@@ -1,0 +1,512 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\EmployeeCompetencyProfile;
+use App\Models\Employee;
+use App\Models\CompetencyLibrary;
+use Illuminate\Http\Request;
+use App\Models\ActivityLog;
+use Illuminate\Support\Facades\Auth;
+
+class EmployeeCompetencyProfileController extends Controller
+{
+    public function index()
+    {
+        $profiles = EmployeeCompetencyProfile::with(['employee', 'competency'])->orderBy('id')->get();
+        $employees = Employee::all();
+        $competencylibrary = CompetencyLibrary::all();
+        return view('competency_management.employee_competency_profiles', compact('profiles', 'employees', 'competencylibrary'));
+    }
+
+    /**
+     * Get current competency level for employee-competency combination (API endpoint)
+     */
+    public function getCurrentLevel($employeeId, $competencyId)
+    {
+        try {
+            // Get competency details
+            $competency = CompetencyLibrary::find($competencyId);
+            if (!$competency) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Competency not found'
+                ], 404);
+            }
+
+            // Check if employee competency profile exists
+            $competencyProfile = EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                ->where('competency_id', $competencyId)
+                ->first();
+
+            $currentLevel = 0;
+            $currentPercentage = 0;
+            $progressSource = 'none';
+
+            if ($competencyProfile) {
+                $competencyName = $competency->competency_name;
+                $storedProficiency = ($competencyProfile->proficiency_level / 5) * 100;
+                $actualProgress = 0;
+
+                // Check if this is truly manually set (not from destination knowledge sync)
+                $isDestinationCompetency = stripos($competencyName, 'Destination Knowledge') !== false;
+
+                if ($isDestinationCompetency) {
+                    // For destination competencies, always use training data
+                    $isManuallySet = false;
+                } else {
+                    // For non-destination competencies, use broader manual detection
+                    $isManuallySet = $competencyProfile->proficiency_level > 1 ||
+                                     ($competencyProfile->proficiency_level == 1 && $competencyProfile->assessment_date &&
+                                      \Carbon\Carbon::parse($competencyProfile->assessment_date)->diffInDays(now()) < 30);
+                }
+
+                if (stripos($competencyName, 'Destination Knowledge') !== false) {
+                    // Extract location name from competency
+                    $locationName = str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $competencyName);
+                    $locationName = trim($locationName);
+
+                    if (!empty($locationName)) {
+                        // Find matching destination knowledge training record
+                        $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
+                            ->where('destination_name', 'LIKE', '%' . $locationName . '%')
+                            ->first();
+
+                        if ($destinationRecord) {
+                            $destinationNameClean = str_replace([' Training', 'Training'], '', $destinationRecord->destination_name);
+
+                            // Find matching course ID for this destination
+                            $matchingCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $destinationNameClean . '%')->first();
+                            $courseId = $matchingCourse ? $matchingCourse->course_id : null;
+
+                            // Get exam progress
+                            $combinedProgress = 0;
+                            if ($courseId) {
+                                $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $courseId);
+                            }
+
+                            // Fall back to training dashboard progress if no exam data
+                            if ($combinedProgress == 0) {
+                                $trainingProgress = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                                    ->where('course_id', $courseId)
+                                    ->value('progress');
+                                $combinedProgress = $trainingProgress ?? $destinationRecord->progress ?? 0;
+                            }
+
+                            $actualProgress = min(100, round($combinedProgress));
+                            $progressSource = 'destination';
+                        }
+                    }
+                } else {
+                    // For non-destination competencies, use employee training dashboard
+                    $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)->get();
+
+                    foreach ($trainingRecords as $record) {
+                        $courseTitle = $record->training_title ?? '';
+
+                        // General competency matching
+                        $cleanCompetency = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $competencyName);
+                        $cleanCourse = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $courseTitle);
+
+                        if (stripos($cleanCourse, $cleanCompetency) !== false || stripos($cleanCompetency, $cleanCourse) !== false) {
+                            // Get progress from this training record
+                            $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $record->course_id);
+                            $trainingProgress = $record->progress ?? 0;
+
+                            // Priority: Exam progress > Training record progress
+                            $actualProgress = $examProgress > 0 ? $examProgress : $trainingProgress;
+                            $progressSource = 'training';
+                            break;
+                        }
+                    }
+                }
+
+                // Use manual proficiency level if manually set, otherwise use training data
+                if ($isManuallySet) {
+                    $currentPercentage = $storedProficiency;
+                    $progressSource = 'manual';
+                } else {
+                    $currentPercentage = $actualProgress > 0 ? $actualProgress : $storedProficiency;
+                }
+
+                // Convert percentage to level (1-5)
+                if ($currentPercentage >= 90) $currentLevel = 5;
+                elseif ($currentPercentage >= 70) $currentLevel = 4;
+                elseif ($currentPercentage >= 50) $currentLevel = 3;
+                elseif ($currentPercentage >= 30) $currentLevel = 2;
+                elseif ($currentPercentage > 0) $currentLevel = 1;
+                else $currentLevel = 0;
+
+                if ($actualProgress == 0 && $progressSource !== 'manual') {
+                    $progressSource = 'profile';
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'current_level' => $currentLevel,
+                'percentage' => round($currentPercentage),
+                'source' => $progressSource,
+                'has_profile' => $competencyProfile !== null
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching competency level: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get training progress for employee-competency combination
+     */
+    public function getTrainingProgress(Request $request)
+    {
+        $employeeId = $request->input('employee_id');
+        $competencyId = $request->input('competency_id');
+
+        if (!$employeeId || !$competencyId) {
+            return response()->json(['progress' => null, 'proficiency_level' => null]);
+        }
+
+        // Get competency name
+        $competency = CompetencyLibrary::find($competencyId);
+        if (!$competency) {
+            return response()->json(['progress' => null, 'proficiency_level' => null]);
+        }
+
+        // Find matching training record by competency name
+        $competencyName = $competency->competency_name;
+
+        // Look for training records that match the competency name
+        $trainingRecord = \App\Models\EmployeeTrainingDashboard::with('course')
+            ->where('employee_id', $employeeId)
+            ->whereHas('course', function($query) use ($competencyName) {
+                // Remove common suffixes and match
+                $searchTerms = [
+                    $competencyName,
+                    $competencyName . ' Training',
+                    str_replace(' Training', '', $competencyName),
+                    str_replace(' Course', '', $competencyName),
+                    str_replace(' Program', '', $competencyName)
+                ];
+
+                $query->where(function($q) use ($searchTerms) {
+                    foreach ($searchTerms as $term) {
+                        $q->orWhere('course_title', 'LIKE', '%' . $term . '%');
+                    }
+                });
+            })
+            ->orderBy('updated_at', 'desc')
+            ->first();
+
+        $progress = $trainingRecord ? $trainingRecord->progress : null;
+
+        // Convert progress to proficiency level (0-100% -> 0-5 scale) - start from 0%
+        $proficiencyLevel = null;
+        if ($progress !== null) {
+            if ($progress >= 90) $proficiencyLevel = 5;
+            elseif ($progress >= 70) $proficiencyLevel = 4;
+            elseif ($progress >= 50) $proficiencyLevel = 3;
+            elseif ($progress >= 30) $proficiencyLevel = 2;
+            elseif ($progress > 0) $proficiencyLevel = 1;
+            else $proficiencyLevel = 0; // 0% progress = 0 proficiency level
+        }
+
+        return response()->json([
+            'progress' => $progress,
+            'proficiency_level' => $proficiencyLevel,
+            'course_title' => $trainingRecord ? $trainingRecord->course->course_title : null,
+            'last_accessed' => $trainingRecord ? $trainingRecord->last_accessed : null
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'employee_id' => 'required|exists:employees,employee_id',
+            'competency_id' => 'required|exists:competency_library,id',
+            'proficiency_level' => 'required|string|max:255',
+            'assessment_date' => 'required|date',
+        ]);
+
+        // Check for existing competency profile to prevent duplicates
+        $existingProfile = EmployeeCompetencyProfile::where('employee_id', $validated['employee_id'])
+            ->where('competency_id', $validated['competency_id'])
+            ->first();
+
+        if ($existingProfile) {
+            return redirect()->route('employee_competency_profiles.index')
+                ->with('error', 'This employee already has a competency profile for this skill. Please edit the existing one instead.');
+        }
+
+        $profile = EmployeeCompetencyProfile::create($validated);
+
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'module' => 'Competency Management',
+            'action' => 'create',
+            'description' => 'Added employee competency profile for employee ID: ' . $profile->employee_id,
+            'model_type' => EmployeeCompetencyProfile::class,
+            'model_id' => $profile->id,
+        ]);
+        return redirect()->route('employee_competency_profiles.index')->with('success', 'Training progress synced successfully!');
+    }
+
+    public function update(Request $request, $id)
+    {
+        $validated = $request->validate([
+            'employee_id' => 'required|exists:employees,employee_id',
+            'competency_id' => 'required|exists:competency_library,id',
+            'proficiency_level' => 'required|string|max:255',
+            'assessment_date' => 'required|date',
+        ]);
+
+        $profile = EmployeeCompetencyProfile::findOrFail($id);
+        $profile->update($validated);
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'module' => 'Competency Management',
+            'action' => 'update',
+            'description' => 'Updated employee competency profile for employee ID: ' . $profile->employee_id,
+            'model_type' => EmployeeCompetencyProfile::class,
+            'model_id' => $profile->id,
+        ]);
+        return redirect()->route('employee_competency_profiles.index')->with('success', 'Profile updated successfully!');
+    }
+
+    public function destroy($id)
+    {
+        $profile = EmployeeCompetencyProfile::findOrFail($id);
+        $employeeId = $profile->employee_id;
+        $profile->delete();
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'module' => 'Competency Management',
+            'action' => 'delete',
+            'description' => 'Deleted employee competency profile for employee ID: ' . $employeeId,
+            'model_type' => EmployeeCompetencyProfile::class,
+            'model_id' => $id,
+        ]);
+        return redirect()->route('employee_competency_profiles.index')->with('success', 'Profile deleted successfully!');
+    }
+
+    /**
+     * Sync competency profiles with training progress - individual progress tracking per employee
+     */
+    public function syncWithTrainingProgress()
+    {
+        try {
+            $updatedCount = 0;
+            $profiles = EmployeeCompetencyProfile::with(['employee', 'competency'])->get();
+
+            foreach ($profiles as $profile) {
+                $competencyName = $profile->competency->competency_name;
+                $actualProgress = 0;
+                $examProgress = 0;
+
+                // Check destination knowledge training first for this specific employee
+                if (stripos($competencyName, 'Destination Knowledge') !== false) {
+                    $locationName = str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $competencyName);
+                    $locationName = trim($locationName);
+
+                    if (!empty($locationName)) {
+                        $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $profile->employee_id)
+                            ->where(function($query) use ($locationName, $competencyName) {
+                                $query->where('destination_name', 'LIKE', '%' . $locationName . '%')
+                                      ->orWhere('destination_name', 'LIKE', '%' . strtoupper($locationName) . '%')
+                                      ->orWhere('destination_name', 'LIKE', '%' . strtolower($locationName) . '%')
+                                      ->orWhere('destination_name', $competencyName)
+                                      ->orWhere('destination_name', $locationName);
+                            })
+                            ->orderBy('progress', 'desc') // Get highest progress first
+                            ->first();
+
+                        if ($destinationRecord) {
+                            $actualProgress = $destinationRecord->progress ?? 0;
+                        }
+                    }
+                }
+
+                // Check employee training dashboard for this specific employee
+                if ($actualProgress == 0) {
+                    $trainingRecord = \App\Models\EmployeeTrainingDashboard::with('course')
+                        ->where('employee_id', $profile->employee_id)
+                        ->whereHas('course', function($query) use ($competencyName) {
+                            $searchTerms = [
+                                $competencyName,
+                                $competencyName . ' Training',
+                                str_replace(' Training', '', $competencyName),
+                                str_replace(' Course', '', $competencyName),
+                                str_replace(' Program', '', $competencyName)
+                            ];
+
+                            $query->where(function($q) use ($searchTerms) {
+                                foreach ($searchTerms as $term) {
+                                    $q->orWhere('course_title', 'LIKE', '%' . $term . '%');
+                                }
+                            });
+                        })
+                        ->orderBy('updated_at', 'desc')
+                        ->first();
+
+                    if ($trainingRecord) {
+                        $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($profile->employee_id, $trainingRecord->course_id);
+                        $trainingProgress = $trainingRecord->progress ?? 0;
+                        $actualProgress = $examProgress > 0 ? $examProgress : $trainingProgress;
+                    }
+                }
+
+                // Convert individual progress to proficiency level for THIS employee only
+                // Do not downgrade to 0. Keep at least current level or minimum 1 for existing profiles.
+                $computedLevel = null;
+                if ($actualProgress >= 90) $computedLevel = 5;
+                elseif ($actualProgress >= 70) $computedLevel = 4;
+                elseif ($actualProgress >= 50) $computedLevel = 3;
+                elseif ($actualProgress >= 30) $computedLevel = 2;
+                elseif ($actualProgress > 0) $computedLevel = 1;
+
+                // Enhanced logic to prevent resetting proficiency level to 0%
+                // ALWAYS preserve manually set values - they should be FIXED and never reset
+                $existingLevel = (int) $profile->proficiency_level;
+                
+                // Check if this is a manually set proficiency level that should be preserved
+                $isManuallySet = false;
+                
+                // For destination competencies, check if manually set (level > 1 or recently assessed)
+                if (stripos($competencyName, 'Destination Knowledge') !== false) {
+                    $isManuallySet = $existingLevel > 1 || 
+                                   ($existingLevel >= 1 && $profile->assessment_date && 
+                                    \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 30);
+                } else {
+                    // For non-destination competencies, be more conservative about manual detection
+                    $isManuallySet = $existingLevel > 1 || 
+                                   ($existingLevel >= 1 && $profile->assessment_date && 
+                                    \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 7);
+                }
+                
+                if ($isManuallySet) {
+                    // PRESERVE manually set proficiency level - NEVER change it
+                    $newProficiencyLevel = $existingLevel;
+                } else {
+                    // Only update if not manually set
+                    if (is_null($computedLevel)) {
+                        // No training progress found, keep existing level but ensure minimum 1
+                        $newProficiencyLevel = max(1, $existingLevel);
+                    } else {
+                        // Training progress found, use computed level but ensure minimum 1
+                        $newProficiencyLevel = max(1, (int) $computedLevel);
+                    }
+                }
+
+                // Only update if proficiency level changed for this individual employee
+                if ($newProficiencyLevel != $profile->proficiency_level) {
+                    $oldProficiency = $profile->proficiency_level;
+                    $profile->proficiency_level = $newProficiencyLevel;
+                    $profile->assessment_date = now();
+                    $profile->save();
+
+                    // Also update competency gap if exists
+                    $competencyGap = \App\Models\CompetencyGap::where('employee_id', $profile->employee_id)
+                        ->where('competency_id', $profile->competency_id)
+                        ->first();
+
+                    if ($competencyGap) {
+                        $competencyGap->current_level = $newProficiencyLevel;
+                        $competencyGap->gap = max(0, $competencyGap->required_level - $newProficiencyLevel);
+                        $competencyGap->save();
+                    }
+
+                    $updatedCount++;
+
+                    // Log the activity
+                    ActivityLog::create([
+                        'user_id' => Auth::id(),
+                        'module' => 'Competency Management',
+                        'action' => 'sync_individual',
+                        'description' => "Updated {$competencyName} proficiency from {$oldProficiency} to {$newProficiencyLevel} based on individual progress {$actualProgress}% (exam: {$examProgress}%) for employee ID: {$profile->employee_id}",
+                        'model_type' => EmployeeCompetencyProfile::class,
+                        'model_id' => $profile->id,
+                    ]);
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully updated {$updatedCount} competency profiles based on individual employee progress.",
+                'updated_count' => $updatedCount
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error syncing competency profiles: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
+    /**
+     * Convert proficiency level (1-5) to progress percentage (0-100%)
+     */
+    private function convertProficiencyToProgress($proficiencyLevel)
+    {
+        $levelMap = [
+            0 => 0,   // No proficiency
+            1 => 20,  // Beginner
+            2 => 40,  // Developing
+            3 => 60,  // Proficient
+            4 => 80,  // Advanced
+            5 => 100  // Expert
+        ];
+
+        return $levelMap[$proficiencyLevel] ?? 0; // Default to 0% instead of 20%
+    }
+
+    private function extractCompetencyName($trainingTitle)
+    {
+        // Remove common training suffixes
+        $competencyName = preg_replace('/\s*(Training|Course|Program|Certification)$/i', '', $trainingTitle);
+
+        // Special handling for destination knowledge - check for Baesa, Quezon, or other destination names
+        if (stripos($trainingTitle, 'BAESA') !== false ||
+            stripos($trainingTitle, 'QUEZON') !== false ||
+            stripos($trainingTitle, 'Baesa') !== false ||
+            stripos($trainingTitle, 'Quezon') !== false ||
+            stripos($trainingTitle, 'destination') !== false) {
+
+            // Extract the specific destination name
+            if (stripos($trainingTitle, 'Baesa') !== false && stripos($trainingTitle, 'Quezon') !== false) {
+                return "Destination Knowledge - Baesa Quezon City";
+            } elseif (stripos($trainingTitle, 'Baesa') !== false) {
+                return "Destination Knowledge - Baesa";
+            } elseif (stripos($trainingTitle, 'Quezon') !== false) {
+                return "Destination Knowledge - Quezon City";
+            } else {
+                return "Destination Knowledge - " . ucwords(strtolower($competencyName));
+            }
+        }
+
+        return ucwords(strtolower($competencyName));
+    }
+
+    private function categorizeCompetency($competencyName)
+    {
+        $name = strtolower($competencyName);
+
+        if (strpos($name, 'destination') !== false || strpos($name, 'baesa') !== false || strpos($name, 'quezon') !== false) {
+            return 'Destination Knowledge';
+        } elseif (strpos($name, 'service') !== false || strpos($name, 'customer') !== false) {
+            return 'Customer Service';
+        } elseif (strpos($name, 'leadership') !== false || strpos($name, 'management') !== false) {
+            return 'Leadership';
+        } elseif (strpos($name, 'communication') !== false || strpos($name, 'speaking') !== false) {
+            return 'Communication';
+        } elseif (strpos($name, 'technical') !== false || strpos($name, 'system') !== false) {
+            return 'Technical';
+        }
+
+        return 'General';
+    }
+}

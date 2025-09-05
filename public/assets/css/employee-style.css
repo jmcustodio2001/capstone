@@ -1,0 +1,124 @@
+/* Employee Dashboard Styles */
+:root {
+    --jetlouge-primary: #1a73e8;
+    --jetlouge-secondary: #5f6368;
+    --jetlouge-success: #34a853;
+    --jetlouge-warning: #fbbc04;
+    --jetlouge-danger: #ea4335;
+    --jetlouge-light: #f8f9fa;
+    --jetlouge-dark: #202124;
+}
+
+body {
+    background-color: #f8f9fa;
+    color: var(--jetlouge-dark);
+}
+
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,.08);
+}
+
+.navbar-brand img {
+    height: 40px;
+}
+
+.content {
+    padding: 2rem;
+}
+
+.card {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,.08);
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background-color: transparent;
+    border-bottom: 1px solid #e9ecef;
+    padding: 1rem;
+}
+
+.card-title {
+    color: var(--jetlouge-dark);
+    font-weight: 600;
+    margin-bottom: 0;
+}
+
+.progress {
+    height: 8px;
+    border-radius: 4px;
+    background-color: #e9ecef;
+}
+
+.progress-bar {
+    background-color: var(--jetlouge-primary);
+}
+
+.badge {
+    padding: 0.5em 0.8em;
+    font-weight: 500;
+}
+
+.badge.bg-success {
+    background-color: var(--jetlouge-success) !important;
+}
+
+.badge.bg-warning {
+    background-color: var(--jetlouge-warning) !important;
+    color: #000;
+}
+
+.badge.bg-secondary {
+    background-color: var(--jetlouge-secondary) !important;
+}
+
+.table > :not(caption) > * > * {
+    padding: 1rem;
+}
+
+.btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.875rem;
+}
+
+.nav-link {
+    color: var(--jetlouge-secondary);
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: var(--jetlouge-primary);
+}
+
+.dropdown-item:active {
+    background-color: var(--jetlouge-primary);
+}
+
+/* Stats Cards */
+.card.bg-primary {
+    background-color: var(--jetlouge-primary) !important;
+}
+
+.card.bg-warning {
+    background-color: var(--jetlouge-warning) !important;
+}
+
+.card.bg-info {
+    background-color: #4285f4 !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .content {
+        padding: 1rem;
+    }
+
+    .card-body {
+        padding: 1rem;
+    }
+
+    .table-responsive {
+        margin: 0 -1rem;
+    }
+}

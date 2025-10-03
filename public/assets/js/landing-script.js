@@ -8,37 +8,166 @@ let currentCategory = 'all';
 let isLoading = false;
 let hasMorePackages = true;
 
+// Fallback package data
+function getFallbackPackages() {
+    return [
+        {
+            id: 1,
+            title: "Boracay Beach Paradise",
+            destination: "Boracay, Aklan",
+            description: "Experience the pristine white sand beaches and crystal-clear waters of Boracay. Enjoy water sports, island hopping, and stunning sunsets.",
+            price: 15000,
+            duration: 3,
+            category: "Beach",
+            features: ["Beach Resort", "Island Hopping", "Water Sports", "Sunset Cruise"],
+            image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            id: 2,
+            title: "Palawan Underground Adventure",
+            destination: "Puerto Princesa, Palawan",
+            description: "Explore the famous Underground River, one of the New 7 Wonders of Nature. Discover limestone caves and diverse wildlife.",
+            price: 18000,
+            duration: 4,
+            category: "Adventure",
+            features: ["Underground River", "Cave Exploration", "Wildlife Watching", "City Tour"],
+            image: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            id: 3,
+            title: "Baguio Mountain Retreat",
+            destination: "Baguio City",
+            description: "Escape to the cool mountain air of Baguio. Visit strawberry farms, explore local markets, and enjoy the scenic mountain views.",
+            price: 12000,
+            duration: 3,
+            category: "Mountain",
+            features: ["Cool Climate", "Strawberry Picking", "Local Markets", "Scenic Views"],
+            image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            id: 4,
+            title: "Cebu Heritage Tour",
+            destination: "Cebu City",
+            description: "Discover the rich history and culture of Cebu. Visit historical landmarks, enjoy local cuisine, and experience vibrant city life.",
+            price: 14000,
+            duration: 3,
+            category: "Cultural",
+            features: ["Historical Sites", "Local Cuisine", "City Tour", "Cultural Shows"],
+            image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            id: 5,
+            title: "Siargao Surfing Experience",
+            destination: "Siargao Island",
+            description: "Ride the famous waves of Cloud 9 and explore the pristine lagoons and rock pools of this surfing paradise.",
+            price: 20000,
+            duration: 5,
+            category: "Adventure",
+            features: ["Surfing Lessons", "Island Hopping", "Lagoon Tours", "Beach Activities"],
+            image: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+        },
+        {
+            id: 6,
+            title: "El Nido Island Paradise",
+            destination: "El Nido, Palawan",
+            description: "Discover hidden lagoons, pristine beaches, and dramatic limestone cliffs in this tropical paradise.",
+            price: 22000,
+            duration: 4,
+            category: "Beach",
+            features: ["Hidden Lagoons", "Island Hopping", "Snorkeling", "Beach Camping"],
+            image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+        }
+    ];
+}
+
 // DOM Content Loaded
 document.addEventListener('DOMContentLoaded', function() {
     initializeNavigation();
-    loadPackages();
-    initializeFilters();
+    // Only load packages if packages grid exists
+    if (document.getElementById('packages-grid')) {
+        loadPackages();
+        initializeFilters();
+    }
     initializeModal();
     initializeNewsletterForm();
     initializeAnimations();
     initializeTestimonialSlider();
 });
 
-// Navigation functionality
+// Enhanced Navigation functionality with mobile optimizations
 function initializeNavigation() {
     const navToggle = document.querySelector('.nav-toggle');
     const navMenu = document.querySelector('.nav-menu');
     const navbar = document.querySelector('.navbar');
+    let isMenuOpen = false;
 
-    // Mobile menu toggle
+    // Enhanced Mobile menu toggle with animation
     if (navToggle && navMenu) {
-        navToggle.addEventListener('click', function() {
-            navMenu.classList.toggle('active');
+        navToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            isMenuOpen = !isMenuOpen;
+            navMenu.classList.toggle('active', isMenuOpen);
+            navToggle.classList.toggle('active', isMenuOpen);
+            
+            // Prevent body scroll when menu is open
+            document.body.style.overflow = isMenuOpen ? 'hidden' : 'auto';
+            
+            // Add haptic feedback on supported devices
+            if (navigator.vibrate) {
+                navigator.vibrate(50);
+            }
         });
     }
 
-    // Close mobile menu when clicking on links
+    // Close mobile menu when clicking outside
+    document.addEventListener('click', function(e) {
+        if (isMenuOpen && navMenu && !navMenu.contains(e.target) && !navToggle.contains(e.target)) {
+            closeMobileMenu();
+        }
+    });
+
+    // Close mobile menu with Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isMenuOpen) {
+            closeMobileMenu();
+        }
+    });
+
+    // Enhanced mobile menu link handling
     document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', function() {
-            if (navMenu) {
-                navMenu.classList.remove('active');
+        link.addEventListener('click', function(e) {
+            // Add touch feedback
+            this.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 150);
+            
+            if (navMenu && isMenuOpen) {
+                // Delay closing to show the touch feedback
+                setTimeout(() => {
+                    closeMobileMenu();
+                }, 200);
             }
         });
+    });
+    
+    // Helper function to close mobile menu
+    function closeMobileMenu() {
+        isMenuOpen = false;
+        navMenu.classList.remove('active');
+        navToggle.classList.remove('active');
+        document.body.style.overflow = 'auto';
+    }
+    
+    // Handle orientation changes
+    window.addEventListener('orientationchange', function() {
+        setTimeout(() => {
+            if (isMenuOpen) {
+                closeMobileMenu();
+            }
+        }, 100);
     });
 
     // Navbar scroll effect
@@ -67,7 +196,7 @@ function initializeNavigation() {
     });
 }
 
-// Load packages from API
+// Load packages with fallback data
 async function loadPackages(reset = false) {
     if (isLoading) return;
 
@@ -76,57 +205,94 @@ async function loadPackages(reset = false) {
 
     if (reset) {
         currentOffset = 0;
-        packagesGrid.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i><p>Loading amazing packages...</p></div>';
+        if (packagesGrid) {
+            packagesGrid.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i><p>Loading amazing packages...</p></div>';
+        }
     }
 
     try {
+        // Try to fetch from API first
         const response = await fetch(`../api/get_packages.php?limit=6&offset=${currentOffset}&category=${currentCategory}`);
-        const data = await response.json();
-
-        if (data.success) {
-            if (reset) {
-                packagesGrid.innerHTML = '';
-            } else {
-                // Remove loading spinner if it exists
-                const loadingSpinner = packagesGrid.querySelector('.loading-spinner');
-                if (loadingSpinner) {
-                    loadingSpinner.remove();
+        
+        // Check if response is OK and contains JSON
+        if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+            const data = await response.json();
+            
+            if (data.success) {
+                if (reset && packagesGrid) {
+                    packagesGrid.innerHTML = '';
+                } else if (packagesGrid) {
+                    // Remove loading spinner if it exists
+                    const loadingSpinner = packagesGrid.querySelector('.loading-spinner');
+                    if (loadingSpinner) {
+                        loadingSpinner.remove();
+                    }
                 }
+
+                // Add packages to grid
+                data.data.forEach((package, index) => {
+                    const packageCard = createPackageCard(package);
+                    if (packagesGrid) {
+                        packagesGrid.appendChild(packageCard);
+                    }
+
+                    // Animate card appearance
+                    setTimeout(() => {
+                        packageCard.style.opacity = '1';
+                        packageCard.style.transform = 'translateY(0)';
+                    }, index * 100);
+                });
+
+                // Update pagination
+                currentOffset += data.data.length;
+                hasMorePackages = data.pagination.has_more;
+
+                // Update load more button
+                updateLoadMoreButton();
+                return;
+            }
+        }
+        
+        // If API fails or doesn't exist, use fallback data
+        throw new Error('API not available');
+        
+    } catch (error) {
+        console.log('API not available, using fallback data');
+        
+        // Use fallback sample data
+        const fallbackPackages = getFallbackPackages();
+        
+        if (reset && packagesGrid) {
+            packagesGrid.innerHTML = '';
+        } else if (packagesGrid) {
+            const loadingSpinner = packagesGrid.querySelector('.loading-spinner');
+            if (loadingSpinner) {
+                loadingSpinner.remove();
+            }
+        }
+        
+        // Filter packages by category if needed
+        const filteredPackages = currentCategory === 'all' ? 
+            fallbackPackages : 
+            fallbackPackages.filter(pkg => pkg.category.toLowerCase() === currentCategory.toLowerCase());
+            
+        // Add fallback packages to grid
+        filteredPackages.forEach((package, index) => {
+            const packageCard = createPackageCard(package);
+            if (packagesGrid) {
+                packagesGrid.appendChild(packageCard);
             }
 
-            // Add packages to grid
-            data.data.forEach((package, index) => {
-                const packageCard = createPackageCard(package);
-                packagesGrid.appendChild(packageCard);
-
-                // Animate card appearance
-                setTimeout(() => {
-                    packageCard.style.opacity = '1';
-                    packageCard.style.transform = 'translateY(0)';
-                }, index * 100);
-            });
-
-            // Update pagination
-            currentOffset += data.data.length;
-            hasMorePackages = data.pagination.has_more;
-
-            // Update load more button
-            updateLoadMoreButton();
-
-        } else {
-            throw new Error(data.message || 'Failed to load packages');
-        }
-    } catch (error) {
-        console.error('Error loading packages:', error);
-        if (reset) {
-            packagesGrid.innerHTML = `
-                <div class="error-message">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <p>Failed to load packages. Please try again later.</p>
-                    <button class="btn btn-primary" onclick="loadPackages(true)">Retry</button>
-                </div>
-            `;
-        }
+            // Animate card appearance
+            setTimeout(() => {
+                packageCard.style.opacity = '1';
+                packageCard.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+        
+        // Set pagination for fallback
+        hasMorePackages = false;
+        updateLoadMoreButton();
     } finally {
         isLoading = false;
     }
@@ -634,33 +800,51 @@ function initializeNewsletterForm() {
     }
 }
 
-// Initialize animations
+// Enhanced animations with mobile optimizations
 function initializeAnimations() {
-    // Animate elements on scroll
+    // Check if user prefers reduced motion
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    
+    // Animate elements on scroll with mobile-friendly settings
     const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
+        threshold: window.innerWidth < 768 ? 0.05 : 0.1, // Lower threshold for mobile
+        rootMargin: window.innerWidth < 768 ? '0px 0px -20px 0px' : '0px 0px -50px 0px'
     };
 
     const observer = new IntersectionObserver(function(entries) {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
-                entry.target.style.opacity = '1';
-                entry.target.style.transform = 'translateY(0)';
+                if (prefersReducedMotion) {
+                    // Instant show for users who prefer reduced motion
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'none';
+                } else {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
             }
         });
     }, observerOptions);
 
-    // Observe elements for animation
-    document.querySelectorAll('.feature-card, .testimonial-card').forEach(el => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(30px)';
-        el.style.transition = 'all 0.6s ease';
+    // Observe elements for animation with mobile-friendly delays
+    document.querySelectorAll('.feature-card, .testimonial-card').forEach((el, index) => {
+        if (!prefersReducedMotion) {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(30px)';
+            el.style.transition = `all ${window.innerWidth < 768 ? '0.4s' : '0.6s'} ease`;
+            // Stagger animations on mobile for better performance
+            if (window.innerWidth < 768) {
+                el.style.transitionDelay = `${index * 0.1}s`;
+            }
+        }
         observer.observe(el);
     });
 
-    // Animate counters
+    // Animate counters with mobile optimization
     animateCounters();
+    
+    // Initialize touch-friendly interactions
+    initializeTouchInteractions();
 }
 
 // Animate counter numbers
@@ -875,8 +1059,213 @@ notificationStyles.textContent = `
 `;
 document.head.appendChild(notificationStyles);
 
-// Initialize auto-slide when DOM is loaded
+// Enhanced mobile-specific functions
+function initializeTouchInteractions() {
+    // Add touch feedback to buttons
+    document.querySelectorAll('.btn, .feature-card, .testimonial-card').forEach(element => {
+        element.addEventListener('touchstart', function() {
+            this.style.transform = 'scale(0.98)';
+        }, { passive: true });
+        
+        element.addEventListener('touchend', function() {
+            setTimeout(() => {
+                this.style.transform = 'scale(1)';
+            }, 150);
+        }, { passive: true });
+    });
+    
+    // Optimize scroll performance on mobile
+    let ticking = false;
+    function updateScrollEffects() {
+        // Throttle scroll events for better performance
+        if (!ticking) {
+            requestAnimationFrame(() => {
+                // Update navbar on scroll
+                const navbar = document.querySelector('.navbar');
+                if (navbar) {
+                    if (window.scrollY > 100) {
+                        navbar.classList.add('scrolled');
+                    } else {
+                        navbar.classList.remove('scrolled');
+                    }
+                }
+                ticking = false;
+            });
+            ticking = true;
+        }
+    }
+    
+    window.addEventListener('scroll', updateScrollEffects, { passive: true });
+}
+
+// Enhanced testimonial slider with touch support
+function initializeTestimonialSlider() {
+    const testimonials = document.querySelectorAll('.testimonial-card');
+    let currentTestimonial = 0;
+    let touchStartX = 0;
+    let touchEndX = 0;
+    
+    if (testimonials.length > 1) {
+        const testimonialContainer = document.querySelector('.testimonials-slider');
+        
+        // Auto-slide functionality
+        const autoSlide = setInterval(() => {
+            nextTestimonial();
+        }, 5000);
+        
+        // Touch/swipe support for mobile
+        if (testimonialContainer) {
+            testimonialContainer.addEventListener('touchstart', function(e) {
+                touchStartX = e.changedTouches[0].screenX;
+                clearInterval(autoSlide); // Pause auto-slide when user interacts
+            }, { passive: true });
+            
+            testimonialContainer.addEventListener('touchend', function(e) {
+                touchEndX = e.changedTouches[0].screenX;
+                handleSwipe();
+            }, { passive: true });
+        }
+        
+        function handleSwipe() {
+            const swipeThreshold = 50;
+            const swipeDistance = touchEndX - touchStartX;
+            
+            if (Math.abs(swipeDistance) > swipeThreshold) {
+                if (swipeDistance > 0) {
+                    previousTestimonial();
+                } else {
+                    nextTestimonial();
+                }
+            }
+        }
+        
+        function nextTestimonial() {
+            testimonials[currentTestimonial].classList.remove('active');
+            currentTestimonial = (currentTestimonial + 1) % testimonials.length;
+            testimonials[currentTestimonial].classList.add('active');
+        }
+        
+        function previousTestimonial() {
+            testimonials[currentTestimonial].classList.remove('active');
+            currentTestimonial = currentTestimonial === 0 ? testimonials.length - 1 : currentTestimonial - 1;
+            testimonials[currentTestimonial].classList.add('active');
+        }
+    }
+}
+
+// Enhanced notification system for mobile
+function showNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existingNotifications = document.querySelectorAll('.notification');
+    existingNotifications.forEach(notification => notification.remove());
+
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="fas ${getNotificationIcon(type)}"></i>
+            <span>${message}</span>
+        </div>
+        <button class="notification-close" aria-label="Close notification">&times;</button>
+    `;
+
+    // Mobile-optimized styles
+    const isMobile = window.innerWidth < 768;
+    notification.style.cssText = `
+        position: fixed;
+        top: ${isMobile ? '10px' : '20px'};
+        right: ${isMobile ? '10px' : '20px'};
+        left: ${isMobile ? '10px' : 'auto'};
+        z-index: 3000;
+        padding: ${isMobile ? '0.75rem' : '1rem 1.5rem'};
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transform: translateY(-100px);
+        transition: transform 0.3s ease;
+        max-width: ${isMobile ? 'none' : '400px'};
+        font-size: ${isMobile ? '0.9rem' : '1rem'};
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    `;
+
+    // Set background color based on type
+    const colors = {
+        success: '#10b981',
+        error: '#ef4444',
+        info: '#3b82f6',
+        warning: '#f59e0b'
+    };
+    notification.style.backgroundColor = colors[type] || colors.info;
+
+    // Add to DOM
+    document.body.appendChild(notification);
+
+    // Animate in
+    setTimeout(() => {
+        notification.style.transform = 'translateY(0)';
+    }, 100);
+
+    // Close functionality
+    const closeBtn = notification.querySelector('.notification-close');
+    closeBtn.addEventListener('click', () => {
+        notification.style.transform = 'translateY(-100px)';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 300);
+    });
+
+    // Auto remove after 4 seconds (shorter on mobile)
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.transform = 'translateY(-100px)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 300);
+        }
+    }, isMobile ? 3000 : 4000);
+}
+
+// Performance optimization for mobile
+function optimizeForMobile() {
+    // Disable hover effects on touch devices
+    if ('ontouchstart' in window) {
+        document.body.classList.add('touch-device');
+    }
+    
+    // Optimize images for mobile
+    const images = document.querySelectorAll('img');
+    images.forEach(img => {
+        img.loading = 'lazy';
+    });
+    
+    // Reduce animation complexity on low-end devices
+    if (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4) {
+        document.body.classList.add('low-performance');
+    }
+}
+
+// Initialize auto-slide and mobile optimizations when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    // ... existing initialization code ...
     initializeAutoSlide();
+    optimizeForMobile();
+    
+    // Handle viewport changes for better mobile experience
+    let resizeTimer;
+    window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            // Recalculate layouts after orientation change
+            const event = new Event('orientationchange');
+            window.dispatchEvent(event);
+        }, 250);
+    });
 });

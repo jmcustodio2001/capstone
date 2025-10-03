@@ -14,11 +14,15 @@ class VerifyCsrfToken extends Middleware
     protected $except = [
         '/admin_login',
         'admin_login',
-        'employee/*',
-        '/employee/*',
+        // Removed employee/* exclusions to fix CSRF token mismatch issues
+        // OTP verification should use proper CSRF tokens for security
         '/employee/exam/submit-ajax/*',
         '/employee/quiz/submit-ajax/*',
         'employee/exam/submit-ajax/*',
         'employee/quiz/submit-ajax/*',
+        // CSRF refresh endpoint must be excluded to get new tokens
+        '/admin/refresh-csrf',
+        // Temporary exception for maintenance mode
+        '/admin/maintenance-mode/enable',
     ];
 }

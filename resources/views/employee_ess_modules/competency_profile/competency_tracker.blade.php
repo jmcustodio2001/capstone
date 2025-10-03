@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>Competency Progress Tracker</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
@@ -41,7 +42,7 @@
     .progress-good { background: linear-gradient(135deg, #2196F3, #1976D2); }
     .progress-fair { background: linear-gradient(135deg, #FF9800, #F57C00); }
     .progress-needs-improvement { background: linear-gradient(135deg, #f44336, #d32f2f); }
-    
+
     .gap-badge {
       padding: 0.4em 0.8em;
       border-radius: 20px;
@@ -51,7 +52,7 @@
     .gap-strong { background-color: #e8f5e8; color: #2e7d32; }
     .gap-moderate { background-color: #fff3e0; color: #ef6c00; }
     .gap-needs-development { background-color: #ffebee; color: #c62828; }
-    
+
     /* Category Badge Colors */
     .category-leadership {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -83,7 +84,7 @@
       color: #333;
       border: none;
     }
-    
+
     /* Deadline Status Colors */
     .deadline-overdue {
       background-color: #ffebee;
@@ -109,12 +110,12 @@
       padding: 8px 12px;
       border-radius: 6px;
     }
-    
+
     .deadline-icon {
       font-size: 1.2em;
       margin-right: 8px;
     }
-    
+
     .competency-level {
       display: inline-flex;
       align-items: center;
@@ -127,7 +128,7 @@
     .level-star.empty {
       color: #e0e0e0;
     }
-    
+
     .summary-card {
       border-radius: 12px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.08);
@@ -144,7 +145,7 @@
       color: #6c757d;
       font-weight: 500;
     }
-    
+
     .training-recommendation {
       background-color: #f8f9ff;
       border-left: 4px solid #667eea;
@@ -152,7 +153,7 @@
       border-radius: 0 8px 8px 0;
       margin-bottom: 0.5rem;
     }
-    
+
     /* Admin dashboard stat card styling */
     .stat-card {
       border-radius: 12px;
@@ -298,11 +299,11 @@
                   // Ensure competencyTrackers is a collection and filter out invalid entries
                   $validTrackers = collect($competencyTrackers ?? [])->filter(function($tracker) {
                     return is_array($tracker) && (
-                      isset($tracker['competency']) || 
+                      isset($tracker['competency']) ||
                       isset($tracker['competency_name'])
                     );
                   });
-                  
+
                   // Group competency trackers by competency name to prevent duplicates
                   $uniqueTrackers = $validTrackers->groupBy(function($tracker) {
                     return $tracker['competency']->competency_name ?? $tracker['competency_name'] ?? 'Unknown';
@@ -394,7 +395,7 @@
                             $isOverdue = $deadlineDate->isPast();
                             $daysUntilDeadline = $now->diffInDays($deadlineDate, false);
                             $timeLeft = $deadlineDate->diffForHumans();
-                            
+
                             // Determine urgency level
                             if ($isOverdue) {
                               $urgencyClass = 'deadline-overdue';
@@ -459,11 +460,6 @@
                         <button class="btn btn-outline-primary btn-sm" onclick="viewDetails({{ $tracker['id'] ?? 0 }})" title="View Details">
                           <i class="bi bi-eye"></i>
                         </button>
-                        @if($tracker['recommended_training'] ?? null)
-                          <button class="btn btn-outline-success btn-sm" onclick="viewTraining({{ $tracker['id'] ?? 0 }})" title="View Training">
-                            <i class="bi bi-book"></i>
-                          </button>
-                        @endif
                       </div>
                     </td>
                   </tr>
@@ -541,23 +537,23 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  
+
   <script>
     // Refresh competency data
     function refreshData() {
       const refreshBtn = document.querySelector('button[onclick="refreshData()"]');
       const originalContent = refreshBtn.innerHTML;
-      
+
       refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-1 spinner-border spinner-border-sm"></i>Loading...';
       refreshBtn.disabled = true;
-      
+
       fetch('{{ route("employee.competency_profile.progress_data") }}')
         .then(response => response.json())
         .then(data => {
           if (data.success) {
             // Update summary cards
             updateSummaryCards(data.summary);
-            
+
             // Show success message
             showToast('Data refreshed successfully', 'success');
           } else {
@@ -573,22 +569,22 @@
           refreshBtn.disabled = false;
         });
     }
-    
+
     // View competency details
     function viewDetails(trackerId) {
       window.location.href = `{{ url('/employee/competency-profile') }}/${trackerId}`;
     }
-    
+
     // Global variable to store current tracker ID
     let currentTrackerId = null;
 
     // View training recommendations
     function viewTraining(trackerId) {
       currentTrackerId = trackerId;
-      
+
       // Create modal for training details
       const modal = new bootstrap.Modal(document.getElementById('trainingModal') || createTrainingModal());
-      
+
       // Load training details via AJAX
       fetch(`{{ url('/employee/competency-profile') }}/${trackerId}`)
         .then(response => response.text())
@@ -597,7 +593,7 @@
           const parser = new DOMParser();
           const doc = parser.parseFromString(html, 'text/html');
           const training = doc.querySelector('[data-training-content]')?.textContent || 'No training details available';
-          
+
           document.getElementById('trainingModalBody').innerHTML = `
             <div class="training-recommendation">
               <div class="d-flex align-items-start">
@@ -621,7 +617,7 @@
               </div>
             </div>
           `;
-          
+
           modal.show();
         })
         .catch(error => {
@@ -639,7 +635,7 @@
 
       const startBtn = document.getElementById('startTrainingBtn');
       const originalContent = startBtn.innerHTML;
-      
+
       // Show loading state
       startBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
       startBtn.disabled = true;
@@ -661,11 +657,11 @@
       .then(data => {
         if (data.success) {
           showToast(`Starting ${data.competency_name} training...`, 'success');
-          
+
           // Close modal and redirect to exam
           const modal = bootstrap.Modal.getInstance(document.getElementById('trainingModal'));
           modal.hide();
-          
+
           // Redirect to exam page
           window.location.href = data.redirect_url;
         } else {
@@ -682,7 +678,7 @@
         startBtn.disabled = false;
       });
     }
-    
+
     // Create training modal if it doesn't exist
     function createTrainingModal() {
       const modalHtml = `
@@ -708,11 +704,11 @@
           </div>
         </div>
       `;
-      
+
       document.body.insertAdjacentHTML('beforeend', modalHtml);
       return document.getElementById('trainingModal');
     }
-    
+
     // Update summary cards with real-time data
     function updateSummaryCards(summary) {
       const cards = document.querySelectorAll('.stat-card h3');
@@ -733,7 +729,7 @@
       }
       if (cards[2]) cards[2].textContent = summary.needs_development;
       if (cards[3]) cards[3].textContent = summary.on_track;
-      
+
       // Show additional metrics if available
       if (summary.training_completion_rate !== undefined) {
         showToast(`Training Completion Rate: ${summary.training_completion_rate}%`, 'info');
@@ -742,7 +738,7 @@
         showToast(`Certificates Earned: ${summary.certificate_count}`, 'success');
       }
     }
-    
+
     // Show toast notification
     function showToast(message, type = 'info') {
       // Create toast container if it doesn't exist
@@ -754,10 +750,10 @@
         toastContainer.style.zIndex = '1055';
         document.body.appendChild(toastContainer);
       }
-      
+
       const toastId = 'toast-' + Date.now();
       const bgClass = type === 'success' ? 'bg-success' : type === 'error' ? 'bg-danger' : 'bg-info';
-      
+
       const toastHtml = `
         <div id="${toastId}" class="toast ${bgClass} text-white" role="alert">
           <div class="toast-header ${bgClass} text-white border-0">
@@ -770,18 +766,18 @@
           </div>
         </div>
       `;
-      
+
       toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-      
+
       const toast = new bootstrap.Toast(document.getElementById(toastId));
       toast.show();
-      
+
       // Remove toast element after it's hidden
       document.getElementById(toastId).addEventListener('hidden.bs.toast', function() {
         this.remove();
       });
     }
-    
+
     // Initialize tooltips
     document.addEventListener('DOMContentLoaded', function() {
       const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));

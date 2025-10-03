@@ -120,10 +120,9 @@ class DashboardDataSeeder extends Seeder
                 $employee = $employees->random();
                 PotentialSuccessor::firstOrCreate([
                     'employee_id' => $employee->employee_id,
-                    'position' => ['Senior Manager', 'Team Lead', 'Department Head', 'Director'][rand(0, 3)],
+                    'potential_role' => ['Senior Manager', 'Team Lead', 'Department Head', 'Director'][rand(0, 3)],
                 ], [
-                    'readiness_level' => rand(1, 5),
-                    'development_plan' => 'Sample development plan for succession',
+                    'identified_date' => now()->subDays(rand(1, 30)),
                 ]);
             }
         }

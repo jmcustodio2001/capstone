@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('customer_service_sales_skills_training', function (Blueprint $table) {
             $table->id();
             $table->string('employee_id', 20);
-            $table->unsignedBigInteger('training_id');
+            $table->unsignedBigInteger('training_id')->nullable(); // Make nullable since trainings table will be dropped
             $table->date('date_completed')->nullable();
             $table->string('skill_topic');
             $table->text('description')->nullable();
@@ -18,7 +18,8 @@ return new class extends Migration {
             $table->softDeletes();
 
             $table->foreign('employee_id')->references('employee_id')->on('employees')->onDelete('cascade');
-            $table->foreign('training_id')->references('id')->on('trainings')->onDelete('cascade');
+            // Don't create foreign key to trainings table since it will be dropped
+            // $table->foreign('training_id')->references('id')->on('trainings')->onDelete('cascade');
         });
     }
 

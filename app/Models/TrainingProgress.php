@@ -7,6 +7,11 @@ class TrainingProgress extends Model {
     protected $table = 'training_progress';
     protected $primaryKey = 'progress_id';
     protected $fillable = [
-        'employee_id', 'training_title', 'progress_percentage', 'last_updated'
+        'employee_id', 'training_title', 'progress_percentage', 'last_updated', 'status'
     ];
+    
+    public function employee()
+    {
+        return $this->belongsTo(Employee::class, 'employee_id', 'employee_id');
+    }
 }

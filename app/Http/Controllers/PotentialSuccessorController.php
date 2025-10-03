@@ -23,41 +23,102 @@ class PotentialSuccessorController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'employee_id' => 'required|exists:employees,employee_id',
-            'potential_role' => 'required|string|max:255',
-            'identified_date' => 'required|date',
-        ]);
-        $successor = PotentialSuccessor::create($request->only(['employee_id', 'potential_role', 'identified_date']));
-        // Log activity
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'create',
-            'module' => 'Potential Successor',
-            'description' => 'Added potential successor (ID: ' . $successor->id . ')',
-        ]);
-        return redirect()->route('potential_successors.index')->with('success', 'Potential successor added successfully.');
+        try {
+            $request->validate([
+                'employee_id' => 'required|exists:employees,employee_id',
+                'potential_role' => 'required|string|max:255',
+                'identified_date' => 'required|date',
+            ]);
+            
+            $successor = PotentialSuccessor::create($request->only(['employee_id', 'potential_role', 'identified_date']));
+            
+            // Log activity
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'create',
+                'module' => 'Potential Successor',
+                'description' => 'Added potential successor (ID: ' . $successor->id . ')',
+            ]);
+            
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Potential successor added successfully.',
+                    'successor' => $successor
+                ]);
+            }
+            
+            return redirect()->route('potential_successors.index')->with('success', 'Potential successor added successfully.');
+        } catch (\Exception $e) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to add potential successor: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Failed to add potential successor: ' . $e->getMessage());
+        }
     }
 
     public function destroy($id)
     {
-        $successor = PotentialSuccessor::findOrFail($id);
-        $successor->delete();
-        // Log activity
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'delete',
-            'module' => 'Potential Successor',
-            'description' => 'Deleted potential successor (ID: ' . $successor->id . ')',
-        ]);
-        return redirect()->route('potential_successors.index')->with('success', 'Potential successor deleted successfully.');
+        try {
+            $successor = PotentialSuccessor::findOrFail($id);
+            $successor->delete();
+            
+            // Log activity
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'delete',
+                'module' => 'Potential Successor',
+                'description' => 'Deleted potential successor (ID: ' . $successor->id . ')',
+            ]);
+            
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Potential successor deleted successfully.'
+                ]);
+            }
+            
+            return redirect()->route('potential_successors.index')->with('success', 'Potential successor deleted successfully.');
+        } catch (\Exception $e) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete potential successor: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Failed to delete potential successor.');
+        }
     }
     public function show($id)
     {
-        $successor = PotentialSuccessor::with('employee')->findOrFail($id);
-        $employees = Employee::all();
-        $successors = PotentialSuccessor::with('employee')->latest()->paginate(10);
-        return view('succession_planning.potential_successor', compact('successors', 'employees', 'successor'))->with('showMode', true);
+        try {
+            $successor = PotentialSuccessor::with(['employee.competencyProfiles.competency'])->findOrFail($id);
+            
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'successor' => $successor
+                ]);
+            }
+            
+            $employees = Employee::all();
+            $successors = PotentialSuccessor::with(['employee.competencyProfiles.competency'])->latest()->paginate(10);
+            return view('succession_planning.potential_successor', compact('successors', 'employees', 'successor'))->with('showMode', true);
+        } catch (\Exception $e) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to load successor details: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Successor not found.');
+        }
     }
 
     public function edit($id)
@@ -112,14 +173,14 @@ class PotentialSuccessorController extends Controller
         $suggestions = [];
         foreach ($employees as $employee) {
             $competencyProfiles = $employee->competencyProfiles;
-            
+
             if ($competencyProfiles->isEmpty()) {
                 continue; // Skip employees without competency data
             }
 
             // Calculate suitability score based on real competency data
             $analysis = $this->analyzeEmployeeForRole($employee, $competencyProfiles, $roleRequirements);
-            
+
             // Apply filters
             if ($readinessFilter && $analysis['readinessLevel'] !== $readinessFilter) {
                 continue;
@@ -211,7 +272,7 @@ class PotentialSuccessorController extends Controller
                 default => is_numeric($level) ? (int)$level : 3 // default to proficient
             };
         });
-        
+
         $avgProficiency = $proficiencyLevels->avg();
         $totalCompetencies = $competencyProfiles->count();
 
@@ -219,22 +280,22 @@ class PotentialSuccessorController extends Controller
         $leadershipCompetencies = $competencyProfiles->filter(function($profile) {
             $competencyName = strtolower($profile->competency->competency_name ?? '');
             $category = strtolower($profile->competency->category ?? '');
-            
+
             // Enhanced leadership detection (same logic as profile modal)
             $leadershipCategories = ['leadership', 'management', 'strategic thinking', 'team leadership', 'executive skills'];
-            $leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building', 
+            $leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building',
                                  'communication', 'delegation', 'coaching', 'mentoring', 'vision', 'planning'];
-            
+
             // Check category match
             foreach ($leadershipCategories as $leadershipCat) {
                 if (stripos($category, $leadershipCat) !== false) return true;
             }
-            
+
             // Check keyword match in competency name
             foreach ($leadershipKeywords as $keyword) {
                 if (stripos($competencyName, $keyword) !== false) return true;
             }
-            
+
             return false;
         })->count();
 
@@ -248,8 +309,8 @@ class PotentialSuccessorController extends Controller
 
         // Calculate role-specific suitability score
         $suitabilityScore = $this->calculateRoleSuitability(
-            $avgProficiency, 
-            $leadershipCompetencies, 
+            $avgProficiency,
+            $leadershipCompetencies,
             $communicationCompetencies,
             $technicalCompetencies,
             $totalCompetencies,
@@ -257,7 +318,7 @@ class PotentialSuccessorController extends Controller
         );
 
         // Determine readiness level
-        $readinessLevel = $suitabilityScore >= 85 ? 'Ready Now' : 
+        $readinessLevel = $suitabilityScore >= 85 ? 'Ready Now' :
                          ($suitabilityScore >= 70 ? 'Ready Soon' : 'Needs Development');
 
         // Get top strengths and development areas
@@ -292,7 +353,7 @@ class PotentialSuccessorController extends Controller
         $proficiencyScore = min(20, ($avgProficiency / 5) * 20); // Max 20% (was 100%)
         $leadershipScore = min(12, $leadership * 2.4); // Max 12% (was 100%), requires 5+ leadership competencies
         $totalCompetenciesScore = min(8, ($total / 75) * 8); // Max 8% (was 100%), requires 75+ competencies
-        
+
         // Ultra-conservative weighted scoring: 70% proficiency + 20% leadership + 10% total competencies
         $readinessScore = ($proficiencyScore * 0.7) + ($leadershipScore * 0.2) + ($totalCompetenciesScore * 0.1);
 
@@ -319,11 +380,11 @@ class PotentialSuccessorController extends Controller
     public function getPredictiveAnalytics(Request $request)
     {
         $targetRole = $request->input('target_role');
-        
+
         // Get employees with competency and training data
         $employees = Employee::with(['competencyProfiles.competency'])->get();
         $trainingData = \App\Models\EmployeeTrainingDashboard::with('employee', 'course')->get();
-        
+
         $analytics = [
             'targetRole' => $targetRole,
             'totalCandidates' => $employees->count(),
@@ -336,47 +397,47 @@ class PotentialSuccessorController extends Controller
             'riskAssessment' => [],
             'timeline' => []
         ];
-        
+
         $totalScore = 0;
         $competencyGaps = [];
-        
+
         foreach ($employees as $employee) {
             if ($employee->competencyProfiles->isEmpty()) continue;
-            
+
             $roleRequirements = $this->getRoleRequirements($targetRole);
             $analysis = $this->analyzeEmployeeForRole($employee, $employee->competencyProfiles, $roleRequirements);
-            
+
             $totalScore += $analysis['suitabilityScore'];
-            
+
             // Count readiness levels
             switch($analysis['readinessLevel']) {
                 case 'Ready Now': $analytics['readyNow']++; break;
                 case 'Ready Soon': $analytics['readySoon']++; break;
                 case 'Needs Development': $analytics['needsDevelopment']++; break;
             }
-            
+
             // Collect competency gaps
             foreach($analysis['developmentAreas'] as $area) {
                 $competencyGaps[$area] = ($competencyGaps[$area] ?? 0) + 1;
             }
         }
-        
+
         $analytics['avgCompetencyScore'] = $employees->count() > 0 ? round($totalScore / $employees->count()) : 0;
-        
+
         // Top 5 competency gaps
         arsort($competencyGaps);
         $analytics['topCompetencyGaps'] = array_slice($competencyGaps, 0, 5, true);
-        
+
         // Generate training recommendations based on gaps
         $analytics['trainingRecommendations'] = $this->generateTrainingRecommendations(array_keys($analytics['topCompetencyGaps']));
-        
+
         // Risk assessment
         $analytics['riskAssessment'] = [
             'high' => $analytics['readyNow'] < 2 ? 'Insufficient ready successors' : null,
             'medium' => $analytics['readySoon'] < 3 ? 'Limited pipeline depth' : null,
             'low' => $analytics['avgCompetencyScore'] < 60 ? 'Overall competency levels need improvement' : null
         ];
-        
+
         // Timeline projections
         $analytics['timeline'] = [
             'immediate' => $analytics['readyNow'],
@@ -384,13 +445,13 @@ class PotentialSuccessorController extends Controller
             '6_months' => round($analytics['readySoon'] * 0.7),
             '12_months' => $analytics['needsDevelopment']
         ];
-        
+
         return response()->json([
             'success' => true,
             'data' => $analytics
         ]);
     }
-    
+
     /**
      * Generate personalized development paths
      */
@@ -398,26 +459,26 @@ class PotentialSuccessorController extends Controller
     {
         $employeeId = $request->input('employee_id');
         $targetRole = $request->input('target_role');
-        
+
         if (!$employeeId) {
             return response()->json(['error' => 'Employee ID required'], 400);
         }
-        
+
         $employee = Employee::with(['competencyProfiles.competency'])->where('employee_id', $employeeId)->first();
-        
+
         if (!$employee) {
             return response()->json(['error' => 'Employee not found'], 404);
         }
-        
+
         $roleRequirements = $this->getRoleRequirements($targetRole);
         $analysis = $this->analyzeEmployeeForRole($employee, $employee->competencyProfiles, $roleRequirements);
-        
+
         // Get training history
         $trainingHistory = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
             ->with('course')
             ->orderBy('training_date', 'desc')
             ->get();
-        
+
         $developmentPath = [
             'employee' => [
                 'id' => $employee->employee_id,
@@ -440,17 +501,17 @@ class PotentialSuccessorController extends Controller
             'timeline' => $this->generateDevelopmentTimeline($analysis['readinessLevel']),
             'milestones' => $this->generateMilestones($analysis, $targetRole)
         ];
-        
+
         return response()->json([
             'success' => true,
             'data' => $developmentPath
         ]);
     }
-    
+
     private function generateTrainingRecommendations($competencyGaps)
     {
         $recommendations = [];
-        
+
         foreach($competencyGaps as $gap) {
             $recommendations[] = [
                 'competency' => $gap,
@@ -459,10 +520,10 @@ class PotentialSuccessorController extends Controller
                 'estimatedDuration' => '2-4 weeks'
             ];
         }
-        
+
         return $recommendations;
     }
-    
+
     private function suggestCoursesForCompetency($competency)
     {
         $courseMap = [
@@ -472,20 +533,20 @@ class PotentialSuccessorController extends Controller
             'Customer Service' => ['Customer Experience Excellence', 'Service Recovery', 'Customer Relations'],
             'Technical Skills' => ['Technical Proficiency', 'System Administration', 'Process Improvement']
         ];
-        
+
         foreach($courseMap as $category => $courses) {
             if(stripos($competency, strtolower($category)) !== false) {
                 return $courses;
             }
         }
-        
+
         return ['General Professional Development', 'Skills Enhancement Workshop'];
     }
-    
+
     private function generateDevelopmentPlan($analysis, $targetRole)
     {
         $plan = [];
-        
+
         switch($analysis['readinessLevel']) {
             case 'Ready Now':
                 $plan = [
@@ -509,10 +570,10 @@ class PotentialSuccessorController extends Controller
                 ];
                 break;
         }
-        
+
         return $plan;
     }
-    
+
     private function generateDevelopmentTimeline($readinessLevel)
     {
         switch($readinessLevel) {
@@ -522,7 +583,7 @@ class PotentialSuccessorController extends Controller
             default: return '12+ months';
         }
     }
-    
+
     private function generateMilestones($analysis, $targetRole)
     {
         return [

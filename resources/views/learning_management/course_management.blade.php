@@ -5,9 +5,43 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
+  <style>
+    /* Card hover effects */
+    .training-request-card, .course-card {
+      transition: all 0.3s ease !important;
+      border: 1px solid #e9ecef !important;
+    }
+    
+    .training-request-card:hover, .course-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+      border-color: #007bff !important;
+    }
+    
+    /* Button group styling */
+    .btn-group .btn {
+      border-radius: 0.375rem !important;
+      margin-right: 2px;
+    }
+    
+    .btn-group .btn:last-child {
+      margin-right: 0;
+    }
+    
+    /* Empty state styling */
+    .bi-inbox, .bi-book {
+      opacity: 0.3;
+    }
+    
+    /* Course card book icon */
+    .course-card .bi-book-fill {
+      opacity: 0.8;
+    }
+  </style>
 </head>
 <body style="background-color: #f8f9fa !important;">
 
@@ -40,7 +74,7 @@
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Home</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Courses</li>
+            <li class="breadcrumb-item active" aria-current="page">Course Management</li>
           </ol>
         </nav>
       </div>
@@ -170,13 +204,8 @@
                 <button class="btn btn-sm btn-success" onclick="acceptAndCreateCourse({{ $notification->id }})">
                   <i class="bi bi-check-circle"></i> Accept & Create Course
                 </button>
-                @if(!$notification->is_read)
-                <button class="btn btn-sm btn-outline-info" onclick="markAsRead({{ $notification->id }})">
-                  <i class="bi bi-check2"></i> Mark Read
-                </button>
-                @endif
                 <button class="btn btn-sm btn-outline-danger" onclick="deleteNotification({{ $notification->id }})">
-                  <i class="bi bi-trash"></i>
+                  <i class="bi bi-trash"></i>Reject
                 </button>
               </div>
             </div>
@@ -252,96 +281,152 @@
         <span class="badge bg-primary">{{ $trainingRequests->count() }} Requests</span>
       </div>
       <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-bordered mb-0">
-            <thead class="table-warning">
-              <tr>
-                <th class="fw-bold">Request ID</th>
-                <th class="fw-bold">Employee</th>
-                <th class="fw-bold">Course Requested</th>
-                <th class="fw-bold">Reason</th>
-                <th class="fw-bold">Status</th>
-                <th class="fw-bold">Requested Date</th>
-                <th class="fw-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse($trainingRequests as $request)
-              <tr>
-                <td>{{ $request->request_id }}</td>
-                <td>
-                  <div class="d-flex align-items-center">
-                    <div class="avatar-sm me-2">
-                      @php
-                        $firstName = $request->employee->first_name ?? 'Unknown';
-                        $lastName = $request->employee->last_name ?? 'Employee';
-                        $fullName = $firstName . ' ' . $lastName;
+        @forelse($trainingRequests as $request)
+          @if($loop->first)
+            <div class="row g-4">
+          @endif
+              <div class="col-lg-6 col-xl-4">
+                <div class="card h-100 shadow-sm border-0 training-request-card" style="transition: all 0.3s ease;">
+                  @php
+                    $firstName = $request->employee->first_name ?? 'Unknown';
+                    $lastName = $request->employee->last_name ?? 'Employee';
+                    $fullName = $firstName . ' ' . $lastName;
 
-                        // Check if profile picture exists - simplified approach
-                        $profilePicUrl = null;
-                        if ($request->employee && $request->employee->profile_picture) {
-                            // Direct asset URL generation - Laravel handles the storage symlink
-                            $profilePicUrl = asset('storage/' . $request->employee->profile_picture);
-                        }
+                    // Check if profile picture exists - simplified approach
+                    $profilePicUrl = null;
+                    if ($request->employee && $request->employee->profile_picture) {
+                        // Direct asset URL generation - Laravel handles the storage symlink
+                        $profilePicUrl = asset('storage/' . $request->employee->profile_picture);
+                    }
 
-                        // Generate consistent color based on employee name for fallback
-                        $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-                        $employeeId = $request->employee_id ?? 'default';
-                        $colorIndex = abs(crc32($employeeId)) % count($colors);
-                        $bgColor = $colors[$colorIndex];
+                    // Generate consistent color based on employee name for fallback
+                    $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
+                    $employeeId = $request->employee_id ?? 'default';
+                    $colorIndex = abs(crc32($employeeId)) % count($colors);
+                    $bgColor = $colors[$colorIndex];
 
-                        // Fallback to UI Avatars if no profile picture found
-                        if (!$profilePicUrl) {
-                            $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
-                                           "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
-                        }
-                      @endphp
-
+                    // Fallback to UI Avatars if no profile picture found
+                    if (!$profilePicUrl) {
+                        $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
+                                       "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+                    }
+                  @endphp
+                  
+                  <!-- Card Header with Employee Info -->
+                  <div class="card-header text-white border-0 py-3" style="background-color: #{{ $bgColor }};">
+                    <div class="d-flex align-items-center">
                       <img src="{{ $profilePicUrl }}"
                            alt="{{ $firstName }} {{ $lastName }}"
-                           class="rounded-circle"
-                           style="width: 40px; height: 40px; object-fit: cover;">
-                    </div>
-                    <div>
-                      <strong>{{ $firstName }} {{ $lastName }}</strong>
-                      <br><small class="text-muted">ID: {{ $request->employee_id }}</small>
+                           class="rounded-circle me-3"
+                           style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);">
+                      <div class="flex-grow-1">
+                        <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
+                        <small class="text-dark fw-bold">Request #{{ $request->request_id }}</small>
+                      </div>
                     </div>
                   </div>
-                </td>
-                <td>
-                  <strong>{{ $request->training_title }}</strong>
-                  @if($request->course)
-                    <br><small class="text-muted">Course ID: {{ $request->course->course_id }}</small>
-                  @endif
-                </td>
-                <td>{{ Str::limit($request->reason, 50) }}</td>
-                <td>
-                  <span class="badge {{ $request->status == 'Approved' ? 'bg-success' : ($request->status == 'Rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
-                    {{ $request->status }}
-                  </span>
-                </td>
-                <td>{{ date('M d, Y', strtotime($request->requested_date)) }}</td>
-                <td class="text-center">
-                  @if($request->status == 'Pending')
-                    <button class="btn btn-success btn-sm me-1" onclick="approveRequest({{ $request->request_id }})">
-                      <i class="bi bi-check-circle"></i> Approve
-                    </button>
-                    <button class="btn btn-danger btn-sm" onclick="rejectRequest({{ $request->request_id }})">
-                      <i class="bi bi-x-circle"></i> Reject
-                    </button>
-                  @else
-                    <span class="text-muted small">{{ $request->status }}</span>
-                  @endif
-                </td>
-              </tr>
-              @empty
-              <tr>
-                <td colspan="7" class="text-center text-muted">No training requests found.</td>
-              </tr>
-              @endforelse
-            </tbody>
-          </table>
-        </div>
+                  
+                  <div class="card-body">
+                    <!-- Course Requested -->
+                    <div class="mb-3 p-3 bg-light rounded-3 border-start border-primary border-4">
+                      <div class="d-flex align-items-center mb-2">
+                        <i class="bi bi-mortarboard-fill text-primary me-2" style="font-size: 1.2rem;"></i>
+                        <h6 class="card-title fw-bold text-dark mb-0">{{ $request->training_title }}</h6>
+                      </div>
+                      @if($request->course)
+                        <small class="text-muted">
+                          <i class="bi bi-tag me-1"></i>Course ID: {{ $request->course->course_id }}
+                        </small>
+                      @endif
+                    </div>
+
+                    <!-- Employee ID -->
+                    <div class="mb-3 p-2 bg-info bg-opacity-10 rounded-2">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-person-badge text-info me-2"></i>
+                        <div>
+                          <small class="text-muted d-block">Employee ID</small>
+                          <span class="fw-semibold text-dark">{{ $request->employee_id }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Reason -->
+                    <div class="mb-3 p-3 bg-warning bg-opacity-10 rounded-2 border-start border-warning border-3">
+                      <div class="d-flex align-items-start">
+                        <i class="bi bi-chat-quote text-warning me-2 mt-1"></i>
+                        <div class="flex-grow-1">
+                          <small class="text-muted d-block mb-1">
+                            <i class="bi bi-question-circle me-1"></i>Reason
+                          </small>
+                          <p class="mb-0 text-dark" style="min-height: 40px; font-style: italic;">
+                            "{{ Str::limit($request->reason, 80) }}"
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Status and Date -->
+                    <div class="row mb-3">
+                      <div class="col-6">
+                        <div class="p-2 bg-light rounded-2 text-center">
+                          <small class="text-muted d-block mb-1">
+                            <i class="bi bi-flag me-1"></i>Status
+                          </small>
+                          <span class="badge {{ $request->status == 'Approved' ? 'bg-success' : ($request->status == 'Rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
+                            <i class="bi {{ $request->status == 'Approved' ? 'bi-check-circle' : ($request->status == 'Rejected' ? 'bi-x-circle' : 'bi-clock') }} me-1"></i>
+                            {{ $request->status }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="col-6">
+                        <div class="p-2 bg-light rounded-2 text-center">
+                          <small class="text-muted d-block mb-1">
+                            <i class="bi bi-calendar-event me-1"></i>Requested Date
+                          </small>
+                          <small class="fw-semibold text-dark">{{ date('M d, Y', strtotime($request->requested_date)) }}</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-grid gap-2">
+                      @if($request->status == 'Pending')
+                        <div class="btn-group" role="group">
+                          <button class="btn btn-success btn-sm" onclick="approveRequest({{ $request->request_id }})" title="Approve Request">
+                            <i class="bi bi-check-circle"></i>
+                          </button>
+                          <button class="btn btn-danger btn-sm" onclick="rejectRequest({{ $request->request_id }})" title="Reject Request">
+                            <i class="bi bi-x-circle"></i>
+                          </button>
+                        </div>
+                        <div class="mt-1">
+                          <small class="text-muted">
+                            <i class="bi bi-check-circle me-1"></i>Approve &nbsp;&nbsp;
+                            <i class="bi bi-x-circle me-1"></i>Reject
+                          </small>
+                        </div>
+                      @else
+                        <button class="btn btn-outline-primary btn-sm w-100" onclick="viewRequestDetails('{{ $request->request_id }}', '{{ addslashes($request->employee->first_name ?? 'Unknown') }} {{ addslashes($request->employee->last_name ?? 'Employee') }}', '{{ $request->employee_id }}', '{{ addslashes($request->training_title) }}', '{{ addslashes($request->reason ?? 'N/A') }}', '{{ $request->status }}', '{{ date('M d, Y', strtotime($request->requested_date)) }}')">
+                          <i class="bi bi-eye me-1"></i> View Details
+                        </button>
+                      @endif
+                    </div>
+                  </div>
+                </div>
+              </div>
+          @if($loop->last)
+            </div>
+          @endif
+        @empty
+          <div class="text-center py-5">
+            <div class="mb-3">
+              <i class="bi bi-inbox display-1 text-muted"></i>
+            </div>
+            <h5 class="text-muted mb-2">No Training Requests Found</h5>
+            <p class="text-muted mb-3">Training requests from employees will appear here.</p>
+          </div>
+        @endforelse
       </div>
     </div>
 
@@ -349,62 +434,122 @@
     <div class="card shadow-sm border-0 mt-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Course List</h4>
-        <button class="btn btn-primary btn-sm d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#addCourseModal">
+        <button class="btn btn-primary btn-sm d-flex align-items-center" onclick="addCourseWithConfirmation()">
           <i class="bi bi-plus-lg me-1"></i> Add Course
         </button>
       </div>
       <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-bordered mb-0">
-            <thead class="table-primary">
-              <tr>
-                <th class="fw-bold">Course ID</th>
-                <th class="fw-bold">Course Title</th>
-                <th class="fw-bold">Description</th>
-                <th class="fw-bold">Start Date</th>
-                <th class="fw-bold">Status</th>
-                <th class="fw-bold">Created At</th>
-                <th class="fw-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse($courses as $course)
-              <tr>
-                <td>{{ $course->course_id }}</td>
-                <td class="fw-semibold">{{ $course->course_title }}</td>
-                <td>{{ Str::limit($course->description, 50) }}</td>
-                <td>{{ date('M d, Y', strtotime($course->start_date)) }}</td>
-                <td>
-                  <span class="badge {{ $course->status == 'Active' ? 'bg-success bg-opacity-10 text-success' : 'bg-secondary bg-opacity-10 text-secondary' }}">
-                    {{ $course->status }}
-                  </span>
-                </td>
-                <td>{{ date('M d, Y', strtotime($course->created_at)) }}</td>
-                <td class="text-center">
-                  <button class="btn btn-outline-primary btn-sm me-1" data-bs-toggle="modal" data-bs-target="#editCourseModal{{ $course->course_id }}">
-                    <i class="bi bi-pencil"></i> Edit
-                  </button>
-                  <form action="{{ route('admin.course_management.destroy', $course->course_id) }}" method="POST" class="d-inline">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Are you sure you want to delete this course?')">
-                      <i class="bi bi-trash"></i> Delete
-                    </button>
-                  </form>
-                </td>
-              </tr>
-              @empty
-              <tr>
-                <td colspan="7" class="text-center text-muted">No courses found.</td>
-              </tr>
-              @endforelse
-            </tbody>
-          </table>
-        </div>
-        <!-- Pagination -->
-        <div class="d-flex justify-content-between align-items-center mt-3">
+        @forelse($courses as $course)
+          @if($loop->first)
+            <div class="row g-4">
+          @endif
+              <div class="col-lg-6 col-xl-4">
+                <div class="card h-100 shadow-sm border-0 course-card" style="transition: all 0.3s ease;">
+                  @php
+                    // Generate course color based on course ID
+                    $courseColors = ['4ECDC4', '45B7D1', 'FFA726', 'AB47BC', 'EF5350', '66BB6A', 'FFCA28', '26A69A', 'FF7043', '7E57C2'];
+                    $courseIndex = abs(crc32($course->course_id)) % count($courseColors);
+                    $courseColor = $courseColors[$courseIndex];
+                  @endphp
+                  
+                  <!-- Card Header with Course Info -->
+                  <div class="card-header text-white border-0 py-3" style="background-color: #{{ $courseColor }};">
+                    <div class="d-flex align-items-center">
+                      <div class="me-3">
+                        <i class="bi bi-book-fill" style="font-size: 2rem;"></i>
+                      </div>
+                      <div class="flex-grow-1">
+                        <h6 class="mb-0 fw-bold">{{ $course->course_title }}</h6>
+                        <small class="text-dark fw-bold">Course ID: {{ $course->course_id }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="card-body">
+                    <!-- Description -->
+                    <div class="mb-3 p-3 bg-light rounded-3 border-start border-info border-4">
+                      <div class="d-flex align-items-start">
+                        <i class="bi bi-file-text text-info me-2 mt-1"></i>
+                        <div class="flex-grow-1">
+                          <small class="text-muted d-block mb-1">
+                            <i class="bi bi-info-circle me-1"></i>Description
+                          </small>
+                          <p class="mb-0 text-dark" style="min-height: 60px; font-style: italic;">
+                            "{{ Str::limit($course->description, 100) }}"
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Dates Section -->
+                    <div class="row mb-3">
+                      <div class="col-6">
+                        <div class="p-2 bg-success bg-opacity-10 rounded-2 text-center">
+                          <small class="text-muted d-block mb-1">
+                            <i class="bi bi-calendar-plus text-success me-1"></i>Start Date
+                          </small>
+                          <small class="fw-semibold text-dark">{{ date('M d, Y', strtotime($course->start_date)) }}</small>
+                        </div>
+                      </div>
+                      <div class="col-6">
+                        <div class="p-2 bg-secondary bg-opacity-10 rounded-2 text-center">
+                          <small class="text-muted d-block mb-1">
+                            <i class="bi bi-calendar-check text-secondary me-1"></i>Created
+                          </small>
+                          <small class="fw-semibold text-dark">{{ date('M d, Y', strtotime($course->created_at)) }}</small>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="mb-3 p-3 {{ $course->status == 'Active' ? 'bg-success' : 'bg-secondary' }} bg-opacity-10 rounded-2 text-center">
+                      <small class="text-muted d-block mb-2">
+                        <i class="bi bi-gear me-1"></i>Course Status
+                      </small>
+                      <span class="badge {{ $course->status == 'Active' ? 'bg-success' : 'bg-secondary' }} fs-6">
+                        <i class="bi {{ $course->status == 'Active' ? 'bi-check-circle' : 'bi-pause-circle' }} me-1"></i>
+                        {{ $course->status }}
+                      </span>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-grid gap-2">
+                      <div class="btn-group" role="group">
+                        <button class="btn btn-outline-info btn-sm" onclick="viewCourseDetails('{{ $course->course_id }}', '{{ addslashes($course->course_title) }}', '{{ addslashes($course->description) }}', '{{ $course->start_date }}', '{{ $course->status }}', '{{ $course->created_at->format('M d, Y H:i') }}')" title="View Details">
+                          <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm" onclick="editCourseWithConfirmation('{{ $course->course_id }}', '{{ addslashes($course->course_title) }}', '{{ addslashes($course->description) }}', '{{ $course->start_date }}', '{{ $course->status }}')" title="Edit Course">
+                          <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="deleteCourseWithConfirmation('{{ $course->course_id }}', '{{ addslashes($course->course_title) }}')" title="Delete Course">
+                          <i class="bi bi-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          @if($loop->last)
+            </div>
+          @endif
+        @empty
+          <div class="text-center py-5">
+            <div class="mb-3">
+              <i class="bi bi-book display-1 text-muted"></i>
+            </div>
+            <h5 class="text-muted mb-2">No Courses Found</h5>
+            <p class="text-muted mb-3">Get started by adding your first course.</p>
+            <button class="btn btn-primary" onclick="addCourseWithConfirmation()">
+              <i class="bi bi-plus-lg me-1"></i> Add Your First Course
+            </button>
+          </div>
+        @endforelse
+
+        <!-- Pagination (if needed) -->
+        @if($courses->count() > 0)
+        <div class="d-flex justify-content-between align-items-center mt-4">
           <div class="text-muted small">
-            Showing <span class="fw-semibold">1</span> to <span class="fw-semibold">2</span> of <span class="fw-semibold">2</span> entries
+            Showing <span class="fw-semibold">{{ $courses->count() }}</span> course{{ $courses->count() != 1 ? 's' : '' }}
           </div>
           <nav>
             <ul class="pagination pagination-sm mb-0">
@@ -418,51 +563,20 @@
             </ul>
           </nav>
         </div>
+        @endif
       </div>
     </div>
   </main>
 
-  <!-- Add Course Modal -->
-  <div class="modal fade" id="addCourseModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="card-header modal-header">
-          <h5 class="modal-title">Add New Course</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <form action="{{ route('admin.course_management.store') }}" method="POST">
-            @csrf
-            <div class="mb-3">
-              <label class="form-label">Course Title*</label>
-              <input type="text" class="form-control" name="course_title" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Description</label>
-              <textarea class="form-control" name="description" rows="4"></textarea>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Start Date*</label>
-              <input type="date" class="form-control" name="start_date" required>
-            </div>
-            <div class="mb-3 mt-3">
-              <label class="form-label">Status*</label>
-              <select class="form-select" name="status" required>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-            <div class="d-flex justify-content-end gap-2 mt-4">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-              <button type="submit" class="btn btn-primary">
-                <i class="bi bi-save me-1"></i> Save Course
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Hidden form for course operations -->
+  <form id="courseActionForm" action="" method="POST" style="display: none;">
+    @csrf
+    <input type="hidden" name="_method" id="courseMethod" value="">
+    <input type="hidden" name="course_title" id="hiddenCourseTitle">
+    <input type="hidden" name="description" id="hiddenDescription">
+    <input type="hidden" name="start_date" id="hiddenStartDate">
+    <input type="hidden" name="status" id="hiddenStatus">
+  </form>
 
   <!-- Edit Course Modals -->
   @foreach($courses as $course)
@@ -639,6 +753,17 @@
 
     // Training request approval/rejection functions
     async function approveRequest(requestId) {
+      // First check if requestId is valid
+      if (!requestId || requestId === 'undefined' || requestId === 'null') {
+        await Swal.fire({
+          title: 'Error',
+          text: 'Invalid request ID. Please refresh the page and try again.',
+          icon: 'error',
+          confirmButtonColor: '#dc3545'
+        });
+        return;
+      }
+
       const result = await Swal.fire({
         title: 'Approve Training Request',
         text: 'Are you sure you want to approve this training request?',
@@ -653,33 +778,29 @@
       if (!result.isConfirmed) return;
 
       try {
-        // First check if training_requests table exists
-        const checkResponse = await fetch('/admin/check-training-requests-table', {
-          method: 'GET',
-          headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-            'Content-Type': 'application/json',
-          }
-        });
-
-        if (!checkResponse.ok) {
-          throw new Error('Unable to verify database table');
-        }
-
+        console.log('Attempting to approve request ID:', requestId);
+        console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]').content);
+        
         const response = await fetch(`/admin/training-requests/${requestId}/approve`, {
           method: 'POST',
           headers: {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
             'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
 
         if (!response.ok) {
           const errorText = await response.text();
+          console.error('Response not OK:', response.status, errorText);
           throw new Error(`HTTP ${response.status}: ${errorText}`);
         }
 
         const result = await response.json();
+        console.log('Approval response:', result);
         if (result.success) {
           // Show SweetAlert success notification
           await Swal.fire({
@@ -703,29 +824,16 @@
         }
       } catch (error) {
         console.error('Error approving request:', error);
+        console.error('Error details:', error.message);
+        console.error('Error stack:', error.stack);
+        
         let errorMessage = 'Error approving request';
+        let technicalDetails = error.message;
 
         if (error.message.includes('404')) {
           errorMessage = 'Training request not found.';
         } else if (error.message.includes('500')) {
-          errorMessage = 'Database error. Creating training_requests table automatically...';
-          
-          // Try to create the table automatically
-          try {
-            const createResponse = await fetch('/admin/create-training-requests-table', {
-              method: 'POST',
-              headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                'Content-Type': 'application/json',
-              }
-            });
-            
-            if (createResponse.ok) {
-              errorMessage = 'Table created successfully. Please try again.';
-            }
-          } catch (createError) {
-            console.error('Failed to create table:', createError);
-          }
+          errorMessage = 'Database error occurred. Please contact the administrator.';
         } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
           errorMessage = 'Network error. Please check your connection and try again.';
         }
@@ -735,7 +843,7 @@
           text: errorMessage,
           icon: 'error',
           confirmButtonColor: '#dc3545',
-          footer: '<small>Technical details: ' + error.message + '</small>'
+          footer: `<small>Technical details: ${technicalDetails}</small>`
         });
       }
     }
@@ -1031,8 +1139,66 @@
       }
     }
 
+    // View training request details function
+    async function viewRequestDetails(requestId, employeeName, employeeId, trainingTitle, reason, status, requestedDate) {
+      // Create detailed view modal with status badge styling
+      const statusBadgeClass = status === 'Approved' ? 'bg-success' : 
+                              status === 'Rejected' ? 'bg-danger' : 'bg-warning text-dark';
+      
+      await Swal.fire({
+        title: 'Training Request Details',
+        html: `
+          <div class="text-start">
+            <div class="row mb-3">
+              <div class="col-6"><strong>Request ID:</strong></div>
+              <div class="col-6">${requestId}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-6"><strong>Employee:</strong></div>
+              <div class="col-6">${employeeName}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-6"><strong>Employee ID:</strong></div>
+              <div class="col-6">${employeeId}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-6"><strong>Course:</strong></div>
+              <div class="col-6">${trainingTitle}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-6"><strong>Reason:</strong></div>
+              <div class="col-6">${reason}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-6"><strong>Status:</strong></div>
+              <div class="col-6"><span class="badge ${statusBadgeClass}">${status}</span></div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-6"><strong>Requested Date:</strong></div>
+              <div class="col-6">${requestedDate}</div>
+            </div>
+          </div>
+        `,
+        icon: 'info',
+        confirmButtonColor: '#0d6efd',
+        confirmButtonText: 'Close',
+        width: '600px'
+      });
+    }
+
     async function deleteNotification(notificationId) {
-      if (!confirm('Are you sure you want to delete this notification?')) return;
+      const result = await Swal.fire({
+        title: 'Delete Notification',
+        text: 'Are you sure you want to delete this notification?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'Yes, Delete',
+        cancelButtonText: 'Cancel'
+      });
+
+      if (!result.isConfirmed) return;
 
       try {
         const response = await fetch(`/admin/course-management/notifications/${notificationId}`, {
@@ -1045,6 +1211,15 @@
 
         const result = await response.json();
         if (result.success) {
+          await Swal.fire({
+            title: 'Deleted!',
+            text: 'Notification deleted successfully!',
+            icon: 'success',
+            confirmButtonColor: '#28a745',
+            timer: 2000,
+            timerProgressBar: true
+          });
+          
           // Remove notification from UI
           const notificationItem = document.querySelector(`[data-notification-id="${notificationId}"]`);
           if (notificationItem) {
@@ -1053,11 +1228,341 @@
           // Reload page to update notification count
           setTimeout(() => location.reload(), 1000);
         } else {
-          alert('Failed to delete notification: ' + result.message);
+          await Swal.fire({
+            title: 'Error',
+            text: 'Failed to delete notification: ' + result.message,
+            icon: 'error',
+            confirmButtonColor: '#dc3545'
+          });
         }
       } catch (error) {
         console.error('Error deleting notification:', error);
-        alert('Error deleting notification');
+        await Swal.fire({
+          title: 'Error',
+          text: 'Error deleting notification',
+          icon: 'error',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    }
+
+    // Course Management Functions with SweetAlert and Password Confirmation
+    async function addCourseWithConfirmation() {
+      const { value: formValues } = await Swal.fire({
+        title: 'Add New Course',
+        html: `
+          <div class="text-start">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Course Title *</label>
+              <input id="swal-course-title" class="form-control" placeholder="Enter course title" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Description</label>
+              <textarea id="swal-description" class="form-control" rows="3" placeholder="Enter course description"></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Start Date *</label>
+              <input id="swal-start-date" type="date" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Status *</label>
+              <select id="swal-status" class="form-select" required>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold text-danger">Admin Password *</label>
+              <input id="swal-password" type="password" class="form-control" placeholder="Enter your admin password for confirmation" required>
+              <small class="text-muted">Password confirmation required for security</small>
+            </div>
+          </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-save me-1"></i> Create Course',
+        cancelButtonText: 'Cancel',
+        width: '600px',
+        preConfirm: () => {
+          const courseTitle = document.getElementById('swal-course-title').value;
+          const description = document.getElementById('swal-description').value;
+          const startDate = document.getElementById('swal-start-date').value;
+          const status = document.getElementById('swal-status').value;
+          const password = document.getElementById('swal-password').value;
+          
+          if (!courseTitle || !startDate || !status || !password) {
+            Swal.showValidationMessage('Please fill in all required fields');
+            return false;
+          }
+          
+          return {
+            course_title: courseTitle,
+            description: description,
+            start_date: startDate,
+            status: status,
+            password: password
+          };
+        }
+      });
+
+      if (formValues) {
+        await submitCourseForm('{{ route('admin.course_management.store') }}', 'POST', formValues);
+      }
+    }
+
+    async function editCourseWithConfirmation(courseId, currentTitle, currentDescription, currentStartDate, currentStatus) {
+      const { value: formValues } = await Swal.fire({
+        title: 'Edit Course',
+        html: `
+          <div class="text-start">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Course Title *</label>
+              <input id="swal-course-title" class="form-control" value="${currentTitle}" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Description</label>
+              <textarea id="swal-description" class="form-control" rows="3">${currentDescription}</textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Start Date *</label>
+              <input id="swal-start-date" type="date" class="form-control" value="${currentStartDate}" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Status *</label>
+              <select id="swal-status" class="form-select" required>
+                <option value="Active" ${currentStatus === 'Active' ? 'selected' : ''}>Active</option>
+                <option value="Inactive" ${currentStatus === 'Inactive' ? 'selected' : ''}>Inactive</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold text-danger">Admin Password *</label>
+              <input id="swal-password" type="password" class="form-control" placeholder="Enter your admin password for confirmation" required>
+              <small class="text-muted">Password confirmation required for security</small>
+            </div>
+          </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonColor: '#0d6efd',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-arrow-repeat me-1"></i> Update Course',
+        cancelButtonText: 'Cancel',
+        width: '600px',
+        preConfirm: () => {
+          const courseTitle = document.getElementById('swal-course-title').value;
+          const description = document.getElementById('swal-description').value;
+          const startDate = document.getElementById('swal-start-date').value;
+          const status = document.getElementById('swal-status').value;
+          const password = document.getElementById('swal-password').value;
+          
+          if (!courseTitle || !startDate || !status || !password) {
+            Swal.showValidationMessage('Please fill in all required fields');
+            return false;
+          }
+          
+          return {
+            course_title: courseTitle,
+            description: description,
+            start_date: startDate,
+            status: status,
+            password: password
+          };
+        }
+      });
+
+      if (formValues) {
+        await submitCourseForm(`{{ url('admin/course-management') }}/${courseId}`, 'PUT', formValues);
+      }
+    }
+
+    async function deleteCourseWithConfirmation(courseId, courseTitle) {
+      const { value: password } = await Swal.fire({
+        title: 'Delete Course',
+        html: `
+          <div class="text-start">
+            <div class="alert alert-warning">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              <strong>Warning:</strong> This action cannot be undone!
+            </div>
+            <p class="mb-3">You are about to delete the course: <strong>${courseTitle}</strong></p>
+            <div class="mb-3">
+              <label class="form-label fw-bold text-danger">Admin Password *</label>
+              <input id="swal-delete-password" type="password" class="form-control" placeholder="Enter your admin password to confirm deletion" required>
+              <small class="text-muted">Password confirmation required for security</small>
+            </div>
+          </div>
+        `,
+        icon: 'warning',
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-trash me-1"></i> Delete Course',
+        cancelButtonText: 'Cancel',
+        width: '500px',
+        preConfirm: () => {
+          const password = document.getElementById('swal-delete-password').value;
+          if (!password) {
+            Swal.showValidationMessage('Password is required to confirm deletion');
+            return false;
+          }
+          return password;
+        }
+      });
+
+      if (password) {
+        await submitCourseForm(`{{ url('admin/course-management') }}/${courseId}`, 'DELETE', { password: password });
+      }
+    }
+
+    async function viewCourseDetails(courseId, title, description, startDate, status, createdAt) {
+      await Swal.fire({
+        title: 'Course Details',
+        html: `
+          <div class="text-start">
+            <div class="row mb-3">
+              <div class="col-4"><strong>Course ID:</strong></div>
+              <div class="col-8">${courseId}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-4"><strong>Title:</strong></div>
+              <div class="col-8">${title}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-4"><strong>Description:</strong></div>
+              <div class="col-8">${description || 'No description provided'}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-4"><strong>Start Date:</strong></div>
+              <div class="col-8">${new Date(startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-4"><strong>Status:</strong></div>
+              <div class="col-8"><span class="badge ${status === 'Active' ? 'bg-success' : 'bg-secondary'}">${status}</span></div>
+            </div>
+            <div class="row mb-3">
+              <div class="col-4"><strong>Created:</strong></div>
+              <div class="col-8">${createdAt}</div>
+            </div>
+          </div>
+        `,
+        icon: 'info',
+        confirmButtonColor: '#0d6efd',
+        confirmButtonText: 'Close',
+        width: '600px'
+      });
+    }
+
+    async function submitCourseForm(url, method, formData) {
+      try {
+        // Show loading
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Please wait while we process your request.',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const requestBody = {
+          _token: document.querySelector('meta[name="csrf-token"]').content,
+          ...formData
+        };
+
+        console.log('Submitting form data:', requestBody);
+
+        if (method !== 'POST') {
+          requestBody._method = method;
+        }
+
+        // Create FormData for traditional Laravel form handling
+        const formDataToSend = new FormData();
+        Object.keys(requestBody).forEach(key => {
+          formDataToSend.append(key, requestBody[key]);
+        });
+
+        console.log('Making request to:', url);
+        console.log('Request method:', method);
+        console.log('Form data:', Object.fromEntries(formDataToSend));
+
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: formDataToSend
+        });
+
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        const responseText = await response.text();
+        console.log('Raw response:', responseText);
+        
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch (e) {
+          console.error('Failed to parse JSON response:', e);
+          throw new Error('Server returned invalid JSON response: ' + responseText.substring(0, 200));
+        }
+        
+        console.log('Parsed result:', result);
+
+        if (response.ok && result.success) {
+          await Swal.fire({
+            title: 'Success!',
+            text: result.message || 'Operation completed successfully!',
+            icon: 'success',
+            confirmButtonColor: '#28a745',
+            timer: 3000,
+            timerProgressBar: true
+          });
+          
+          // Reload page to show changes
+          location.reload();
+        } else {
+          let errorMessage = 'Operation failed';
+          
+          console.log('Operation failed. Response:', result);
+          
+          if (result.errors) {
+            errorMessage = Object.values(result.errors).flat().join('\n');
+          } else if (result.message) {
+            errorMessage = result.message;
+          } else {
+            errorMessage = `Server error (${response.status}): ${responseText.substring(0, 200)}`;
+          }
+          
+          await Swal.fire({
+            title: 'Error',
+            text: errorMessage,
+            icon: 'error',
+            confirmButtonColor: '#dc3545'
+          });
+        }
+      } catch (error) {
+        console.error('Error submitting form:', error);
+        console.error('Error stack:', error.stack);
+        
+        let errorMessage = 'An unexpected error occurred. Please try again.';
+        if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        await Swal.fire({
+          title: 'Error',
+          text: errorMessage,
+          icon: 'error',
+          confirmButtonColor: '#dc3545',
+          footer: '<small>Check browser console for detailed error information</small>'
+        });
       }
     }
   </script>

@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
-            $table->boolean('admin_approved_for_upcoming')->default(false)->after('is_active');
+            if (!Schema::hasColumn('destination_knowledge_trainings', 'admin_approved_for_upcoming')) {
+                $table->boolean('admin_approved_for_upcoming')->default(false)->after('is_active');
+            }
         });
     }
 
@@ -22,7 +24,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
-            $table->dropColumn('admin_approved_for_upcoming');
+            if (Schema::hasColumn('destination_knowledge_trainings', 'admin_approved_for_upcoming')) {
+                $table->dropColumn('admin_approved_for_upcoming');
+            }
         });
     }
 };

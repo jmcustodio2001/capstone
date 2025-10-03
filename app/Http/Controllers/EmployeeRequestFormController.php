@@ -7,6 +7,8 @@ use App\Models\RequestForm;
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 class EmployeeRequestFormController extends Controller
 {
@@ -62,10 +64,22 @@ class EmployeeRequestFormController extends Controller
             'reason' => 'required|string',
             'status' => 'required|in:pending,approved,rejected',
             'requested_date' => 'required|date',
-            'rejection_reason' => 'nullable|string|max:500'
+            'rejection_reason' => 'nullable|string|max:500',
+            'password' => 'required|string|min:3'
         ]);
+
+        // Verify admin password
+        if (!$this->verifyAdminPassword($validated['password'])) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Invalid password. Please enter your correct admin password.'
+            ], 401);
+        }
         
         $requestForm = RequestForm::findOrFail($id);
+        
+        // Remove password from update data
+        unset($validated['password']);
         $requestForm->update($validated);
         
         // Log activity
@@ -76,12 +90,24 @@ class EmployeeRequestFormController extends Controller
             'description' => 'Updated employee request form (ID: ' . $requestForm->request_id . ') - ' . $validated['request_type'],
         ]);
         
-        return redirect()->route('employee_request_forms.index')->with('success', 'Request updated successfully.');
+        return response()->json(['success' => true, 'message' => 'Request updated successfully']);
     }
 
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $validated = $request->validate([
+            'password' => 'required|string|min:3'
+        ]);
+
+        // Verify admin password
+        if (!$this->verifyAdminPassword($validated['password'])) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Invalid password. Please enter your correct admin password.'
+            ], 401);
+        }
+
         $requestForm = RequestForm::findOrFail($id);
         $requestFormId = $requestForm->request_id;
         $requestForm->delete();
@@ -104,8 +130,17 @@ class EmployeeRequestFormController extends Controller
     {
         $validated = $request->validate([
             'status' => 'required|in:approved,rejected,pending',
-            'rejection_reason' => 'required_if:status,rejected|nullable|string|max:500'
+            'rejection_reason' => 'required_if:status,rejected|nullable|string|max:500',
+            'password' => 'required|string|min:3'
         ]);
+
+        // Verify admin password
+        if (!$this->verifyAdminPassword($validated['password'])) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Invalid password. Please enter your correct admin password.'
+            ], 401);
+        }
 
         $requestForm = RequestForm::findOrFail($id);
         
@@ -135,5 +170,67 @@ class EmployeeRequestFormController extends Controller
         ]);
 
         return response()->json(['success' => true, 'message' => 'Request status updated successfully']);
+    }
+
+    /**
+     * Fix status case sensitivity issue - convert 'Pending' to 'pending'
+     */
+    public function fixStatusCase()
+    {
+        try {
+            // Update all records with 'Pending' to 'pending'
+            $updatedPending = DB::table('request_forms')
+                ->where('status', 'Pending')
+                ->update(['status' => 'pending']);
+
+            // Update all records with 'Approved' to 'approved'  
+            $updatedApproved = DB::table('request_forms')
+                ->where('status', 'Approved')
+                ->update(['status' => 'approved']);
+
+            // Update all records with 'Rejected' to 'rejected'
+            $updatedRejected = DB::table('request_forms')
+                ->where('status', 'Rejected')
+                ->update(['status' => 'rejected']);
+
+            $totalUpdated = $updatedPending + $updatedApproved + $updatedRejected;
+
+            // Log activity
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'fix_status_case',
+                'module' => 'Employee Request Form',
+                'description' => "Fixed status case sensitivity. Updated {$totalUpdated} records: {$updatedPending} pending, {$updatedApproved} approved, {$updatedRejected} rejected",
+            ]);
+
+            return response()->json([
+                'success' => true, 
+                'message' => "Status case fixed successfully. Updated {$totalUpdated} records.",
+                'details' => [
+                    'pending' => $updatedPending,
+                    'approved' => $updatedApproved,
+                    'rejected' => $updatedRejected,
+                    'total' => $totalUpdated
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Error fixing status case: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify admin password
+     */
+    private function verifyAdminPassword($password)
+    {
+        $admin = Auth::guard('admin')->user();
+        if (!$admin) {
+            return false;
+        }
+        return Hash::check($password, $admin->password);
     }
 }

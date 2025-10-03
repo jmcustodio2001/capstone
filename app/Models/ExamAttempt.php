@@ -93,17 +93,32 @@ class ExamAttempt extends Model
     public static function calculateCombinedProgress($employeeId, $courseId)
     {
         try {
-            $scores = self::getBestScores($employeeId, $courseId);
-            $examScore = isset($scores['exam_score']) ? max(0, min(100, $scores['exam_score'])) : 0;
+            // Get the best exam score directly
+            $bestExamScore = self::where('employee_id', $employeeId)
+                ->where('course_id', $courseId)
+                ->where('type', 'exam')
+                ->where('status', 'completed')
+                ->max('score');
+            
+            if ($bestExamScore === null) {
+                return 0; // No completed exam attempts
+            }
+            
+            $examScore = max(0, min(100, (float)$bestExamScore));
+            
+            // Log for debugging
+            \Illuminate\Support\Facades\Log::info('Calculating progress', [
+                'employee_id' => $employeeId,
+                'course_id' => $courseId,
+                'best_exam_score' => $bestExamScore,
+                'calculated_progress' => $examScore >= 80 ? 100 : $examScore
+            ]);
 
-            // Apply passing grade logic: Only 80%+ exam scores result in 100% progress
+            // Apply passing grade logic: 80%+ exam scores result in 100% progress
             if ($examScore >= 80) {
                 return 100; // Training complete when exam is passed
-            } elseif ($examScore > 0) {
-                // Progress scales with exam score but caps at 79% until passing
-                return min(79, round($examScore, 1));
             } else {
-                return 0; // No exam attempt yet
+                return round($examScore, 1); // Return actual score if below passing
             }
         } catch (Exception $e) {
             \Illuminate\Support\Facades\Log::error('Error calculating exam progress: ' . $e->getMessage());

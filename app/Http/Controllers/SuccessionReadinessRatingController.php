@@ -20,7 +20,7 @@ class SuccessionReadinessRatingController extends Controller
         $count = 0;
         foreach ($employees as $employee) {
             $score = $this->calculateEmployeeReadinessScore($employee->employee_id);
-            $assessmentDate = now()->toDateString();
+            $assessmentDate = now()->format('Y-m-d');
             $rating = \App\Models\SuccessionReadinessRating::updateOrCreate(
                 ['employee_id' => $employee->employee_id],
                 [
@@ -41,130 +41,71 @@ class SuccessionReadinessRatingController extends Controller
     }
 
     /**
-     * Calculate comprehensive readiness score for an employee using EXACT same algorithm as frontend
+     * Calculate readiness score based on: Hire Date (10%), Training Records (3%), and Competency Profiles (additive)
      */
-    private function calculateEmployeeReadinessScore($employeeId)
+    public function calculateEmployeeReadinessScore($employeeId)
     {
-        // Get comprehensive training data
-        $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)->get();
-        $trainingProgress = $trainingRecords->avg('progress') ?? 0;
-        $totalCoursesAssigned = $trainingRecords->count();
-        $completedCourses = $trainingRecords->where('progress', '>=', 100)->count();
-        $courseCompletionRate = $totalCoursesAssigned > 0 ? ($completedCourses / $totalCoursesAssigned) * 100 : 0;
+        // Get employee data for tenure calculation
+        $employee = \App\Models\Employee::where('employee_id', $employeeId)->first();
+        
+        // 1. HIRE DATE COMPONENT (10%)
+        $hireDateScore = 0;
+        $yearsOfService = 0;
+        if ($employee && $employee->hire_date) {
+            $hireDate = \Carbon\Carbon::parse($employee->hire_date);
+            $yearsOfService = max(0, $hireDate->diffInYears(now()));
+            
+            // Hire date contributes 10% maximum (1% per year, capped at 10%)
+            $hireDateScore = min(10, $yearsOfService * 1);
+        }
+        
+        // 2. TRAINING RECORDS COMPONENT (3%)
+        $trainingRecordsScore = 0;
+        try {
+            // Get certificates from training_record_certificate_tracking table
+            $certificates = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)->count();
+            
+            // Training records contribute 3% maximum (0.5% per certificate, capped at 3%)
+            $trainingRecordsScore = min(3, $certificates * 0.5);
+        } catch (\Exception $e) {
+            // If table doesn't exist, score remains 0
+            $trainingRecordsScore = 0;
+        }
 
-        // Get employee competency profiles
+        // 3. EMPLOYEE COMPETENCY PROFILES COMPONENT (Additive based on proficiency level)
+        $competencyScore = 0;
         $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')
             ->where('employee_id', $employeeId)
             ->get();
-
-        $hasTrainingData = $totalCoursesAssigned > 0;
-        $hasRealCompetencyData = !$competencyProfiles->isEmpty();
-
-        // USE EXACT SAME ALGORITHM AS FRONTEND AI ANALYSIS
-        if ($hasRealCompetencyData) {
-            // Convert proficiency levels to numeric
-            $proficiencyLevels = $competencyProfiles->map(function($profile) {
-                return match(strtolower($profile->proficiency_level)) {
-                    'beginner', '1' => 1,
-                    'developing', '2' => 2,
-                    'proficient', '3' => 3,
-                    'advanced', '4' => 4,
-                    'expert', '5' => 5,
-                    default => 3
-                };
-            });
             
-            $avgProficiencyLevel = $proficiencyLevels->avg();
-            $totalCompetenciesAssessed = $competencyProfiles->count();
-            
-            // Count leadership competencies
-            $leadershipCompetencies = $competencyProfiles->filter(function($profile) {
-                $competencyName = strtolower($profile->competency->competency_name ?? '');
-                $category = strtolower($profile->competency->category ?? '');
-                
-                return str_contains($competencyName, 'leadership') || 
-                       str_contains($competencyName, 'management') ||
-                       str_contains($competencyName, 'communication') ||
-                       str_contains($competencyName, 'decision') ||
-                       str_contains($category, 'leadership') ||
-                       str_contains($category, 'management');
-            });
-            
-            $leadershipCompetenciesCount = $leadershipCompetencies->count();
-            
-            // Calculate component scores using EXACT same algorithm as frontend
-            $proficiencyScore = ($avgProficiencyLevel / 5) * 100;
-            
-            // Enhanced leadership score based on average proficiency of leadership competencies
-            if ($leadershipCompetenciesCount > 0) {
-                $leadershipProficiencySum = 0;
-                foreach ($leadershipCompetencies as $leadership) {
-                    $profLevel = match(strtolower($leadership->proficiency_level)) {
-                        'beginner', '1' => 1,
-                        'developing', '2' => 2,
-                        'proficient', '3' => 3,
-                        'advanced', '4' => 4,
-                        'expert', '5' => 5,
-                        default => 3
-                    };
-                    $leadershipProficiencySum += $profLevel;
-                }
-                $avgLeadershipProficiency = $leadershipProficiencySum / $leadershipCompetenciesCount;
-                $leadershipScore = ($avgLeadershipProficiency / 5) * 100;
-            } else {
-                $leadershipScore = 0;
-            }
-            
-            $competencyBreadthScore = min(100, ($totalCompetenciesAssessed / 10) * 100);
-            
-            // Enhanced training score calculation
-            $trainingProgressScore = $trainingProgress;
-            $courseCompletionScore = $courseCompletionRate;
-            
-            // Only include training score if there's meaningful progress or completion
-            if ($trainingProgress > 0 || $completedCourses > 0) {
-                $combinedTrainingScore = ($trainingProgressScore * 0.5) + 
-                                       ($courseCompletionScore * 0.5);
-            } else {
-                $combinedTrainingScore = 0;
-            }
-            
-            // Calculate overall readiness score with COMPETENCY-FOCUSED weighting
-            if ($trainingProgress > 0 || $completedCourses > 0) {
-                // Competency-focused weights when training data exists
-                $proficiencyWeight = 0.40;  // Increased from 0.30
-                $leadershipWeight = 0.30;   // Increased from 0.25
-                $competencyBreadthWeight = 0.20; // Increased from 0.15
-                $trainingWeight = 0.10;     // Reduced from 0.30
-            } else {
-                // Pure competency-based when no training progress
-                $proficiencyWeight = 0.50;  // Highest priority
-                $leadershipWeight = 0.30;   
-                $competencyBreadthWeight = 0.20;
-                $trainingWeight = 0.00;     // No training weight
-            }
-            
-            $overallScore = ($proficiencyScore * $proficiencyWeight) + 
-                           ($leadershipScore * $leadershipWeight) + 
-                           ($competencyBreadthScore * $competencyBreadthWeight) + 
-                           ($combinedTrainingScore * $trainingWeight);
-            
-            return max(1, min(100, round($overallScore)));
-        }
-        // Fallback: If no competency data but has training data, use training-focused calculation
-        else if ($hasTrainingData) {
-            $progressScore = $trainingProgress;
-            $completionScore = $totalCoursesAssigned > 0 ? ($completedCourses / $totalCoursesAssigned) * 100 : 0;
-            
-            // Balanced training score for fallback calculation
-            $combinedTrainingScore = ($progressScore * 0.5) + 
-                                   ($completionScore * 0.5);
-            
-            return max(1, min(100, round($combinedTrainingScore)));
+        // Each competency adds score based on proficiency level
+        // Proficiency Level 1 = 2%, Level 2 = 4%, Level 3 = 6%, Level 4 = 8%, Level 5 = 10%
+        foreach ($competencyProfiles as $profile) {
+            $proficiencyLevel = (int)$profile->proficiency_level;
+            $competencyScore += $proficiencyLevel * 2; // 2% per proficiency level
         }
 
-        // Last resort: No data available
-        return 0; // New employees start at 0%
+        // CALCULATE FINAL SCORE
+        // Simple additive approach: Hire Date (10%) + Training Records (3%) + Competency Profiles (additive)
+        $totalScore = $hireDateScore + $trainingRecordsScore + $competencyScore;
+        
+        // Set minimum score based on years of service
+        $minimumScore = $yearsOfService < 1 ? 5 : 15;
+        
+        // Ensure score is between minimum and 100%
+        $finalScore = max($minimumScore, min(100, $totalScore));
+        
+        \Illuminate\Support\Facades\Log::info("Employee $employeeId readiness calculation:", [
+            'hireDateScore' => $hireDateScore,
+            'trainingRecordsScore' => $trainingRecordsScore, 
+            'competencyScore' => $competencyScore,
+            'totalScore' => $totalScore,
+            'finalScore' => $finalScore,
+            'yearsOfService' => $yearsOfService,
+            'competencyCount' => $competencyProfiles->count()
+        ]);
+        
+        return $finalScore;
     }
 
     /**
@@ -257,6 +198,7 @@ class SuccessionReadinessRatingController extends Controller
         $rating = SuccessionReadinessRating::create([
             'employee_id' => $request->employee_id,
             'readiness_score' => $readinessScore,
+            'readiness_level' => $request->readiness_level,
             'assessment_date' => $request->assessment_date,
         ]);
         
@@ -290,6 +232,7 @@ class SuccessionReadinessRatingController extends Controller
         $rating->update([
             'employee_id' => $request->employee_id,
             'readiness_score' => $readinessScore,
+            'readiness_level' => $request->readiness_level,
             'assessment_date' => $request->assessment_date,
         ]);
         
@@ -345,6 +288,8 @@ class SuccessionReadinessRatingController extends Controller
                 return response()->json([
                     'error' => 'Employee not found', 
                     'searched_id' => $employeeId,
+                    'hire_date' => null,
+                    'years_of_service' => 0,
                     'has_data' => false,
                     'employee_name' => 'Unknown Employee',
                     'avg_proficiency_level' => 0,
@@ -391,10 +336,20 @@ class SuccessionReadinessRatingController extends Controller
                 // Continue with empty collection
             }
 
-            // Get certificate data (only for employees with certificates assigned)
+            // Get certificate data from multiple sources
             $certificates = 0;
             try {
-                $certificates = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $actualEmployeeId)->count();
+                // Check training_record_certificate_tracking table
+                $certificates += \App\Models\TrainingRecordCertificateTracking::where('employee_id', $actualEmployeeId)->count();
+                
+                // Also check training_records table for certificates
+                $trainingRecordsCerts = \Illuminate\Support\Facades\DB::table('training_records')
+                    ->where('employee_id', $actualEmployeeId)
+                    ->whereNotNull('certificate_number')
+                    ->where('certificate_number', '!=', '')
+                    ->count();
+                $certificates += $trainingRecordsCerts;
+                
             } catch (\Exception $certError) {
                 Log::warning("Certificate tracking table error: " . $certError->getMessage());
                 // Continue without certificate data
@@ -404,9 +359,6 @@ class SuccessionReadinessRatingController extends Controller
         $hasTrainingData = $totalCoursesAssigned > 0;
         $hasRealCompetencyData = !$competencyProfiles->isEmpty(); // Accept any competency data
         $hasCertificateData = $certificates > 0;
-
-        // Always return has_data: true so frontend calculates real score instead of showing "Simulated"
-        // Even employees with no data will get baseline 15% score through ultra-conservative algorithm
 
         // Calculate real metrics
         $proficiencyLevels = $competencyProfiles->pluck('proficiency_level')->map(function($level) {
@@ -446,16 +398,16 @@ class SuccessionReadinessRatingController extends Controller
         $leadershipCompetenciesCount = $leadershipCompetencies->count();
 
         // Calculate tenure using hire_date with fallback and validation
-        $tenure = 1; // Default minimum tenure
+        $tenure = 0; // Default for new hires
         if ($employee->hire_date) {
             $hireDate = \Carbon\Carbon::parse($employee->hire_date);
             $yearsOfService = now()->diffInYears($hireDate);
-            $tenure = max(1, $yearsOfService); // Minimum 1 year, maximum realistic value
+            $tenure = max(0, $yearsOfService); // Minimum 0 years for new hires
         } elseif ($employee->created_at) {
             // Fallback to created_at but ensure it's reasonable
             $createdDate = \Carbon\Carbon::parse($employee->created_at);
             $yearsOfService = now()->diffInYears($createdDate);
-            $tenure = max(1, min($yearsOfService, 10)); // Cap at 10 years if using created_at
+            $tenure = max(0, min($yearsOfService, 10)); // Cap at 10 years if using created_at
         }
 
         // Get actual competency details for strengths and development areas
@@ -477,9 +429,14 @@ class SuccessionReadinessRatingController extends Controller
             return $level;
         })->pluck('competency.competency_name')->take(3);
 
+        // CALCULATE THE ACTUAL READINESS SCORE USING OUR FIXED ALGORITHM
+        $calculatedReadinessScore = $this->calculateEmployeeReadinessScore($employeeId);
+
         return response()->json([
             'employee_name' => $employee->first_name . ' ' . $employee->last_name,
             'employee_id' => $employeeId,
+            'hire_date' => $employee->hire_date ? \Carbon\Carbon::parse($employee->hire_date)->format('Y-m-d') : null,
+            'years_of_service' => $tenure,
             'has_data' => true,
             'has_training_data' => $hasTrainingData,
             'has_real_competency_data' => $hasRealCompetencyData,
@@ -489,11 +446,15 @@ class SuccessionReadinessRatingController extends Controller
             'total_competencies_assessed' => $totalCompetenciesAssessed,
             'training_progress' => round($trainingProgress, 1),
             'total_courses_assigned' => $totalCoursesAssigned,
+            'total_courses' => $totalCoursesAssigned,
             'completed_courses' => $completedCourses,
             'courses_in_progress' => $coursesInProgress,
             'course_completion_rate' => $totalCoursesAssigned > 0 ? round(($completedCourses / $totalCoursesAssigned) * 100, 1) : 0,
             'certificates_earned' => $certificates,
+            'destination_trainings_completed' => 0,
+            'destination_training_progress' => 0,
             'tenure' => $tenure,
+            'calculated_readiness_score' => $calculatedReadinessScore, // USE OUR BACKEND CALCULATION
             'strong_competencies' => $strongCompetencies->toArray(),
             'development_competencies' => $developmentCompetencies->toArray(),
             'all_competencies' => $competencyProfiles->map(function($profile) {

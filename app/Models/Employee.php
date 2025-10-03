@@ -27,6 +27,12 @@ class Employee extends Authenticatable
         'password',
         'profile_picture',
         'remember_token',
+        'otp_code',
+        'otp_expires_at',
+        'otp_attempts',
+        'last_otp_sent_at',
+        'otp_verified',
+        'email_verified_at',
         'created_at',
         'updated_at',
     ];
@@ -34,6 +40,7 @@ class Employee extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'otp_code',
     ];
 
     protected $casts = [
@@ -41,6 +48,10 @@ class Employee extends Authenticatable
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
         'password' => 'hashed',
+        'otp_expires_at' => 'datetime',
+        'last_otp_sent_at' => 'datetime',
+        'email_verified_at' => 'datetime',
+        'otp_verified' => 'boolean',
     ];
 
     public function competencyProfiles()

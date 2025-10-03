@@ -7,19 +7,178 @@ use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class TrainingRecordCertificateTrackingController extends Controller
 {
     public function index()
     {
-        $certificates = TrainingRecordCertificateTracking::with(['employee', 'course'])->paginate(10);
-        $employees = \App\Models\Employee::all();
-        $courses = \App\Models\CourseManagement::all();
-        return view('learning_management.training_record_certificate_tracking', compact('certificates', 'employees', 'courses'));
+        try {
+            // Check if table exists first
+            $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
+            
+            if (count($tableExists) == 0) {
+                // Table doesn't exist, create it
+                Log::warning('training_record_certificate_tracking table does not exist, creating it...');
+                $this->ensureTableStructure();
+            }
+            
+            // Fetch certificates with relationships - enhanced error handling
+            $certificates = TrainingRecordCertificateTracking::with(['employee', 'course'])
+                ->orderBy('created_at', 'desc')
+                ->paginate(10);
+            
+            // Safely get employees and courses with error handling
+            $employees = collect();
+            $courses = collect();
+            
+            try {
+                $employees = \App\Models\Employee::all();
+            } catch (\Exception $e) {
+                Log::error('Error fetching employees: ' . $e->getMessage());
+            }
+            
+            try {
+                $courses = \App\Models\CourseManagement::all();
+            } catch (\Exception $e) {
+                Log::error('Error fetching courses: ' . $e->getMessage());
+            }
+            
+            // Debug logging with safe counts
+            Log::info('Certificate tracking - Records found: ' . $certificates->total());
+            Log::info('Certificate tracking - Employees available: ' . $employees->count());
+            Log::info('Certificate tracking - Courses available: ' . $courses->count());
+            
+            // Check for orphaned records (certificates without valid employee/course relationships)
+            $orphanedCount = 0;
+            foreach ($certificates as $certificate) {
+                if (!$certificate->employee || !$certificate->course) {
+                    $orphanedCount++;
+                    Log::warning('Orphaned certificate record found', [
+                        'certificate_id' => $certificate->id,
+                        'employee_id' => $certificate->employee_id,
+                        'course_id' => $certificate->course_id,
+                        'has_employee' => $certificate->employee ? 'yes' : 'no',
+                        'has_course' => $certificate->course ? 'yes' : 'no'
+                    ]);
+                }
+            }
+            
+            if ($orphanedCount > 0) {
+                Log::warning("Found {$orphanedCount} certificate records with missing employee or course relationships");
+            }
+            
+            return view('learning_management.training_record_certificate_tracking', compact('certificates', 'employees', 'courses'));
+            
+        } catch (\Exception $e) {
+            Log::error('Error in TrainingRecordCertificateTracking index: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // If there's an error, try to ensure table structure and return empty data
+            $this->ensureTableStructure();
+            
+            $certificates = collect()->paginate(10);
+            $employees = collect();
+            $courses = collect();
+            
+            return view('learning_management.training_record_certificate_tracking', compact('certificates', 'employees', 'courses'))
+                ->with('error', 'Database error detected. Table structure has been verified. Please refresh the page. Error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Show individual certificate record for editing
+     */
+    public function show($id)
+    {
+        try {
+            $certificate = TrainingRecordCertificateTracking::with(['employee', 'course'])->findOrFail($id);
+            
+            // Safe employee data extraction
+            $employee = $certificate->employee;
+            $employeeName = 'Unknown Employee';
+            if ($employee) {
+                $firstName = $employee->first_name ?? '';
+                $lastName = $employee->last_name ?? '';
+                $employeeName = trim($firstName . ' ' . $lastName);
+                if (empty($employeeName)) {
+                    $employeeName = 'Employee ID: ' . $certificate->employee_id;
+                }
+            }
+            
+            // Safe course data extraction
+            $course = $certificate->course;
+            $courseTitle = 'Unknown Course';
+            if ($course && $course->course_title) {
+                $courseTitle = $course->course_title;
+            } elseif ($certificate->course_id) {
+                $courseTitle = 'Course ID: ' . $certificate->course_id;
+            }
+            
+            // Format dates for display
+            $formattedDate = 'Unknown Date';
+            $issuedDate = 'Unknown Date';
+            if ($certificate->training_date) {
+                try {
+                    $trainingDate = \Carbon\Carbon::parse($certificate->training_date);
+                    $formattedDate = $trainingDate->format('F j, Y');
+                    $issuedDate = $trainingDate->format('M j, Y');
+                } catch (\Exception $e) {
+                    Log::warning('Failed to parse training date', ['training_date' => $certificate->training_date]);
+                }
+            }
+            
+            // Format the data for JSON response with safe null handling
+            $data = [
+                'id' => $certificate->id,
+                'employee_id' => $certificate->employee_id ?? '',
+                'course_id' => $certificate->course_id ?? '',
+                'employee_name' => $employeeName,
+                'course_name' => $courseTitle, // Also provide as course_name for consistency
+                'course_title' => $courseTitle,
+                'certificate_number' => $certificate->certificate_number ?? '',
+                'training_date' => $certificate->training_date ?? '',
+                'certificate_expiry' => $certificate->certificate_expiry ?? '',
+                'status' => $certificate->status ?? 'Pending',
+                'remarks' => $certificate->remarks ?? '',
+                'certificate_url' => $certificate->certificate_url ?? '',
+                'formatted_date' => $formattedDate,
+                'issued_date' => $issuedDate,
+                'has_employee_record' => $employee ? true : false,
+                'has_course_record' => $course ? true : false
+            ];
+            
+            Log::info('Certificate data retrieved successfully', [
+                'certificate_id' => $id,
+                'employee_found' => $employee ? 'yes' : 'no',
+                'course_found' => $course ? 'yes' : 'no'
+            ]);
+            
+            return response()->json($data);
+            
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            Log::error('Certificate not found: ' . $id);
+            return response()->json(['error' => 'Certificate record not found. It may have been deleted.'], 404);
+        } catch (\Exception $e) {
+            Log::error('Error fetching certificate for editing', [
+                'certificate_id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => 'Server error occurred while fetching certificate data. Please try again.'], 500);
+        }
     }
 
     public function store(Request $request)
     {
+        // EMERGENCY FIX: Ensure table structure is correct before proceeding
+        if (!$this->ensureTableStructure()) {
+            return redirect()->route('training_record_certificate_tracking.index')
+                ->with('error', 'Failed to ensure proper table structure. Please contact administrator.');
+        }
+
         $request->validate([
             'employee_id' => 'required|string|exists:employees,employee_id',
             'course_id' => 'required|integer|exists:course_management,course_id',
@@ -124,10 +283,16 @@ class TrainingRecordCertificateTrackingController extends Controller
     public function autoGenerateMissingCertificates()
     {
         try {
+            // EMERGENCY FIX: Ensure table structure is correct before proceeding
+            if (!$this->ensureTableStructure()) {
+                return redirect()->route('training_record_certificate_tracking.index')
+                    ->with('error', 'Failed to ensure proper table structure. Please contact administrator.');
+            }
+
             $createdCount = 0;
             $skippedCount = 0;
             $errorCount = 0;
-            $certificateController = new \App\Http\Controllers\CertificateGenerationController(new \App\Services\AICertificateGeneratorService());
+            $certificateController = new \App\Http\Controllers\CertificateGenerationController();
 
             // 1. Get completed trainings from the main completed_trainings table
             $completedTrainingsFromTable = \App\Models\CompletedTraining::with(['employee', 'course'])
@@ -254,14 +419,18 @@ class TrainingRecordCertificateTrackingController extends Controller
                 // Create certificate tracking record directly (since training requests don't use CertificateGenerationController)
                 $certificateNumber = 'REQ-' . strtoupper(substr($request->employee_id, 0, 3)) . '-' . date('Y') . '-' . str_pad($createdCount + 1, 4, '0', STR_PAD_LEFT);
 
+                // Ensure table structure before creating record
+                $this->ensureTableStructure();
+                
                 TrainingRecordCertificateTracking::create([
                     'employee_id' => $request->employee_id,
                     'course_id' => $course->course_id,
                     'training_date' => $request->requested_date,
                     'certificate_number' => $certificateNumber,
                     'certificate_expiry' => date('Y-m-d', strtotime($request->requested_date . ' +2 years')),
-                    'status' => 'Completed',
-                    'remarks' => 'Auto-generated from approved training request: ' . $request->training_title,
+                    'issue_date' => $request->requested_date,
+                    'status' => 'Pending Examination',
+                    'remarks' => 'Training completed - awaiting examination for certification',
                     'certificate_url' => null
                 ]);
 
@@ -359,8 +528,9 @@ class TrainingRecordCertificateTrackingController extends Controller
                     'training_date' => $training->updated_at->format('Y-m-d'),
                     'certificate_number' => $certificateNumber,
                     'certificate_expiry' => date('Y-m-d', strtotime('+2 years')),
-                    'status' => 'Completed',
-                    'remarks' => 'Auto-generated from Customer Service & Sales Skills Training completion',
+                    'issue_date' => $training->updated_at->format('Y-m-d'),
+                    'status' => 'Pending Examination',
+                    'remarks' => 'Training completed - awaiting examination for certification',
                     'certificate_url' => null
                 ]);
 
@@ -411,8 +581,9 @@ class TrainingRecordCertificateTrackingController extends Controller
                     'training_date' => $training->date_completed ?: $training->updated_at->format('Y-m-d'),
                     'certificate_number' => $certificateNumber,
                     'certificate_expiry' => date('Y-m-d', strtotime('+2 years')),
-                    'status' => 'Completed',
-                    'remarks' => 'Auto-generated from destination knowledge training completion',
+                    'issue_date' => $training->date_completed ?: $training->updated_at->format('Y-m-d'),
+                    'status' => 'Pending Examination',
+                    'remarks' => 'Training completed - awaiting examination for certification',
                     'certificate_url' => null
                 ]);
 
@@ -620,6 +791,472 @@ class TrainingRecordCertificateTrackingController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('training_record_certificate_tracking.index')
                 ->with('error', 'Error syncing certificates: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Create the missing training_record_certificate_tracking table
+     * Access via: /admin/training-certificate-tracking/create-table
+     */
+    public function createMissingTable()
+    {
+        try {
+            // Create the table using Laravel Schema Builder
+            if (!\Illuminate\Support\Facades\Schema::hasTable('training_record_certificate_tracking')) {
+                \Illuminate\Support\Facades\Schema::create('training_record_certificate_tracking', function ($table) {
+                    $table->id();
+                    $table->string('employee_id', 50)->index();
+                    $table->unsignedBigInteger('course_id')->index();
+                    $table->date('training_date');
+                    $table->string('certificate_number')->nullable();
+                    $table->date('certificate_expiry')->nullable();
+                    $table->string('certificate_url')->nullable();
+                    $table->string('status')->default('Active');
+                    $table->text('remarks')->nullable();
+                    $table->timestamps();
+                });
+
+                // Log activity
+                ActivityLog::create([
+                    'user_id' => Auth::id() ?: 1,
+                    'action' => 'create',
+                    'module' => 'Training Record Certificate Tracking',
+                    'description' => 'Created missing training_record_certificate_tracking table with proper structure',
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Successfully created training_record_certificate_tracking table',
+                    'action' => 'created'
+                ]);
+            } else {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Table training_record_certificate_tracking already exists',
+                    'action' => 'none'
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error creating training_record_certificate_tracking table: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating table: ' . $e->getMessage(),
+                'action' => 'error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Force create table immediately - for emergency use
+     */
+    public function forceCreateTable()
+    {
+        try {
+            // Execute the table creation directly using raw SQL
+            $createTableSQL = "
+                DROP TABLE IF EXISTS `training_record_certificate_tracking`;
+                
+                CREATE TABLE `training_record_certificate_tracking` (
+                    `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+                    `employee_id` varchar(50) NOT NULL,
+                    `course_id` bigint(20) unsigned NOT NULL,
+                    `training_date` date NOT NULL,
+                    `certificate_number` varchar(255) DEFAULT NULL,
+                    `certificate_expiry` date DEFAULT NULL,
+                    `certificate_url` varchar(255) DEFAULT NULL,
+                    `status` varchar(255) NOT NULL DEFAULT 'Active',
+                    `remarks` text DEFAULT NULL,
+                    `created_at` timestamp NULL DEFAULT NULL,
+                    `updated_at` timestamp NULL DEFAULT NULL,
+                    PRIMARY KEY (`id`),
+                    KEY `idx_employee_id` (`employee_id`),
+                    KEY `idx_course_id` (`course_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+            ";
+
+            // Execute each statement separately
+            DB::statement("DROP TABLE IF EXISTS `training_record_certificate_tracking`");
+            
+            DB::statement("
+                CREATE TABLE `training_record_certificate_tracking` (
+                    `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+                    `employee_id` varchar(50) NOT NULL,
+                    `course_id` bigint(20) unsigned NOT NULL,
+                    `training_date` date NOT NULL,
+                    `certificate_number` varchar(255) DEFAULT NULL,
+                    `certificate_expiry` date DEFAULT NULL,
+                    `certificate_url` varchar(255) DEFAULT NULL,
+                    `status` varchar(255) NOT NULL DEFAULT 'Active',
+                    `remarks` text DEFAULT NULL,
+                    `created_at` timestamp NULL DEFAULT NULL,
+                    `updated_at` timestamp NULL DEFAULT NULL,
+                    PRIMARY KEY (`id`),
+                    KEY `idx_employee_id` (`employee_id`),
+                    KEY `idx_course_id` (`course_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+
+            // Verify table was created
+            $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
+            
+            if (count($tableExists) > 0) {
+                // Log activity
+                ActivityLog::create([
+                    'user_id' => Auth::id() ?: 1,
+                    'action' => 'create',
+                    'module' => 'Training Record Certificate Tracking',
+                    'description' => 'Force created training_record_certificate_tracking table using raw SQL',
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Successfully force created training_record_certificate_tracking table using raw SQL',
+                    'action' => 'force_created'
+                ]);
+            } else {
+                throw new \Exception('Table creation failed - table does not exist after creation attempt');
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error force creating training_record_certificate_tracking table: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error force creating table: ' . $e->getMessage(),
+                'action' => 'error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Execute table creation immediately - call this method directly
+     */
+    public function executeTableCreation()
+    {
+        try {
+            // Execute the table creation directly
+            DB::statement("DROP TABLE IF EXISTS `training_record_certificate_tracking`");
+            
+            DB::statement("
+                CREATE TABLE `training_record_certificate_tracking` (
+                    `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+                    `employee_id` varchar(50) NOT NULL,
+                    `course_id` bigint(20) unsigned NOT NULL,
+                    `training_date` date NOT NULL,
+                    `certificate_number` varchar(255) DEFAULT NULL,
+                    `certificate_expiry` date DEFAULT NULL,
+                    `certificate_url` varchar(255) DEFAULT NULL,
+                    `status` varchar(255) NOT NULL DEFAULT 'Active',
+                    `remarks` text DEFAULT NULL,
+                    `created_at` timestamp NULL DEFAULT NULL,
+                    `updated_at` timestamp NULL DEFAULT NULL,
+                    PRIMARY KEY (`id`),
+                    KEY `idx_employee_id` (`employee_id`),
+                    KEY `idx_course_id` (`course_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+
+            // Verify table exists
+            $result = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
+            
+            if (count($result) > 0) {
+                Log::info('training_record_certificate_tracking table created successfully');
+                return true;
+            } else {
+                Log::error('Failed to create training_record_certificate_tracking table');
+                return false;
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error creating training_record_certificate_tracking table: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Emergency fix - executes immediately when autoGenerateMissingCertificates is called
+     */
+    private function ensureTableStructure()
+    {
+        try {
+            // Check if table exists
+            $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
+            
+            if (count($tableExists) == 0) {
+                // Table doesn't exist, create it
+                $this->executeTableCreation();
+                return true;
+            }
+
+            // Get all existing columns
+            $existingColumns = DB::select("SHOW COLUMNS FROM training_record_certificate_tracking");
+            $columnNames = array_column($existingColumns, 'Field');
+            
+            // Required columns with their definitions
+            $requiredColumns = [
+                'training_date' => "ADD COLUMN `training_date` date NOT NULL AFTER `course_id`",
+                'certificate_number' => "ADD COLUMN `certificate_number` varchar(255) DEFAULT NULL AFTER `training_date`",
+                'certificate_expiry' => "ADD COLUMN `certificate_expiry` date DEFAULT NULL AFTER `certificate_number`",
+                'certificate_url' => "ADD COLUMN `certificate_url` varchar(255) DEFAULT NULL AFTER `certificate_expiry`",
+                'issue_date' => "ADD COLUMN `issue_date` date DEFAULT NULL AFTER `certificate_url`",
+                'status' => "ADD COLUMN `status` varchar(255) NOT NULL DEFAULT 'Active' AFTER `issue_date`",
+                'remarks' => "ADD COLUMN `remarks` text DEFAULT NULL AFTER `status`"
+            ];
+
+            $columnsAdded = [];
+            
+            // Check and add missing columns
+            foreach ($requiredColumns as $columnName => $alterStatement) {
+                if (!in_array($columnName, $columnNames)) {
+                    try {
+                        DB::statement("ALTER TABLE `training_record_certificate_tracking` " . $alterStatement);
+                        $columnsAdded[] = $columnName;
+                        Log::info("Added missing column: {$columnName}");
+                    } catch (\Exception $e) {
+                        Log::error("Failed to add column {$columnName}: " . $e->getMessage());
+                    }
+                }
+            }
+
+            // Update existing records with default values if columns were added
+            if (!empty($columnsAdded)) {
+                if (in_array('training_date', $columnsAdded)) {
+                    DB::statement("UPDATE `training_record_certificate_tracking` SET `training_date` = COALESCE(DATE(`created_at`), CURDATE()) WHERE `training_date` IS NULL OR `training_date` = '0000-00-00'");
+                }
+                if (in_array('issue_date', $columnsAdded)) {
+                    DB::statement("UPDATE `training_record_certificate_tracking` SET `issue_date` = COALESCE(DATE(`created_at`), CURDATE()) WHERE `issue_date` IS NULL OR `issue_date` = '0000-00-00'");
+                }
+                if (in_array('status', $columnsAdded)) {
+                    DB::statement("UPDATE `training_record_certificate_tracking` SET `status` = 'Active' WHERE `status` IS NULL OR `status` = ''");
+                }
+                
+                Log::info('Updated existing records with default values for columns: ' . implode(', ', $columnsAdded));
+            }
+
+            return true;
+
+        } catch (\Exception $e) {
+            Log::error('Error ensuring table structure: ' . $e->getMessage());
+            
+            // If all else fails, recreate the table completely
+            try {
+                Log::info('Attempting to recreate table due to structure issues...');
+                $this->executeTableCreation();
+                return true;
+            } catch (\Exception $e2) {
+                Log::error('Failed to recreate table: ' . $e2->getMessage());
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Fix missing training_date column in existing table
+     * Access via: /admin/training-certificate-tracking/fix-training-date-column
+     */
+    public function fixTrainingDateColumn()
+    {
+        try {
+            // Check if table exists
+            $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
+            
+            if (count($tableExists) == 0) {
+                // Table doesn't exist, create it completely
+                return $this->executeTableCreation();
+            }
+
+            // Check if training_date column exists
+            $columns = DB::select("SHOW COLUMNS FROM training_record_certificate_tracking LIKE 'training_date'");
+            
+            if (count($columns) == 0) {
+                // Column doesn't exist, add it
+                DB::statement("ALTER TABLE `training_record_certificate_tracking` ADD COLUMN `training_date` date NOT NULL AFTER `course_id`");
+                
+                // Update existing records with a default date if they don't have one
+                DB::statement("UPDATE `training_record_certificate_tracking` SET `training_date` = COALESCE(`created_at`, NOW()) WHERE `training_date` IS NULL OR `training_date` = '0000-00-00'");
+                
+                Log::info('Added missing training_date column to training_record_certificate_tracking table');
+                
+                // Log activity
+                ActivityLog::create([
+                    'user_id' => Auth::id() ?: 1,
+                    'action' => 'alter',
+                    'module' => 'Training Record Certificate Tracking',
+                    'description' => 'Added missing training_date column to training_record_certificate_tracking table',
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Successfully added missing training_date column to training_record_certificate_tracking table',
+                    'action' => 'column_added'
+                ]);
+            } else {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'training_date column already exists in training_record_certificate_tracking table',
+                    'action' => 'none'
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error fixing training_date column: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fixing training_date column: ' . $e->getMessage(),
+                'action' => 'error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Comprehensive table structure fix - recreates table with all required columns
+     * Access via: /admin/training-certificate-tracking/fix-table-structure
+     */
+    public function fixTableStructure()
+    {
+        try {
+            // Drop and recreate table with complete structure
+            DB::statement("DROP TABLE IF EXISTS `training_record_certificate_tracking`");
+            
+            DB::statement("
+                CREATE TABLE `training_record_certificate_tracking` (
+                    `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+                    `employee_id` varchar(50) NOT NULL,
+                    `course_id` bigint(20) unsigned NOT NULL,
+                    `training_date` date NOT NULL,
+                    `certificate_number` varchar(255) DEFAULT NULL,
+                    `certificate_expiry` date DEFAULT NULL,
+                    `certificate_url` varchar(255) DEFAULT NULL,
+                    `status` varchar(255) NOT NULL DEFAULT 'Active',
+                    `remarks` text DEFAULT NULL,
+                    `created_at` timestamp NULL DEFAULT NULL,
+                    `updated_at` timestamp NULL DEFAULT NULL,
+                    PRIMARY KEY (`id`),
+                    KEY `idx_employee_id` (`employee_id`),
+                    KEY `idx_course_id` (`course_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+
+            // Verify table was created with correct structure
+            $columns = DB::select("DESCRIBE training_record_certificate_tracking");
+            $hasTrainingDate = false;
+            
+            foreach ($columns as $column) {
+                if ($column->Field === 'training_date') {
+                    $hasTrainingDate = true;
+                    break;
+                }
+            }
+
+            if ($hasTrainingDate) {
+                // Log activity
+                ActivityLog::create([
+                    'user_id' => Auth::id() ?: 1,
+                    'action' => 'recreate',
+                    'module' => 'Training Record Certificate Tracking',
+                    'description' => 'Recreated training_record_certificate_tracking table with complete structure including training_date column',
+                ]);
+
+                Log::info('Successfully recreated training_record_certificate_tracking table with complete structure');
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Successfully recreated training_record_certificate_tracking table with complete structure including training_date column',
+                    'action' => 'table_recreated',
+                    'columns' => $columns
+                ]);
+            } else {
+                throw new \Exception('Table recreated but training_date column is still missing');
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error fixing table structure: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fixing table structure: ' . $e->getMessage(),
+                'action' => 'error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Quick fix for missing training_date column using model method
+     * Access via: /admin/training-certificate-tracking/quick-fix-column
+     */
+    public function quickFixTrainingDateColumn()
+    {
+        try {
+            $result = TrainingRecordCertificateTracking::fixMissingTrainingDateColumn();
+            
+            // Log the result for debugging
+            Log::info('Quick fix training_date column result: ', $result);
+            
+            if ($result['success']) {
+                return response()->json($result);
+            } else {
+                return response()->json($result, 500);
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error in quickFixTrainingDateColumn: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error calling model fix method: ' . $e->getMessage(),
+                'action' => 'error'
+            ], 500);
+        }
+    }
+
+    /**
+     * Execute fix immediately and redirect back with message
+     * Access via: /admin/training-certificate-tracking/execute-fix-now
+     */
+    public function executeFixNow()
+    {
+        try {
+            $result = TrainingRecordCertificateTracking::fixMissingTrainingDateColumn();
+            
+            if ($result['success']) {
+                return redirect()->back()->with('success', $result['message']);
+            } else {
+                return redirect()->back()->with('error', $result['message']);
+            }
+            
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Error executing fix: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Simple fix for missing training_date column - direct access
+     * Access via: /admin/fix-training-date-column-now
+     */
+    public function fixColumnNow()
+    {
+        try {
+            // Check if column exists first
+            if (\Illuminate\Support\Facades\Schema::hasColumn('training_record_certificate_tracking', 'training_date')) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'training_date column already exists in the table.',
+                    'action' => 'no_action_needed'
+                ]);
+            }
+
+            $result = TrainingRecordCertificateTracking::fixMissingTrainingDateColumn();
+            
+            return response()->json($result);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fixing training_date column: ' . $e->getMessage(),
+                'action' => 'error'
+            ], 500);
         }
     }
 }

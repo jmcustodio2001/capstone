@@ -11,6 +11,7 @@ use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Schema\Blueprint;
 
 class CompetencyGapAnalysisController extends Controller
@@ -42,14 +43,33 @@ class CompetencyGapAnalysisController extends Controller
 
         // Eager load related employee and competency to avoid N+1 problem
         // Only show accessible (active and non-expired) gaps by default
-        $gaps = CompetencyGap::with(['employee', 'competency'])->accessible()->get();
+        // Exclude gaps for destination training competencies
+        $gaps = CompetencyGap::with(['employee', 'competency'])
+            ->whereHas('competency', function($query) {
+                $query->where('category', '!=', 'Destination Knowledge')
+                    ->where('category', '!=', 'General')
+                    ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
+                    ->where('competency_name', 'NOT LIKE', '%destination%')
+                    ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%');
+            })
+            ->accessible()
+            ->get();
         $employees = Employee::all()->map(function($emp) {
             return [
                 'id' => $emp->employee_id,
                 'name' => $emp->first_name . ' ' . $emp->last_name
             ];
         });
-        $competencies = CompetencyLibrary::select('id', 'competency_name', 'description', 'category', 'rate')->get();
+        // Exclude destination training related competencies from the competency gap view
+        $competencies = CompetencyLibrary::select('id', 'competency_name', 'description', 'category', 'rate')
+            ->where('category', '!=', 'Destination Knowledge')
+            ->where('category', '!=', 'General')
+            ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+            ->where('competency_name', 'NOT LIKE', '%ITALY%')
+            ->where('competency_name', 'NOT LIKE', '%destination%')
+            ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
+            ->get();
 
         // Check for existing training assignments for each employee-competency combination
         $employeeTrainingAssignments = [];
@@ -75,8 +95,18 @@ class CompetencyGapAnalysisController extends Controller
             $employeeTrainingAssignments[$employeeId . '_' . $competencyId] = $hasSpecificTraining;
         }
 
-        // Get expired gaps for display
-        $expiredGaps = CompetencyGap::with(['employee', 'competency'])->expired()->get();
+        // Get expired gaps for display (also exclude destination training gaps)
+        $expiredGaps = CompetencyGap::with(['employee', 'competency'])
+            ->whereHas('competency', function($query) {
+                $query->where('category', '!=', 'Destination Knowledge')
+                    ->where('category', '!=', 'General')
+                    ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
+                    ->where('competency_name', 'NOT LIKE', '%destination%')
+                    ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%');
+            })
+            ->expired()
+            ->get();
 
         return view('competency_management.competency_gap', compact('gaps', 'employees', 'competencies', 'employeeTrainingAssignments', 'expiredGaps'));
     }
@@ -114,11 +144,23 @@ class CompetencyGapAnalysisController extends Controller
             if (!isset($validated['expired_date']) || empty($validated['expired_date'])) {
                 $validated['expired_date'] = now()->addDays(30);
                 Log::info('Set default expired_date: ' . $validated['expired_date']->format('Y-m-d H:i:s'));
+            } else {
+                // Convert string date to Carbon object if it exists
+                $validated['expired_date'] = \Carbon\Carbon::parse($validated['expired_date']);
+                Log::info('Converted expired_date: ' . $validated['expired_date']->format('Y-m-d H:i:s'));
+            }
+
+            // Create the CompetencyGap record with proper data handling
+            $gapData = $validated;
+            // Ensure expired_date is a Carbon object for the model (Laravel casting expects Carbon objects)
+            if (isset($gapData['expired_date'])) {
+                // Always ensure it's a Carbon object, even if it already is one
+                $gapData['expired_date'] = \Carbon\Carbon::parse($gapData['expired_date']);
             }
 
             Log::info('Attempting to create CompetencyGap record...');
 
-            $gap = CompetencyGap::create($validated);
+            $gap = CompetencyGap::create($gapData);
 
             Log::info('CompetencyGap created successfully with ID: ' . $gap->id);
 
@@ -180,6 +222,17 @@ class CompetencyGapAnalysisController extends Controller
     {
         try {
             $gap = CompetencyGap::findOrFail($id);
+            
+            // Check if gap is already assigned to training
+            if ($gap->assigned_to_training) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot update this competency gap as it has already been assigned to training.'
+                    ], 403);
+                }
+                return redirect()->back()->with('error', 'Cannot update this competency gap as it has already been assigned to training.');
+            }
             $validated = $request->validate([
                 'employee_id'    => 'required|exists:employees,employee_id',
                 'competency_id'  => 'required|exists:competency_library,id',
@@ -227,6 +280,17 @@ class CompetencyGapAnalysisController extends Controller
     {
         try {
             $gap = CompetencyGap::findOrFail($id);
+            
+            // Check if gap is already assigned to training
+            if ($gap->assigned_to_training) {
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Cannot delete this competency gap as it has already been assigned to training.'
+                    ], 403);
+                }
+                return redirect()->back()->with('error', 'Cannot delete this competency gap as it has already been assigned to training.');
+            }
             $employeeId = $gap->employee_id;
             $gap->delete();
 
@@ -337,17 +401,18 @@ class CompetencyGapAnalysisController extends Controller
                 ], 404);
             }
 
-            // Activate the destination knowledge training
-            $destinationTraining->is_active = true;
-            $destinationTraining->remarks = str_replace('Pending approval', 'Approved by competency gap management', $destinationTraining->remarks);
-            $destinationTraining->save();
+            // Approve and activate the training
+            $destinationTraining->update([
+                'admin_approved_for_upcoming' => true,
+                'is_active' => true,
+                'status' => 'approved'
+            ]);
 
-            // Log the approval activity
             ActivityLog::create([
                 'user_id' => Auth::id(),
                 'module' => 'Competency Management',
-                'action' => 'approve',
-                'description' => "Approved destination knowledge training for {$request->destination_name} - Employee ID: {$request->employee_id}",
+                'action' => 'approve_destination_knowledge',
+                'description' => "Approved destination knowledge training for {$request->employee_id}: {$request->destination_name}",
                 'model_type' => \App\Models\DestinationKnowledgeTraining::class,
                 'model_id' => $destinationTraining->id,
             ]);
@@ -362,6 +427,51 @@ class CompetencyGapAnalysisController extends Controller
                 'success' => false,
                 'message' => 'Error approving destination knowledge training: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Remove all destination training competency gap records
+     */
+    public function removeDestinationTrainingGaps()
+    {
+        // Check if user is admin
+        if (!Auth::guard('admin')->check() || strtoupper(Auth::guard('admin')->user()->role) !== 'ADMIN') {
+            abort(403, 'Access denied. Admin privileges required.');
+        }
+
+        try {
+            // Find all competency gap records for destination training competencies
+            $destinationGaps = CompetencyGap::whereHas('competency', function($query) {
+                $query->where('category', 'Destination Knowledge')
+                    ->orWhere('category', 'General')
+                    ->orWhere('competency_name', 'LIKE', '%BESTLINK%')
+                    ->orWhere('competency_name', 'LIKE', '%ITALY%')
+                    ->orWhere('competency_name', 'LIKE', '%destination%')
+                    ->orWhere('description', 'LIKE', '%Auto-created from destination knowledge training%');
+            })->get();
+
+            $deletedCount = $destinationGaps->count();
+
+            // Delete the gap records
+            foreach ($destinationGaps as $gap) {
+                $gap->delete();
+            }
+
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'module' => 'Competency Management',
+                'action' => 'cleanup',
+                'description' => "Removed {$deletedCount} destination training competency gap records. These should only exist in the Destination Knowledge Training system.",
+                'model_type' => CompetencyGap::class,
+            ]);
+
+            return redirect()->route('admin.competency_gap.index')
+                ->with('success', "Successfully removed {$deletedCount} destination training competency gap records. These should only exist in the Destination Knowledge Training system.");
+
+        } catch (\Exception $e) {
+            return redirect()->route('admin.competency_gap.index')
+                ->with('error', 'Error during removal: ' . $e->getMessage());
         }
     }
 
@@ -419,11 +529,12 @@ class CompetencyGapAnalysisController extends Controller
             $upcomingData = [
                 'employee_id' => $competencyGap->employee_id,
                 'training_title' => $competencyGap->competency->competency_name,
-                'start_date' => now()->format('Y-m-d'), // Start immediately when assigned
-                'end_date' => $competencyGap->expired_date ? \Carbon\Carbon::parse($competencyGap->expired_date)->format('Y-m-d') : now()->addMonths(3)->format('Y-m-d'), // Use gap expiration or 3 months
+                'start_date' => now(), // Start immediately when assigned
+                'end_date' => $competencyGap->expired_date ?: now()->addMonths(3), // Use gap expiration or 3 months
                 'status' => 'Assigned',
                 'source' => 'competency_gap',
-                'assigned_by' => $assignedBy, // Accurate assigned by from current user
+                'assigned_by' => Auth::id(), // Store admin user ID
+                'assigned_by_name' => $assignedBy, // Store admin name for display
                 'assigned_date' => now(), // Accurate assignment timestamp
                 'needs_response' => true
             ];
@@ -825,7 +936,7 @@ class CompetencyGapAnalysisController extends Controller
             ]);
 
             $extensionDays = $request->extension_days;
-            $gap->expired_date = now()->addDays($extensionDays)->toDateTimeString();
+            $gap->expired_date = now()->addDays($extensionDays);
             $gap->is_active = true; // Reactivate if it was expired
             $gap->save();
 
@@ -906,7 +1017,7 @@ class CompetencyGapAnalysisController extends Controller
 
             foreach ($gapsWithoutExpiredDate as $gap) {
                 // Set expiration date to 30 days from now for existing records
-                $gap->expired_date = now()->addDays(30)->toDateTimeString();
+                $gap->expired_date = now()->addDays(30);
                 $gap->is_active = true; // Ensure they're active
                 $gap->save();
                 $updated++;
@@ -1006,32 +1117,41 @@ class CompetencyGapAnalysisController extends Controller
                     $table->text('gap_description')->nullable();
                     $table->timestamp('expired_date')->nullable();
                     $table->boolean('is_active')->default(true);
+                    $table->boolean('assigned_to_training')->default(false);
                     $table->timestamps();
-
-                    // Add foreign key constraints with error handling
-                    try {
-                        $table->foreign('employee_id')
-                            ->references('employee_id')
-                            ->on('employees')
-                            ->onDelete('cascade');
-                    } catch (\Exception $e) {
-                        Log::warning('Could not create employee_id foreign key: ' . $e->getMessage());
-                    }
-
-                    try {
-                        $table->foreign('competency_id')
-                            ->references('id')
-                            ->on('competency_library')
-                            ->onDelete('cascade');
-                    } catch (\Exception $e) {
-                        Log::warning('Could not create competency_id foreign key: ' . $e->getMessage());
-                    }
 
                     // Add indexes for better performance
                     $table->index(['employee_id', 'competency_id']);
                     $table->index('is_active');
                     $table->index('expired_date');
                 });
+
+                // Add foreign key constraints separately with error handling
+                try {
+                    if (Schema::hasTable('employees')) {
+                        Schema::table('competency_gaps', function (Blueprint $table) {
+                            $table->foreign('employee_id')
+                                ->references('employee_id')
+                                ->on('employees')
+                                ->onDelete('cascade');
+                        });
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Could not create employee_id foreign key: ' . $e->getMessage());
+                }
+
+                try {
+                    if (Schema::hasTable('competency_library')) {
+                        Schema::table('competency_gaps', function (Blueprint $table) {
+                            $table->foreign('competency_id')
+                                ->references('id')
+                                ->on('competency_library')
+                                ->onDelete('cascade');
+                        });
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Could not create competency_id foreign key: ' . $e->getMessage());
+                }
 
                 Log::info('competency_gaps table created successfully');
             } else {
@@ -1048,6 +1168,13 @@ class CompetencyGapAnalysisController extends Controller
                         $table->boolean('is_active')->default(true);
                     });
                     Log::info('Added is_active column to competency_gaps table');
+                }
+
+                if (!Schema::hasColumn('competency_gaps', 'assigned_to_training')) {
+                    Schema::table('competency_gaps', function (Blueprint $table) {
+                        $table->boolean('assigned_to_training')->default(false);
+                    });
+                    Log::info('Added assigned_to_training column to competency_gaps table');
                 }
             }
         } catch (\Exception $e) {
@@ -1072,22 +1199,23 @@ class CompetencyGapAnalysisController extends Controller
             // Find the competency gap record
             $competencyGap = CompetencyGap::with(['employee', 'competency'])->findOrFail($request->gap_id);
 
-            // Get current user for assigned_by field
-            $assignedBy = 'Admin';
-            try {
-                if (Auth::check() && Auth::user()) {
-                    $assignedBy = Auth::user()->name ?? Auth::user()->username ?? 'Admin';
-                }
-            } catch (\Exception $authException) {
-                Log::warning('Auth issue in assignToTraining: ' . $authException->getMessage());
-                $assignedBy = 'Admin';
+            // Get the employee record
+            $employee = Employee::where('employee_id', $request->employee_id)->first();
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found with employee_id: ' . $request->employee_id
+                ], 404);
             }
-
-            // Ensure upcoming_trainings table exists
+            
+            // The employees table uses string employee_id, but upcoming_trainings expects integer
+            // We need to modify the upcoming_trainings table to use string employee_id to match
+            
+            // Ensure upcoming_trainings table exists with correct structure
             if (!Schema::hasTable('upcoming_trainings')) {
                 Schema::create('upcoming_trainings', function (Blueprint $table) {
                     $table->id('upcoming_id');
-                    $table->string('employee_id', 20);
+                    $table->string('employee_id', 20); // Change to string to match employees table
                     $table->string('training_title');
                     $table->timestamp('start_date')->nullable();
                     $table->timestamp('end_date')->nullable();
@@ -1102,22 +1230,63 @@ class CompetencyGapAnalysisController extends Controller
                     $table->index('employee_id');
                     $table->foreign('employee_id')->references('employee_id')->on('employees');
                 });
+            } else {
+                // Check if employee_id column needs to be modified
+                try {
+                    // Attempt to modify the column type if it exists as integer
+                    Schema::table('upcoming_trainings', function (Blueprint $table) {
+                        $table->string('employee_id', 20)->change();
+                    });
+                } catch (\Exception $e) {
+                    // Column might already be string, or other issue - log but continue
+                    Log::info('Could not modify employee_id column in upcoming_trainings: ' . $e->getMessage());
+                }
+            }
+            
+            $employeeDatabaseId = $employee->employee_id; // Use the string employee_id
+
+            // Get current user for assigned_by field
+            $assignedBy = 'Admin User';
+            $assignedById = null;
+            try {
+                if (Auth::check() && Auth::user()) {
+                    $assignedBy = Auth::user()->name ?? Auth::user()->username ?? 'Admin User';
+                    $assignedById = Auth::id();
+                }
+            } catch (\Exception $authException) {
+                Log::warning('Auth issue in assignToTraining: ' . $authException->getMessage());
+                $assignedBy = 'Admin User';
             }
 
             // Check if training already exists in upcoming trainings
-            $existingUpcoming = \App\Models\UpcomingTraining::where('employee_id', $request->employee_id)
+            $existingUpcoming = \App\Models\UpcomingTraining::where('employee_id', $employeeDatabaseId)
                 ->where('training_title', $request->competency)
                 ->first();
 
-            // Prepare training data
+            // Use the competency gap's exact expiration date
+            $expirationDate = $competencyGap->expired_date;
+            
+            // If expired_date is provided in request, validate it matches the competency gap
+            if ($request->expired_date) {
+                $requestDate = \Carbon\Carbon::parse($request->expired_date);
+                $gapDate = \Carbon\Carbon::parse($competencyGap->expired_date);
+                
+                // Use the competency gap date to ensure consistency
+                $expirationDate = $gapDate;
+                
+                Log::info("Expiration date comparison - Request: {$requestDate}, Gap: {$gapDate}, Using: {$expirationDate}");
+            }
+
+            // Prepare training data using the database ID
             $trainingData = [
-                'employee_id' => $request->employee_id,
+                'employee_id' => $employeeDatabaseId, // Use database ID, not employee_id string
                 'training_title' => $request->competency,
-                'start_date' => now()->format('Y-m-d'),
-                'end_date' => $request->expired_date ? \Carbon\Carbon::parse($request->expired_date)->format('Y-m-d') : now()->addMonths(3)->format('Y-m-d'),
+                'start_date' => now(),
+                'end_date' => $expirationDate, // Use the exact expiration date from competency gap
                 'status' => 'Assigned',
                 'source' => 'competency_gap',
-                'assigned_by' => $assignedBy,
+                'assigned_by' => $assignedById, // Store admin user ID
+                'assigned_by_name' => $assignedBy, // Store admin name for display
                 'assigned_date' => now(),
                 'needs_response' => true
             ];
@@ -1131,6 +1300,10 @@ class CompetencyGapAnalysisController extends Controller
                 \App\Models\UpcomingTraining::create($trainingData);
                 $message = "Successfully assigned {$request->competency} to upcoming trainings";
             }
+
+            // Mark the competency gap as assigned to training
+            $competencyGap->assigned_to_training = true;
+            $competencyGap->save();
 
             // Log the activity
             ActivityLog::create([
@@ -1152,6 +1325,153 @@ class CompetencyGapAnalysisController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error assigning training: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Fix existing expiration dates to match competency gaps
+     */
+    public function fixExpirationDates()
+    {
+        try {
+            // Direct fix for Communication Skills
+            $updated = \DB::table('upcoming_trainings')
+                ->where('training_title', 'Communication Skills')
+                ->where('source', 'competency_gap')
+                ->update(['end_date' => '2025-09-30 19:15:00']);
+            
+            Log::info("Direct fix: Updated {$updated} Communication Skills records to Sep 30, 2025");
+            
+            // Also run the general fix method
+            $updatedCount = \App\Models\UpcomingTraining::fixExpirationDates();
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully fixed {$updatedCount} expiration dates. Direct fix updated {$updated} Communication Skills records.",
+                'updated_count' => $updatedCount,
+                'direct_fix' => $updated
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error fixing expiration dates: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fixing expiration dates: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Unassign competency gap from training (admin override)
+     */
+    public function unassignFromTraining(Request $request, $id)
+    {
+        try {
+            $gap = CompetencyGap::findOrFail($id);
+            
+            // Mark as not assigned to training
+            $gap->assigned_to_training = false;
+            $gap->save();
+
+            // Log the activity
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'module' => 'Competency Management',
+                'action' => 'unassign_training',
+                'description' => "Unassigned competency gap from training for employee ID: {$gap->employee_id} - {$gap->competency->competency_name}",
+                'model_type' => CompetencyGap::class,
+                'model_id' => $gap->id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Competency gap unassigned from training successfully. You can now edit or delete this record.'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error unassigning from training: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Create competency_gaps table directly using raw SQL
+     */
+    public function createCompetencyGapsTable()
+    {
+        try {
+            // Check if table already exists
+            if (Schema::hasTable('competency_gaps')) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'competency_gaps table already exists'
+                ]);
+            }
+
+            // Create table using raw SQL for better control
+            $sql = "
+                CREATE TABLE competency_gaps (
+                    id bigint unsigned NOT NULL AUTO_INCREMENT,
+                    employee_id varchar(20) NOT NULL,
+                    competency_id bigint unsigned NOT NULL,
+                    required_level int NOT NULL,
+                    current_level int NOT NULL,
+                    gap int NOT NULL,
+                    gap_description text,
+                    expired_date timestamp NULL DEFAULT NULL,
+                    is_active tinyint(1) NOT NULL DEFAULT '1',
+                    assigned_to_training tinyint(1) NOT NULL DEFAULT '0',
+                    created_at timestamp NULL DEFAULT NULL,
+                    updated_at timestamp NULL DEFAULT NULL,
+                    PRIMARY KEY (id),
+                    KEY competency_gaps_employee_id_competency_id_index (employee_id, competency_id),
+                    KEY competency_gaps_is_active_index (is_active),
+                    KEY competency_gaps_expired_date_index (expired_date)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ";
+
+            DB::statement($sql);
+
+            // Add foreign key constraints if tables exist
+            try {
+                if (Schema::hasTable('employees')) {
+                    DB::statement("
+                        ALTER TABLE competency_gaps 
+                        ADD CONSTRAINT competency_gaps_employee_id_foreign 
+                        FOREIGN KEY (employee_id) REFERENCES employees (employee_id) ON DELETE CASCADE
+                    ");
+                }
+            } catch (\Exception $e) {
+                Log::warning('Could not create employee_id foreign key: ' . $e->getMessage());
+            }
+
+            try {
+                if (Schema::hasTable('competency_library')) {
+                    DB::statement("
+                        ALTER TABLE competency_gaps 
+                        ADD CONSTRAINT competency_gaps_competency_id_foreign 
+                        FOREIGN KEY (competency_id) REFERENCES competency_library (id) ON DELETE CASCADE
+                    ");
+                }
+            } catch (\Exception $e) {
+                Log::warning('Could not create competency_id foreign key: ' . $e->getMessage());
+            }
+
+            Log::info('competency_gaps table created successfully via direct SQL');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'competency_gaps table created successfully with all columns including assigned_to_training'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error creating competency_gaps table: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating table: ' . $e->getMessage()
             ], 500);
         }
     }

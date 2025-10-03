@@ -7,15 +7,17 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
-        Schema::create('succession_readiness_ratings', function (Blueprint $table) {
-            $table->id();
-            $table->string('employee_id', 20);
-            $table->integer('readiness_score');
-            $table->date('assessment_date');
-            $table->timestamps();
+        if (!Schema::hasTable('succession_readiness_ratings')) {
+            Schema::create('succession_readiness_ratings', function (Blueprint $table) {
+                $table->id();
+                $table->string('employee_id', 20);
+                $table->integer('readiness_score');
+                $table->date('assessment_date');
+                $table->timestamps();
 
-            $table->foreign('employee_id')->references('employee_id')->on('employees')->onDelete('cascade');
-        });
+                $table->foreign('employee_id')->references('employee_id')->on('employees')->onDelete('cascade');
+            });
+        }
     }
 
     public function down(): void

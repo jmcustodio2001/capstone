@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Employee Trainings</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/employee_dashboard-style.css') }}">
@@ -218,6 +219,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 link.classList.remove('active');
             }
         });
+
+        // Refresh progress data when progress section is shown
+        if (targetId === 'progress') {
+            refreshTrainingProgress();
+        }
     }
 
     // Add click event listeners to breadcrumb links
@@ -232,6 +238,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Check URL parameters for tab selection
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('tab');
+    const refreshParam = urlParams.get('refresh');
+
+    // If refresh parameter is present, refresh progress data
+    if (refreshParam) {
+        refreshTrainingProgress();
+    }
 
     if (tabParam && ['upcoming', 'completed', 'requests', 'progress', 'feedback', 'notifications'].includes(tabParam)) {
         // Show the tab specified in URL parameter
@@ -243,8 +255,77 @@ document.addEventListener('DOMContentLoaded', function() {
             showSection(firstTarget);
         }
     }
+
+    // Auto-refresh progress data on page load
+    setTimeout(function() {
+        refreshTrainingProgress();
+    }, 500);
+
+    // Force refresh every 10 seconds for real-time updates
+    setInterval(function() {
+        if (document.getElementById('progress-section').style.display !== 'none') {
+            refreshTrainingProgress();
+        }
+    }, 10000);
 });
+
+// Function to refresh training progress data
+function refreshTrainingProgress() {
+    fetch('/employee/training/refresh-progress', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Training progress refreshed:', data);
+            // Reload the page to show updated progress if any records were updated
+            if (data.updated_count > 0) {
+                setTimeout(function() {
+                    window.location.reload();
+                }, 500);
+            }
+        } else {
+            console.error('Failed to refresh training progress:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing training progress:', error);
+    });
+}
+
+// Function to manually refresh progress (can be called by buttons)
+function manualRefreshProgress() {
+    const refreshBtn = document.getElementById('refresh-progress-btn');
+    if (refreshBtn) {
+        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Refreshing...';
+        refreshBtn.disabled = true;
+    }
+
+    refreshTrainingProgress();
+
+    setTimeout(function() {
+        if (refreshBtn) {
+            refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Refresh Progress';
+            refreshBtn.disabled = false;
+        }
+    }, 2000);
+}
 </script>
+
+<style>
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
 
 </body>
 </html>

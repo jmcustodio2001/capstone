@@ -11,11 +11,12 @@ class CompetencyGap extends Model
     // REMOVED: No longer auto-creating destination knowledge training records
     // This prevents non-destination competencies from appearing in destination knowledge training
     protected $fillable = [
-        'employee_id', 'competency_id', 'required_level', 'current_level', 'gap', 'gap_description', 'expired_date', 'is_active'
+        'employee_id', 'competency_id', 'required_level', 'current_level', 'gap', 'gap_description', 'expired_date', 'is_active', 'assigned_to_training'
     ];
 
     protected $casts = [
         'expired_date' => 'datetime',
+        'assigned_to_training' => 'boolean',
     ];
 
     protected static function booted()

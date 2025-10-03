@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Employee Settings</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
@@ -99,7 +100,47 @@
 @include('employee_ess_modules.partials.employee_topbar')
 @include('employee_ess_modules.partials.employee_sidebar')
 
-<main id="main-content" class="container py-4" style="margin-top: 30px;">
+<main id="main-content" class="container py-4 main-content-transition" style="margin-top: 3.5rem; max-width: 1000px;">
+<style>
+  /* Sidebar toggle responsive fix */
+  .main-content-transition {
+    transition: margin-left 0.3s;
+    margin-left: 270px;
+  }
+  .sidebar-collapsed ~ #main-content,
+  .sidebar-collapsed #main-content,
+  .main-content-collapsed {
+    margin-left: 80px !important;
+  }
+</style>
+<script>
+// Sidebar toggle fix: listen for sidebar toggle and adjust main content margin
+document.addEventListener('DOMContentLoaded', function() {
+  // ...existing code...
+
+  // Sidebar toggle logic
+  // Assumes sidebar has id 'employee-sidebar' and toggle button has id 'sidebar-toggle-btn'
+  const sidebar = document.getElementById('employee-sidebar') || document.querySelector('.employee-sidebar');
+  const mainContent = document.getElementById('main-content');
+  const toggleBtn = document.getElementById('sidebar-toggle-btn') || document.querySelector('.sidebar-toggle-btn');
+
+  function updateMainContentMargin() {
+    if (sidebar && sidebar.classList.contains('collapsed')) {
+      mainContent.classList.add('main-content-collapsed');
+    } else {
+      mainContent.classList.remove('main-content-collapsed');
+    }
+  }
+
+  if (toggleBtn && sidebar && mainContent) {
+    toggleBtn.addEventListener('click', function() {
+      setTimeout(updateMainContentMargin, 10); // Wait for sidebar class to update
+    });
+    // Initial state
+    updateMainContentMargin();
+  }
+});
+</script>
 
   <!-- Header -->
   <div class="page-header-container mb-4">
@@ -116,16 +157,32 @@
     </div>
   </div>
 
+  <!-- Success/Error Messages -->
+  @if(session('success'))
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+      <i class="bi bi-check-circle me-2"></i>{{ session('success') }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  @endif
+
+  @if($errors->any())
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      @foreach($errors->all() as $error)
+        {{ $error }}<br>
+      @endforeach
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  @endif
+
   <!-- Settings Form -->
   <div class="card settings-card">
     <div class="card-header">
       <i class="bi bi-person-gear me-2"></i>Employee Information
     </div>
     <div class="card-body p-4">
-      <form method="POST" action="/employee/settings" enctype="multipart/form-data">
+      <form method="POST" action="{{ route('employee.settings.fix') }}" enctype="multipart/form-data" id="settings-form">
         @csrf
-        @method('PUT')
-        <input type="hidden" name="employee_password" id="employee-password">
 
         <!-- Basic Information Section -->
         <div class="settings-section">
@@ -135,22 +192,22 @@
           <div class="settings-grid">
             <div class="settings-field">
               <label class="form-label">Employee ID</label>
-              <input type="text" class="form-control readonly-field" name="employee_id" value="{{ $employee->employee_id }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->employee_id }}" readonly>
             </div>
 
             <div class="settings-field">
               <label class="form-label">Position</label>
-              <input type="text" class="form-control readonly-field" name="position" value="{{ $employee->position }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->position }}" readonly>
             </div>
 
             <div class="settings-field">
               <label class="form-label">First Name</label>
-              <input type="text" class="form-control readonly-field" name="first_name" value="{{ $employee->first_name }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->first_name }}" readonly>
             </div>
 
             <div class="settings-field">
               <label class="form-label">Last Name</label>
-              <input type="text" class="form-control readonly-field" name="last_name" value="{{ $employee->last_name }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->last_name }}" readonly>
             </div>
           </div>
         </div>
@@ -163,17 +220,17 @@
           <div class="settings-grid">
             <div class="settings-field">
               <label class="form-label">Email</label>
-              <input type="email" class="form-control readonly-field" name="email" value="{{ $employee->email }}" readonly>
+              <input type="email" class="form-control readonly-field" value="{{ $employee->email }}" readonly>
             </div>
 
             <div class="settings-field">
               <label class="form-label">Phone Number</label>
-              <input type="text" class="form-control readonly-field" name="phone_number" value="{{ $employee->phone_number }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->phone_number }}" readonly>
             </div>
 
             <div class="settings-field">
               <label class="form-label">Address</label>
-              <input type="text" class="form-control readonly-field" name="address" value="{{ $employee->address }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->address }}" readonly>
             </div>
           </div>
         </div>
@@ -186,7 +243,7 @@
           <div class="settings-grid">
             <div class="settings-field">
               <label class="form-label">Hire Date</label>
-              <input type="date" class="form-control readonly-field" name="hire_date" value="{{ $employee->hire_date ? \Carbon\Carbon::parse($employee->hire_date)->format('Y-m-d') : '' }}" readonly>
+              <input type="date" class="form-control readonly-field" value="{{ $employee->hire_date ? \Carbon\Carbon::parse($employee->hire_date)->format('Y-m-d') : '' }}" readonly>
             </div>
 
             <div class="settings-field">
@@ -195,12 +252,22 @@
             </div>
 
             <div class="settings-field">
-              <label class="form-label">Status</label>
+              <label class="form-label">Employment Status</label>
               <select class="form-select" name="status">
                 <option value="Active" {{ $employee->status == 'Active' ? 'selected' : '' }}>Active</option>
                 <option value="Inactive" {{ $employee->status == 'Inactive' ? 'selected' : '' }}>Inactive</option>
                 <option value="On Leave" {{ $employee->status == 'On Leave' ? 'selected' : '' }}>On Leave</option>
               </select>
+            </div>
+
+            <div class="settings-field">
+              <label class="form-label">Online Status</label>
+              <div class="d-flex align-items-center">
+                <span id="online-status" class="badge bg-secondary me-2">
+                  <i class="bi bi-circle-fill me-1"></i>Checking...
+                </span>
+                <small class="text-muted">Real-time connection status</small>
+              </div>
             </div>
           </div>
         </div>
@@ -234,14 +301,19 @@
           </div>
           <div class="d-flex align-items-center flex-wrap">
             @if($employee->profile_picture)
-              <img src="{{ asset('storage/'.$employee->profile_picture) }}" alt="Profile Picture" class="profile-img-preview me-4">
+              <img src="{{ asset('storage/'.$employee->profile_picture) }}" alt="Profile Picture" class="profile-img-preview me-4" id="current-profile-picture">
+            @else
+              <div class="profile-img-preview me-4 d-flex align-items-center justify-content-center bg-light" id="no-profile-picture">
+                <i class="bi bi-person-circle" style="font-size: 4rem; color: #6c757d;"></i>
+              </div>
             @endif
             <div class="flex-grow-1">
-              <input type="file" class="form-control" name="profile_picture">
-              <small class="form-text text-muted">Recommended: Square image, at least 200x200 pixels</small>
+              <input type="file" class="form-control" name="profile_picture" id="profile-picture-input" accept="image/*">
+              <small class="form-text text-muted">Recommended: Square image, at least 200x200 pixels (JPEG, PNG, JPG, GIF - Max: 2MB)</small>
             </div>
           </div>
         </div>
+
 
         <!-- System Information Section -->
         <div class="settings-section">
@@ -251,19 +323,19 @@
           <div class="settings-grid">
             <div class="settings-field">
               <label class="form-label">Created At</label>
-              <input type="text" class="form-control readonly-field" value="{{ $employee->created_at }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->created_at ? \Carbon\Carbon::parse($employee->created_at)->format('Y-m-d') : '' }}" readonly>
             </div>
 
             <div class="settings-field">
               <label class="form-label">Updated At</label>
-              <input type="text" class="form-control readonly-field" value="{{ $employee->updated_at }}" readonly>
+              <input type="text" class="form-control readonly-field" value="{{ $employee->updated_at ? \Carbon\Carbon::parse($employee->updated_at)->format('Y-m-d') : '' }}" readonly>
             </div>
           </div>
         </div>
 
         <div class="d-flex justify-content-end mt-4 pt-3 border-top">
           <button type="reset" class="btn btn-light me-3">Reset</button>
-          <button type="button" class="btn btn-primary" id="save-changes-btn">Save Changes</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
         </div>
       </form>
     </div>
@@ -364,190 +436,38 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Handle save changes button click with password verification
-  const form = document.querySelector('form');
-  const saveBtn = document.getElementById('save-changes-btn');
-  console.log('Form found:', form);
-  console.log('Save button found:', saveBtn);
-  console.log('Form method:', form ? form.method : 'Form not found');
-  console.log('Form action:', form ? form.action : 'Form not found');
+  // Profile picture preview
+  const profilePictureInput = document.getElementById('profile-picture-input');
+  if (profilePictureInput) {
+    profilePictureInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const currentImg = document.getElementById('current-profile-picture');
+          const noProfileDiv = document.getElementById('no-profile-picture');
 
-  if (!form || !saveBtn) {
-    console.error('Form or save button not found! Cannot attach event listener.');
-    return;
-  }
-
-  saveBtn.addEventListener('click', function(e) {
-    console.log('Save changes button clicked');
-    console.log('Event target:', e.target);
-    console.log('Event type:', e.type);
-
-    // Validate new password if provided
-    const newPassword = passwordInput ? passwordInput.value : '';
-    if (newPassword.trim() && !validatePassword(newPassword)) {
-      alert('Please ensure your new password meets all requirements.');
-      return;
-    }
-
-    // Validate confirm password if new password is provided
-    if (newPassword.trim() && !validateConfirmPassword()) {
-      alert('Please ensure your confirm password matches the new password.');
-      return;
-    }
-
-    // Check if SweetAlert is available
-    if (typeof Swal === 'undefined') {
-      console.error('SweetAlert not available! Cannot show popup.');
-      alert('SweetAlert library not loaded. Please refresh the page.');
-      return;
-    }
-
-    // Show SweetAlert password verification popup
-    console.log('About to show SweetAlert password popup');
-    Swal.fire({
-      title: 'Enter Password',
-      text: 'Please enter your password to confirm saving these changes.',
-      input: 'password',
-      inputPlaceholder: 'Enter your password',
-      inputAttributes: {
-        autocapitalize: 'off',
-        autocorrect: 'off'
-      },
-      showCancelButton: true,
-      confirmButtonText: 'Verify',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#4299e1',
-      cancelButtonColor: '#6c757d',
-      preConfirm: async (password) => {
-        console.log('Password entered:', password ? 'Yes' : 'No');
-        if (!password.trim()) {
-          console.log('Password validation failed: empty password');
-          Swal.showValidationMessage('Password is required');
-          return false;
-        }
-
-        try {
-          console.log('Starting password verification AJAX request');
-          const csrfToken = document.querySelector('meta[name="csrf-token"]');
-          console.log('CSRF token found:', csrfToken ? 'Yes' : 'No');
-          console.log('CSRF token value:', csrfToken ? csrfToken.getAttribute('content') : 'N/A');
-
-          // Verify password with backend
-          const response = await fetch('/employee/verify-password', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': csrfToken ? csrfToken.getAttribute('content') : ''
-            },
-            body: JSON.stringify({ password: password })
-          });
-
-          console.log('AJAX response status:', response.status);
-          console.log('AJAX response ok:', response.ok);
-
-          const result = await response.json();
-          console.log('AJAX response result:', result);
-
-          if (!result.success) {
-            console.log('Password verification failed:', result.message);
-            throw new Error(result.message || 'The password you entered is incorrect.');
+          if (currentImg) {
+            currentImg.src = e.target.result;
+          } else if (noProfileDiv) {
+            noProfileDiv.innerHTML = '<img src="' + e.target.result + '" alt="Profile Picture" class="profile-img-preview" style="max-width: 120px; border-radius: 50%;">';
           }
-
-          console.log('Password verification successful');
-          return password;
-        } catch (error) {
-          console.log('Password verification error:', error.message);
-          Swal.showValidationMessage(error.message || 'An error occurred while verifying your password. Please try again.');
-          return false;
-        }
-      }
-    }).then((result) => {
-      console.log('SweetAlert password popup result:', result);
-      console.log('Result isConfirmed:', result.isConfirmed);
-      console.log('Result value:', result.value);
-
-      if (result.isConfirmed && result.value) {
-        const password = result.value;
-        console.log('Password confirmed, setting hidden field');
-        document.getElementById('employee-password').value = password;
-
-        // Show confirmation dialog with enhanced styling
-        console.log('About to show confirmation dialog');
-        Swal.fire({
-          title: 'Save Changes?',
-          html: '<div class="text-center"><i class="bi bi-check-circle text-success" style="font-size: 3rem;"></i><br><br>Your password has been verified successfully.<br><strong>Do you want to save these changes to your profile?</strong></div>',
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonColor: '#28a745',
-          cancelButtonColor: '#dc3545',
-          confirmButtonText: '<i class="bi bi-check-lg"></i> Yes, Save Changes!',
-          cancelButtonText: '<i class="bi bi-x-lg"></i> Cancel',
-          customClass: {
-            popup: 'swal2-popup-custom',
-            confirmButton: 'btn btn-success px-4',
-            cancelButton: 'btn btn-danger px-4'
-          },
-          buttonsStyling: false,
-          allowOutsideClick: false,
-          allowEscapeKey: false
-        }).then((confirmResult) => {
-          console.log('Confirmation dialog result:', confirmResult);
-          console.log('Confirmation isConfirmed:', confirmResult.isConfirmed);
-
-          if (confirmResult.isConfirmed) {
-            console.log('User confirmed, submitting form');
-            
-            // Show loading state
-            Swal.fire({
-              title: 'Saving Changes...',
-              html: '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><br><br>Please wait while we update your profile information.</div>',
-              allowOutsideClick: false,
-              allowEscapeKey: false,
-              showConfirmButton: false,
-              customClass: {
-                popup: 'swal2-popup-custom'
-              }
-            });
-            
-            // Submit the form
-            const submitBtn = document.getElementById('save-changes-btn');
-            console.log('Submit button found:', submitBtn);
-            if (submitBtn) {
-              submitBtn.disabled = true;
-              submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
-              console.log('Form submitting...');
-              
-              // Add a small delay to show the loading state
-              setTimeout(() => {
-                form.submit();
-              }, 500);
-            } else {
-              console.error('Submit button not found!');
-              Swal.fire({
-                title: 'Error!',
-                text: 'Unable to save changes. Please refresh the page and try again.',
-                icon: 'error',
-                confirmButtonColor: '#dc3545'
-              });
-            }
-          } else {
-            console.log('User cancelled confirmation');
-            // Show cancellation message
-            Swal.fire({
-              title: 'Changes Not Saved',
-              text: 'Your profile changes have been cancelled.',
-              icon: 'info',
-              confirmButtonColor: '#6c757d',
-              timer: 2000,
-              timerProgressBar: true
-            });
-          }
-        });
-      } else {
-        console.log('Password popup was cancelled or failed');
+        };
+        reader.readAsDataURL(file);
       }
     });
-  });
+  }
+
+  // Online status - show as online since user is logged in
+  function updateOnlineStatus() {
+    const statusElement = document.getElementById('online-status');
+    statusElement.className = 'badge bg-success me-2';
+    statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>Online';
+  }
+
+  // Set status immediately
+  updateOnlineStatus();
+
 });
 </script>
 </body>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
@@ -14,6 +15,133 @@
     }
     .text-orange {
       color: #ff8c00 !important;
+    }
+    
+    /* Professional list styling */
+    .competency-row {
+      transition: all 0.3s ease !important;
+      border-left: 3px solid transparent;
+    }
+    
+    .competency-row:hover {
+      background-color: #f8f9fa !important;
+      border-left-color: #007bff;
+      box-shadow: 0 2px 8px rgba(0,123,255,0.1);
+    }
+    
+    /* Custom category colors */
+    .bg-purple {
+      background-color: #6f42c1 !important;
+    }
+    
+    .bg-pink {
+      background-color: #e83e8c !important;
+    }
+    
+    /* Progress bar animations */
+    .progress-bar {
+      transition: width 0.6s ease;
+    }
+    
+    /* Button group styling */
+    .btn-group .btn {
+      border-radius: 0.375rem !important;
+      margin-right: 2px;
+    }
+    
+    .btn-group .btn:last-child {
+      margin-right: 0;
+    }
+    
+    /* Star rating styling */
+    .bi-star-fill, .bi-star {
+      font-size: 0.9rem;
+    }
+    
+    /* Empty state styling */
+    .bi-inbox {
+      opacity: 0.3;
+    }
+    
+    /* Professional table styling */
+    .table {
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    
+    .table th {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      font-weight: 600;
+      font-size: 0.875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 1rem 0.75rem;
+    }
+    
+    .table td {
+      vertical-align: middle;
+      padding: 1rem 0.75rem;
+      border-color: #e9ecef;
+    }
+    
+    .table tbody tr {
+      border-bottom: 1px solid #f1f3f4;
+    }
+    
+    .category-badge {
+      font-size: 0.75rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 20px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    
+    .progress-sm {
+      height: 8px;
+      border-radius: 10px;
+      background-color: #e9ecef;
+    }
+    
+    .progress-sm .progress-bar {
+      border-radius: 10px;
+    }
+    
+    .star-rating {
+      font-size: 0.9rem;
+    }
+    
+    .competency-name {
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 0.25rem;
+    }
+    
+    .competency-date {
+      font-size: 0.8rem;
+      color: #6c757d;
+    }
+    
+    .row-number {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 15px;
+    }
+    
+    .description-text {
+      color: #495057;
+      line-height: 1.4;
+    }
+    
+    .progress-percentage {
+      font-weight: 700;
+      font-size: 0.9rem;
     }
   </style>
 </head>
@@ -84,106 +212,150 @@
           @endif
         </div>
       </div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-bordered">
-            <thead class="table-primary">
-              <tr>
-                <th class="fw-bold">ID</th>
-                <th class="fw-bold">Competency Name</th>
-                <th class="fw-bold">Description</th>
-                <th class="fw-bold">Category</th>
-                <th class="fw-bold">Proficiency</th>
-                <th class="fw-bold">Created At</th>
-                <th class="fw-bold">Updated At</th>
-                <th class="fw-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse($competencies as $index => $comp)
-                <tr>
-                  <td>{{ $index + 1 }}</td>
-                  <td>{{ $comp->competency_name }}</td>
-                  <td>{{ Str::limit($comp->description, 50) }}</td>
-                  <td>
-                    @php
-                      $categoryColors = [
-                        'Technical' => 'bg-primary',
-                        'Leadership' => 'bg-success',
-                        'Communication' => 'bg-info',
-                        'Behavioral' => 'bg-warning',
-                        'Management' => 'bg-danger',
-                        'Analytical' => 'bg-purple',
-                        'Creative' => 'bg-pink',
-                        'Strategic' => 'bg-dark'
-                      ];
-                      $effectiveCategory = $comp->category ?? '';
-                      $colorClass = $categoryColors[$effectiveCategory] ?? 'bg-secondary';
-                      $badgeClass = "badge {$colorClass} bg-opacity-10 text-" . str_replace('bg-', '', $colorClass);
-                      $iconClass = '';
-                    @endphp
-                    <span class="{{ $badgeClass }}">
-                      {{ $effectiveCategory }}
-                    </span>
-                  </td>
-                  <td>
-                    <div class="d-flex align-items-center">
-                      @php
-                        $progressPercent = round((($comp->rate ?? 0)/5)*100);
-                        // Ensure progress is within valid range
-                        $progressPercent = max(0, min(100, $progressPercent));
-                      @endphp
-                      <div class="progress me-2" style="width: 80px; height: 20px;">
-                        <div class="progress-bar {{ $progressPercent >= 80 ? 'bg-success' : ($progressPercent >= 50 ? 'bg-warning' : 'bg-danger') }}" data-progress-width="{{ $progressPercent }}"></div>
+      <div class="card-body p-0">
+        @forelse($competencies as $index => $comp)
+          @if($loop->first)
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead>
+                  <tr>
+                    <th width="5%" class="text-center">#</th>
+                    <th width="22%">Competency Name</th>
+                    <th width="12%" class="text-center">Category</th>
+                    <th width="28%">Description</th>
+                    <th width="15%">Proficiency Level</th>
+                    <th width="8%" class="text-center">Rating</th>
+                    <th width="10%" class="text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+          @endif
+                  @php
+                    $categoryColors = [
+                      'Technical' => 'bg-primary',
+                      'Leadership' => 'bg-success',
+                      'Communication' => 'bg-info',
+                      'Behavioral' => 'bg-warning',
+                      'Management' => 'bg-danger',
+                      'Analytical' => 'bg-purple',
+                      'Creative' => 'bg-pink',
+                      'Strategic' => 'bg-dark'
+                    ];
+                    $effectiveCategory = $comp->category ?? '';
+                    $colorClass = $categoryColors[$effectiveCategory] ?? 'bg-secondary';
+                    $progressPercent = round((($comp->rate ?? 0)/5)*100);
+                    $progressPercent = max(0, min(100, $progressPercent));
+                    $percentClass = $progressPercent >= 80 ? 'text-success' : ($progressPercent >= 50 ? 'text-warning' : 'text-danger');
+                  @endphp
+                  <tr class="competency-row">
+                    <td class="text-center">
+                      <span class="row-number">{{ $index + 1 }}</span>
+                    </td>
+                    <td>
+                      <div class="competency-name">{{ $comp->competency_name }}</div>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge category-badge {{ $colorClass }} text-white">
+                        <i class="bi bi-tag-fill me-1"></i>{{ $effectiveCategory }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="description-text" title="{{ $comp->description }}">
+                        {{ Str::limit($comp->description, 85) }}
                       </div>
-                      @php
-                        $percentClass = $progressPercent >= 80 ? 'text-success' : ($progressPercent >= 50 ? 'text-warning' : 'text-danger');
-                      @endphp
-                      <span class="fw-semibold {{ $percentClass }}">{{ $progressPercent }}%</span>
-                    </div>
-                  </td>
-                  <td>{{ $comp->created_at->format('M d, Y') }}</td>
-                  <td>{{ $comp->updated_at->format('M d, Y') }}</td>
-                  <td class="text-center">
-                    @if(Auth::guard('admin')->check() && strtoupper(Auth::guard('admin')->user()->role) === 'ADMIN')
-                      <button class="btn btn-outline-primary btn-sm me-1 edit-competency-btn"
-                              data-id="{{ $comp->id }}"
-                              data-name="{{ $comp->competency_name }}"
-                              data-description="{{ $comp->description }}"
-                              data-category="{{ $comp->category }}"
-                              data-rate="{{ $comp->rate }}">
-                        <i class="bi bi-pencil"></i> Edit
-                      </button>
-                      <button class="btn btn-outline-info btn-sm me-1 notify-course-btn"
-                              data-id="{{ $comp->id }}"
-                              data-name="{{ $comp->competency_name }}"
-                              data-description="{{ $comp->description }}">
-                        <i class="bi bi-bell"></i> Notify Course Mgmt
-                      </button>
-                      <form id="deleteForm{{ $comp->id }}" action="{{ route('admin.competency_library.destroy', $comp->id) }}" method="POST" style="display:inline-block;">
-                        @csrf
-                        @method('DELETE')
-                        <button type="button" class="btn btn-outline-danger btn-sm delete-competency-btn"
-                                data-id="{{ $comp->id }}"
-                                data-name="{{ $comp->competency_name }}">
-                          <i class="bi bi-trash"></i> Delete
-                        </button>
-                      </form>
-                    @else
-                      <span class="text-muted small">Admin access required</span>
-                    @endif
-                  </td>
-                </tr>
-              @empty
-                <tr>
-                  <td colspan="8" class="text-center text-muted py-4">
-                    <i class="bi bi-info-circle-fill me-2"></i>No competencies found. Click "Add Competency" to create one.
-                  </td>
-                </tr>
-              @endforelse
-            </tbody>
-          </table>
-        </div>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center mb-2">
+                        <span class="progress-percentage {{ $percentClass }} me-2">{{ $progressPercent }}%</span>
+                      </div>
+                      <div class="progress progress-sm">
+                        <div class="progress-bar {{ $progressPercent >= 80 ? 'bg-success' : ($progressPercent >= 50 ? 'bg-warning' : 'bg-danger') }}" 
+                             data-progress-width="{{ $progressPercent }}" 
+                             style="width: {{ $progressPercent }}%;">
+                        </div>
+                      </div>
+                    </td>
+                    <td class="text-center">
+                      <div class="star-rating mb-1">
+                        @for($i = 1; $i <= 5; $i++)
+                          @if($i <= ($comp->rate ?? 0))
+                            <i class="bi bi-star-fill text-warning"></i>
+                          @else
+                            <i class="bi bi-star text-muted"></i>
+                          @endif
+                        @endfor
+                      </div>
+                      <div class="small text-muted fw-semibold">({{ $comp->rate ?? 0 }}/5)</div>
+                    </td>
+                    <td class="text-center">
+                      @if(Auth::guard('admin')->check() && strtoupper(Auth::guard('admin')->user()->role) === 'ADMIN')
+                        <div class="btn-group" role="group">
+                          <button class="btn btn-outline-primary btn-sm edit-competency-btn"
+                                  data-id="{{ $comp->id }}"
+                                  data-name="{{ $comp->competency_name }}"
+                                  data-description="{{ $comp->description }}"
+                                  data-category="{{ $comp->category }}"
+                                  data-rate="{{ $comp->rate }}"
+                                  title="Edit Competency"
+                                  data-bs-toggle="tooltip">
+                            <i class="bi bi-pencil-square"></i>
+                          </button>
+                          @if(isset($comp->notification_sent) && $comp->notification_sent)
+                            <button class="btn btn-outline-secondary btn-sm" disabled
+                                    title="Already Notified"
+                                    data-bs-toggle="tooltip">
+                              <i class="bi bi-bell-slash"></i>
+                            </button>
+                          @else
+                            <button class="btn btn-outline-info btn-sm notify-course-btn"
+                                    data-id="{{ $comp->id }}"
+                                    data-name="{{ $comp->competency_name }}"
+                                    data-description="{{ $comp->description }}"
+                                    title="Notify Course Management"
+                                    data-bs-toggle="tooltip">
+                              <i class="bi bi-bell-fill"></i>
+                            </button>
+                          @endif
+                          <form id="deleteForm{{ $comp->id }}" action="{{ route('admin.competency_library.destroy', $comp->id) }}" method="POST" style="display:inline-block;">
+                            @csrf
+                            @method('DELETE')
+                            <button type="button" class="btn btn-outline-danger btn-sm delete-competency-btn"
+                                    data-id="{{ $comp->id }}"
+                                    data-name="{{ $comp->competency_name }}"
+                                    title="Delete Competency"
+                                    data-bs-toggle="tooltip">
+                              <i class="bi bi-trash3-fill"></i>
+                            </button>
+                          </form>
+                        </div>
+                      @else
+                        <div class="text-center">
+                          <span class="badge bg-light text-muted">
+                            <i class="bi bi-lock-fill me-1"></i>Restricted
+                          </span>
+                        </div>
+                      @endif
+                    </td>
+                  </tr>
+          @if($loop->last)
+                </tbody>
+              </table>
+            </div>
+          @endif
+        @empty
+          <div class="text-center py-5">
+            <div class="mb-3">
+              <i class="bi bi-inbox display-1 text-muted"></i>
+            </div>
+            <h5 class="text-muted mb-2">No Competencies Found</h5>
+            <p class="text-muted mb-3">Get started by adding your first competency to the library.</p>
+            @if(Auth::guard('admin')->check() && strtoupper(Auth::guard('admin')->user()->role) === 'ADMIN')
+              <button class="btn btn-primary" onclick="addCompetency()">
+                <i class="bi bi-plus-lg me-1"></i> Add Your First Competency
+              </button>
+            @endif
+          </div>
+        @endforelse
       </div>
     </div>
   </main>

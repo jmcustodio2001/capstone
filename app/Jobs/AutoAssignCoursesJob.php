@@ -32,7 +32,7 @@ class AutoAssignCoursesJob implements ShouldQueue
     {
         $gaps = CompetencyGap::with('competency')->where('employee_id', $this->employeeId)->where('gap', '>', 0)->get();
         $toInsert = [];
-        $today = now()->toDateString();
+        $today = now();
         $existingAssignments = EmployeeTrainingDashboard::where('employee_id', $this->employeeId)
             ->pluck('course_id')->toArray();
         foreach ($gaps as $gap) {

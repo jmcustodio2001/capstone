@@ -9,6 +9,7 @@ use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Collection;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Hash;
 
 class SuccessionSimulationController extends Controller
 {
@@ -248,22 +249,63 @@ class SuccessionSimulationController extends Controller
     {
         $request->validate([
             'employee_id' => 'required|exists:employees,employee_id',
-            'simulation_result' => 'required|string',
-            'created_at' => 'required|date',
+            'position_id' => 'nullable|string',
+            'simulation_name' => 'required|string|max:255',
+            'simulation_type' => 'required|in:leadership,technical,management,strategic',
+            'scenario_description' => 'nullable|string',
+            'simulation_date' => 'required|date',
+            'duration_hours' => 'nullable|numeric|min:0',
+            'score' => 'nullable|numeric|min:0',
+            'max_score' => 'nullable|numeric|min:0',
+            'performance_rating' => 'nullable|in:excellent,good,satisfactory,needs_improvement,poor',
+            'competencies_assessed' => 'nullable|array',
+            'strengths' => 'nullable|string',
+            'areas_for_improvement' => 'nullable|string',
+            'recommendations' => 'nullable|string',
+            'assessor_id' => 'nullable|string',
+            'status' => 'required|in:scheduled,in_progress,completed,cancelled',
+            'notes' => 'nullable|string',
+            'simulation_result' => 'nullable|string', // For backward compatibility
         ]);
-        $employee = Employee::find($request->employee_id);
+        
         $sim = SuccessionSimulation::create([
             'employee_id' => $request->employee_id,
-            'simulation_result' => $request->simulation_result,
-            'created_at' => $request->created_at,
+            'position_id' => $request->position_id,
+            'simulation_name' => $request->simulation_name,
+            'simulation_type' => $request->simulation_type ?? 'leadership',
+            'scenario_description' => $request->scenario_description,
+            'simulation_date' => $request->simulation_date,
+            'duration_hours' => $request->duration_hours,
+            'score' => $request->score,
+            'max_score' => $request->max_score ?? 100.00,
+            'performance_rating' => $request->performance_rating,
+            'competencies_assessed' => $request->competencies_assessed,
+            'strengths' => $request->strengths,
+            'areas_for_improvement' => $request->areas_for_improvement,
+            'recommendations' => $request->recommendations,
+            'assessor_id' => $request->assessor_id ?? Auth::id(),
+            'status' => $request->status ?? 'scheduled',
+            'notes' => $request->notes,
+            'simulation_result' => $request->simulation_result, // For backward compatibility
         ]);
+        
         // Log activity
         ActivityLog::create([
             'user_id' => Auth::id(),
             'action' => 'create',
             'module' => 'Succession Simulation',
-            'description' => 'Added simulation entry (ID: ' . $sim->id . ')',
+            'description' => 'Added simulation entry: ' . $sim->simulation_name . ' (ID: ' . $sim->id . ')',
         ]);
+        
+        // Check if request expects JSON response (for AJAX calls)
+        if ($request->expectsJson() || $request->header('Accept') === 'application/json') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Simulation entry added successfully.',
+                'data' => $sim
+            ]);
+        }
+        
         return redirect()->route('succession_simulations.index')->with('success', 'Simulation entry added successfully.');
     }
 
@@ -271,15 +313,45 @@ class SuccessionSimulationController extends Controller
     {
         $request->validate([
             'employee_id' => 'required|exists:employees,employee_id',
-            'simulation_result' => 'required|string',
-            'created_at' => 'required|date',
+            'position_id' => 'nullable|string',
+            'simulation_name' => 'required|string|max:255',
+            'simulation_type' => 'required|in:leadership,technical,management,strategic',
+            'scenario_description' => 'nullable|string',
+            'simulation_date' => 'required|date',
+            'duration_hours' => 'nullable|numeric|min:0',
+            'score' => 'nullable|numeric|min:0',
+            'max_score' => 'nullable|numeric|min:0',
+            'performance_rating' => 'nullable|in:excellent,good,satisfactory,needs_improvement,poor',
+            'competencies_assessed' => 'nullable|array',
+            'strengths' => 'nullable|string',
+            'areas_for_improvement' => 'nullable|string',
+            'recommendations' => 'nullable|string',
+            'assessor_id' => 'nullable|string',
+            'status' => 'required|in:scheduled,in_progress,completed,cancelled',
+            'notes' => 'nullable|string',
+            'simulation_result' => 'nullable|string', // For backward compatibility
         ]);
 
         $sim = SuccessionSimulation::findOrFail($id);
         $sim->update([
             'employee_id' => $request->employee_id,
-            'simulation_result' => $request->simulation_result,
-            'created_at' => $request->created_at,
+            'position_id' => $request->position_id,
+            'simulation_name' => $request->simulation_name,
+            'simulation_type' => $request->simulation_type,
+            'scenario_description' => $request->scenario_description,
+            'simulation_date' => $request->simulation_date,
+            'duration_hours' => $request->duration_hours,
+            'score' => $request->score,
+            'max_score' => $request->max_score,
+            'performance_rating' => $request->performance_rating,
+            'competencies_assessed' => $request->competencies_assessed,
+            'strengths' => $request->strengths,
+            'areas_for_improvement' => $request->areas_for_improvement,
+            'recommendations' => $request->recommendations,
+            'assessor_id' => $request->assessor_id,
+            'status' => $request->status,
+            'notes' => $request->notes,
+            'simulation_result' => $request->simulation_result, // For backward compatibility
         ]);
 
         // Log activity
@@ -287,23 +359,285 @@ class SuccessionSimulationController extends Controller
             'user_id' => Auth::id(),
             'action' => 'update',
             'module' => 'Succession Simulation',
-            'description' => 'Updated simulation entry (ID: ' . $sim->id . ')',
+            'description' => 'Updated simulation entry: ' . $sim->simulation_name . ' (ID: ' . $sim->id . ')',
         ]);
 
-        return response()->json(['success' => true, 'message' => 'Simulation entry updated successfully.']);
+        // Check if request expects JSON response (for AJAX calls)
+        if ($request->expectsJson() || $request->header('Accept') === 'application/json') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Simulation entry updated successfully.',
+                'data' => $sim
+            ]);
+        }
+
+        return redirect()->route('succession_simulations.index')->with('success', 'Simulation entry updated successfully.');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $sim = SuccessionSimulation::findOrFail($id);
         $sim->delete();
+        
         // Log activity
         ActivityLog::create([
             'user_id' => Auth::id(),
             'action' => 'delete',
             'module' => 'Succession Simulation',
-            'description' => 'Deleted simulation entry (ID: ' . $sim->id . ')',
+            'description' => 'Deleted simulation entry (ID: ' . $id . ')',
         ]);
+        
+        // Check if request expects JSON response (for AJAX calls)
+        if ($request->expectsJson() || $request->header('Accept') === 'application/json') {
+            return response()->json([
+                'success' => true,
+                'message' => 'Simulation entry deleted successfully.'
+            ]);
+        }
+        
         return redirect()->route('succession_simulations.index')->with('success', 'Simulation entry deleted successfully.');
+    }
+
+    /**
+     * Export succession planning data with password verification
+     */
+    public function exportSuccessionData(Request $request)
+    {
+        // Validate the request
+        $request->validate([
+            'password' => 'required|string',
+            'export_type' => 'required|in:simulations,scenarios,comprehensive'
+        ]);
+
+        // Verify admin password
+        $user = Auth::guard('admin')->user();
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid password'
+            ], 401);
+        }
+
+        try {
+            $exportType = $request->export_type;
+            $timestamp = now()->format('Y-m-d_H-i-s');
+            
+            switch ($exportType) {
+                case 'simulations':
+                    return $this->exportSimulations($timestamp);
+                case 'scenarios':
+                    return $this->exportScenarios($timestamp);
+                case 'comprehensive':
+                    return $this->exportComprehensiveReport($timestamp);
+                default:
+                    return response()->json(['success' => false, 'message' => 'Invalid export type'], 400);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Export failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export simulation entries
+     */
+    private function exportSimulations($timestamp)
+    {
+        $simulations = SuccessionSimulation::with('employee')->get();
+        
+        $csvData = [];
+        $csvData[] = [
+            'ID',
+            'Employee Name',
+            'Employee ID',
+            'Simulation Name',
+            'Simulation Type',
+            'Simulation Date',
+            'Duration (Hours)',
+            'Score',
+            'Max Score',
+            'Performance Rating',
+            'Status',
+            'Strengths',
+            'Areas for Improvement',
+            'Recommendations',
+            'Notes',
+            'Created Date'
+        ];
+
+        foreach ($simulations as $sim) {
+            $employeeName = $sim->employee ? 
+                $sim->employee->first_name . ' ' . $sim->employee->last_name : 
+                'Unknown Employee';
+
+            $csvData[] = [
+                $sim->id,
+                $employeeName,
+                $sim->employee_id,
+                $sim->simulation_name ?? 'N/A',
+                $sim->simulation_type ?? 'N/A',
+                $sim->simulation_date ? \Carbon\Carbon::parse($sim->simulation_date)->format('Y-m-d') : 'N/A',
+                $sim->duration_hours ?? 'N/A',
+                $sim->score ?? 'N/A',
+                $sim->max_score ?? 'N/A',
+                $sim->performance_rating ?? 'N/A',
+                $sim->status ?? 'N/A',
+                $sim->strengths ?? 'N/A',
+                $sim->areas_for_improvement ?? 'N/A',
+                $sim->recommendations ?? 'N/A',
+                $sim->notes ?? 'N/A',
+                $sim->created_at->format('Y-m-d H:i:s')
+            ];
+        }
+
+        return $this->generateCsvResponse($csvData, "succession_simulations_{$timestamp}.csv");
+    }
+
+    /**
+     * Export AI scenarios data
+     */
+    private function exportScenarios($timestamp)
+    {
+        $positions = $this->getOrganizationalPositions();
+        $topCandidates = $this->getTopCandidatesForPositions($positions);
+        $dashboardMetrics = $this->calculateDashboardMetrics();
+        $scenarioData = $this->generateScenarioData($positions, $topCandidates, $dashboardMetrics);
+
+        $csvData = [];
+        $csvData[] = [
+            'Scenario ID',
+            'Title',
+            'Description',
+            'Impact Level',
+            'Ready Successor',
+            'Transition Time',
+            'Affected Positions',
+            'Timeline',
+            'Positions Affected',
+            'New Positions',
+            'Leadership Gap',
+            'Recovery Time',
+            'Succession Readiness'
+        ];
+
+        foreach ($scenarioData as $scenario) {
+            $csvData[] = [
+                $scenario['id'] ?? 'N/A',
+                $scenario['title'] ?? 'N/A',
+                $scenario['description'] ?? 'N/A',
+                $scenario['impact_level'] ?? 'N/A',
+                $scenario['ready_successor'] ?? 'N/A',
+                $scenario['transition_time'] ?? 'N/A',
+                $scenario['affected_positions'] ?? 'N/A',
+                $scenario['timeline'] ?? 'N/A',
+                $scenario['positions_affected'] ?? 'N/A',
+                $scenario['new_positions'] ?? 'N/A',
+                $scenario['leadership_gap'] ?? 'N/A',
+                $scenario['recovery_time'] ?? 'N/A',
+                $scenario['succession_readiness'] ?? 'N/A'
+            ];
+        }
+
+        return $this->generateCsvResponse($csvData, "succession_scenarios_{$timestamp}.csv");
+    }
+
+    /**
+     * Export comprehensive succession planning report
+     */
+    private function exportComprehensiveReport($timestamp)
+    {
+        $simulations = SuccessionSimulation::with('employee')->get();
+        $positions = $this->getOrganizationalPositions();
+        $topCandidates = $this->getTopCandidatesForPositions($positions);
+        $dashboardMetrics = $this->calculateDashboardMetrics();
+
+        $csvData = [];
+        
+        // Dashboard Metrics Section
+        $csvData[] = ['=== SUCCESSION PLANNING DASHBOARD METRICS ==='];
+        $csvData[] = ['Metric', 'Value'];
+        $csvData[] = ['Total Candidates', $dashboardMetrics['totalCandidates']];
+        $csvData[] = ['Ready Leaders', $dashboardMetrics['readyLeaders']];
+        $csvData[] = ['In Development', $dashboardMetrics['inDevelopment']];
+        $csvData[] = ['Key Positions', $dashboardMetrics['keyPositions']];
+        $csvData[] = [''];
+
+        // Top Candidates Section
+        $csvData[] = ['=== TOP CANDIDATES BY POSITION ==='];
+        $csvData[] = ['Position', 'Department', 'Level', 'Top Candidate', 'Readiness Score'];
+        foreach ($positions as $position) {
+            $candidates = $topCandidates[$position->id] ?? collect();
+            $topCandidate = $candidates->first();
+            
+            $csvData[] = [
+                $position->position_title,
+                $position->department,
+                $position->level,
+                $topCandidate ? $topCandidate['name'] : 'No candidate',
+                $topCandidate ? $topCandidate['readiness_score'] . '%' : 'N/A'
+            ];
+        }
+        $csvData[] = [''];
+
+        // Simulations Section
+        $csvData[] = ['=== SIMULATION ENTRIES ==='];
+        $csvData[] = [
+            'ID', 'Employee Name', 'Simulation Name', 'Type', 'Date', 
+            'Score', 'Performance Rating', 'Status', 'Created Date'
+        ];
+        
+        foreach ($simulations as $sim) {
+            $employeeName = $sim->employee ? 
+                $sim->employee->first_name . ' ' . $sim->employee->last_name : 
+                'Unknown Employee';
+
+            $csvData[] = [
+                $sim->id,
+                $employeeName,
+                $sim->simulation_name ?? 'N/A',
+                $sim->simulation_type ?? 'N/A',
+                $sim->simulation_date ? \Carbon\Carbon::parse($sim->simulation_date)->format('Y-m-d') : 'N/A',
+                $sim->score ?? 'N/A',
+                $sim->performance_rating ?? 'N/A',
+                $sim->status ?? 'N/A',
+                $sim->created_at->format('Y-m-d H:i:s')
+            ];
+        }
+
+        return $this->generateCsvResponse($csvData, "succession_planning_comprehensive_{$timestamp}.csv");
+    }
+
+    /**
+     * Generate CSV response
+     */
+    private function generateCsvResponse($data, $filename)
+    {
+        $output = fopen('php://temp', 'r+');
+        
+        foreach ($data as $row) {
+            fputcsv($output, $row);
+        }
+        
+        rewind($output);
+        $csv = stream_get_contents($output);
+        fclose($output);
+
+        // Log the export activity
+        ActivityLog::create([
+            'user_id' => Auth::id(),
+            'action' => 'export',
+            'module' => 'Succession Planning',
+            'description' => 'Exported succession planning data: ' . $filename,
+        ]);
+
+        return response($csv)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="' . $filename . '"')
+            ->header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 }

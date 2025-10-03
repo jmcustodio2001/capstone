@@ -13,11 +13,12 @@ return new class extends Migration
     {
         Schema::table('customer_service_sales_skills_training', function (Blueprint $table) {
             // Drop unused columns that don't match the form
-            $table->dropColumn(['skill_topic', 'description']);
-            
-            // Update foreign key to reference employee_training_dashboards instead of trainings
-            $table->dropForeign(['training_id']);
-            $table->foreign('training_id')->references('id')->on('employee_training_dashboards')->onDelete('cascade');
+            if (Schema::hasColumn('customer_service_sales_skills_training', 'skill_topic')) {
+                $table->dropColumn('skill_topic');
+            }
+            if (Schema::hasColumn('customer_service_sales_skills_training', 'description')) {
+                $table->dropColumn('description');
+            }
         });
     }
 
@@ -31,9 +32,8 @@ return new class extends Migration
             $table->string('skill_topic')->after('date_completed');
             $table->text('description')->nullable()->after('skill_topic');
             
-            // Restore original foreign key
-            $table->dropForeign(['training_id']);
-            $table->foreign('training_id')->references('id')->on('trainings')->onDelete('cascade');
+            // Don't recreate foreign key to trainings table since it doesn't exist
+            // The trainings table has been dropped in the database cleanup
         });
     }
 };

@@ -62,7 +62,7 @@ class ExamController extends Controller
             $existingRecord = \App\Models\CompletedTraining::where('employee_id', $attempt->employee_id)
                 ->where(function($query) use ($course) {
                     $query->where('training_title', $course->course_title)
-                          ->orWhere('course_id', $course->course_id);
+                          ->orWhere('training_title', 'LIKE', '%' . $course->course_title . '%');
                 })
                 ->first();
 
@@ -70,9 +70,8 @@ class ExamController extends Controller
                 // Create completed training record
                 \App\Models\CompletedTraining::create([
                     'employee_id' => $attempt->employee_id,
-                    'course_id' => $course->course_id,
                     'training_title' => $course->course_title,
-                    'completion_date' => now()->format('Y-m-d'),
+                    'completion_date' => now(),
                     'remarks' => "Completed via exam with score: {$attempt->score}%",
                     'status' => 'Verified',
                     'certificate_path' => null // Will be updated after certificate generation
@@ -200,7 +199,7 @@ class ExamController extends Controller
             
             $correctAnswers = 0;
             
-            // Accurate answer validation - simple and fair
+            // Enhanced answer validation - accurate and robust
             foreach ($questions as $question) {
                 $userAnswer = $answers[$question->id] ?? null;
                 $isCorrect = false;
@@ -212,21 +211,38 @@ class ExamController extends Controller
                         $selectedAnswerText = $question->options[$userAnswer];
                     }
                     
-                    // Primary validation: Compare selected answer text with correct answer text
-                    if ($selectedAnswerText && strcasecmp(trim($selectedAnswerText), trim($question->correct_answer)) === 0) {
-                        $isCorrect = true;
-                        Log::info("Answer CORRECT", [
-                            'question_id' => $question->id,
-                            'selected_text' => $selectedAnswerText,
-                            'correct_answer' => $question->correct_answer
-                        ]);
-                    } else {
-                        Log::info("Answer INCORRECT", [
+                    // Enhanced validation with multiple comparison methods
+                    if ($selectedAnswerText) {
+                        $selectedClean = trim(strtolower($selectedAnswerText));
+                        $correctClean = trim(strtolower($question->correct_answer));
+                        
+                        // Method 1: Exact match (case-insensitive)
+                        if ($selectedClean === $correctClean) {
+                            $isCorrect = true;
+                        }
+                        // Method 2: Remove extra spaces and punctuation
+                        elseif (preg_replace('/[^a-z0-9\s]/i', '', $selectedClean) === preg_replace('/[^a-z0-9\s]/i', '', $correctClean)) {
+                            $isCorrect = true;
+                        }
+                        // Method 3: Check if selected answer contains the correct answer or vice versa
+                        elseif (strpos($selectedClean, $correctClean) !== false || strpos($correctClean, $selectedClean) !== false) {
+                            $isCorrect = true;
+                        }
+                        
+                        Log::info($isCorrect ? "Answer CORRECT" : "Answer INCORRECT", [
                             'question_id' => $question->id,
                             'user_selected' => $userAnswer,
                             'selected_text' => $selectedAnswerText,
                             'correct_answer' => $question->correct_answer,
-                            'options_available' => is_array($question->options) ? array_keys($question->options) : 'none'
+                            'selected_clean' => $selectedClean,
+                            'correct_clean' => $correctClean,
+                            'is_correct' => $isCorrect
+                        ]);
+                    } else {
+                        Log::warning("Answer option not found", [
+                            'question_id' => $question->id,
+                            'user_selected' => $userAnswer,
+                            'available_options' => is_array($question->options) ? array_keys($question->options) : 'none'
                         ]);
                     }
                 } else {
@@ -250,21 +266,23 @@ class ExamController extends Controller
                 'calculated_score' => $score
             ]);
             
-            // Update exam attempt
+            // Update exam attempt with correct pass/fail status
+            $isPassed = $score >= 80;
+            $examStatus = $isPassed ? 'completed' : 'failed';
+            
             $attempt->update([
                 'answers' => $answers,
                 'score' => $score,
                 'correct_answers' => $correctAnswers,
                 'total_questions' => $totalQuestions,
-                'status' => 'completed',
+                'status' => $examStatus,
                 'completed_at' => now()
             ]);
             
             // Update training progress based on accurate pass/fail logic
-            // 80-100% = PASSED (100% progress), 75% and below = FAILED (progress = actual score)
-            $isPassed = $score >= 80;
+            // 80-100% = PASSED (100% progress), Below 80% = FAILED (progress = actual score)
             $progress = $isPassed ? 100 : $score;
-            $status = $isPassed ? 'Completed' : ($score <= 75 ? 'Failed' : 'In Progress');
+            $status = $isPassed ? 'Completed' : 'Failed';
             
             Log::info("Pass/Fail determination", [
                 'score' => $score,
@@ -273,21 +291,117 @@ class ExamController extends Controller
                 'status' => $status
             ]);
             
-            // Safely update training progress tables
+            // Safely update or create training progress records
             try {
-                DB::table('employee_training_dashboard')
+                // Force update - ensure we always update the record
+                $updated = DB::table('employee_training_dashboard')
                     ->where('employee_id', $employeeId)
                     ->where('course_id', $attempt->course_id)
                     ->update([
                         'progress' => $progress,
                         'status' => $status,
-                        'updated_at' => now()
+                        'updated_at' => now(),
+                        'remarks' => 'Updated from exam completion - Score: ' . $score . '%'
                     ]);
+                
+                Log::info("Dashboard update attempt", [
+                    'employee_id' => $employeeId,
+                    'course_id' => $attempt->course_id,
+                    'progress' => $progress,
+                    'status' => $status,
+                    'rows_affected' => $updated
+                ]);
+                
+                // If no record was updated, create a new one
+                if ($updated === 0) {
+                    // Check if record exists but wasn't updated due to constraints
+                    $existingRecord = DB::table('employee_training_dashboard')
+                        ->where('employee_id', $employeeId)
+                        ->where('course_id', $attempt->course_id)
+                        ->first();
+                    
+                    if ($existingRecord) {
+                        // Force update using raw SQL
+                        DB::statement(
+                            "UPDATE employee_training_dashboard SET progress = ?, status = ?, updated_at = NOW(), remarks = ? WHERE employee_id = ? AND course_id = ?",
+                            [$progress, $status, 'Force updated from exam completion - Score: ' . $score . '%', $employeeId, $attempt->course_id]
+                        );
+                        Log::info("Force updated existing dashboard record", [
+                            'employee_id' => $employeeId,
+                            'course_id' => $attempt->course_id,
+                            'progress' => $progress,
+                            'status' => $status
+                        ]);
+                    } else {
+                        // Create new record
+                        DB::table('employee_training_dashboard')->insert([
+                            'employee_id' => $employeeId,
+                            'course_id' => $attempt->course_id,
+                            'training_date' => now()->format('Y-m-d'),
+                            'progress' => $progress,
+                            'status' => $status,
+                            'remarks' => 'Auto-created from exam completion - Score: ' . $score . '%',
+                            'assigned_by' => 1, // System/Admin
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                        Log::info("Created new dashboard record", [
+                            'employee_id' => $employeeId,
+                            'course_id' => $attempt->course_id,
+                            'progress' => $progress,
+                            'status' => $status
+                        ]);
+                    }
+                } else {
+                    Log::info("Successfully updated dashboard record", [
+                        'employee_id' => $employeeId,
+                        'course_id' => $attempt->course_id,
+                        'progress' => $progress,
+                        'status' => $status,
+                        'rows_updated' => $updated
+                    ]);
+                }
+                
+                // Verify the update worked
+                $verifyRecord = DB::table('employee_training_dashboard')
+                    ->where('employee_id', $employeeId)
+                    ->where('course_id', $attempt->course_id)
+                    ->first();
+                
+                if ($verifyRecord) {
+                    Log::info("Dashboard record verification", [
+                        'employee_id' => $employeeId,
+                        'course_id' => $attempt->course_id,
+                        'current_progress' => $verifyRecord->progress,
+                        'current_status' => $verifyRecord->status,
+                        'expected_progress' => $progress,
+                        'expected_status' => $status,
+                        'match' => ($verifyRecord->progress == $progress && $verifyRecord->status == $status)
+                    ]);
+                } else {
+                    Log::error("Dashboard record not found after update attempt", [
+                        'employee_id' => $employeeId,
+                        'course_id' => $attempt->course_id
+                    ]);
+                }
                     
                 // If exam is passed (100% progress), automatically move to Completed Trainings
                 if ($isPassed) {
                     $this->moveExamToCompletedTrainings($attempt, $progress);
+                    
+                    // Update competency profile when exam is passed
+                    $this->updateCompetencyProfileFromExam($attempt, $progress);
                 }
+                
+                // Also update any training requests for this course
+                DB::table('training_requests')
+                    ->where('employee_id', $employeeId)
+                    ->where('course_id', $attempt->course_id)
+                    ->where('status', 'Approved')
+                    ->update([
+                        'updated_at' => now()
+                    ]);
+                    
             } catch (\Exception $e) {
                 Log::warning("Failed to update employee_training_dashboard: " . $e->getMessage());
             }
@@ -311,7 +425,7 @@ class ExamController extends Controller
                         ->update([
                             'progress' => $progress,
                             'status' => $destinationStatus,
-                            'date_completed' => $progress >= 100 ? now()->toDateString() : null,
+                            'date_completed' => $progress >= 100 ? now()->format('Y-m-d') : null,
                             'updated_at' => now()
                         ]);
                     
@@ -327,7 +441,7 @@ class ExamController extends Controller
                             ->update([
                                 'progress' => $progress,
                                 'status' => $destinationStatus,
-                                'date_completed' => $progress >= 100 ? now()->toDateString() : null,
+                                'date_completed' => $progress >= 100 ? now()->format('Y-m-d') : null,
                                 'updated_at' => now()
                             ]);
                     }
@@ -343,7 +457,7 @@ class ExamController extends Controller
                                     ->update([
                                         'progress' => $progress,
                                         'status' => $destinationStatus,
-                                        'date_completed' => $progress >= 100 ? now()->toDateString() : null,
+                                        'date_completed' => $progress >= 100 ? now()->format('Y-m-d') : null,
                                         'updated_at' => now()
                                     ]);
                                 if ($updated > 0) break;
@@ -1011,4 +1125,106 @@ class ExamController extends Controller
             ]
         ];
     }
+
+/**
+ * Update competency profile when exam is passed
+ */
+private function updateCompetencyProfileFromExam($attempt, $progress)
+{
+    try {
+        $course = CourseManagement::find($attempt->course_id);
+        if (!$course) {
+            Log::warning("Course not found for competency update", ['attempt_id' => $attempt->id]);
+            return;
+        }
+
+        // Extract competency name from course title
+        $courseTitle = str_replace([' Training', ' Course', ' Program'], '', $course->course_title);
+        
+        // Find matching competency profile
+        $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($courseTitle, $course) {
+            $q->where('competency_name', 'LIKE', '%' . $courseTitle . '%')
+              ->orWhere('competency_name', 'LIKE', '%' . $course->course_title . '%')
+              ->orWhere(function($subQ) use ($courseTitle) {
+                  if (stripos($courseTitle, 'Communication') !== false) {
+                      $subQ->where('competency_name', 'LIKE', '%Communication%');
+                  }
+                  if (stripos($courseTitle, 'BAESA') !== false || stripos($courseTitle, 'QUEZON') !== false) {
+                      $subQ->orWhere('competency_name', 'LIKE', '%Destination Knowledge%')
+                           ->orWhere('competency_name', 'LIKE', '%Baesa%')
+                           ->orWhere('competency_name', 'LIKE', '%Quezon%');
+                  }
+              });
+        })
+        ->where('employee_id', $attempt->employee_id)
+        ->first();
+
+        if ($competencyProfile) {
+            // Convert exam score to proficiency level (1-5 scale)
+            $proficiencyLevel = 5; // Passed exam = maximum proficiency
+            if ($attempt->score < 90) $proficiencyLevel = 4;
+            if ($attempt->score < 85) $proficiencyLevel = 3;
+            
+            $competencyProfile->proficiency_level = $proficiencyLevel;
+            $competencyProfile->assessment_date = now();
+            $competencyProfile->save();
+            
+            Log::info("Updated competency profile from exam", [
+                'employee_id' => $attempt->employee_id,
+                'course_title' => $course->course_title,
+                'exam_score' => $attempt->score,
+                'proficiency_level' => $proficiencyLevel
+            ]);
+            
+            // Also update competency gap if exists
+            $competencyGap = \App\Models\CompetencyGap::whereHas('competency', function($q) use ($courseTitle, $course) {
+                $q->where('competency_name', 'LIKE', '%' . $courseTitle . '%')
+                  ->orWhere('competency_name', 'LIKE', '%' . $course->course_title . '%');
+            })
+            ->where('employee_id', $attempt->employee_id)
+            ->first();
+            
+            if ($competencyGap) {
+                $competencyGap->current_level = $proficiencyLevel;
+                $competencyGap->gap = max(0, $competencyGap->required_level - $proficiencyLevel);
+                $competencyGap->save();
+                
+                Log::info("Updated competency gap from exam", [
+                    'employee_id' => $attempt->employee_id,
+                    'course_title' => $course->course_title,
+                    'current_level' => $proficiencyLevel,
+                    'gap' => $competencyGap->gap
+                ]);
+            }
+        } else {
+            // Create new competency profile if none exists
+            $competency = \App\Models\CompetencyLibrary::where('competency_name', 'LIKE', '%' . $courseTitle . '%')
+                ->orWhere('competency_name', 'LIKE', '%' . $course->course_title . '%')
+                ->first();
+            
+            if ($competency) {
+                $proficiencyLevel = 5; // Passed exam = maximum proficiency
+                if ($attempt->score < 90) $proficiencyLevel = 4;
+                if ($attempt->score < 85) $proficiencyLevel = 3;
+                
+                \App\Models\EmployeeCompetencyProfile::create([
+                    'employee_id' => $attempt->employee_id,
+                    'competency_id' => $competency->competency_id,
+                    'proficiency_level' => $proficiencyLevel,
+                    'assessment_date' => now(),
+                    'assessment_method' => 'Exam Result',
+                    'notes' => "Auto-created from exam completion with {$attempt->score}% score"
+                ]);
+                
+                Log::info("Created new competency profile from exam", [
+                    'employee_id' => $attempt->employee_id,
+                    'competency_name' => $competency->competency_name,
+                    'proficiency_level' => $proficiencyLevel
+                ]);
+            }
+        }
+    } catch (\Exception $e) {
+        Log::error('Error updating competency profile from exam: ' . $e->getMessage());
+    }
+}
 }

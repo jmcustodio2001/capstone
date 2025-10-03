@@ -14,7 +14,7 @@ body {
 }
 
 .navbar {
-  z-index: 1050 !important;
+  z-index: 1055 !important;
 }
 
 .navbar-brand {
@@ -69,7 +69,7 @@ body {
     transform: translateX(0);
     background-color: #ffffff !important;
     border-right: 1px solid #e5e7eb;
-    z-index: 1030;
+    z-index: 1020;
     overflow-y: auto;
   }
 

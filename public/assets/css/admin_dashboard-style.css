@@ -313,11 +313,30 @@ aside#sidebar {
   background-color: #ffffff !important;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  min-height: 140px;
 }
 
 .stat-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card .card-body {
+  padding: 1rem 0.75rem;
+}
+
+.stat-card h3 {
+  font-size: 1.75rem;
+  color: var(--jetlouge-primary);
+}
+
+.stat-card .small {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.stat-card small {
+  font-size: 0.65rem;
 }
 
 .stat-icon.bg-primary {

@@ -1,7 +1,7 @@
-<!-- Sidebar -->
-<aside id="sidebar" class="bg-white border-end p-3 shadow-sm">
+<!-- Responsive Employee Sidebar -->
+<aside id="sidebar" class="bg-white border-end shadow-sm">
   <!-- Profile Section -->
-  <div class="profile-section text-center d-flex flex-column align-items-center">
+  <div class="profile-section text-center p-3">
     @php
       // Use the 'employee' guard if available, fallback to default
       $employee = null;
@@ -57,17 +57,15 @@
       </div>
     @endif
 
-    <div class="d-flex flex-column h-100 bg-white shadow-sm" style="width: 250px; min-height: 100vh;">
-      <!-- Profile Section -->
-      <div class="text-center py-4 border-bottom">
-        <div class="fw-bold" style="font-size: 1.1rem;">{{ ($employee->first_name ?? '') . ' ' . ($employee->last_name ?? '') ?: 'Nica A. Casamingo' }}</div>
-        <div class="text-secondary" style="font-size: 0.95rem;">{{ $employee->position ?? 'Software Developer' }}</div>
-        <span class="badge bg-info text-white mt-2" style="font-size: 0.85rem;">Active</span>
-        <div class="text-muted small mt-1">Employee ID: {{ $employee->employee_id ?? 'EMP001' }}</div>
-      </div>
+    <div class="fw-bold" style="font-size: 1.1rem;">{{ ($employee->first_name ?? '') . ' ' . ($employee->last_name ?? '') ?: 'Nica A. Casamingo' }}</div>
+    <div class="text-secondary" style="font-size: 0.95rem;">{{ $employee->position ?? 'Software Developer' }}</div>
+    <span class="badge bg-info text-white mt-2" style="font-size: 0.85rem;">Active</span>
+    <div class="text-muted small mt-1">Employee ID: {{ $employee->employee_id ?? 'EMP001' }}</div>
+  </div>
 
   <!-- Navigation Menu -->
-  <ul class="nav flex-column">
+  <div class="p-3 pt-0">
+    <ul class="nav flex-column">
 
       <!-- Dashboard -->
     <li class="nav-item">
@@ -80,7 +78,8 @@
   <!-- Leave Application & Balance -->
   <li class="nav-item">
     <a href="{{ route('employee.leave_applications.index') }}" class="nav-link{{ request()->routeIs('employee.leave_applications.*') ? ' active fw-bold bg-primary text-white' : ' text-primary' }} d-flex align-items-center">
-      <i class="bi bi-calendar-event me-2"></i> Leave Application & Balance
+      <i class="bi bi-calendar-event me-2"></i>
+      Leave Application & Balance
     </a>
   </li>
 
@@ -95,7 +94,7 @@
 
     <!-- Payslip Access -->
     <li class="nav-item">
-      <a href="{{ route('payslips.index') }}" class="nav-link{{ request()->routeIs('payslips.*') ? ' active fw-bold bg-primary text-white' : ' text-primary' }} d-flex align-items-center">
+      <a href="{{ route('employee.payslips.index') }}" class="nav-link{{ request()->routeIs('employee.payslips.*') ? ' active fw-bold bg-primary text-white' : ' text-primary' }} d-flex align-items-center">
         <i class="bi bi-receipt me-2"></i>
         Payslip Access
       </a>
@@ -160,5 +159,6 @@
       </form>
     </li>
 
-  </ul>
+    </ul>
+  </div>
 </aside>

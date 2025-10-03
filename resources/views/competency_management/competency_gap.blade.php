@@ -5,10 +5,49 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
+  <style>
+    /* Card hover effects */
+    .gap-card {
+      transition: all 0.3s ease !important;
+      border: 1px solid #e9ecef !important;
+    }
+    
+    .gap-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
+      border-color: #007bff !important;
+    }
+    
+    /* Progress bar animations */
+    .progress-bar {
+      transition: width 0.6s ease;
+    }
+    
+    /* Button group styling */
+    .btn-group .btn {
+      border-radius: 0.375rem !important;
+      margin-right: 2px;
+    }
+    
+    .btn-group .btn:last-child {
+      margin-right: 0;
+    }
+    
+    /* Empty state styling */
+    .bi-inbox {
+      opacity: 0.3;
+    }
+    
+    /* Employee avatar styling */
+    .gap-card .card-header img {
+      border: 2px solid rgba(255,255,255,0.3) !important;
+    }
+  </style>
 </head>
 <body style="background-color: #f8f9fa !important;">
 
@@ -26,7 +65,7 @@
             <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels" class="logo-img">
           </div>
           <div>
-            <h2 class="fw-bold mb-1">Competency Library</h2>
+            <h2 class="fw-bold mb-1">Competency GAP List</h2>
             <p class="text-muted mb-0">
               Welcome back,
               @if(Auth::check())
@@ -34,14 +73,14 @@
               @else
                 Admin
               @endif
-              ! Here's your Competency Library.
+              ! Here's your Competency Gap List.
             </p>
           </div>
         </div>
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Home</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Competency Library</li>
+            <li class="breadcrumb-item active" aria-current="page">Competency Gap</li>
           </ol>
         </nav>
       </div>
@@ -78,13 +117,12 @@
                 <th class="fw-bold">Description</th>
                 <th class="fw-bold">Category</th>
                 <th class="fw-bold">Rate</th>
-                <th class="fw-bold text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
-              @forelse($competencies as $index => $comp)
+              @forelse($competencies->where('category', '!=', 'Destination Knowledge') as $index => $comp)
                 <tr>
-                  <td>{{ $index + 1 }}</td>
+                  <td>{{ $loop->iteration }}</td>
                   <td>{{ $comp->competency_name }}</td>
                   <td>{{ $comp->description }}</td>
                   <td>
@@ -122,34 +160,24 @@
                     </span>
                   </td>
                   <td>
+                    @php
+                      $rate = $comp->rate ?? 5; // Default to 5 if rate is null
+                      $percentage = round(($rate/5)*100);
+                    @endphp
                     <div class="d-flex align-items-center">
                       <div class="progress me-2" style="width: 80px; height: 20px;">
-                        <div class="progress-bar bg-warning" style="width: {{ (($comp->rate ?? 0)/5)*100 }}%"></div>
+                        <div class="progress-bar bg-warning" style="width: {{ $percentage }}%"></div>
                       </div>
-                      <span class="fw-semibold">{{ round((($comp->rate ?? 0)/5)*100) }}%</span>
+                      <span class="fw-semibold">{{ $percentage }}%</span>
+                      @if($comp->rate === null)
+                        <small class="text-muted ms-1" title="Default rate applied">(default)</small>
+                      @endif
                     </div>
-                  </td>
-                  <td class="text-center">
-                    <button class="btn btn-outline-primary btn-sm me-1 edit-competency-btn"
-                            data-id="{{ $comp->id }}"
-                            data-name="{{ $comp->competency_name }}"
-                            data-description="{{ $comp->description }}"
-                            data-category="{{ $comp->category }}"
-                            data-rate="{{ $comp->rate }}">
-                      <i class="bi bi-pencil"></i> Edit
-                    </button>
-                    <form action="{{ route('admin.competency_library.destroy', $comp->id) }}" method="POST" style="display:inline-block;">
-                      @csrf
-                      @method('DELETE')
-                      <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirmDeleteCompetency()">
-                        <i class="bi bi-trash"></i> Delete
-                      </button>
-                    </form>
                   </td>
                 </tr>
               @empty
                 <tr>
-                  <td colspan="6" class="text-center text-muted">No competencies found.</td>
+                  <td colspan="5" class="text-center text-muted">No competencies found.</td>
                 </tr>
               @endforelse
             </tbody>
@@ -179,96 +207,90 @@
         </div>
       </div>
       <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-bordered">
-            <thead class="table-primary">
-              <tr>
-                <th class="fw-bold">ID</th>
-                <th class="fw-bold">Employee</th>
-                <th class="fw-bold">Competency</th>
-                <th class="fw-bold">Rate</th>
-                <th class="fw-bold">Required Level</th>
-                <th class="fw-bold">Current Level</th>
-                <th class="fw-bold">Gap</th>
-                <th class="fw-bold">Expiration</th>
-                <th class="fw-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tbody id="gap-table-body">
-                @forelse($gaps as $index => $gap)
-                  <tr class="gap-row">
-                    <td>{{ $index + 1 }}</td>
-                    <td class="gap-employee">
-                      @if($gap->employee)
-                        <div class="d-flex align-items-center">
-                          <div class="avatar-sm me-2">
-                            @php
-                              $firstName = $gap->employee->first_name ?? 'Unknown';
-                              $lastName = $gap->employee->last_name ?? 'Employee';
-                              $fullName = $firstName . ' ' . $lastName;
+        @forelse($gaps as $index => $gap)
+          @if($loop->first)
+            <div class="row g-4" id="gap-cards-container">
+          @endif
+              <div class="col-lg-6 col-xl-4">
+                <div class="card h-100 shadow-sm border-0 gap-card" style="transition: all 0.3s ease;">
+                  @php
+                    $firstName = $gap->employee->first_name ?? 'Unknown';
+                    $lastName = $gap->employee->last_name ?? 'Employee';
+                    $fullName = $firstName . ' ' . $lastName;
 
-                              // Check if profile picture exists - simplified approach
-                              $profilePicUrl = null;
-                              if ($gap->employee->profile_picture) {
-                                  // Direct asset URL generation - Laravel handles the storage symlink
-                                  $profilePicUrl = asset('storage/' . $gap->employee->profile_picture);
-                              }
+                    // Check if profile picture exists - simplified approach
+                    $profilePicUrl = null;
+                    if ($gap->employee->profile_picture) {
+                        // Direct asset URL generation - Laravel handles the storage symlink
+                        $profilePicUrl = asset('storage/' . $gap->employee->profile_picture);
+                    }
 
-                              // Generate consistent color based on employee name for fallback
-                              $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-                              $employeeId = $gap->employee->employee_id ?? 'default';
-                              $colorIndex = abs(crc32($employeeId)) % count($colors);
-                              $bgColor = $colors[$colorIndex];
+                    // Generate consistent color based on employee name for fallback
+                    $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
+                    $employeeId = $gap->employee->employee_id ?? 'default';
+                    $colorIndex = abs(crc32($employeeId)) % count($colors);
+                    $bgColor = $colors[$colorIndex];
 
-                              // Fallback to UI Avatars if no profile picture found
-                              if (!$profilePicUrl) {
-                                  $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
-                                                 "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
-                              }
-                            @endphp
+                    // Fallback to UI Avatars if no profile picture found
+                    if (!$profilePicUrl) {
+                        $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
+                                       "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+                    }
 
-                            <img src="{{ $profilePicUrl }}"
-                                 alt="{{ $firstName }} {{ $lastName }}"
-                                 class="rounded-circle"
-                                 style="width: 40px; height: 40px; object-fit: cover;">
-                          </div>
-                          <span class="fw-semibold">
-                            {{ $firstName }} {{ $lastName }}
-                          </span>
-                        </div>
-                      @else
-                        N/A
-                      @endif
-                    </td>
-                    <td>
+                    // Calculate required level percentage
+                    $requiredLevel = min(5, max(0, $gap->required_level ?? 0));
+                    $requiredPercentage = ($requiredLevel / 5) * 100;
+                  @endphp
+                  
+                  <!-- Card Header with Employee Info -->
+                  <div class="card-header bg-primary text-white border-0 py-3">
+                    <div class="d-flex align-items-center">
+                      <img src="{{ $profilePicUrl }}"
+                           alt="{{ $firstName }} {{ $lastName }}"
+                           class="rounded-circle me-3"
+                           style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);">
+                      <div class="flex-grow-1">
+                        <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
+                        <small class="text-dark fw-bold">#{{ $index + 1 }}</small>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="card-body">
+                    <!-- Competency Name -->
+                    <h6 class="card-title fw-bold text-dark mb-3">
                       @if($gap->competency)
                         {{ $gap->competency->competency_name }}
                       @else
                         N/A
                       @endif
-                    </td>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <div class="progress me-2" style="width: 80px; height: 20px;">
+                    </h6>
+
+                    <!-- Progress Bars Section -->
+                    <div class="mb-3">
+                      <!-- Rate Progress -->
+                      <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                          <small class="fw-semibold text-secondary">Rate</small>
+                          <small class="fw-bold text-warning">{{ round((($gap->competency->rate ?? 0)/5)*100) }}%</small>
+                        </div>
+                        <div class="progress" style="height: 6px;">
                           <div class="progress-bar bg-warning" style="width: {{ (($gap->competency->rate ?? 0)/5)*100 }}%"></div>
                         </div>
-                        <span class="fw-semibold">{{ round((($gap->competency->rate ?? 0)/5)*100) }}%</span>
                       </div>
-                    </td>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <div class="progress me-2" style="width: 80px; height: 20px;">
-                          @php
-                            $requiredLevel = min(5, max(0, $gap->required_level ?? 0));
-                            $requiredPercentage = ($requiredLevel / 5) * 100;
-                          @endphp
+
+                      <!-- Required Level -->
+                      <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                          <small class="fw-semibold text-secondary">Required Level</small>
+                          <small class="fw-bold text-info">{{ round($requiredPercentage) }}%</small>
+                        </div>
+                        <div class="progress" style="height: 6px;">
                           <div class="progress-bar bg-info" style="width: {{ $requiredPercentage }}%"></div>
                         </div>
-                        <span class="fw-semibold">{{ round($requiredPercentage) }}%</span>
                       </div>
-                    </td>
-                    <td>
+
+                      <!-- Current Level -->
                       @php
                         // Use same logic as competency profiles for current level calculation
                         $competencyProfile = \App\Models\EmployeeCompetencyProfile::where('employee_id', $gap->employee_id)
@@ -381,36 +403,61 @@
                           }
                         }
                       @endphp
-                      <div class="d-flex align-items-center">
-                        <div class="progress me-2" style="width: 80px; height: 20px;">
+                      <div class="mb-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                          <small class="fw-semibold text-secondary">Current Level</small>
+                          <div class="d-flex align-items-center">
+                            <small class="fw-bold text-success me-1">{{ round($currentPercentage) }}%</small>
+                            @if($progressSource === 'manual')
+                              <small class="text-warning" title="Manual proficiency level">(manual)</small>
+                            @elseif($progressSource === 'destination')
+                              <small class="text-success" title="From destination knowledge training">(destination)</small>
+                            @elseif($progressSource === 'training')
+                              <small class="text-primary" title="From employee training dashboard">(training)</small>
+                            @elseif($progressSource === 'profile')
+                              <small class="text-info" title="Using stored proficiency level">(profile)</small>
+                            @else
+                              <small class="text-muted" title="No data found">(no data)</small>
+                            @endif
+                          </div>
+                        </div>
+                        <div class="progress" style="height: 6px;">
                           <div class="progress-bar bg-success" style="width: {{ $currentPercentage }}%"></div>
                         </div>
-                        <span class="fw-semibold">{{ round($currentPercentage) }}%</span>
-                        @if($progressSource === 'manual')
-                          <small class="text-warning ms-1" title="Manual proficiency level">(manual)</small>
-                        @elseif($progressSource === 'destination')
-                          <small class="text-success ms-1" title="From destination knowledge training">(destination)</small>
-                        @elseif($progressSource === 'training')
-                          <small class="text-primary ms-1" title="From employee training dashboard">(training)</small>
-                        @elseif($progressSource === 'profile')
-                          <small class="text-info ms-1" title="Using stored proficiency level">(profile)</small>
+                      </div>
+                    </div>
+
+                    <!-- Gap and Status Section -->
+                    <div class="row mb-3">
+                      <div class="col-6">
+                        @php
+                          // Calculate gap using the calculated current level from above
+                          $requiredLevel = min(5, max(0, $gap->required_level ?? 0));
+                          // Use the calculated $currentLevel from the progress calculation above
+                          $gapValue = max(0, $requiredLevel - $currentLevel);
+                          $badgeClass = $gapValue > 0 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-success bg-opacity-10 text-success';
+                          $gapText = $gapValue > 0 ? $gapValue . ' level(s) below' : 'No gap';
+                        @endphp
+                        <small class="text-muted d-block">Gap</small>
+                        <span class="badge {{ $badgeClass }}">{{ $gapText }}</span>
+                      </div>
+                      <div class="col-6">
+                        <small class="text-muted d-block">Status</small>
+                        @if($gap->assigned_to_training)
+                          <span class="badge bg-success bg-opacity-10 text-success">
+                            <i class="bi bi-check-circle"></i> Assigned
+                          </span>
                         @else
-                          <small class="text-muted ms-1" title="No data found">(no data)</small>
+                          <span class="badge bg-warning bg-opacity-10 text-warning">
+                            <i class="bi bi-clock"></i> Pending
+                          </span>
                         @endif
                       </div>
-                    </td>
-                    <td>
-                      @php
-                        // Calculate gap using the calculated current level from above
-                        $requiredLevel = min(5, max(0, $gap->required_level ?? 0));
-                        // Use the calculated $currentLevel from the progress calculation above
-                        $gapValue = max(0, $requiredLevel - $currentLevel);
-                        $badgeClass = $gapValue > 0 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-success bg-opacity-10 text-success';
-                        $gapText = $gapValue > 0 ? $gapValue . ' level(s) below' : 'No gap';
-                      @endphp
-                      <span class="badge {{ $badgeClass }}">{{ $gapText }}</span>
-                    </td>
-                    <td>
+                    </div>
+
+                    <!-- Expiration Date -->
+                    <div class="mb-3">
+                      <small class="text-muted d-block">Expiration</small>
                       @if($gap->expired_date && !empty(trim($gap->expired_date)) && trim($gap->expired_date) !== '0000-00-00 00:00:00' && trim($gap->expired_date) !== '0000-00-00')
                         @php
                           try {
@@ -427,10 +474,10 @@
                           }
                         @endphp
                         @if($showExpiredDate)
-                          <div class="d-flex flex-column align-items-start">
-                            <div><strong>{{ $dateFormatted }}</strong></div>
+                          <div class="text-center">
+                            <div class="fw-semibold">{{ $dateFormatted }}</div>
                             <div class="text-muted small">{{ $timeFormatted }}</div>
-                            <div class="w-100 mt-1">
+                            <div class="mt-1">
                               @if(!$isExpired)
                                 <span class="badge bg-info bg-opacity-10 text-info">
                                   <i class="bi bi-clock"></i> {{ floor(abs($daysLeft)) }} day{{ floor(abs($daysLeft)) == 1 ? '' : 's' }} left
@@ -452,57 +499,110 @@
                           <i class="bi bi-calendar-x"></i> Not Set
                         </span>
                       @endif
-                    </td>
-                    <td class="text-center">
-                      <!-- Always show edit button, no date parsing needed -->
-                        <button class="btn btn-outline-primary btn-sm me-1 edit-gap-btn"
-                                data-id="{{ $gap->id }}"
-                                data-employee-id="{{ $gap->employee_id }}"
-                                data-competency-id="{{ $gap->competency_id }}"
-                                data-rate="{{ $gap->competency->rate ?? '' }}"
-                                data-required-level="{{ $gap->required_level }}"
-                                data-current-level="{{ $gap->current_level }}"
-                                data-gap="{{ $gap->gap }}"
-                                data-expired-date="">
-                          <i class="bi bi-pencil"></i> Edit
-                        </button>
+                    </div>
 
-                      @if($gap->expired_date)
-                        <button class="btn btn-outline-warning btn-sm me-1 extend-expiration-btn"
+                    <!-- Action Buttons -->
+                    <div class="d-grid gap-2">
+                      <div class="btn-group" role="group">
+                        <button class="btn btn-outline-info btn-sm view-gap-btn"
                                 data-id="{{ $gap->id }}"
-                                data-employee="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
-                                data-competency="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
-                                data-expired="false">
-                          <i class="bi bi-clock-history"></i>
-                          Extend
+                                data-employee-name="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
+                                data-competency-name="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
+                                data-competency-description="{{ $gap->competency ? $gap->competency->description : 'N/A' }}"
+                                data-competency-category="{{ $gap->competency ? $gap->competency->category : 'N/A' }}"
+                                data-competency-rate="{{ $gap->competency->rate ?? 'N/A' }}"
+                                data-required-level="{{ $gap->required_level }}"
+                                data-current-level="{{ $currentLevel }}"
+                                data-current-percentage="{{ round($currentPercentage) }}"
+                                data-gap-value="{{ $gapValue }}"
+                                data-progress-source="{{ $progressSource }}"
+                                data-assigned-to-training="{{ $gap->assigned_to_training ? 'Yes' : 'No' }}"
+                                data-expired-date="{{ $gap->expired_date }}"
+                                title="View Details">
+                          <i class="bi bi-eye"></i>
                         </button>
-                      @endif
-                      <button class="btn btn-outline-success btn-sm me-1 assign-training-btn"
-                              data-id="{{ $gap->id }}"
-                              data-employee-id="{{ $gap->employee_id }}"
-                              data-employee-name="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
-                              data-competency="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
-                              data-expired-date="{{ $gap->expired_date }}">
-                        <i class="bi bi-calendar-plus"></i> Assign to Training
-                      </button>
-                      <button class="btn btn-outline-danger btn-sm delete-gap-btn"
-                              data-id="{{ $gap->id }}"
-                              data-employee="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
-                              data-competency="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}">
-                        <i class="bi bi-trash"></i> Delete
-                      </button>
-</script>
-                    </td>
-                  </tr>
-                @empty
-                  <tr>
-                    <td colspan="8" class="text-center text-muted">No gap records found.</td>
-                  </tr>
-                @endforelse
-              </tbody>
-            </tbody>
-          </table>
-        </div>
+                        @if(!$gap->assigned_to_training)
+                          <button class="btn btn-outline-primary btn-sm edit-gap-btn"
+                                  data-id="{{ $gap->id }}"
+                                  data-employee-id="{{ $gap->employee_id }}"
+                                  data-competency-id="{{ $gap->competency_id }}"
+                                  data-rate="{{ $gap->competency->rate ?? '' }}"
+                                  data-required-level="{{ $gap->required_level }}"
+                                  data-current-level="{{ $gap->current_level }}"
+                                  data-gap="{{ $gap->gap }}"
+                                  data-expired-date=""
+                                  title="Edit Gap">
+                            <i class="bi bi-pencil"></i>
+                          </button>
+                        @else
+                          <button class="btn btn-outline-secondary btn-sm" disabled title="Cannot edit - already assigned to training">
+                            <i class="bi bi-lock"></i>
+                          </button>
+                        @endif
+                        @if(!$gap->assigned_to_training)
+                          <button class="btn btn-outline-danger btn-sm delete-gap-btn"
+                                  data-id="{{ $gap->id }}"
+                                  data-employee="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
+                                  data-competency="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
+                                  title="Delete Gap">
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        @else
+                          <button class="btn btn-outline-secondary btn-sm" disabled title="Cannot delete - already assigned to training">
+                            <i class="bi bi-lock"></i>
+                          </button>
+                        @endif
+                      </div>
+                      
+                      <!-- Additional Action Buttons -->
+                      <div class="mt-2">
+                        @if($gap->expired_date)
+                          <button class="btn btn-outline-warning btn-sm w-100 mb-1 extend-expiration-btn"
+                                  data-id="{{ $gap->id }}"
+                                  data-employee="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
+                                  data-competency="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
+                                  data-expired="false">
+                            <i class="bi bi-clock-history"></i> Extend Expiration
+                          </button>
+                        @endif
+                        @if(!$gap->assigned_to_training)
+                          <button class="btn btn-outline-success btn-sm w-100 assign-training-btn"
+                                  data-id="{{ $gap->id }}"
+                                  data-employee-id="{{ $gap->employee_id }}"
+                                  data-employee-name="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
+                                  data-competency="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
+                                  data-expired-date="{{ $gap->expired_date }}">
+                            <i class="bi bi-calendar-plus"></i> Assign to Training
+                          </button>
+                        @else
+                          <button class="btn btn-outline-warning btn-sm w-100 unassign-training-btn"
+                                  data-id="{{ $gap->id }}"
+                                  data-employee="{{ $gap->employee ? $gap->employee->first_name . ' ' . $gap->employee->last_name : 'N/A' }}"
+                                  data-competency="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
+                                  title="Unassign from training to allow editing">
+                            <i class="bi bi-arrow-counterclockwise"></i> Unassign Training
+                          </button>
+                        @endif
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+          @if($loop->last)
+            </div>
+          @endif
+        @empty
+          <div class="text-center py-5">
+            <div class="mb-3">
+              <i class="bi bi-inbox display-1 text-muted"></i>
+            </div>
+            <h5 class="text-muted mb-2">No Gap Records Found</h5>
+            <p class="text-muted mb-3">Get started by adding your first competency gap record.</p>
+            <button class="btn btn-primary" id="addGapBtn">
+              <i class="bi bi-plus-lg me-1"></i> Add Your First Gap Record
+            </button>
+          </div>
+        @endforelse
       </div>
     </div>
 
@@ -2264,7 +2364,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
       }
 
-      // Assign to Training button handler
+      // Assign to Training button handler with SweetAlert and password verification
       document.addEventListener('click', function(e) {
         if (e.target.closest('.assign-training-btn')) {
           const btn = e.target.closest('.assign-training-btn');
@@ -2274,54 +2374,524 @@ document.addEventListener('DOMContentLoaded', function () {
           const competency = btn.getAttribute('data-competency');
           const expiredDate = btn.getAttribute('data-expired-date');
           
-          // Show confirmation dialog
-          if (confirm(`Assign training for "${competency}" to ${employeeName}?`)) {
-            // Show loading state
-            const originalHtml = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Assigning...';
-            
-            // Make API call to assign training
-            fetch('{{ route("competency_gap_analysis.assign_to_training") }}', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-              },
-              body: JSON.stringify({
-                gap_id: gapId,
-                employee_id: employeeId,
-                competency: competency,
-                expired_date: expiredDate
-              })
-            })
-            .then(response => response.json())
-            .then(data => {
-              // Reset button state
-              btn.disabled = false;
-              btn.innerHTML = originalHtml;
-              
-              if (data.success) {
-                showToast(`✅ ${data.message}`, 'success');
-                // Update button to show assigned state
-                btn.classList.remove('btn-outline-success');
-                btn.classList.add('btn-success');
-                btn.innerHTML = '<i class="bi bi-check-circle"></i> Assigned';
-                btn.disabled = true;
-              } else {
-                showToast(`❌ ${data.message || 'Failed to assign training'}`, 'error');
-              }
-            })
-            .catch(error => {
-              console.error('Error:', error);
-              // Reset button state
-              btn.disabled = false;
-              btn.innerHTML = originalHtml;
-              showToast('❌ Network error occurred while assigning training', 'error');
-            });
-          }
+          assignTrainingWithConfirmation(gapId, employeeId, employeeName, competency, expiredDate);
+        }
+        
+        // Unassign from Training button handler with SweetAlert and password verification
+        if (e.target.closest('.unassign-training-btn')) {
+          const btn = e.target.closest('.unassign-training-btn');
+          const gapId = btn.getAttribute('data-id');
+          const employeeName = btn.getAttribute('data-employee');
+          const competency = btn.getAttribute('data-competency');
+          
+          unassignTrainingWithConfirmation(gapId, employeeName, competency);
         }
       });
+
+      // ========== VIEW GAP DETAILS FUNCTIONALITY ==========
+      document.querySelectorAll('.view-gap-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const gapData = {
+            id: this.getAttribute('data-id'),
+            employeeName: this.getAttribute('data-employee-name'),
+            competencyName: this.getAttribute('data-competency-name'),
+            competencyDescription: this.getAttribute('data-competency-description'),
+            competencyCategory: this.getAttribute('data-competency-category'),
+            competencyRate: this.getAttribute('data-competency-rate'),
+            requiredLevel: this.getAttribute('data-required-level'),
+            currentLevel: this.getAttribute('data-current-level'),
+            currentPercentage: this.getAttribute('data-current-percentage'),
+            gapValue: this.getAttribute('data-gap-value'),
+            progressSource: this.getAttribute('data-progress-source'),
+            assignedToTraining: this.getAttribute('data-assigned-to-training'),
+            expiredDate: this.getAttribute('data-expired-date')
+          };
+          
+          viewGapDetails(gapData);
+        });
+      });
+      
+      // View Gap Details with SweetAlert
+      function viewGapDetails(gapData) {
+        // Format expiration date
+        let expirationInfo = 'Not Set';
+        if (gapData.expiredDate && gapData.expiredDate !== 'null' && gapData.expiredDate.trim() !== '') {
+          try {
+            const expDate = new Date(gapData.expiredDate);
+            const now = new Date();
+            const isExpired = now > expDate;
+            const daysDiff = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
+            
+            expirationInfo = `
+              <div class="d-flex align-items-center">
+                <strong>${expDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</strong>
+                <span class="badge ms-2 ${
+                  isExpired ? 'bg-danger' : (daysDiff <= 7 ? 'bg-warning' : 'bg-success')
+                }">
+                  ${isExpired ? `Expired ${Math.abs(daysDiff)} days ago` : `${daysDiff} days left`}
+                </span>
+              </div>
+            `;
+          } catch (e) {
+            expirationInfo = 'Invalid Date';
+          }
+        }
+        
+        // Format progress source
+        const sourceLabels = {
+          'manual': '<span class="badge bg-warning"><i class="bi bi-pencil"></i> Manual Entry</span>',
+          'destination': '<span class="badge bg-info"><i class="bi bi-geo-alt"></i> Destination Training</span>',
+          'training': '<span class="badge bg-primary"><i class="bi bi-book"></i> Training Dashboard</span>',
+          'profile': '<span class="badge bg-secondary"><i class="bi bi-person"></i> Competency Profile</span>',
+          'none': '<span class="badge bg-light text-dark"><i class="bi bi-question"></i> No Data</span>'
+        };
+        
+        const progressSourceLabel = sourceLabels[gapData.progressSource] || sourceLabels['none'];
+        
+        // Determine gap status color
+        const gapValue = parseInt(gapData.gapValue) || 0;
+        const gapStatusColor = gapValue > 0 ? 'text-danger' : 'text-success';
+        const gapStatusIcon = gapValue > 0 ? 'bi-exclamation-triangle' : 'bi-check-circle';
+        const gapStatusText = gapValue > 0 ? `${gapValue} level(s) below required` : 'No gap - meets requirement';
+        
+        Swal.fire({
+          title: '<i class="bi bi-eye text-info"></i> Competency Gap Details',
+          html: `
+            <div class="text-start">
+              <!-- Employee Information -->
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="bi bi-person-circle me-2"></i>Employee Information</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row">
+                    <div class="col-12">
+                      <strong><i class="bi bi-person me-1"></i>Name:</strong> ${gapData.employeeName}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Competency Information -->
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="bi bi-award me-2"></i>Competency Information</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row g-2">
+                    <div class="col-12">
+                      <strong><i class="bi bi-bookmark me-1"></i>Name:</strong> ${gapData.competencyName}
+                    </div>
+                    <div class="col-12">
+                      <strong><i class="bi bi-card-text me-1"></i>Description:</strong> 
+                      <div class="text-muted small mt-1">${gapData.competencyDescription || 'No description available'}</div>
+                    </div>
+                    <div class="col-6">
+                      <strong><i class="bi bi-tag me-1"></i>Category:</strong> ${gapData.competencyCategory}
+                    </div>
+                    <div class="col-6">
+                      <strong><i class="bi bi-star me-1"></i>Rate:</strong> ${gapData.competencyRate}/5
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Gap Analysis -->
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Gap Analysis</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row g-2">
+                    <div class="col-4">
+                      <strong><i class="bi bi-arrow-up-circle me-1"></i>Required Level:</strong>
+                      <div class="mt-1">
+                        <span class="badge bg-info">${gapData.requiredLevel}/5</span>
+                        <div class="progress mt-1" style="height: 8px;">
+                          <div class="progress-bar bg-info" style="width: ${(gapData.requiredLevel/5)*100}%"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-4">
+                      <strong><i class="bi bi-speedometer me-1"></i>Current Level:</strong>
+                      <div class="mt-1">
+                        <span class="badge bg-success">${gapData.currentLevel}/5 (${gapData.currentPercentage}%)</span>
+                        <div class="progress mt-1" style="height: 8px;">
+                          <div class="progress-bar bg-success" style="width: ${gapData.currentPercentage}%"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-4">
+                      <strong><i class="bi bi-gap me-1"></i>Gap Status:</strong>
+                      <div class="mt-1">
+                        <div class="${gapStatusColor}">
+                          <i class="${gapStatusIcon} me-1"></i>${gapStatusText}
+                        </div>
+                      </div>
+                    </div>
+                    <div class="col-12 mt-2">
+                      <strong><i class="bi bi-database me-1"></i>Progress Source:</strong> ${progressSourceLabel}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Training Assignment Status -->
+              <div class="card mb-3">
+                <div class="card-header bg-light">
+                  <h6 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Training Assignment</h6>
+                </div>
+                <div class="card-body">
+                  <div class="row g-2">
+                    <div class="col-6">
+                      <strong><i class="bi bi-check-square me-1"></i>Assigned to Training:</strong>
+                      <div class="mt-1">
+                        ${gapData.assignedToTraining === 'Yes' ? 
+                          '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Yes</span>' : 
+                          '<span class="badge bg-warning"><i class="bi bi-clock"></i> No</span>'
+                        }
+                      </div>
+                    </div>
+                    <div class="col-6">
+                      <strong><i class="bi bi-calendar-x me-1"></i>Expiration Date:</strong>
+                      <div class="mt-1">${expirationInfo}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `,
+          width: '700px',
+          showConfirmButton: true,
+          confirmButtonText: '<i class="bi bi-check-lg me-1"></i>Close',
+          confirmButtonColor: '#6c757d',
+          customClass: {
+            popup: 'text-start'
+          }
+        });
+      }
+      
+      // ========== SWEETALERT FUNCTIONS FOR COMPETENCY GAP ACTIONS ==========
+      
+      // Assign Training with SweetAlert and Password Verification
+      function assignTrainingWithConfirmation(gapId, employeeId, employeeName, competency, expiredDate) {
+        Swal.fire({
+          title: '<i class="bi bi-calendar-plus text-success"></i> Assign Training',
+          html: `
+            <div class="text-start">
+              <div class="alert alert-info border-start border-info border-4">
+                <i class="bi bi-info-circle me-2 text-info"></i>
+                <strong>Training Assignment Details:</strong>
+                <div class="mt-2">
+                  <small class="text-muted">
+                    <i class="bi bi-person me-1"></i><strong>Employee:</strong> ${employeeName}<br>
+                    <i class="bi bi-award me-1"></i><strong>Competency:</strong> ${competency}<br>
+                    <i class="bi bi-calendar me-1"></i><strong>Expiration:</strong> ${expiredDate || 'Not set'}
+                  </small>
+                </div>
+              </div>
+              
+              <div class="alert alert-warning border-start border-warning border-4 mt-3">
+                <i class="bi bi-shield-lock-fill me-2 text-warning"></i>
+                <strong>Security Verification Required:</strong>
+                <div class="mt-2">
+                  <small class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Please verify your admin password to assign this training.
+                  </small>
+                </div>
+              </div>
+              
+              <div class="mb-3">
+                <label for="assign-password" class="form-label fw-semibold">
+                  <i class="bi bi-key me-1"></i>Admin Password*
+                </label>
+                <input id="assign-password" type="password" class="form-control" placeholder="Enter your admin password" required>
+              </div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: '<i class="bi bi-calendar-plus me-1"></i>Assign Training',
+          cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+          confirmButtonColor: '#198754',
+          cancelButtonColor: '#6c757d',
+          width: '500px',
+          preConfirm: () => {
+            const password = document.getElementById('assign-password').value;
+            if (!password) {
+              Swal.showValidationMessage('Please enter your admin password');
+              return false;
+            }
+            if (password.length < 6) {
+              Swal.showValidationMessage('Password must be at least 6 characters long');
+              return false;
+            }
+            return { password };
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            submitTrainingAssignment(gapId, employeeId, competency, expiredDate, result.value.password);
+          }
+        });
+      }
+      
+      // Submit Training Assignment
+      function submitTrainingAssignment(gapId, employeeId, competency, expiredDate, password) {
+        Swal.fire({
+          title: 'Processing...',
+          html: '<i class="bi bi-hourglass-split"></i> Assigning training to employee...',
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          }
+        });
+        
+        fetch('{{ route("competency_gap_analysis.assign_to_training") }}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            gap_id: gapId,
+            employee_id: employeeId,
+            competency: competency,
+            expired_date: expiredDate,
+            admin_password: password
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Training Assigned Successfully!',
+              html: `
+                <div class="text-start">
+                  <div class="alert alert-success border-start border-success border-4">
+                    <i class="bi bi-check-circle me-2 text-success"></i>
+                    <strong>Assignment Complete:</strong>
+                    <div class="mt-2">
+                      <small class="text-muted">
+                        ${data.message || 'Training has been successfully assigned to the employee.'}
+                      </small>
+                    </div>
+                  </div>
+                </div>
+              `,
+              timer: 3000,
+              timerProgressBar: true,
+              showConfirmButton: false
+            }).then(() => {
+              window.location.reload();
+            });
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Assignment Failed',
+              html: `
+                <div class="alert alert-danger border-start border-danger border-4">
+                  <i class="bi bi-exclamation-triangle me-2 text-danger"></i>
+                  <strong>Error:</strong> ${data.message || 'Failed to assign training'}
+                </div>
+              `,
+              confirmButtonText: 'Try Again',
+              confirmButtonColor: '#dc3545'
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Assignment error:', error);
+          Swal.fire({
+            icon: 'error',
+            title: 'Network Error',
+            html: `
+              <div class="alert alert-danger border-start border-danger border-4">
+                <i class="bi bi-wifi-off me-2 text-danger"></i>
+                <strong>Connection Error:</strong> Unable to assign training. Please check your connection and try again.
+              </div>
+            `,
+            confirmButtonText: 'Retry',
+            confirmButtonColor: '#dc3545'
+          });
+        });
+      }
+      
+      // Unassign Training with SweetAlert and Password Verification
+      function unassignTrainingWithConfirmation(gapId, employeeName, competency) {
+        Swal.fire({
+          title: '<i class="bi bi-arrow-counterclockwise text-warning"></i> Unassign Training',
+          html: `
+            <div class="text-start">
+              <div class="alert alert-warning border-start border-warning border-4">
+                <i class="bi bi-exclamation-triangle me-2 text-warning"></i>
+                <strong>Unassignment Details:</strong>
+                <div class="mt-2">
+                  <small class="text-muted">
+                    <i class="bi bi-person me-1"></i><strong>Employee:</strong> ${employeeName}<br>
+                    <i class="bi bi-award me-1"></i><strong>Competency:</strong> ${competency}<br>
+                    <i class="bi bi-info-circle me-1"></i><strong>Effect:</strong> This will allow the record to be edited again
+                  </small>
+                </div>
+              </div>
+              
+              <div class="alert alert-danger border-start border-danger border-4 mt-3">
+                <i class="bi bi-shield-lock-fill me-2 text-danger"></i>
+                <strong>Security Verification Required:</strong>
+                <div class="mt-2">
+                  <small class="text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Please verify your admin password to unassign this training.
+                  </small>
+                </div>
+              </div>
+              
+              <div class="mb-3">
+                <label for="unassign-password" class="form-label fw-semibold">
+                  <i class="bi bi-key me-1"></i>Admin Password*
+                </label>
+                <input id="unassign-password" type="password" class="form-control" placeholder="Enter your admin password" required>
+              </div>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: '<i class="bi bi-arrow-counterclockwise me-1"></i>Unassign Training',
+          cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+          confirmButtonColor: '#ffc107',
+          cancelButtonColor: '#6c757d',
+          width: '500px',
+          preConfirm: () => {
+            const password = document.getElementById('unassign-password').value;
+            if (!password) {
+              Swal.showValidationMessage('Please enter your admin password');
+              return false;
+            }
+            if (password.length < 6) {
+              Swal.showValidationMessage('Password must be at least 6 characters long');
+              return false;
+            }
+            return { password };
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            submitTrainingUnassignment(gapId, result.value.password);
+          }
+        });
+      }
+      
+      // Submit Training Unassignment
+      function submitTrainingUnassignment(gapId, password) {
+        Swal.fire({
+          title: 'Processing...',
+          html: '<i class="bi bi-hourglass-split"></i> Unassigning training from employee...',
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          }
+        });
+        
+        fetch(`/admin/competency-gap-analysis/${gapId}/unassign-training`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            admin_password: password
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Training Unassigned Successfully!',
+              html: `
+                <div class="text-start">
+                  <div class="alert alert-success border-start border-success border-4">
+                    <i class="bi bi-check-circle me-2 text-success"></i>
+                    <strong>Unassignment Complete:</strong>
+                    <div class="mt-2">
+                      <small class="text-muted">
+                        ${data.message || 'Training has been successfully unassigned. The record can now be edited.'}
+                      </small>
+                    </div>
+                  </div>
+                </div>
+              `,
+              timer: 3000,
+              timerProgressBar: true,
+              showConfirmButton: false
+            }).then(() => {
+              window.location.reload();
+            });
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Unassignment Failed',
+              html: `
+                <div class="alert alert-danger border-start border-danger border-4">
+                  <i class="bi bi-exclamation-triangle me-2 text-danger"></i>
+                  <strong>Error:</strong> ${data.message || 'Failed to unassign training'}
+                </div>
+              `,
+              confirmButtonText: 'Try Again',
+              confirmButtonColor: '#dc3545'
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Unassignment error:', error);
+          Swal.fire({
+            icon: 'error',
+            title: 'Network Error',
+            html: `
+              <div class="alert alert-danger border-start border-danger border-4">
+                <i class="bi bi-wifi-off me-2 text-danger"></i>
+                <strong>Connection Error:</strong> Unable to unassign training. Please check your connection and try again.
+              </div>
+            `,
+            confirmButtonText: 'Retry',
+            confirmButtonColor: '#dc3545'
+          });
+        });
+      }
+      
+      // Re-attach event listeners after dynamic content updates
+      function reattachEventListeners() {
+        // Re-attach view gap button listeners
+        document.querySelectorAll('.view-gap-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const gapData = {
+              id: this.getAttribute('data-id'),
+              employeeName: this.getAttribute('data-employee-name'),
+              competencyName: this.getAttribute('data-competency-name'),
+              competencyDescription: this.getAttribute('data-competency-description'),
+              competencyCategory: this.getAttribute('data-competency-category'),
+              competencyRate: this.getAttribute('data-competency-rate'),
+              requiredLevel: this.getAttribute('data-required-level'),
+              currentLevel: this.getAttribute('data-current-level'),
+              currentPercentage: this.getAttribute('data-current-percentage'),
+              gapValue: this.getAttribute('data-gap-value'),
+              progressSource: this.getAttribute('data-progress-source'),
+              assignedToTraining: this.getAttribute('data-assigned-to-training'),
+              expiredDate: this.getAttribute('data-expired-date')
+            };
+            
+            viewGapDetails(gapData);
+          });
+        });
+        
+        // Re-attach other button listeners as needed
+        setupAutoAssignButtons();
+      }
+      
+      // Call reattach function after page loads
+      reattachEventListeners();
     });
   </script>
 </body>

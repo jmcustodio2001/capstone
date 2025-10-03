@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>Employee Attendance Logs</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/employee_dashboard-style.css') }}">
@@ -290,7 +291,43 @@
 
 <div id="overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50" style="z-index:1040; display: none;"></div>
 
-<main id="main-content" style="margin-left: 280px; padding: 2rem; margin-top: 3.5rem;">
+<main id="main-content" class="expanded" style="margin-left: 280px; padding: 2rem; margin-top: 3.5rem; transition: margin-left 0.3s cubic-bezier(.4,2,.6,1);">
+<style>
+#main-content.expanded {
+  margin-left: 0 !important;
+  transition: margin-left 0.3s cubic-bezier(.4,2,.6,1);
+}
+#main-content.collapsed {
+  margin-left: 280px !important;
+  transition: margin-left 0.3s cubic-bezier(.4,2,.6,1);
+}
+</style>
+<script>
+// Sidebar toggle logic to expand/collapse main content
+document.addEventListener('DOMContentLoaded', function() {
+  const sidebar = document.querySelector('.sidebar, #sidebar');
+  const mainContent = document.getElementById('main-content');
+  const toggleBtn = document.querySelector('.sidebar-toggle, #sidebarToggle, .toggle-sidebar');
+  function updateMainContent() {
+    if (sidebar && sidebar.classList.contains('collapsed')) {
+      mainContent.classList.add('expanded');
+      mainContent.classList.remove('collapsed');
+      mainContent.style.marginLeft = '0';
+    } else {
+      mainContent.classList.remove('expanded');
+      mainContent.classList.add('collapsed');
+      mainContent.style.marginLeft = '280px';
+    }
+  }
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', function() {
+      setTimeout(updateMainContent, 10);
+    });
+  }
+  // Initial state
+  updateMainContent();
+});
+</script>
 
     <!-- Page Header -->
     <div class="page-header-container mb-4">
@@ -505,13 +542,6 @@
                             <i class="bi bi-eye me-2"></i>View Details
                           </a>
                         </li>
-                        @if($log->status !== 'Present' && !$log->time_out)
-                        <li>
-                          <a class="dropdown-item" href="#" onclick="editAttendanceRecord({{ $log->id }})">
-                            <i class="bi bi-pencil me-2"></i>Edit Record
-                          </a>
-                        </li>
-                        @endif
                         <li><hr class="dropdown-divider"></li>
                         <li>
                           <a class="dropdown-item" href="#" onclick="requestCorrection({{ $log->id }})">
@@ -854,7 +884,7 @@
     function showNotification(message, type) {
       let icon = 'info';
       let color = '#4361ee';
-      
+
       switch(type) {
         case 'success':
           icon = 'success';
@@ -1249,9 +1279,6 @@
       });
     }
 
-    function editAttendanceRecord(logId) {
-      showNotification('Edit functionality will be available in the next update.', 'info');
-    }
 
     function requestCorrection(logId) {
       // Create modal for requesting correction
@@ -1293,7 +1320,7 @@
                 </div>
                 <div class="mb-3">
                   <label for="verifyPassword" class="form-label">Verify Password <span class="text-danger">*</span></label>
-                  <input type="password" class="form-control" id="verifyPassword" 
+                  <input type="password" class="form-control" id="verifyPassword"
                          placeholder="Enter your password to confirm" required>
                   <div class="form-text">Password verification is required to submit correction requests</div>
                 </div>

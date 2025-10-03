@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
+  <!-- SweetAlert2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
     .simulation-card {
       border-radius: 8px;
@@ -82,7 +85,7 @@
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Home</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Profile Updates</li>
+            <li class="breadcrumb-item active" aria-current="page">Employee Profile Update</li>
           </ol>
         </nav>
       </div>
@@ -91,7 +94,7 @@
     <div class="simulation-card card">
       <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Employee Profile Updates</h4>
-        <button class="btn btn-warning btn-sm" onclick="fixOldValues()" title="Fix missing current values in existing records">
+        <button class="btn btn-warning btn-sm" onclick="fixOldValuesWithConfirmation()" title="Fix missing current values in existing records">
           <i class="bi bi-wrench"></i> Fix Old Values
         </button>
       </div>
@@ -173,21 +176,23 @@
                 </td>
                 <td>{{ $update->requested_at ? $update->requested_at->format('M j, Y') : ($update->updated_at ? \Carbon\Carbon::parse($update->updated_at)->format('M j, Y') : 'N/A') }}</td>
                 <td class="text-center action-btns">
-                  <button class="btn btn-outline-primary btn-sm me-1" data-bs-toggle="modal" data-bs-target="#viewModal{{ $update->id }}" title="View Details">
-                    <i class="bi bi-eye"></i>
-                  </button>
-                  @if($update->status === 'pending')
-                    <button class="btn btn-outline-success btn-sm me-1" onclick="approveUpdate({{ $update->id }})" title="Approve">
-                      <i class="bi bi-check-lg"></i>
+                  <div class="btn-group" role="group">
+                    <button class="btn btn-outline-primary btn-sm" onclick="viewUpdateDetails({{ $update->id }})" title="View Details">
+                      <i class="bi bi-eye"></i>
                     </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="rejectUpdate({{ $update->id }})" title="Reject">
-                      <i class="bi bi-x-lg"></i>
-                    </button>
-                  @else
-                    <button class="btn btn-outline-secondary btn-sm" disabled title="Already {{ $update->status }}">
-                      <i class="bi bi-{{ $update->status === 'approved' ? 'check-circle' : 'x-circle' }}"></i>
-                    </button>
-                  @endif
+                    @if($update->status === 'pending')
+                      <button class="btn btn-outline-success btn-sm" onclick="approveUpdateWithConfirmation({{ $update->id }})" title="Approve">
+                        <i class="bi bi-check-lg"></i>
+                      </button>
+                      <button class="btn btn-outline-danger btn-sm" onclick="rejectUpdateWithConfirmation({{ $update->id }})" title="Reject">
+                        <i class="bi bi-x-lg"></i>
+                      </button>
+                    @else
+                      <button class="btn btn-outline-secondary btn-sm" disabled title="Already {{ $update->status }}">
+                        <i class="bi bi-{{ $update->status === 'approved' ? 'check-circle' : 'x-circle' }}"></i>
+                      </button>
+                    @endif
+                  </div>
                 </td>
               </tr>
               @empty
@@ -307,10 +312,10 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             @if($update->status === 'pending')
-              <button type="button" class="btn btn-success" onclick="approveUpdate({{ $update->id }})">
+              <button type="button" class="btn btn-success" onclick="approveUpdateWithConfirmation({{ $update->id }})">
                 <i class="bi bi-check-lg me-1"></i>Approve
               </button>
-              <button type="button" class="btn btn-danger" onclick="rejectUpdate({{ $update->id }})">
+              <button type="button" class="btn btn-danger" onclick="rejectUpdateWithConfirmation({{ $update->id }})">
                 <i class="bi bi-x-lg me-1"></i>Reject
               </button>
             @endif
@@ -335,108 +340,474 @@
   document.addEventListener('hidden.bs.modal', removeAllModalBackdrops);
 
   // CSRF token for AJAX requests
-  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  function getCSRFToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  }
 
-  // Approve update function
-  function approveUpdate(updateId) {
-    if (confirm('Are you sure you want to approve this profile update request?')) {
-      fetch(`/admin/profile-updates/${updateId}/approve`, {
+  // Admin password verification function
+  async function verifyAdminPassword(password) {
+    try {
+      const response = await fetch('/admin/verify-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken
+          'X-CSRF-TOKEN': getCSRFToken(),
+          'X-Requested-With': 'XMLHttpRequest'
         },
-        body: JSON.stringify({
-          status: 'approved'
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          // Close any open modals
-          const modals = document.querySelectorAll('.modal.show');
-          modals.forEach(modal => {
-            const modalInstance = bootstrap.Modal.getInstance(modal);
-            if (modalInstance) modalInstance.hide();
-          });
-          
-          // Show success message and reload page
-          alert('Profile update request approved successfully!');
-          window.location.reload();
-        } else {
-          alert('Error: ' + (data.message || 'Failed to approve update'));
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred while approving the update');
+        body: JSON.stringify({ password: password })
       });
+      
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      
+      const data = await response.json();
+      return data.success || data.valid;
+    } catch (error) {
+      console.error('Password verification error:', error);
+      return false;
     }
   }
 
-  // Reject update function
-  function rejectUpdate(updateId) {
-    const reason = prompt('Please provide a reason for rejecting this request:');
-    if (reason !== null && reason.trim() !== '') {
-      fetch(`/admin/profile-updates/${updateId}/reject`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken
-        },
-        body: JSON.stringify({
-          status: 'rejected',
-          rejection_reason: reason.trim()
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          // Close any open modals
-          const modals = document.querySelectorAll('.modal.show');
-          modals.forEach(modal => {
-            const modalInstance = bootstrap.Modal.getInstance(modal);
-            if (modalInstance) modalInstance.hide();
-          });
-          
-          // Show success message and reload page
-          alert('Profile update request rejected successfully!');
-          window.location.reload();
-        } else {
-          alert('Error: ' + (data.message || 'Failed to reject update'));
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred while rejecting the update');
+  // View update details with SweetAlert
+  function viewUpdateDetails(updateId) {
+    // Find the update data from the page
+    const updateRow = document.querySelector(`tr:has(button[onclick*="${updateId}"])`);
+    if (!updateRow) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Update details not found'
       });
+      return;
     }
+
+    const cells = updateRow.querySelectorAll('td');
+    const employeeName = cells[1]?.querySelector('.fw-semibold')?.textContent || 'N/A';
+    const employeeId = cells[1]?.querySelector('.text-muted')?.textContent || 'N/A';
+    const fieldName = cells[2]?.textContent || 'N/A';
+    const oldValue = cells[3]?.textContent?.trim() || 'N/A';
+    const newValue = cells[4]?.textContent?.trim() || 'N/A';
+    const status = cells[5]?.querySelector('.badge')?.textContent || 'N/A';
+    const updatedAt = cells[6]?.textContent || 'N/A';
+
+    Swal.fire({
+      title: `Profile Update Request #${updateId}`,
+      html: `
+        <div class="text-start">
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <h6 class="text-primary"><i class="bi bi-person-circle me-2"></i>Employee Information</h6>
+              <p class="mb-1"><strong>Name:</strong> ${employeeName}</p>
+              <p class="mb-1"><strong>ID:</strong> ${employeeId}</p>
+            </div>
+            <div class="col-md-6">
+              <h6 class="text-info"><i class="bi bi-info-circle me-2"></i>Request Details</h6>
+              <p class="mb-1"><strong>Field:</strong> ${fieldName}</p>
+              <p class="mb-1"><strong>Status:</strong> <span class="badge bg-secondary">${status}</span></p>
+              <p class="mb-1"><strong>Date:</strong> ${updatedAt}</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header bg-light">
+              <h6 class="mb-0"><i class="bi bi-arrow-left-right me-2"></i>Value Changes</h6>
+            </div>
+            <div class="card-body">
+              <div class="row">
+                <div class="col-md-6">
+                  <h6 class="text-secondary">Current Value:</h6>
+                  <div class="p-2 bg-light rounded border">${oldValue}</div>
+                </div>
+                <div class="col-md-6">
+                  <h6 class="text-primary">Requested Value:</h6>
+                  <div class="p-2 bg-primary bg-opacity-10 rounded border border-primary">${newValue}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `,
+      width: '800px',
+      showCloseButton: true,
+      confirmButtonText: 'Close',
+      confirmButtonColor: '#6c757d'
+    });
   }
 
-  // Fix old values function
-  function fixOldValues() {
-    if (confirm('This will update all existing profile update records to show proper current values. Continue?')) {
-      fetch('/admin/profile-updates/fix-old-values', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken
+  // Approve update with password confirmation
+  function approveUpdateWithConfirmation(updateId) {
+    Swal.fire({
+      title: 'Approve Profile Update',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Security Notice:</strong> Admin password verification is required to approve profile update requests.
+          </div>
+          <p class="mb-3">You are about to approve profile update request #${updateId}. This action will apply the requested changes to the employee's profile.</p>
+        </div>
+        <div class="form-group">
+          <label for="admin-password-approve" class="form-label fw-bold">Admin Password:</label>
+          <input type="password" id="admin-password-approve" class="form-control" placeholder="Enter your admin password" minlength="3" required>
+          <div class="form-text">Enter your admin password to confirm this action.</div>
+        </div>
+      `,
+      width: '600px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-check-lg me-1"></i>Approve Update',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#198754',
+      cancelButtonColor: '#6c757d',
+      preConfirm: async () => {
+        const password = document.getElementById('admin-password-approve').value;
+        
+        if (!password || password.length < 3) {
+          Swal.showValidationMessage('Please enter a valid admin password (minimum 3 characters)');
+          return false;
         }
+        
+        // Show loading
+        Swal.fire({
+          title: 'Verifying Password...',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+        
+        // Verify password
+        const isValidPassword = await verifyAdminPassword(password);
+        
+        if (!isValidPassword) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Invalid Password',
+            text: 'The admin password you entered is incorrect. Please try again.',
+            confirmButtonColor: '#dc3545'
+          });
+          return false;
+        }
+        
+        return { password };
+      }
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        submitApproveUpdate(updateId, result.value.password);
+      }
+    });
+  }
+
+  // Submit approve update
+  function submitApproveUpdate(updateId, password) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Approving profile update request...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    fetch(`/admin/profile-updates/${updateId}/approve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': getCSRFToken(),
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({
+        status: 'approved',
+        password_verification: password
       })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          alert(data.message);
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Update Approved!',
+          text: 'The profile update request has been approved successfully.',
+          confirmButtonColor: '#198754',
+          timer: 3000,
+          timerProgressBar: true
+        }).then(() => {
           window.location.reload();
-        } else {
-          alert('Error: ' + (data.message || 'Failed to fix old values'));
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('An error occurred while fixing old values');
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Approval Failed',
+          text: data.message || 'Failed to approve the profile update request. Please try again.',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Network Error',
+        text: 'An error occurred while processing the request. Please check your connection and try again.',
+        confirmButtonColor: '#dc3545'
       });
-    }
+    });
+  }
+
+  // Reject update with password confirmation
+  function rejectUpdateWithConfirmation(updateId) {
+    Swal.fire({
+      title: 'Reject Profile Update',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Warning:</strong> You are about to reject profile update request #${updateId}.
+          </div>
+          <p class="mb-3">Please provide a reason for rejecting this request and confirm with your admin password.</p>
+        </div>
+        <div class="form-group mb-3">
+          <label for="rejection-reason" class="form-label fw-bold">Rejection Reason:</label>
+          <textarea id="rejection-reason" class="form-control" rows="3" placeholder="Please explain why this request is being rejected..." required></textarea>
+        </div>
+        <div class="form-group">
+          <label for="admin-password-reject" class="form-label fw-bold">Admin Password:</label>
+          <input type="password" id="admin-password-reject" class="form-control" placeholder="Enter your admin password" minlength="3" required>
+          <div class="form-text">Enter your admin password to confirm this action.</div>
+        </div>
+      `,
+      width: '600px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-x-lg me-1"></i>Reject Update',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#6c757d',
+      preConfirm: async () => {
+        const reason = document.getElementById('rejection-reason').value.trim();
+        const password = document.getElementById('admin-password-reject').value;
+        
+        if (!reason) {
+          Swal.showValidationMessage('Please provide a reason for rejecting this request');
+          return false;
+        }
+        
+        if (!password || password.length < 3) {
+          Swal.showValidationMessage('Please enter a valid admin password (minimum 3 characters)');
+          return false;
+        }
+        
+        // Show loading
+        Swal.fire({
+          title: 'Verifying Password...',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+        
+        // Verify password
+        const isValidPassword = await verifyAdminPassword(password);
+        
+        if (!isValidPassword) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Invalid Password',
+            text: 'The admin password you entered is incorrect. Please try again.',
+            confirmButtonColor: '#dc3545'
+          });
+          return false;
+        }
+        
+        return { reason, password };
+      }
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        submitRejectUpdate(updateId, result.value.reason, result.value.password);
+      }
+    });
+  }
+
+  // Submit reject update
+  function submitRejectUpdate(updateId, reason, password) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Rejecting profile update request...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    fetch(`/admin/profile-updates/${updateId}/reject`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': getCSRFToken(),
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({
+        status: 'rejected',
+        rejection_reason: reason,
+        password_verification: password
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Update Rejected',
+          text: 'The profile update request has been rejected successfully.',
+          confirmButtonColor: '#198754',
+          timer: 3000,
+          timerProgressBar: true
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Rejection Failed',
+          text: data.message || 'Failed to reject the profile update request. Please try again.',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Network Error',
+        text: 'An error occurred while processing the request. Please check your connection and try again.',
+        confirmButtonColor: '#dc3545'
+      });
+    });
+  }
+
+  // Fix old values with password confirmation
+  function fixOldValuesWithConfirmation() {
+    Swal.fire({
+      title: 'Fix Old Values',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>System Maintenance:</strong> This operation will update all existing profile update records to show proper current values.
+          </div>
+          <p class="mb-3">This maintenance operation will:</p>
+          <ul class="text-start">
+            <li>Update all profile update records with missing current values</li>
+            <li>Ensure proper before/after comparison display</li>
+            <li>Improve data consistency across the system</li>
+          </ul>
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Note:</strong> This operation may take a few moments to complete.
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="admin-password-fix" class="form-label fw-bold">Admin Password:</label>
+          <input type="password" id="admin-password-fix" class="form-control" placeholder="Enter your admin password" minlength="3" required>
+          <div class="form-text">Enter your admin password to confirm this maintenance operation.</div>
+        </div>
+      `,
+      width: '600px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-wrench me-1"></i>Fix Old Values',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ffc107',
+      cancelButtonColor: '#6c757d',
+      preConfirm: async () => {
+        const password = document.getElementById('admin-password-fix').value;
+        
+        if (!password || password.length < 3) {
+          Swal.showValidationMessage('Please enter a valid admin password (minimum 3 characters)');
+          return false;
+        }
+        
+        // Show loading
+        Swal.fire({
+          title: 'Verifying Password...',
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+        
+        // Verify password
+        const isValidPassword = await verifyAdminPassword(password);
+        
+        if (!isValidPassword) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Invalid Password',
+            text: 'The admin password you entered is incorrect. Please try again.',
+            confirmButtonColor: '#dc3545'
+          });
+          return false;
+        }
+        
+        return { password };
+      }
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        submitFixOldValues(result.value.password);
+      }
+    });
+  }
+
+  // Submit fix old values
+  function submitFixOldValues(password) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Fixing old values in profile update records...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    fetch('/admin/profile-updates/fix-old-values', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': getCSRFToken(),
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({
+        password_verification: password
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Values Fixed!',
+          text: data.message || 'Old values have been fixed successfully.',
+          confirmButtonColor: '#198754',
+          timer: 3000,
+          timerProgressBar: true
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Fix Failed',
+          text: data.message || 'Failed to fix old values. Please try again.',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Network Error',
+        text: 'An error occurred while processing the request. Please check your connection and try again.',
+        confirmButtonColor: '#dc3545'
+      });
+    });
   }
 </script>
 </body>

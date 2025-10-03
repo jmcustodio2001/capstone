@@ -10,6 +10,7 @@ class CompetencyCourseAssignment extends Model
         'employee_id',
         'course_id',
         'assigned_date',
+        'assigned_by',
         'status',
         'progress',
         'is_destination_knowledge'

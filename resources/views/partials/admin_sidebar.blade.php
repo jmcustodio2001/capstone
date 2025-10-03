@@ -1,9 +1,14 @@
-<!-- Sidebar -->
+<!-- Responsive Admin Sidebar -->
 <aside id="sidebar" class="bg-white border-end p-3 shadow-sm">
   <!-- Profile Section -->
   <div class="profile-section text-center">
-    <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face"
-         alt="Admin Profile" class="profile-img mb-2">
+    @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->profile_picture)
+      <img src="{{ asset('storage/profile_pictures/' . Auth::guard('admin')->user()->profile_picture) }}"
+           alt="Admin Profile" class="profile-img mb-2">
+    @else
+      <img src="{{ asset('assets/images/default-avatar.png') }}"
+           alt="Admin Profile" class="profile-img mb-2">
+    @endif
     <h6 class="fw-semibold mb-1">
       @if(Auth::guard('admin')->check())
         {{ Auth::guard('admin')->user()->name }}

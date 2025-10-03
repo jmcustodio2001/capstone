@@ -5,9 +5,69 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
+  <!-- SweetAlert2 -->
+  <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.min.css" rel="stylesheet">
+  
+  <!-- Custom CSS for Employee Profile Pictures -->
+  <style>
+    .employee-avatar {
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .employee-avatar:hover {
+      transform: scale(1.1);
+      box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+    }
+    
+    .position-relative:hover .employee-avatar {
+      filter: brightness(1.1);
+    }
+    
+    .avatar-sm, .avatar-lg {
+      transition: all 0.3s ease;
+    }
+    
+    .avatar-sm:hover, .avatar-lg:hover {
+      transform: scale(1.05);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* Profile picture loading animation */
+    .employee-avatar {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: loading 1.5s infinite;
+    }
+    
+    @keyframes loading {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    
+    .employee-avatar[src] {
+      animation: none;
+      background: none;
+    }
+    
+    /* Status indicator styling */
+    .position-absolute .badge {
+      box-shadow: 0 0 0 2px white;
+    }
+    
+    /* Tooltip styling for profile pictures */
+    .tooltip-inner {
+      background-color: rgba(0, 0, 0, 0.9);
+      color: white;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+  </style>
 </head>
 <body style="background-color: #f8f9fa !important;">
 
@@ -33,8 +93,8 @@
         </div>
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb mb-0">
-            <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Admin Dashboard</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Training Feedback</li>
+            <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Home</a></li>
+            <li class="breadcrumb-item active" aria-current="page">Employee Training Feedback Tracking</li>
           </ol>
         </nav>
       </div>
@@ -153,10 +213,10 @@
       </div>
     </div>
 
-    <!-- Training Feedback Table -->
+    <!-- Training Feedback & Competency Requests Table -->
     <div class="card border-0 shadow-sm">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="fw-bold mb-0"><i class="bi bi-table me-2"></i>Training Feedback Records</h5>
+        <h5 class="fw-bold mb-0"><i class="bi bi-table me-2"></i>Training Feedback & Competency Requests</h5>
         <div class="d-flex gap-2">
           <button class="btn btn-success btn-sm" onclick="exportFeedback()">
             <i class="bi bi-download me-1"></i>Export
@@ -188,12 +248,149 @@
                   <td><span class="badge bg-primary">{{ optional($feedback)->feedback_id ?? 'N/A' }}</span></td>
                   <td>
                     <div class="d-flex align-items-center">
-                      <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-2">
-                        <span class="text-primary fw-bold">{{ substr(optional(optional($feedback)->employee)->first_name ?? 'U', 0, 1) }}{{ substr(optional(optional($feedback)->employee)->last_name ?? 'U', 0, 1) }}</span>
+                      <div class="position-relative me-2">
+                        @php
+                          $employee = optional($feedback)->employee;
+                          $profilePicture = $employee->profile_picture ?? null;
+                          $employeeName = ($employee->first_name ?? 'Unknown') . ' ' . ($employee->last_name ?? 'User');
+                          $initials = substr($employee->first_name ?? 'U', 0, 1) . substr($employee->last_name ?? 'U', 0, 1);
+                          
+                          // Handle profile picture - check if it's base64 encoded data or filename
+                          $hasProfilePicture = false;
+                          $profilePicturePath = '';
+                          
+                          if ($profilePicture) {
+                              // Check if it's base64 encoded data (starts with data:image)
+                              if (strpos($profilePicture, 'data:image') === 0) {
+                                  $hasProfilePicture = true;
+                                  $profilePicturePath = $profilePicture; // Use base64 data directly
+                              } 
+                              // Check if it's a very long string (likely encoded filename)
+                              elseif (strlen($profilePicture) > 50) {
+                                  // Try to decode if it looks like base64
+                                  $decoded = base64_decode($profilePicture, true);
+                                  if ($decoded !== false && strlen($decoded) < 100) {
+                                      // It's a base64 encoded filename
+                                      $actualFilename = $decoded;
+                                  } else {
+                                      // It's probably an encoded filename, try to extract extension
+                                      $actualFilename = $employee->employee_id . '.jpg'; // Default fallback
+                                  }
+                                  
+                                  // Check multiple possible paths with the actual filename
+                                  $possiblePaths = [
+                                      'storage/employee_photos/' . $actualFilename,
+                                      'assets/employee_photos/' . $actualFilename,
+                                      'uploads/employee_photos/' . $actualFilename,
+                                      'storage/employee_photos/' . $employee->employee_id . '.jpg',
+                                      'storage/employee_photos/' . $employee->employee_id . '.png',
+                                      'assets/employee_photos/' . $employee->employee_id . '.jpg',
+                                      'assets/employee_photos/' . $employee->employee_id . '.png'
+                                  ];
+                                  
+                                  foreach ($possiblePaths as $path) {
+                                      if (file_exists(public_path($path))) {
+                                          $hasProfilePicture = true;
+                                          $profilePicturePath = asset($path);
+                                          break;
+                                      }
+                                  }
+                              }
+                              // Regular filename
+                              else {
+                                  $possiblePaths = [
+                                      'storage/employee_photos/' . $profilePicture,
+                                      'assets/employee_photos/' . $profilePicture,
+                                      'uploads/employee_photos/' . $profilePicture
+                                  ];
+                                  
+                                  foreach ($possiblePaths as $path) {
+                                      if (file_exists(public_path($path))) {
+                                          $hasProfilePicture = true;
+                                          $profilePicturePath = asset($path);
+                                          break;
+                                      }
+                                  }
+                              }
+                          }
+                          
+                          // If still no profile picture found, try common employee ID based filenames
+                          if (!$hasProfilePicture && $employee->employee_id) {
+                              $commonFilenames = [
+                                  $employee->employee_id . '.jpg',
+                                  $employee->employee_id . '.png',
+                                  $employee->employee_id . '.jpeg',
+                                  strtolower($employee->employee_id) . '.jpg',
+                                  strtolower($employee->employee_id) . '.png'
+                              ];
+                              
+                              foreach ($commonFilenames as $filename) {
+                                  $possiblePaths = [
+                                      'storage/employee_photos/' . $filename,
+                                      'assets/employee_photos/' . $filename,
+                                      'uploads/employee_photos/' . $filename
+                                  ];
+                                  
+                                  foreach ($possiblePaths as $path) {
+                                      if (file_exists(public_path($path))) {
+                                          $hasProfilePicture = true;
+                                          $profilePicturePath = asset($path);
+                                          break 2;
+                                      }
+                                  }
+                              }
+                          }
+                        @endphp
+                        
+                        @if($hasProfilePicture)
+                          <img src="{{ $profilePicturePath }}" 
+                               alt="{{ $employeeName }}" 
+                               class="rounded-circle employee-avatar"
+                               style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #007bff;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $employeeName }}"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                          <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                               style="width: 40px; height: 40px; display: none; border: 2px solid #007bff;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $employeeName }}">
+                            <span class="text-primary fw-bold">{{ $initials }}</span>
+                          </div>
+                        @else
+                          <!-- Debug info for missing profile picture -->
+                          <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                               style="width: 40px; height: 40px; border: 2px solid #007bff;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $employeeName }} (No photo found - ID: {{ $employee->employee_id ?? 'N/A' }})">
+                            <span class="text-primary fw-bold">{{ $initials }}</span>
+                          </div>
+                        @endif
+                        
+                        <!-- Online status indicator -->
+                        <div class="position-absolute bottom-0 end-0">
+                          <span class="badge bg-success rounded-pill" style="width: 12px; height: 12px; padding: 0;" 
+                                data-bs-toggle="tooltip" 
+                                data-bs-placement="top" 
+                                title="Active Employee"></span>
+                        </div>
                       </div>
                       <div>
-                        <div class="fw-bold">{{ optional(optional($feedback)->employee)->first_name ?? 'Unknown' }} {{ optional(optional($feedback)->employee)->last_name ?? 'User' }}</div>
-                        <small class="text-muted">{{ optional(optional($feedback)->employee)->employee_id ?? 'N/A' }}</small>
+                        <div class="fw-bold">
+                          {{ $employeeName }}
+                          <button class="btn btn-link btn-sm p-0 ms-1" onclick="viewEmployeeProfile('{{ $employee->employee_id ?? 'N/A' }}')" title="View Employee Profile">
+                            <i class="bi bi-person-circle text-info"></i>
+                          </button>
+                        </div>
+                        <small class="text-muted">
+                          <i class="bi bi-badge-ad me-1"></i>{{ $employee->employee_id ?? 'N/A' }}
+                          @if($employee->department)
+                            <span class="mx-1">•</span>
+                            <i class="bi bi-building me-1"></i>{{ $employee->department }}
+                          @endif
+                        </small>
                       </div>
                     </div>
                   </td>
@@ -237,22 +434,162 @@
                       <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#viewFeedbackModal" onclick="viewFeedbackDetails({{ optional($feedback)->id ?? 0 }})" title="View Details">
                         <i class="bi bi-eye"></i>
                       </button>
-                      <button class="btn btn-success btn-sm" onclick="markAsReviewed({{ optional($feedback)->id ?? 0 }})" title="Mark as Reviewed">
+                      <button class="btn btn-success btn-sm" onclick="markAsReviewedWithConfirmation({{ optional($feedback)->id ?? 0 }})" title="Mark as Reviewed">
                         <i class="bi bi-check-circle"></i>
                       </button>
-                      <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#respondModal" onclick="respondToFeedback({{ optional($feedback)->id ?? 0 }})" title="Respond">
+                      <button class="btn btn-warning btn-sm" onclick="respondToFeedbackWithConfirmation({{ optional($feedback)->id ?? 0 }})" title="Respond">
                         <i class="bi bi-reply"></i>
                       </button>
                     </div>
                   </td>
                 </tr>
               @empty
+              @endforelse
+              
+              <!-- Competency Feedback Requests -->
+              @forelse($competencyRequests ?? [] as $request)
+                <tr class="table-info">
+                  <td><span class="badge bg-info">COMP-{{ $request->id }}</span></td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div class="position-relative me-2">
+                        @php
+                          $compEmployee = $request->employee;
+                          $compProfilePicture = $compEmployee->profile_picture ?? $compEmployee->photo ?? null;
+                          $compEmployeeName = ($compEmployee->first_name ?? 'Unknown') . ' ' . ($compEmployee->last_name ?? 'User');
+                          $compInitials = substr($compEmployee->first_name ?? 'U', 0, 1) . substr($compEmployee->last_name ?? 'U', 0, 1);
+                        @endphp
+                        
+                        @if($compProfilePicture && file_exists(public_path('storage/employee_photos/' . $compProfilePicture)))
+                          <img src="{{ asset('storage/employee_photos/' . $compProfilePicture) }}" 
+                               alt="{{ $compEmployeeName }}" 
+                               class="rounded-circle employee-avatar"
+                               style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $compEmployeeName }}"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                               style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $compEmployeeName }}">
+                            <span class="text-info fw-bold">{{ $compInitials }}</span>
+                          </div>
+                        @elseif($compProfilePicture && file_exists(public_path('assets/employee_photos/' . $compProfilePicture)))
+                          <img src="{{ asset('assets/employee_photos/' . $compProfilePicture) }}" 
+                               alt="{{ $compEmployeeName }}" 
+                               class="rounded-circle employee-avatar"
+                               style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $compEmployeeName }}"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                               style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $compEmployeeName }}">
+                            <span class="text-info fw-bold">{{ $compInitials }}</span>
+                          </div>
+                        @elseif($compProfilePicture && file_exists(public_path('uploads/employee_photos/' . $compProfilePicture)))
+                          <img src="{{ asset('uploads/employee_photos/' . $compProfilePicture) }}" 
+                               alt="{{ $compEmployeeName }}" 
+                               class="rounded-circle employee-avatar"
+                               style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $compEmployeeName }}"
+                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                               style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $compEmployeeName }}">
+                            <span class="text-info fw-bold">{{ $compInitials }}</span>
+                          </div>
+                        @else
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                               style="width: 40px; height: 40px; border: 2px solid #17a2b8;"
+                               data-bs-toggle="tooltip" 
+                               data-bs-placement="top" 
+                               title="Employee Profile: {{ $compEmployeeName }}">
+                            <span class="text-info fw-bold">{{ $compInitials }}</span>
+                          </div>
+                        @endif
+                        
+                        <!-- Competency request indicator -->
+                        <div class="position-absolute bottom-0 end-0">
+                          <span class="badge bg-info rounded-pill" style="width: 12px; height: 12px; padding: 0;" 
+                                data-bs-toggle="tooltip" 
+                                data-bs-placement="top" 
+                                title="Competency Request"></span>
+                        </div>
+                      </div>
+                      <div>
+                        <div class="fw-bold">
+                          {{ $compEmployeeName }}
+                          <button class="btn btn-link btn-sm p-0 ms-1" onclick="viewEmployeeProfile('{{ $compEmployee->employee_id ?? 'N/A' }}')" title="View Employee Profile">
+                            <i class="bi bi-person-circle text-info"></i>
+                          </button>
+                        </div>
+                        <small class="text-muted">
+                          <i class="bi bi-badge-ad me-1"></i>{{ $compEmployee->employee_id ?? 'N/A' }}
+                          @if($compEmployee->department)
+                            <span class="mx-1">•</span>
+                            <i class="bi bi-building me-1"></i>{{ $compEmployee->department }}
+                          @endif
+                        </small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <strong>{{ $request->competency->competency_name ?? 'Unknown Competency' }}</strong>
+                    <br><small class="text-muted"><i class="bi bi-star me-1"></i>Competency Feedback Request</small>
+                  </td>
+                  <td>
+                    <span class="badge bg-info">Competency</span>
+                  </td>
+                  <td>
+                    <span class="text-muted">-</span>
+                  </td>
+                  <td>
+                    <span class="badge bg-secondary">{{ $request->competency->category ?? 'General' }}</span>
+                  </td>
+                  <td>
+                    {{ $request->created_at->format('M d, Y') }}<br>
+                    <small class="text-muted">{{ $request->created_at->format('h:i A') }}</small>
+                  </td>
+                  <td>
+                    <span class="badge bg-{{ $request->status == 'pending' ? 'warning' : ($request->status == 'responded' ? 'success' : 'secondary') }}">
+                      {{ ucfirst($request->status) }}
+                    </span>
+                  </td>
+                  <td class="text-center">
+                    <div class="btn-group" role="group">
+                      <button class="btn btn-info btn-sm" onclick="viewCompetencyRequestDetails({{ $request->id }})" title="View Details">
+                        <i class="bi bi-eye"></i>
+                      </button>
+                      @if($request->status == 'pending')
+                        <button class="btn btn-warning btn-sm" onclick="respondToCompetencyRequestWithConfirmation({{ $request->id }})" title="Respond">
+                          <i class="bi bi-reply"></i>
+                        </button>
+                      @endif
+                      <button class="btn btn-success btn-sm" onclick="markCompetencyRequestAsReviewedWithConfirmation({{ $request->id }})" title="Mark as Reviewed">
+                        <i class="bi bi-check-circle"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              @empty
+                @if(($allFeedback ?? collect())->isEmpty())
                 <tr>
                   <td colspan="9" class="text-center text-muted py-4">
                     <i class="bi bi-chat-square-text fs-1 text-muted d-block mb-2"></i>
-                    No training feedback submitted yet.
+                    No training feedback or competency requests submitted yet.
                   </td>
                 </tr>
+                @endif
               @endforelse
             </tbody>
           </table>
@@ -280,60 +617,188 @@
     </div>
   </div>
 
-  <!-- Respond to Feedback Modal -->
-  <div class="modal fade" id="respondModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-      <div class="modal-content">
-        <form id="respondForm" method="POST">
-          @csrf
-          <div class="modal-header bg-warning text-dark">
-            <h5 class="modal-title"><i class="bi bi-reply me-2"></i>Respond to Feedback</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label fw-bold">Admin Response</label>
-              <textarea name="admin_response" class="form-control" rows="4" placeholder="Enter your response to this feedback..." required></textarea>
-            </div>
-            <div class="mb-3">
-              <label class="form-label fw-bold">Action Taken</label>
-              <select name="action_taken" class="form-select">
-                <option value="">Select action...</option>
-                <option value="Training Updated">Training Content Updated</option>
-                <option value="Instructor Notified">Instructor Notified</option>
-                <option value="Process Improved">Process Improved</option>
-                <option value="No Action Required">No Action Required</option>
-                <option value="Under Review">Under Review</option>
-              </select>
-            </div>
-            <div class="mb-3">
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="notify_employee" id="notifyEmployee" checked>
-                <label class="form-check-label" for="notifyEmployee">
-                  Notify employee of response
-                </label>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
-            <button class="btn btn-warning" type="submit">Send Response</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.all.min.js"></script>
   <script>
     let currentFeedbackId = null;
 
+    // Secure Password verification function using custom modal
+    async function verifyAdminPassword() {
+      return new Promise((resolve) => {
+        // Create custom modal HTML
+        const modalHtml = `
+          <div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header bg-warning text-dark">
+                  <h5 class="modal-title">
+                    <i class="bi bi-shield-lock me-2"></i>Admin Password Required
+                  </h5>
+                </div>
+                <div class="modal-body">
+                  <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Security Verification</strong><br>
+                    This action requires admin password verification for security purposes.
+                  </div>
+                  <div class="mb-3">
+                    <label for="securePasswordInput" class="form-label fw-bold">Enter admin password:</label>
+                    <input type="password" class="form-control" id="securePasswordInput" placeholder="Enter admin password" minlength="6" autocomplete="current-password">
+                    <div class="form-text">
+                      <i class="bi bi-info-circle me-1"></i>Password must be at least 6 characters long
+                    </div>
+                  </div>
+                  <div id="passwordError" class="alert alert-danger d-none"></div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" id="cancelPasswordBtn">
+                    <i class="bi bi-x-circle me-1"></i>Cancel
+                  </button>
+                  <button type="button" class="btn btn-warning" id="verifyPasswordBtn">
+                    <i class="bi bi-unlock me-1"></i>Verify Password
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('passwordModal');
+        if (existingModal) {
+          existingModal.remove();
+        }
+
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // Get modal elements
+        const modal = document.getElementById('passwordModal');
+        const passwordInput = document.getElementById('securePasswordInput');
+        const verifyBtn = document.getElementById('verifyPasswordBtn');
+        const cancelBtn = document.getElementById('cancelPasswordBtn');
+        const errorDiv = document.getElementById('passwordError');
+
+        // Initialize Bootstrap modal
+        const bsModal = new bootstrap.Modal(modal);
+
+        // Show modal
+        bsModal.show();
+
+        // Focus on input after modal is shown
+        modal.addEventListener('shown.bs.modal', () => {
+          passwordInput.focus();
+        });
+
+        // Handle Enter key
+        passwordInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            verifyBtn.click();
+          }
+        });
+
+        // Handle verify button click
+        verifyBtn.addEventListener('click', async () => {
+          const password = passwordInput.value;
+
+          // Clear previous errors
+          errorDiv.classList.add('d-none');
+
+          // Validate password
+          if (!password || password.trim() === '') {
+            showError('Password is required');
+            return;
+          }
+
+          if (password.length < 6) {
+            showError('Password must be at least 6 characters long');
+            return;
+          }
+
+          // Show loading
+          verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
+          verifyBtn.disabled = true;
+
+          try {
+            const response = await fetch('/admin/verify-password', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+              },
+              body: JSON.stringify({ password: password })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+              // Success - close modal and resolve
+              bsModal.hide();
+              modal.addEventListener('hidden.bs.modal', () => {
+                modal.remove();
+              });
+              resolve(true);
+            } else {
+              // Invalid password
+              showError('Invalid password. Please try again.');
+              resetButton();
+            }
+          } catch (error) {
+            console.error('Password verification error:', error);
+            showError('Unable to verify password. Please try again.');
+            resetButton();
+          }
+        });
+
+        // Handle cancel button click
+        cancelBtn.addEventListener('click', () => {
+          bsModal.hide();
+          modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+          });
+          resolve(false);
+        });
+
+        // Handle modal close (X button or backdrop)
+        modal.addEventListener('hidden.bs.modal', () => {
+          modal.remove();
+          resolve(false);
+        });
+
+        // Helper functions
+        function showError(message) {
+          errorDiv.textContent = message;
+          errorDiv.classList.remove('d-none');
+          passwordInput.focus();
+        }
+
+        function resetButton() {
+          verifyBtn.innerHTML = '<i class="bi bi-unlock me-1"></i>Verify Password';
+          verifyBtn.disabled = false;
+          passwordInput.focus();
+        }
+      });
+    }
+
     // View Feedback Details
     function viewFeedbackDetails(feedbackId) {
+      console.log('Setting currentFeedbackId to:', feedbackId);
       currentFeedbackId = feedbackId;
+      
+      // Show loading state
+      document.getElementById('viewFeedbackContent').innerHTML = '<div class="text-center"><i class="bi bi-hourglass-split"></i> Loading feedback details...</div>';
+      
       fetch(`/admin/training-feedback/${feedbackId}`)
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
         .then(data => {
+          console.log('Feedback data loaded:', data);
           const content = `
             <div class="row">
               <div class="col-md-6">
@@ -403,36 +868,251 @@
         });
     }
 
+    // Mark as Reviewed with Confirmation
+    async function markAsReviewedWithConfirmation(feedbackId) {
+      const confirmed = await Swal.fire({
+        title: 'Mark as Reviewed',
+        text: 'Are you sure you want to mark this feedback as reviewed?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Yes, Mark as Reviewed',
+        cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+        customClass: {
+          confirmButton: 'btn btn-success me-2',
+          cancelButton: 'btn btn-secondary'
+        },
+        buttonsStyling: false
+      });
+
+      if (confirmed.isConfirmed) {
+        const passwordVerified = await verifyAdminPassword();
+        if (passwordVerified) {
+          await markAsReviewed(feedbackId);
+        }
+      }
+    }
+
     // Mark as Reviewed
-    function markAsReviewed(feedbackId) {
-      if (confirm('Mark this feedback as reviewed?')) {
-        fetch(`/admin/training-feedback/${feedbackId}/review`, {
+    async function markAsReviewed(feedbackId) {
+      try {
+        // Show loading
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Marking feedback as reviewed',
+          icon: 'info',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const response = await fetch(`/admin/training-feedback/${feedbackId}/review`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
           }
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            location.reload();
-          } else {
-            alert('Error marking feedback as reviewed');
-          }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          await Swal.fire({
+            title: 'Success!',
+            text: 'Feedback has been marked as reviewed.',
+            icon: 'success',
+            confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+            customClass: {
+              confirmButton: 'btn btn-success'
+            },
+            buttonsStyling: false
+          });
+          location.reload();
+        } else {
+          await Swal.fire({
+            title: 'Error!',
+            text: 'Failed to mark feedback as reviewed.',
+            icon: 'error',
+            confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+            customClass: {
+              confirmButton: 'btn btn-danger'
+            },
+            buttonsStyling: false
+          });
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        await Swal.fire({
+          title: 'Network Error!',
+          text: 'An unexpected error occurred. Please try again.',
+          icon: 'error',
+          confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+          customClass: {
+            confirmButton: 'btn btn-danger'
+          },
+          buttonsStyling: false
         });
       }
     }
 
     function markCurrentAsReviewed() {
-      if (currentFeedbackId) {
-        markAsReviewed(currentFeedbackId);
+      console.log('markCurrentAsReviewed called, currentFeedbackId:', currentFeedbackId);
+      if (currentFeedbackId && currentFeedbackId !== null && currentFeedbackId !== 0) {
+        markAsReviewedWithConfirmation(currentFeedbackId);
+      } else {
+        Swal.fire({
+          title: 'Error',
+          text: 'No feedback selected. Please close this modal and try again.',
+          icon: 'error',
+          confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+          customClass: {
+            confirmButton: 'btn btn-danger'
+          },
+          buttonsStyling: false
+        });
       }
     }
 
-    // Respond to Feedback
-    function respondToFeedback(feedbackId) {
-      document.getElementById('respondForm').action = `/admin/training-feedback/${feedbackId}/respond`;
+    // Respond to Feedback with Confirmation
+    async function respondToFeedbackWithConfirmation(feedbackId) {
+      const passwordVerified = await verifyAdminPassword();
+      if (passwordVerified) {
+        await showRespondToFeedbackForm(feedbackId);
+      }
+    }
+
+    // Show Respond to Feedback Form
+    async function showRespondToFeedbackForm(feedbackId) {
+      const { value: formValues } = await Swal.fire({
+        title: 'Respond to Training Feedback',
+        html: `
+          <div class="text-start">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Admin Response</label>
+              <textarea id="adminResponse" class="form-control" rows="4" placeholder="Enter your response to this feedback..." required></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Action Taken</label>
+              <select id="actionTaken" class="form-select">
+                <option value="">Select action...</option>
+                <option value="Training Updated">Training Content Updated</option>
+                <option value="Instructor Notified">Instructor Notified</option>
+                <option value="Process Improved">Process Improved</option>
+                <option value="No Action Required">No Action Required</option>
+                <option value="Under Review">Under Review</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="notifyEmployee" checked>
+                <label class="form-check-label" for="notifyEmployee">
+                  Notify employee of response
+                </label>
+              </div>
+            </div>
+          </div>
+        `,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-send me-1"></i>Send Response',
+        cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+        customClass: {
+          confirmButton: 'btn btn-warning me-2',
+          cancelButton: 'btn btn-secondary'
+        },
+        buttonsStyling: false,
+        width: '600px',
+        preConfirm: () => {
+          const adminResponse = document.getElementById('adminResponse').value;
+          const actionTaken = document.getElementById('actionTaken').value;
+          const notifyEmployee = document.getElementById('notifyEmployee').checked;
+
+          if (!adminResponse.trim()) {
+            Swal.showValidationMessage('Admin response is required');
+            return false;
+          }
+
+          return {
+            admin_response: adminResponse,
+            action_taken: actionTaken,
+            notify_employee: notifyEmployee
+          };
+        }
+      });
+
+      if (formValues) {
+        await submitFeedbackResponse(feedbackId, formValues);
+      }
+    }
+
+    // Submit Feedback Response
+    async function submitFeedbackResponse(feedbackId, formData) {
+      try {
+        // Show loading
+        Swal.fire({
+          title: 'Sending Response...',
+          text: 'Please wait while we send your response',
+          icon: 'info',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const response = await fetch(`/admin/training-feedback/${feedbackId}/respond`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+          },
+          body: JSON.stringify(formData)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          await Swal.fire({
+            title: 'Response Sent!',
+            text: 'Your response has been sent successfully.',
+            icon: 'success',
+            confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+            customClass: {
+              confirmButton: 'btn btn-success'
+            },
+            buttonsStyling: false
+          });
+          location.reload();
+        } else {
+          await Swal.fire({
+            title: 'Error!',
+            text: 'Failed to send response. Please try again.',
+            icon: 'error',
+            confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+            customClass: {
+              confirmButton: 'btn btn-danger'
+            },
+            buttonsStyling: false
+          });
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        await Swal.fire({
+          title: 'Network Error!',
+          text: 'An unexpected error occurred. Please try again.',
+          icon: 'error',
+          confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+          customClass: {
+            confirmButton: 'btn btn-danger'
+          },
+          buttonsStyling: false
+        });
+      }
     }
 
     // Apply Filters
@@ -451,37 +1131,782 @@
       window.location.href = `${window.location.pathname}?${params.toString()}`;
     }
 
-    // Export Feedback
-    function exportFeedback() {
-      window.location.href = '/admin/training-feedback/export';
+    // Enhanced Export Feedback with Password Verification
+    async function exportFeedback() {
+      const passwordVerified = await verifyAdminPassword();
+      if (passwordVerified) {
+        await showExportOptions();
+      }
     }
 
-    // Refresh Data
-    function refreshData() {
-      location.reload();
-    }
-
-    // Form Submission
-    document.getElementById('respondForm')?.addEventListener('submit', function(e) {
-      e.preventDefault();
-      
-      const formData = new FormData(this);
-      
-      fetch(this.action, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+    // Show Export Options
+    async function showExportOptions() {
+      const { value: exportOptions } = await Swal.fire({
+        title: 'Export Training Feedback',
+        html: `
+          <div class="text-start">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Export Format</label>
+              <select id="exportFormat" class="form-select">
+                <option value="excel">Excel (.xlsx)</option>
+                <option value="csv">CSV (.csv)</option>
+                <option value="pdf">PDF Report</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Include Data</label>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="includeEmployeeProfiles" checked>
+                <label class="form-check-label" for="includeEmployeeProfiles">
+                  Employee Profile Information
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="includeDetailedFeedback" checked>
+                <label class="form-check-label" for="includeDetailedFeedback">
+                  Detailed Feedback Comments
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="includeAdminResponses" checked>
+                <label class="form-check-label" for="includeAdminResponses">
+                  Admin Responses & Actions
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="includeCompetencyRequests">
+                <label class="form-check-label" for="includeCompetencyRequests">
+                  Competency Feedback Requests
+                </label>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Date Range</label>
+              <select id="exportDateRange" class="form-select">
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+              </select>
+            </div>
+            <div class="alert alert-info">
+              <i class="bi bi-info-circle me-2"></i>
+              <small>Export will include employee profile tracking data and comprehensive feedback analytics.</small>
+            </div>
+          </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-download me-1"></i>Export Data',
+        cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+        customClass: {
+          confirmButton: 'btn btn-success me-2',
+          cancelButton: 'btn btn-secondary'
+        },
+        buttonsStyling: false,
+        width: '600px',
+        preConfirm: () => {
+          return {
+            format: document.getElementById('exportFormat').value,
+            includeEmployeeProfiles: document.getElementById('includeEmployeeProfiles').checked,
+            includeDetailedFeedback: document.getElementById('includeDetailedFeedback').checked,
+            includeAdminResponses: document.getElementById('includeAdminResponses').checked,
+            includeCompetencyRequests: document.getElementById('includeCompetencyRequests').checked,
+            dateRange: document.getElementById('exportDateRange').value
+          };
         }
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          bootstrap.Modal.getInstance(document.getElementById('respondModal')).hide();
+      });
+
+      if (exportOptions) {
+        await performExport(exportOptions);
+      }
+    }
+
+    // Perform Export
+    async function performExport(options) {
+      try {
+        // Show loading
+        Swal.fire({
+          title: 'Generating Export...',
+          html: `
+            <div class="text-center">
+              <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p>Preparing ${options.format.toUpperCase()} export with employee profile tracking...</p>
+              <small class="text-muted">This may take a few moments for large datasets.</small>
+            </div>
+          `,
+          icon: 'info',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false
+        });
+
+        // Build export URL with parameters
+        const params = new URLSearchParams();
+        params.append('format', options.format);
+        params.append('include_profiles', options.includeEmployeeProfiles ? '1' : '0');
+        params.append('include_detailed', options.includeDetailedFeedback ? '1' : '0');
+        params.append('include_responses', options.includeAdminResponses ? '1' : '0');
+        params.append('include_competency', options.includeCompetencyRequests ? '1' : '0');
+        params.append('date_range', options.dateRange);
+
+        // Add current filter parameters
+        const currentEmployee = document.getElementById('employeeFilter').value;
+        const currentTraining = document.getElementById('trainingFilter').value;
+        const currentRating = document.getElementById('ratingFilter').value;
+        const currentDateFilter = document.getElementById('dateFilter').value;
+
+        if (currentEmployee) params.append('employee_filter', currentEmployee);
+        if (currentTraining) params.append('training_filter', currentTraining);
+        if (currentRating) params.append('rating_filter', currentRating);
+        if (currentDateFilter) params.append('date_filter', currentDateFilter);
+
+        // Trigger download
+        const exportUrl = `/admin/training-feedback/export?${params.toString()}`;
+        
+        // Create hidden link and trigger download
+        const link = document.createElement('a');
+        link.href = exportUrl;
+        link.download = `training_feedback_export_${new Date().toISOString().split('T')[0]}.${options.format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Show success message
+        setTimeout(async () => {
+          await Swal.fire({
+            title: 'Export Complete!',
+            html: `
+              <div class="text-center">
+                <i class="bi bi-check-circle-fill text-success fs-1 mb-3"></i>
+                <p>Your ${options.format.toUpperCase()} export has been generated successfully.</p>
+                <div class="alert alert-success text-start">
+                  <strong>Export includes:</strong>
+                  <ul class="mb-0 mt-2">
+                    ${options.includeEmployeeProfiles ? '<li>Employee profile information</li>' : ''}
+                    ${options.includeDetailedFeedback ? '<li>Detailed feedback comments</li>' : ''}
+                    ${options.includeAdminResponses ? '<li>Admin responses & actions</li>' : ''}
+                    ${options.includeCompetencyRequests ? '<li>Competency feedback requests</li>' : ''}
+                  </ul>
+                </div>
+              </div>
+            `,
+            icon: 'success',
+            confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+            customClass: {
+              confirmButton: 'btn btn-success'
+            },
+            buttonsStyling: false
+          });
+        }, 2000);
+
+      } catch (error) {
+        console.error('Export error:', error);
+        await Swal.fire({
+          title: 'Export Failed!',
+          text: 'An error occurred while generating the export. Please try again.',
+          icon: 'error',
+          confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+          customClass: {
+            confirmButton: 'btn btn-danger'
+          },
+          buttonsStyling: false
+        });
+      }
+    }
+
+    // Enhanced Refresh Data with Analytics Update
+    async function refreshData() {
+      try {
+        // Show loading with progress
+        Swal.fire({
+          title: 'Refreshing Data...',
+          html: `
+            <div class="text-center">
+              <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p>Updating employee profiles and feedback analytics...</p>
+              <div class="progress mb-3" style="height: 6px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+              </div>
+              <small class="text-muted">Fetching latest data from server...</small>
+            </div>
+          `,
+          icon: 'info',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            // Animate progress bar
+            const progressBar = document.querySelector('.progress-bar');
+            let width = 0;
+            const interval = setInterval(() => {
+              width += 10;
+              progressBar.style.width = width + '%';
+              if (width >= 90) {
+                clearInterval(interval);
+              }
+            }, 100);
+          }
+        });
+
+        // Fetch updated analytics data
+        const response = await fetch('/admin/training-feedback/analytics', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Update analytics cards
+          if (data.analytics) {
+            document.getElementById('totalFeedback').textContent = data.analytics.totalFeedback || 0;
+            document.getElementById('avgRating').textContent = parseFloat(data.analytics.avgRating || 0).toFixed(1);
+            document.getElementById('thisWeekFeedback').textContent = data.analytics.thisWeekFeedback || 0;
+            document.getElementById('recommendationRate').textContent = parseFloat(data.analytics.recommendationRate || 0).toFixed(1) + '%';
+          }
+
+          // Show success and reload
+          await Swal.fire({
+            title: 'Data Refreshed!',
+            html: `
+              <div class="text-center">
+                <i class="bi bi-arrow-clockwise text-success fs-1 mb-3"></i>
+                <p>Employee profiles and feedback data have been updated successfully.</p>
+                <div class="row text-center mt-3">
+                  <div class="col-6">
+                    <div class="card border-primary">
+                      <div class="card-body py-2">
+                        <small class="text-muted">Total Feedback</small>
+                        <div class="fw-bold text-primary">${data.analytics?.totalFeedback || 0}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-6">
+                    <div class="card border-success">
+                      <div class="card-body py-2">
+                        <small class="text-muted">Avg Rating</small>
+                        <div class="fw-bold text-success">${parseFloat(data.analytics?.avgRating || 0).toFixed(1)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `,
+            icon: 'success',
+            confirmButtonText: '<i class="bi bi-check me-1"></i>Continue',
+            customClass: {
+              confirmButton: 'btn btn-success'
+            },
+            buttonsStyling: false,
+            timer: 3000,
+            timerProgressBar: true
+          });
+
+          // Reload page to show updated data
           location.reload();
         } else {
-          alert('Error sending response');
+          throw new Error('Failed to fetch analytics data');
         }
+
+      } catch (error) {
+        console.error('Refresh error:', error);
+        await Swal.fire({
+          title: 'Refresh Failed!',
+          text: 'Unable to refresh data. Reloading page instead.',
+          icon: 'warning',
+          confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Reload Page',
+          customClass: {
+            confirmButton: 'btn btn-warning'
+          },
+          buttonsStyling: false
+        });
+        location.reload();
+      }
+    }
+
+    // Competency Request Functions
+    function viewCompetencyRequestDetails(requestId) {
+      fetch(`/admin/competency-feedback/${requestId}`)
+        .then(response => response.json())
+        .then(data => {
+          const content = `
+            <div class="row">
+              <div class="col-md-6">
+                <h6 class="fw-bold text-primary">Employee Information</h6>
+                <table class="table table-borderless">
+                  <tr><td><strong>Employee:</strong></td><td>${data.employee?.first_name || 'Unknown'} ${data.employee?.last_name || 'User'}</td></tr>
+                  <tr><td><strong>Employee ID:</strong></td><td>${data.employee?.employee_id || 'N/A'}</td></tr>
+                  <tr><td><strong>Department:</strong></td><td>${data.employee?.department || 'N/A'}</td></tr>
+                </table>
+                
+                <h6 class="fw-bold text-primary mt-4">Competency Information</h6>
+                <table class="table table-borderless">
+                  <tr><td><strong>Competency:</strong></td><td>${data.competency?.competency_name || 'Unknown'}</td></tr>
+                  <tr><td><strong>Category:</strong></td><td>${data.competency?.category || 'General'}</td></tr>
+                  <tr><td><strong>Description:</strong></td><td>${data.competency?.description || 'No description'}</td></tr>
+                </table>
+              </div>
+              <div class="col-md-6">
+                <h6 class="fw-bold text-primary">Request Details</h6>
+                <div class="mb-3">
+                  <strong>Request Message:</strong>
+                  <p class="text-muted border-start border-3 border-primary ps-3">${data.request_message || 'No message provided'}</p>
+                </div>
+                <div class="mb-3">
+                  <strong>Status:</strong>
+                  <span class="badge bg-${data.status == 'pending' ? 'warning' : (data.status == 'responded' ? 'success' : 'secondary')}">${data.status.charAt(0).toUpperCase() + data.status.slice(1)}</span>
+                </div>
+                <div class="mb-3">
+                  <strong>Requested:</strong> ${new Date(data.created_at).toLocaleDateString()}
+                </div>
+                ${data.responded_at ? `<div class="mb-3"><strong>Responded:</strong> ${new Date(data.responded_at).toLocaleDateString()}</div>` : ''}
+                
+                ${data.manager_response ? `
+                  <h6 class="fw-bold text-success mt-4">Manager Response</h6>
+                  <div class="alert alert-success">
+                    <p class="mb-1">${data.manager_response}</p>
+                    ${data.manager ? `<small><strong>Responded by:</strong> ${data.manager.name}</small>` : ''}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `;
+          document.getElementById('viewFeedbackContent').innerHTML = content;
+          
+          // Show modal
+          const modal = new bootstrap.Modal(document.getElementById('viewFeedbackModal'));
+          modal.show();
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Error loading request details');
+        });
+    }
+
+    // Respond to Competency Request with Confirmation
+    async function respondToCompetencyRequestWithConfirmation(requestId) {
+      const passwordVerified = await verifyAdminPassword();
+      if (passwordVerified) {
+        await showRespondToCompetencyRequestForm(requestId);
+      }
+    }
+
+    // Show Respond to Competency Request Form
+    async function showRespondToCompetencyRequestForm(requestId) {
+      const { value: formValues } = await Swal.fire({
+        title: 'Respond to Competency Request',
+        html: `
+          <div class="text-start">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Manager Response</label>
+              <textarea id="managerResponse" class="form-control" rows="4" placeholder="Provide feedback on the employee's competency progress..." required></textarea>
+            </div>
+          </div>
+        `,
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-send me-1"></i>Send Response',
+        cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+        customClass: {
+          confirmButton: 'btn btn-warning me-2',
+          cancelButton: 'btn btn-secondary'
+        },
+        buttonsStyling: false,
+        width: '600px',
+        preConfirm: () => {
+          const managerResponse = document.getElementById('managerResponse').value;
+
+          if (!managerResponse.trim()) {
+            Swal.showValidationMessage('Manager response is required');
+            return false;
+          }
+
+          return {
+            manager_response: managerResponse
+          };
+        }
+      });
+
+      if (formValues) {
+        await submitCompetencyResponse(requestId, formValues);
+      }
+    }
+
+    // Submit Competency Response
+    async function submitCompetencyResponse(requestId, formData) {
+      try {
+        // Show loading
+        Swal.fire({
+          title: 'Sending Response...',
+          text: 'Please wait while we send your response',
+          icon: 'info',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const response = await fetch(`/admin/competency-feedback/${requestId}/respond`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+          },
+          body: JSON.stringify(formData)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          await Swal.fire({
+            title: 'Response Sent!',
+            text: 'Your response has been sent successfully.',
+            icon: 'success',
+            confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+            customClass: {
+              confirmButton: 'btn btn-success'
+            },
+            buttonsStyling: false
+          });
+          location.reload();
+        } else {
+          await Swal.fire({
+            title: 'Error!',
+            text: 'Failed to send response. Please try again.',
+            icon: 'error',
+            confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+            customClass: {
+              confirmButton: 'btn btn-danger'
+            },
+            buttonsStyling: false
+          });
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        await Swal.fire({
+          title: 'Network Error!',
+          text: 'An unexpected error occurred. Please try again.',
+          icon: 'error',
+          confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+          customClass: {
+            confirmButton: 'btn btn-danger'
+          },
+          buttonsStyling: false
+        });
+      }
+    }
+
+    // Mark Competency Request as Reviewed with Confirmation
+    async function markCompetencyRequestAsReviewedWithConfirmation(requestId) {
+      const confirmed = await Swal.fire({
+        title: 'Mark as Reviewed',
+        text: 'Are you sure you want to mark this competency request as reviewed?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Yes, Mark as Reviewed',
+        cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+        customClass: {
+          confirmButton: 'btn btn-success me-2',
+          cancelButton: 'btn btn-secondary'
+        },
+        buttonsStyling: false
+      });
+
+      if (confirmed.isConfirmed) {
+        const passwordVerified = await verifyAdminPassword();
+        if (passwordVerified) {
+          await markCompetencyRequestAsReviewed(requestId);
+        }
+      }
+    }
+
+    // Mark Competency Request as Reviewed
+    async function markCompetencyRequestAsReviewed(requestId) {
+      try {
+        // Show loading
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Marking request as reviewed',
+          icon: 'info',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        const response = await fetch(`/admin/competency-feedback/${requestId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+          }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          await Swal.fire({
+            title: 'Success!',
+            text: 'Competency request has been marked as reviewed.',
+            icon: 'success',
+            confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+            customClass: {
+              confirmButton: 'btn btn-success'
+            },
+            buttonsStyling: false
+          });
+          location.reload();
+        } else {
+          await Swal.fire({
+            title: 'Error!',
+            html: `<div class="text-start">
+              <p><strong>Failed to mark request as reviewed.</strong></p>
+              <p><small>Error: ${data.message || 'Unknown error'}</small></p>
+              <p><small>Request ID: ${requestId}</small></p>
+            </div>`,
+            icon: 'error',
+            confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+            customClass: {
+              confirmButton: 'btn btn-danger'
+            },
+            buttonsStyling: false
+          });
+        }
+      } catch (error) {
+        console.error('Fetch error:', error);
+        await Swal.fire({
+          title: 'Network Error!',
+          html: `<div class="text-start">
+            <p><strong>An unexpected error occurred.</strong></p>
+            <p><small>Error: ${error.message}</small></p>
+            <p><small>Request ID: ${requestId}</small></p>
+            <p><small>Please check the browser console for more details.</small></p>
+          </div>`,
+          icon: 'error',
+          confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+          customClass: {
+            confirmButton: 'btn btn-danger'
+          },
+          buttonsStyling: false
+        });
+      }
+    }
+
+    // Employee Profile Tracking Function
+    async function viewEmployeeProfile(employeeId) {
+      console.log('viewEmployeeProfile called with ID:', employeeId);
+      
+      if (!employeeId || employeeId === 'N/A') {
+        await Swal.fire({
+          title: 'Profile Not Available',
+          text: 'Employee profile information is not available for this record.',
+          icon: 'info',
+          confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+          customClass: {
+            confirmButton: 'btn btn-info'
+          },
+          buttonsStyling: false
+        });
+        return;
+      }
+
+      try {
+        // Show loading
+        Swal.fire({
+          title: 'Loading Employee Profile...',
+          html: `
+            <div class="text-center">
+              <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p>Fetching profile data for Employee ID: <strong>${employeeId}</strong></p>
+              <small class="text-muted">API URL: /admin/employee-profile/${employeeId}</small>
+            </div>
+          `,
+          icon: 'info',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false
+        });
+
+        // Fetch employee profile data
+        const apiUrl = `/admin/employee-profile/${employeeId}`;
+        console.log('Fetching from URL:', apiUrl);
+        
+        const response = await fetch(apiUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+          }
+        });
+
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+
+        if (response.ok) {
+          const employee = await response.json();
+          console.log('Employee data received:', employee);
+          
+          await Swal.fire({
+            title: 'Employee Profile',
+            html: `
+              <div class="text-start">
+                <div class="row">
+                  <div class="col-md-4 text-center">
+                    ${employee.profile_picture || employee.photo ? `
+                      <img src="/storage/employee_photos/${employee.profile_picture || employee.photo}" 
+                           alt="${employee.first_name || 'Unknown'} ${employee.last_name || 'User'}" 
+                           class="rounded-circle mx-auto mb-3" 
+                           style="width: 80px; height: 80px; object-fit: cover; border: 3px solid #007bff;"
+                           onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                      <div class="avatar-lg bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 80px; height: 80px; display: none; border: 3px solid #007bff;">
+                        <span class="text-primary fw-bold fs-2">${employee.first_name?.charAt(0) || 'U'}${employee.last_name?.charAt(0) || 'U'}</span>
+                      </div>
+                    ` : `
+                      <div class="avatar-lg bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 80px; height: 80px; border: 3px solid #007bff;">
+                        <span class="text-primary fw-bold fs-2">${employee.first_name?.charAt(0) || 'U'}${employee.last_name?.charAt(0) || 'U'}</span>
+                      </div>
+                    `}
+                    <h6 class="fw-bold">${employee.first_name || 'Unknown'} ${employee.last_name || 'User'}</h6>
+                    <small class="text-muted">${employee.employee_id || 'N/A'}</small>
+                  </div>
+                  <div class="col-md-8">
+                    <h6 class="fw-bold text-primary mb-3">Profile Information</h6>
+                    <table class="table table-borderless table-sm">
+                      <tr><td><strong>Employee ID:</strong></td><td>${employee.employee_id || 'N/A'}</td></tr>
+                      <tr><td><strong>Department:</strong></td><td>${employee.department || 'Not specified'}</td></tr>
+                      <tr><td><strong>Position:</strong></td><td>${employee.position || 'Not specified'}</td></tr>
+                      <tr><td><strong>Email:</strong></td><td>${employee.email || 'Not provided'}</td></tr>
+                      <tr><td><strong>Phone:</strong></td><td>${employee.phone || 'Not provided'}</td></tr>
+                      <tr><td><strong>Hire Date:</strong></td><td>${employee.hire_date ? new Date(employee.hire_date).toLocaleDateString() : 'Not available'}</td></tr>
+                      <tr><td><strong>Status:</strong></td><td><span class="badge bg-${employee.status === 'Active' ? 'success' : 'secondary'}">${employee.status || 'Unknown'}</span></td></tr>
+                    </table>
+                    
+                    ${employee.training_stats ? `
+                      <h6 class="fw-bold text-success mt-4 mb-3">Training Statistics</h6>
+                      <div class="row text-center">
+                        <div class="col-4">
+                          <div class="card border-primary">
+                            <div class="card-body py-2">
+                              <div class="fw-bold text-primary">${employee.training_stats.total_feedback || 0}</div>
+                              <small class="text-muted">Total Feedback</small>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-4">
+                          <div class="card border-success">
+                            <div class="card-body py-2">
+                              <div class="fw-bold text-success">${parseFloat(employee.training_stats.avg_rating || 0).toFixed(1)}</div>
+                              <small class="text-muted">Avg Rating</small>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="col-4">
+                          <div class="card border-info">
+                            <div class="card-body py-2">
+                              <div class="fw-bold text-info">${employee.training_stats.completed_trainings || 0}</div>
+                              <small class="text-muted">Completed</small>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ` : ''}
+                  </div>
+                </div>
+              </div>
+            `,
+            icon: 'info',
+            confirmButtonText: '<i class="bi bi-check me-1"></i>Close',
+            customClass: {
+              confirmButton: 'btn btn-primary'
+            },
+            buttonsStyling: false,
+            width: '700px'
+          });
+
+        } else {
+          // Get error details
+          const errorText = await response.text();
+          console.error('API Error Response:', errorText);
+          console.error('Response status:', response.status);
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+      } catch (error) {
+        console.error('Error loading employee profile:', error);
+        
+        // Show detailed error information
+        await Swal.fire({
+          title: 'Profile Not Found',
+          html: `
+            <div class="text-start">
+              <p><strong>Unable to load employee profile.</strong></p>
+              <div class="alert alert-warning">
+                <small><strong>Debug Information:</strong></small><br>
+                <small><strong>Employee ID:</strong> ${employeeId}</small><br>
+                <small><strong>API URL:</strong> /admin/employee-profile/${employeeId}</small><br>
+                <small><strong>Error:</strong> ${error.message}</small>
+              </div>
+              <p><small>Possible causes:</small></p>
+              <ul class="small">
+                <li>Employee record doesn't exist in database</li>
+                <li>API route not properly configured</li>
+                <li>Authentication/permission issues</li>
+                <li>Server error</li>
+              </ul>
+            </div>
+          `,
+          icon: 'warning',
+          confirmButtonText: '<i class="bi bi-check me-1"></i>OK',
+          customClass: {
+            confirmButton: 'btn btn-warning'
+          },
+          buttonsStyling: false,
+          width: '600px'
+        });
+      }
+    }
+
+    // Utility Functions
+    function applyFilters() {
+      const employee = document.getElementById('employeeFilter').value;
+      const training = document.getElementById('trainingFilter').value;
+      const rating = document.getElementById('ratingFilter').value;
+      const dateRange = document.getElementById('dateFilter').value;
+      
+      const params = new URLSearchParams();
+      if (employee) params.append('employee', employee);
+      if (training) params.append('training', training);
+      if (rating) params.append('rating', rating);
+      if (dateRange) params.append('date_range', dateRange);
+      
+      window.location.href = `${window.location.pathname}?${params.toString()}`;
+    }
+
+    // Initialize tooltips when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize Bootstrap tooltips
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
       });
     });
   </script>

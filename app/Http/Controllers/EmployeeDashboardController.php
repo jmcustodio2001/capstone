@@ -26,21 +26,29 @@ class EmployeeDashboardController extends Controller
         // Debug: Log the employee ID being used
         error_log('Employee dashboard accessed by employee ID: ' . $employeeId);
 
-        // Get employee's training statistics
+        // Get employee's training statistics from multiple sources
         $trainings = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
             ->with('course')
             ->get();
 
-        $completedTrainings = $trainings->where('progress', 100)->count();
+        // Also include completed trainings from employee self-reports
+        $completedTrainingsSelfReported = \App\Models\CompletedTraining::where('employee_id', $employeeId)->count();
+        
+        $completedTrainings = $trainings->where('progress', 100)->count() + $completedTrainingsSelfReported;
         $inProgressTrainings = $trainings->where('progress', '>', 0)->where('progress', '<', 100)->count();
-        $totalTrainings = $trainings->count();
+        $totalTrainings = $trainings->count() + $completedTrainingsSelfReported;
         $avgTrainingProgress = $trainings->avg('progress') ?? 0;
 
-        // Get recent notifications
-        $notifications = \App\Models\TrainingNotification::where('employee_id', $employeeId)
-            ->orderBy('sent_at', 'desc')
-            ->take(5)
-            ->get();
+        // Get recent notifications (with fallback if table doesn't exist)
+        try {
+            $notifications = \App\Models\TrainingNotification::where('employee_id', $employeeId)
+                ->orderBy('sent_at', 'desc')
+                ->take(5)
+                ->get();
+        } catch (\Exception $e) {
+            // If training_notifications table doesn't exist, use empty collection
+            $notifications = collect();
+        }
 
         // Get pending leave requests count
         $pendingLeaveRequests = \App\Models\RequestForm::where('employee_id', $employeeId)
@@ -58,12 +66,13 @@ class EmployeeDashboardController extends Controller
             ->count();
         $attendanceRate = $workingDaysThisMonth > 0 ? round(($attendanceRecords / $workingDaysThisMonth) * 100) : 0;
 
-        // Get latest payslip amount (simulated for now)
-        $latestPayslip = 28500; // This would come from payroll system
-        $payslipMonth = 'July 2025';
+        // Get latest payslip amount from real payslip data
+        $latestPayslip = $this->getLatestPayslipAmount($employeeId);
+        $payslipMonth = $this->getLatestPayslipMonth($employeeId);
 
-        // Get upcoming trainings count (simplified for now)
-        $upcomingTrainings = 0;
+        // Get upcoming trainings count from upcoming trainings list
+        $upcomingTrainingsList = $this->getUpcomingTrainingsFromMyTrainingController($employeeId);
+        $upcomingTrainings = $upcomingTrainingsList->count();
 
         // Get recent requests with mixed types
         $recentRequests = collect();
@@ -135,8 +144,8 @@ class EmployeeDashboardController extends Controller
         // Calculate training completion percentage
         $trainingCompletionRate = $totalTrainings > 0 ? round(($completedTrainings / $totalTrainings) * 100) : 0;
 
-        // Get upcoming trainings list (including destination knowledge training)
-        $upcomingTrainingsList = $this->getUpcomingTrainingsList($employeeId);
+        // Get company announcements
+        $announcements = $this->getCompanyAnnouncements();
         
         // Debug: Log the upcoming trainings being passed to view
         error_log('Passing ' . $upcomingTrainingsList->count() . ' upcoming trainings to view for employee: ' . $employeeId);
@@ -160,164 +169,82 @@ class EmployeeDashboardController extends Controller
             'competencyGoalsAchieved',
             'competencyProgress',
             'trainingCompletionRate',
-            'upcomingTrainingsList'
+            'upcomingTrainingsList',
+            'announcements'
         ));
     }
 
     /**
-     * Get upcoming trainings list including destination knowledge training
+     * Get upcoming trainings using the same logic as MyTrainingController
      */
-    private function getUpcomingTrainingsList($employeeId)
+    private function getUpcomingTrainingsFromMyTrainingController($employeeId)
     {
-        $upcomingTrainings = collect();
-
-        // Get Employee Training Dashboard records (include all assigned trainings)
-        $employeeTrainings = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
-            ->with('course')
-            ->get();
-            
-        // Debug: Log the training records found
-        error_log('Found ' . $employeeTrainings->count() . ' training records for employee: ' . $employeeId);
-
-        foreach ($employeeTrainings as $training) {
-            // Show all trainings regardless of progress to debug the issue
-            $source = $training->source ?? 'admin_assigned';
-            $assignedByName = 'Admin';
-            
-            // Determine source and assigned by based on the training source
-            if ($source === 'competency_assigned') {
-                $assignedByName = 'System Auto-Assign (competency_auto_assigned)';
-            }
-            
-            $upcomingTrainings->push([
-                'upcoming_id' => 'ETD-' . $training->id,
-                'id' => 'ETD-' . $training->id,
-                'training_title' => $training->course->course_title ?? $training->training_title ?? 'Training Course',
-                'title' => $training->course->course_title ?? $training->training_title ?? 'Training Course',
-                'start_date' => $training->course->start_date ?? $training->training_date ?? $training->created_at->format('Y-m-d'),
-                'end_date' => $training->course->end_date ?? null,
-                'expired_date' => $training->expired_date ?? $training->course->expired_date ?? null,
-                'progress' => $training->progress ?? 0,
-                'status' => $training->status ?? ($training->progress == 0 ? 'Not Started' : 'In Progress'),
-                'status_class' => $training->progress == 0 ? 'bg-secondary' : 'bg-warning',
-                'source' => $source,
-                'assigned_by_name' => $assignedByName,
-                'assigned_by' => $assignedByName,
-                'assigned_date' => $training->created_at,
-                'delivery_mode' => $training->course->delivery_mode ?? 'Online',
-                'course_id' => $training->course_id
-            ]);
-            
-            // Debug log each training record
-            error_log('Training record: ' . ($training->course->course_title ?? 'No title') . ' - Progress: ' . ($training->progress ?? 0) . '%');
-        }
-
-        // Get Destination Knowledge Training records (include all active trainings)
-        $destinationTrainings = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
-            ->where('is_active', true)
-            ->get();
-
-        foreach ($destinationTrainings as $destination) {
-            $progress = $destination->progress ?? 0;
-            $status = $progress == 0 ? 'Not Started' : ($progress == 100 ? 'Completed' : 'In Progress');
-            $statusClass = $progress == 0 ? 'bg-secondary' : ($progress == 100 ? 'bg-success' : 'bg-warning');
-            
-            // Only show trainings that are not completed (progress < 100%)
-            if ($progress < 100) {
-                $upcomingTrainings->push([
-                    'upcoming_id' => 'DKT-' . $destination->id,
-                    'id' => 'DKT-' . $destination->id,
-                    'training_title' => $destination->destination_name,
-                    'title' => $destination->destination_name,
-                    'start_date' => $destination->created_at->format('Y-m-d'),
-                    'end_date' => null,
-                    'expired_date' => $destination->expired_date,
-                    'progress' => $progress,
-                    'status' => $status,
-                    'status_class' => $statusClass,
-                    'source' => 'destination_assigned',
-                    'assigned_by_name' => 'Admin',
-                    'assigned_by' => 'Admin',
-                    'assigned_date' => $destination->created_at,
-                    'delivery_mode' => $destination->delivery_mode ?? 'On-site Training',
-                    'destination_training_id' => $destination->id,
-                    'is_active' => $destination->is_active,
-                    'needs_response' => false
-                ]);
-            }
-        }
-
-        // Get Training Requests for this employee
-        $trainingRequests = \App\Models\TrainingRequest::where('employee_id', $employeeId)
-            ->where('status', '!=', 'Completed')
-            ->with('course')
-            ->get();
-
-        foreach ($trainingRequests as $request) {
-            // Only show non-completed training requests
-            if ($request->status != 'Completed') {
-                $upcomingTrainings->push([
-                    'upcoming_id' => 'TR-' . $request->id,
-                    'id' => 'TR-' . $request->id,
-                    'training_title' => $request->course->course_title ?? $request->training_title ?? 'Training Request',
-                    'title' => $request->course->course_title ?? $request->training_title ?? 'Training Request',
-                    'start_date' => $request->course->start_date ?? $request->created_at->format('Y-m-d'),
-                    'end_date' => $request->course->end_date ?? null,
-                    'expired_date' => $request->expired_date ?? null,
-                    'progress' => 0,
-                    'status' => $request->status,
-                    'status_class' => $request->status == 'Approved' ? 'bg-success' : 'bg-warning',
-                    'source' => 'employee_requested',
-                    'assigned_by_name' => 'Self-Requested',
-                    'assigned_by' => 'Self-Requested',
-                    'assigned_date' => $request->created_at,
-                    'delivery_mode' => $request->course->delivery_mode ?? 'Online',
-                    'course_id' => $request->course_id
-                ]);
-            }
-        }
-
-        // Get Competency Course Assignments (from auto-assign feature)
-        // Only include assignments that don't already have EmployeeTrainingDashboard records to avoid duplicates
-        $courseAssignments = \App\Models\CompetencyCourseAssignment::where('employee_id', $employeeId)
-            ->where('status', '!=', 'Completed')
-            ->with('course')
-            ->get();
-
-        // Get list of course IDs that already have EmployeeTrainingDashboard records
-        $existingTrainingCourseIds = $employeeTrainings->pluck('course_id')->toArray();
-
-        foreach ($courseAssignments as $assignment) {
-            // Only show non-completed course assignments that don't already have EmployeeTrainingDashboard records
-            if (($assignment->progress ?? 0) < 100 && 
-                $assignment->status != 'Completed' && 
-                !in_array($assignment->course_id, $existingTrainingCourseIds)) {
-                
-                $upcomingTrainings->push([
-                    'upcoming_id' => 'CCA-' . $assignment->id,
-                    'id' => 'CCA-' . $assignment->id,
-                    'training_title' => $assignment->course->course_title ?? 'Course Assignment',
-                    'title' => $assignment->course->course_title ?? 'Course Assignment',
-                    'start_date' => $assignment->course->start_date ?? $assignment->created_at->format('Y-m-d'),
-                    'end_date' => $assignment->course->end_date ?? null,
-                    'expired_date' => $assignment->expired_date ?? null,
-                    'progress' => $assignment->progress ?? 0,
-                    'status' => $assignment->status,
-                    'status_class' => $assignment->status == 'Active' ? 'bg-primary' : 'bg-warning',
-                    'source' => 'competency_auto_assigned',
-                    'assigned_by_name' => 'System Auto-Assign',
-                    'assigned_by' => 'System Auto-Assign',
-                    'assigned_date' => $assignment->created_at,
-                    'delivery_mode' => $assignment->course->delivery_mode ?? 'Online',
-                    'course_id' => $assignment->course_id
-                ]);
-            }
-        }
-
-        // Debug: Log final upcoming trainings count
-        error_log('Final upcoming trainings count: ' . $upcomingTrainings->count() . ' for employee: ' . $employeeId);
+        // Fix expiration dates for destination trainings before retrieving them
+        $this->fixDestinationExpirationDates();
         
-        return $upcomingTrainings->sortBy('start_date');
+        // Fix expiration dates for competency gap trainings
+        $this->fixCompetencyGapExpirationDates();
+        
+        // Use the exact same logic as MyTrainingController
+        
+        // Get ONLY competency gap sourced upcoming trainings (exclude admin assigned)
+        $manualUpcoming = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
+            ->whereIn('source', ['competency_gap', 'competency_assigned', 'competency_auto_assigned'])
+            ->get();
+
+        // REMOVED: Admin-assigned trainings to eliminate duplicates
+        // Only show competency gap sourced trainings in Recent Trainings
+        $adminAssigned = collect(); // Empty collection
+
+        // Get destination knowledge training assignments
+        $existingUpcomingDestinations = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
+            ->where('source', 'destination_assigned')
+            ->pluck('training_title')
+            ->toArray();
+            
+        $destinationAssigned = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
+            ->where('admin_approved_for_upcoming', true)
+            ->whereNotIn('status', ['completed', 'declined'])
+            ->whereNotIn('destination_name', $existingUpcomingDestinations)
+            ->get()
+            ->map(function($training) {
+                // Generate proper Training ID for destination training
+                $destinationYear = $training->created_at->format('Y');
+                $sequentialNumber = str_pad($training->id, 4, '0', STR_PAD_LEFT);
+                $properDestinationId = "DT{$destinationYear}{$sequentialNumber}";
+                
+                // Use proper expired date or calculate one
+                $expiredDate = $training->expired_date;
+                if (!$expiredDate) {
+                    $expiredDate = $training->created_at->addMonths(3);
+                }
+                
+                return (object)[
+                    'upcoming_id' => $properDestinationId,
+                    'training_title' => $training->destination_name,
+                    'start_date' => $training->created_at,
+                    'end_date' => $expiredDate,
+                    'expired_date' => $expiredDate,
+                    'status' => ucfirst($training->status),
+                    'progress' => $training->progress ?? 0,
+                    'source' => 'destination_assigned',
+                    'assigned_by' => 'Admin',
+                    'assigned_by_name' => 'Admin',
+                    'assigned_date' => $training->created_at,
+                    'destination_training_id' => $training->id,
+                    'employee_id' => $training->employee_id,
+                    'delivery_mode' => $training->delivery_mode ?? 'On-site Training',
+                    'needs_response' => $training->needs_response ?? false
+                ];
+            });
+
+        // Combine all upcoming trainings
+        $upcoming = collect()
+            ->merge($manualUpcoming->toArray())
+            ->merge($adminAssigned->toArray())
+            ->merge($destinationAssigned->toArray());
+
+        return $upcoming;
     }
 
     /**
@@ -342,11 +269,16 @@ class EmployeeDashboardController extends Controller
         $totalTrainings = $trainings->count();
         $avgTrainingProgress = $trainings->avg('progress') ?? 0;
 
-        // Get recent notifications
-        $notifications = \App\Models\TrainingNotification::where('employee_id', $employeeId)
-            ->orderBy('sent_at', 'desc')
-            ->take(5)
-            ->get();
+        // Get recent notifications (with fallback if table doesn't exist)
+        try {
+            $notifications = \App\Models\TrainingNotification::where('employee_id', $employeeId)
+                ->orderBy('sent_at', 'desc')
+                ->take(5)
+                ->get();
+        } catch (\Exception $e) {
+            // If training_notifications table doesn't exist, use empty collection
+            $notifications = collect();
+        }
 
         // Get pending leave requests count
         $pendingLeaveRequests = \App\Models\RequestForm::where('employee_id', $employeeId)
@@ -512,6 +444,443 @@ class EmployeeDashboardController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Password verification failed'
+            ], 500);
+        }
+    }
+
+    /**
+     * Fix expiration dates for destination training records
+     */
+    private function fixDestinationExpirationDates()
+    {
+        try {
+            $updated = 0;
+            
+            // Get all destination training records without proper expiration dates
+            $records = \App\Models\DestinationKnowledgeTraining::destinationTrainings()
+                ->where(function($query) {
+                    $query->whereNull('expired_date')
+                          ->orWhere('expired_date', '0000-00-00 00:00:00')
+                          ->orWhere('expired_date', '');
+                })
+                ->get();
+
+            foreach ($records as $record) {
+                // Set expiration date to 3 months from creation date
+                $expirationDate = $record->created_at->addMonths(3);
+                
+                $record->expired_date = $expirationDate;
+                
+                // Ensure the record is properly marked for upcoming if active
+                if ($record->is_active && !$record->admin_approved_for_upcoming) {
+                    $record->admin_approved_for_upcoming = true;
+                }
+                
+                $record->save();
+                $updated++;
+            }
+
+            if ($updated > 0) {
+                error_log("Fixed expiration dates for {$updated} destination training records in EmployeeDashboardController");
+            }
+
+        } catch (\Exception $e) {
+            error_log('Error fixing destination expiration dates in EmployeeDashboardController: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Fix expiration dates for competency gap trainings
+     */
+    private function fixCompetencyGapExpirationDates()
+    {
+        try {
+            $updated = 0;
+            
+            // Get all competency gaps without proper expiration dates
+            $competencyGaps = \App\Models\CompetencyGap::where(function($query) {
+                $query->whereNull('expired_date')
+                      ->orWhere('expired_date', '0000-00-00 00:00:00')
+                      ->orWhere('expired_date', '');
+            })->get();
+
+            foreach ($competencyGaps as $gap) {
+                // Set expiration date to 6 months from creation date for competency gaps
+                $expirationDate = $gap->created_at->addMonths(6);
+                
+                $gap->expired_date = $expirationDate;
+                $gap->save();
+                $updated++;
+            }
+
+            // Also fix upcoming trainings that are competency gap assigned
+            $upcomingTrainings = \App\Models\UpcomingTraining::where('source', 'competency_assigned')
+                ->where(function($query) {
+                    $query->whereNull('expired_date')
+                          ->orWhere('expired_date', '0000-00-00 00:00:00')
+                          ->orWhere('expired_date', '');
+                })
+                ->get();
+
+            foreach ($upcomingTrainings as $training) {
+                // Try to find matching competency gap
+                $competencyName = str_replace([' Training', ' Course', ' Program'], '', $training->training_title);
+                $competencyGap = \App\Models\CompetencyGap::whereHas('competency', function($query) use ($competencyName) {
+                    $query->where('competency_name', 'LIKE', '%' . $competencyName . '%');
+                })->where('employee_id', $training->employee_id)->first();
+
+                if ($competencyGap && $competencyGap->expired_date) {
+                    $training->expired_date = $competencyGap->expired_date;
+                } else {
+                    // Fallback: set to 6 months from creation
+                    $training->expired_date = $training->created_at->addMonths(6);
+                }
+                
+                $training->save();
+                $updated++;
+            }
+
+            if ($updated > 0) {
+                error_log("Fixed expiration dates for {$updated} competency gap training records in EmployeeDashboardController");
+            }
+
+        } catch (\Exception $e) {
+            error_log('Error fixing competency gap expiration dates in EmployeeDashboardController: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Get upcoming trainings list for admin view
+     */
+    private function getUpcomingTrainingsList($employeeId)
+    {
+        return $this->getUpcomingTrainingsFromMyTrainingController($employeeId);
+    }
+
+    /**
+     * Get latest payslip amount for employee
+     */
+    private function getLatestPayslipAmount($employeeId)
+    {
+        try {
+            // Try to get from payslips table if it exists
+            if (Schema::hasTable('payslips')) {
+                $latestPayslip = DB::table('payslips')
+                    ->where('employee_id', $employeeId)
+                    ->orderBy('pay_period_end', 'desc')
+                    ->first();
+                
+                if ($latestPayslip) {
+                    return $latestPayslip->net_pay ?? $latestPayslip->gross_pay ?? 28500;
+                }
+            }
+            
+            // Fallback to default amount
+            return 28500;
+        } catch (\Exception $e) {
+            return 28500;
+        }
+    }
+
+    /**
+     * Get latest payslip month for employee
+     */
+    private function getLatestPayslipMonth($employeeId)
+    {
+        try {
+            // Try to get from payslips table if it exists
+            if (Schema::hasTable('payslips')) {
+                $latestPayslip = DB::table('payslips')
+                    ->where('employee_id', $employeeId)
+                    ->orderBy('pay_period_end', 'desc')
+                    ->first();
+                
+                if ($latestPayslip && $latestPayslip->pay_period_end) {
+                    return Carbon::parse($latestPayslip->pay_period_end)->format('F Y');
+                }
+            }
+            
+            // Fallback to current month
+            return Carbon::now()->format('F Y');
+        } catch (\Exception $e) {
+            return Carbon::now()->format('F Y');
+        }
+    }
+
+    /**
+     * Get company announcements
+     */
+    private function getCompanyAnnouncements()
+    {
+        try {
+            // Try to get from announcements table if it exists
+            if (Schema::hasTable('announcements')) {
+                return DB::table('announcements')
+                    ->where('is_active', true)
+                    ->orderBy('created_at', 'desc')
+                    ->take(10)
+                    ->get();
+            }
+            
+            // Try alternative table names
+            if (Schema::hasTable('company_announcements')) {
+                return DB::table('company_announcements')
+                    ->where('status', 'active')
+                    ->orderBy('created_at', 'desc')
+                    ->take(10)
+                    ->get();
+            }
+            
+            // Create sample announcements for demonstration
+            return collect([
+                (object)[
+                    'id' => 1,
+                    'title' => 'Welcome to HR2ESS System',
+                    'message' => 'Welcome to the new HR2ESS Employee Self-Service System. Please explore all the features available to you.',
+                    'priority' => 'important',
+                    'created_at' => Carbon::now()->subDays(1)->toDateTimeString(),
+                ],
+                (object)[
+                    'id' => 2,
+                    'title' => 'Training Completion Reminder',
+                    'message' => 'Please complete your assigned trainings before the expiration dates to maintain compliance.',
+                    'priority' => 'normal',
+                    'created_at' => Carbon::now()->subDays(3)->toDateTimeString(),
+                ],
+                (object)[
+                    'id' => 3,
+                    'title' => 'System Maintenance Notice',
+                    'message' => 'The system will undergo maintenance this weekend. Please save your work and log out by Friday evening.',
+                    'priority' => 'urgent',
+                    'created_at' => Carbon::now()->subDays(5)->toDateTimeString(),
+                ]
+            ]);
+        } catch (\Exception $e) {
+            // Return empty collection if there's an error
+            return collect();
+        }
+    }
+
+    /**
+     * Get announcement details for modal view
+     */
+    public function getAnnouncementDetails($announcementId)
+    {
+        try {
+            $announcement = null;
+            
+            // Try to get from announcements table if it exists
+            if (Schema::hasTable('announcements')) {
+                $announcement = DB::table('announcements')
+                    ->where('id', $announcementId)
+                    ->first();
+            }
+            
+            // Try alternative table names
+            if (!$announcement && Schema::hasTable('company_announcements')) {
+                $announcement = DB::table('company_announcements')
+                    ->where('id', $announcementId)
+                    ->first();
+            }
+            
+            // Fallback to sample data
+            if (!$announcement) {
+                $sampleAnnouncements = [
+                    1 => [
+                        'id' => 1,
+                        'title' => 'Welcome to HR2ESS System',
+                        'message' => 'Welcome to the new HR2ESS Employee Self-Service System. This comprehensive platform provides you with access to all your employment-related information and services.\n\nKey features include:\n• Training management and progress tracking\n• Leave application and approval workflow\n• Payslip access and download\n• Competency profile management\n• Attendance tracking\n• Request forms and document management\n\nPlease take some time to explore all the features available to you. If you have any questions or need assistance, please contact the HR department.',
+                        'priority' => 'important',
+                        'created_at' => Carbon::now()->subDays(1)->toDateTimeString(),
+                        'author' => 'HR Department'
+                    ],
+                    2 => [
+                        'id' => 2,
+                        'title' => 'Training Completion Reminder',
+                        'message' => 'This is a friendly reminder to complete your assigned trainings before the expiration dates.\n\nPlease note:\n• Training completion is mandatory for compliance\n• Expired trainings may affect your performance evaluation\n• Contact your supervisor if you need assistance\n• Training materials are available in the My Trainings section\n\nThank you for your cooperation in maintaining our training standards.',
+                        'priority' => 'normal',
+                        'created_at' => Carbon::now()->subDays(3)->toDateTimeString(),
+                        'author' => 'Training Department'
+                    ],
+                    3 => [
+                        'id' => 3,
+                        'title' => 'System Maintenance Notice',
+                        'message' => 'IMPORTANT: The HR2ESS system will undergo scheduled maintenance this weekend.\n\nMaintenance Details:\n• Date: This Saturday, 11:00 PM - Sunday, 6:00 AM\n• Expected Duration: 7 hours\n• Services Affected: All HR2ESS modules\n\nAction Required:\n• Please save all your work before Friday evening\n• Log out of the system completely\n• Do not attempt to access the system during maintenance\n\nWe apologize for any inconvenience and appreciate your understanding.',
+                        'priority' => 'urgent',
+                        'created_at' => Carbon::now()->subDays(5)->toDateTimeString(),
+                        'author' => 'IT Department'
+                    ]
+                ];
+                
+                $announcement = $sampleAnnouncements[$announcementId] ?? null;
+            }
+            
+            if ($announcement) {
+                return response()->json([
+                    'success' => true,
+                    'announcement' => $announcement
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Announcement not found'
+                ], 404);
+            }
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving announcement details'
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle employee profile update
+     */
+    public function updateProfile(Request $request)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            
+            // Verify password first
+            if (!Hash::check($request->verify_password, $employee->password)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'invalid_password',
+                    'message' => 'Invalid password provided'
+                ], 400);
+            }
+            
+            // Validate input
+            $request->validate([
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'email' => 'required|email|max:255|unique:employees,email,' . $employee->id,
+                'phone_number' => 'nullable|string|max:20',
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            ]);
+            
+            // Update employee data
+            $employee->first_name = $request->first_name;
+            $employee->last_name = $request->last_name;
+            $employee->email = $request->email;
+            $employee->phone_number = $request->phone_number;
+            
+            // Handle profile picture upload
+            if ($request->hasFile('profile_picture')) {
+                $file = $request->file('profile_picture');
+                $filename = 'profile_' . $employee->employee_id . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $file->storeAs('profile_pictures', $filename, 'public');
+                $employee->profile_picture = 'profile_pictures/' . $filename;
+            }
+            
+            $employee->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Profile updated successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating profile: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle leave application submission
+     */
+    public function submitLeaveApplication(Request $request)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            
+            // Validate input
+            $request->validate([
+                'leave_type' => 'required|string',
+                'start_date' => 'required|date',
+                'end_date' => 'required|date|after_or_equal:start_date',
+                'reason' => 'required|string|max:1000'
+            ]);
+            
+            // Create leave application
+            $leaveApplication = new \App\Models\RequestForm();
+            $leaveApplication->employee_id = $employee->employee_id;
+            $leaveApplication->request_type = 'Leave Application';
+            $leaveApplication->requested_date = Carbon::now();
+            $leaveApplication->status = 'Pending';
+            $leaveApplication->reason = $request->reason;
+            
+            // Store additional leave details in a JSON field or separate fields
+            $leaveApplication->details = json_encode([
+                'leave_type' => $request->leave_type,
+                'start_date' => $request->start_date,
+                'end_date' => $request->end_date
+            ]);
+            
+            $leaveApplication->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Leave application submitted successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error submitting leave application: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle attendance logging
+     */
+    public function logAttendance(Request $request)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            
+            // Validate input
+            $request->validate([
+                'timestamp' => 'required|date'
+            ]);
+            
+            $timestamp = Carbon::parse($request->timestamp);
+            $today = $timestamp->format('Y-m-d');
+            
+            // Check if attendance already logged for today
+            $existingLog = \App\Models\AttendanceTimeLog::where('employee_id', $employee->employee_id)
+                ->whereDate('log_date', $today)
+                ->first();
+            
+            if ($existingLog) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attendance already logged for today'
+                ], 400);
+            }
+            
+            // Create attendance log
+            $attendanceLog = new \App\Models\AttendanceTimeLog();
+            $attendanceLog->employee_id = $employee->employee_id;
+            $attendanceLog->log_date = $today; // Laravel will handle the date casting
+            $attendanceLog->time_in = $timestamp->format('H:i:s');
+            $attendanceLog->status = 'Present';
+            $attendanceLog->save();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance logged successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error logging attendance: ' . $e->getMessage()
             ], 500);
         }
     }

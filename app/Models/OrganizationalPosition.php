@@ -63,6 +63,6 @@ class OrganizationalPosition extends Model
         }
 
         $competencyIds = collect($this->required_competencies)->pluck('competency_id');
-        return Competency::whereIn('id', $competencyIds)->get();
+        return CompetencyLibrary::whereIn('id', $competencyIds)->get();
     }
 }

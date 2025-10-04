@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Admin Portal - Jetlouge Travels Admin</title>
-
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <!-- Bootstrap Icons -->
@@ -66,10 +66,20 @@
                 Sign In to Your Account
               </h3>
               @if($errors instanceof \Illuminate\Support\ViewErrorBag && $errors->any())
-            <div class="alert alert-danger d-none" id="errorAlert">
+            <div class="alert alert-danger" id="errorAlert">
               {{ $errors->first() }}
-              </div>
-             @endif
+            </div>
+      @endif
+      @if(session('lockout'))
+            <div class="alert alert-danger" id="lockoutAlert">
+              Account is temporarily locked. Please try again after {{ session('lockout') }}.
+            </div>
+      @endif
+      @if(session('attempts'))
+            <div class="alert alert-warning" id="attemptsAlert">
+              Warning: {{ 3 - session('attempts') }} login attempts remaining.
+            </div>
+      @endif
               <form method="POST" action="{{ route('admin.login.submit') }}" id="adminLoginForm">
                 @csrf
                   <div class="mb-3">
@@ -110,6 +120,10 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      // Clean up any old localStorage attempt tracking since we now use server-side tracking
+      localStorage.removeItem('loginAttempts');
+      localStorage.removeItem('lockoutTime');
+
       // Set CSRF token for AJAX requests
       const token = document.querySelector('meta[name="csrf-token"]');
       if (token) {
@@ -158,7 +172,7 @@
       const loginForm = document.getElementById('adminLoginForm');
       const submitBtn = document.getElementById('submitBtn');
       const emailInput = document.getElementById('email');
-      
+
       if (loginForm && submitBtn) {
         loginForm.addEventListener('submit', function(e) {
           e.preventDefault();
@@ -234,10 +248,8 @@
           submitBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Signing In...';
           submitBtn.disabled = true;
 
-          // Submit the form
-          setTimeout(() => {
-            loginForm.submit();
-          }, 500);
+          // Submit the form - server will handle attempt counting and lockout
+          loginForm.submit();
 
           // Re-enable button after a delay in case of errors
           setTimeout(() => {
@@ -302,6 +314,36 @@
           }
         });
       }, 1000);
+
+      // Show lockout alert if present from server
+      const lockoutAlert = document.getElementById('lockoutAlert');
+      if (lockoutAlert && !lockoutAlert.classList.contains('d-none')) {
+        const lockoutMessage = lockoutAlert.textContent.trim();
+        if (lockoutMessage) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Account Locked',
+            text: lockoutMessage,
+            confirmButtonColor: '#dc3545',
+            allowOutsideClick: false,
+            allowEscapeKey: false
+          });
+        }
+      }
+
+      // Show attempts warning if present from server
+      const attemptsAlert = document.getElementById('attemptsAlert');
+      if (attemptsAlert && !attemptsAlert.classList.contains('d-none')) {
+        const attemptsMessage = attemptsAlert.textContent.trim();
+        if (attemptsMessage) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Login Attempts Warning',
+            text: attemptsMessage,
+            confirmButtonColor: '#ffc107'
+          });
+        }
+      }
     });
   </script>
 </body>

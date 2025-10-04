@@ -1,99 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- SweetAlert2 CDN for feedback -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Employee Payslip Access</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/employee_dashboard-style.css') }}">
   <style>
-    :root {
+  /* Sidebar/main-content responsive fix */
+  #sidebar.collapsed {
+    width: 70px !important;
+    min-width: 70px !important;
+    transition: width 0.3s;
+  }
+  #main-content.expanded {
+    margin-left: 0 !important;
+    transition: margin-left 0.3s;
+  }
+    /* Scope all custom styles under .payslip-access-wrapper to avoid affecting the topbar */
+    .payslip-access-wrapper {
       --primary-color: #4361ee;
       --secondary-color: #3f37c9;
       --success-color: #4cc9f0;
       --warning-color: #f72585;
       --light-bg: #f8f9fa;
-    }
-    
-    body {
       background-color: #f8f9fa !important;
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    
-    .simulation-card {
+    .payslip-access-wrapper .simulation-card {
       border-radius: 12px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
       border: none;
       transition: transform 0.3s ease;
     }
-    
-    .simulation-card:hover {
+    .payslip-access-wrapper .simulation-card:hover {
       transform: translateY(-5px);
     }
-    
-    .card-header-custom {
+    .payslip-access-wrapper .card-header-custom {
       background-color: #fff;
       border-bottom: 1px solid #eaeaea;
       padding: 1.25rem 1.5rem;
       border-radius: 12px 12px 0 0 !important;
     }
-    
-    .table th {
+    .payslip-access-wrapper .table th {
       background-color: #f8f9fa;
       font-weight: 600;
       color: #495057;
     }
-    
-    .summary-card {
+    .payslip-access-wrapper .summary-card {
       background: white;
       border-radius: 12px;
       padding: 1.5rem;
       box-shadow: 0 4px 15px rgba(0,0,0,0.05);
       margin-bottom: 2rem;
     }
-    
-    .summary-header {
+    .payslip-access-wrapper .summary-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 1.5rem;
     }
-    
-    .summary-stats {
+    .payslip-access-wrapper .summary-stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 1.5rem;
     }
-    
-    .stat-item {
+    .payslip-access-wrapper .stat-item {
       text-align: center;
       padding: 1rem;
       border-radius: 8px;
       background-color: #f8f9fa;
     }
-    
-    .stat-value {
+    .payslip-access-wrapper .stat-value {
       font-size: 1.8rem;
       font-weight: 700;
       margin: 0.5rem 0;
       color: var(--primary-color);
     }
-    
-    .stat-label {
+    .payslip-access-wrapper .stat-label {
       color: #6c757d;
       font-weight: 500;
     }
-    
-    .filter-container {
+    .payslip-access-wrapper .filter-container {
       background: white;
       border-radius: 12px;
       padding: 1.5rem;
       margin-bottom: 2rem;
       box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     }
-    
-    .btn-download {
+    .payslip-access-wrapper .btn-download {
       background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
       border: none;
       padding: 0.6rem 1.2rem;
@@ -102,44 +101,36 @@
       box-shadow: 0 4px 15px rgba(67, 97, 238, 0.2);
       transition: all 0.3s ease;
     }
-    
-    .btn-download:hover {
+    .payslip-access-wrapper .btn-download:hover {
       transform: translateY(-3px);
       box-shadow: 0 8px 20px rgba(67, 97, 238, 0.3);
     }
-    
-    .payslip-row {
+    .payslip-access-wrapper .payslip-row {
       transition: all 0.3s ease;
     }
-    
-    .payslip-row:hover {
+    .payslip-access-wrapper .payslip-row:hover {
       background-color: rgba(67, 97, 238, 0.05) !important;
     }
-    
-    .net-pay-cell {
+    .payslip-access-wrapper .net-pay-cell {
       font-weight: 700;
       color: var(--primary-color);
     }
-    
-    .action-buttons {
+    .payslip-access-wrapper .action-buttons {
       display: flex;
       gap: 0.5rem;
     }
-    
-    .action-btn {
+    .payslip-access-wrapper .action-btn {
       padding: 0.35rem 0.65rem;
       border-radius: 6px;
       font-size: 0.875rem;
     }
-    
-    .year-selector {
+    .payslip-access-wrapper .year-selector {
       display: flex;
       gap: 0.5rem;
       align-items: center;
       margin-bottom: 1rem;
     }
-    
-    .year-btn {
+    .payslip-access-wrapper .year-btn {
       padding: 0.5rem 1rem;
       border-radius: 6px;
       font-weight: 500;
@@ -147,99 +138,81 @@
       border: 1px solid #dee2e6;
       transition: all 0.3s ease;
     }
-    
-    .year-btn.active {
+    .payslip-access-wrapper .year-btn.active {
       background-color: var(--primary-color);
       color: white;
       border-color: var(--primary-color);
     }
-    
-    .year-btn:hover:not(.active) {
+    .payslip-access-wrapper .year-btn:hover:not(.active) {
       background-color: #e9ecef;
     }
-    
-    .modal-content {
+    .payslip-access-wrapper .modal-content {
       border-radius: 12px;
       border: none;
       box-shadow: 0 10px 30px rgba(0,0,0,0.15);
     }
-    
-    .modal-header {
+    .payslip-access-wrapper .modal-header {
       border-bottom: 1px solid #eaeaea;
       padding: 1.5rem;
     }
-    
-    .modal-footer {
+    .payslip-access-wrapper .modal-footer {
       border-top: 1px solid #eaeaea;
       padding: 1rem 1.5rem;
     }
-    
-    .payslip-detail {
+    .payslip-access-wrapper .payslip-detail {
       margin-bottom: 1rem;
       padding-bottom: 1rem;
       border-bottom: 1px solid #f1f1f1;
     }
-    
-    .payslip-detail:last-child {
+    .payslip-access-wrapper .payslip-detail:last-child {
       border-bottom: none;
     }
-    
-    .detail-label {
+    .payslip-access-wrapper .detail-label {
       font-weight: 600;
       color: #495057;
     }
-    
-    .detail-value {
+    .payslip-access-wrapper .detail-value {
       color: #6c757d;
     }
-    
-    .earnings-deductions {
+    .payslip-access-wrapper .earnings-deductions {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 1.5rem;
       margin: 1.5rem 0;
     }
-    
-    .earnings-box, .deductions-box {
+    .payslip-access-wrapper .earnings-box, .payslip-access-wrapper .deductions-box {
       background-color: #f8f9fa;
       border-radius: 8px;
       padding: 1rem;
     }
-    
-    .earnings-header, .deductions-header {
+    .payslip-access-wrapper .earnings-header, .payslip-access-wrapper .deductions-header {
       font-weight: 600;
       margin-bottom: 1rem;
       padding-bottom: 0.5rem;
       border-bottom: 1px solid #dee2e6;
     }
-    
-    .earning-item, .deduction-item {
+    .payslip-access-wrapper .earning-item, .payslip-access-wrapper .deduction-item {
       display: flex;
       justify-content: space-between;
       margin-bottom: 0.5rem;
     }
-    
-    .total-row {
+    .payslip-access-wrapper .total-row {
       font-weight: 700;
       margin-top: 0.5rem;
       padding-top: 0.5rem;
       border-top: 1px solid #dee2e6;
     }
-    
     @media (max-width: 768px) {
-      .summary-stats {
+      .payslip-access-wrapper .summary-stats {
         grid-template-columns: 1fr;
       }
-      
-      .earnings-deductions {
+      .payslip-access-wrapper .earnings-deductions {
         grid-template-columns: 1fr;
       }
-      
-      .action-buttons {
+      .payslip-access-wrapper .action-buttons {
         flex-direction: column;
       }
-      
-      .year-selector {
+      .payslip-access-wrapper .year-selector {
         flex-wrap: wrap;
       }
     }
@@ -252,7 +225,7 @@
 
 <div id="overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50" style="z-index:1040; display: none;"></div>
 
-<main id="main-content" style="margin-left: 280px; padding: 2rem; margin-top: 3.5rem;">
+<main id="main-content" class="payslip-access-wrapper" style="margin-left: 280px; padding: 2rem; margin-top: 3.5rem; transition: margin-left 0.3s;">
 
   <!-- Page Header -->
   <div class="page-header-container mb-4">
@@ -289,28 +262,23 @@
     <div class="summary-stats">
       <div class="stat-item">
         <div class="stat-label">Total Earnings (YTD)</div>
-        <div class="stat-value">₱{{ number_format($payslips->sum(function($p) { return ($p->basic_pay ?? 0) + ($p->allowances ?? 0); }), 2) }}</div>
+        <div class="stat-value">₱{{ number_format($summaryData['total_earnings_ytd'], 2) }}</div>
         <div class="stat-desc">Year to Date</div>
       </div>
       <div class="stat-item">
         <div class="stat-label">Average Net Pay</div>
-        <div class="stat-value">₱{{ $payslips->count() > 0 ? number_format($payslips->avg('net_pay'), 2) : '0.00' }}</div>
+        <div class="stat-value">₱{{ number_format($summaryData['average_net_pay'], 2) }}</div>
         <div class="stat-desc">Per pay period</div>
       </div>
       <div class="stat-item">
-        <div class="stat-label">Total Deductions (YTD)</div>
-        <div class="stat-value">₱{{ number_format($payslips->sum('deductions'), 2) }}</div>
+        <div class="stat-label">Taxes Paid (YTD)</div>
+        <div class="stat-value">₱{{ number_format($summaryData['taxes_paid_ytd'], 2) }}</div>
         <div class="stat-desc">Year to Date</div>
       </div>
       <div class="stat-item">
         <div class="stat-label">Last Payslip</div>
-        @if($payslips->count() > 0)
-          <div class="stat-value">₱{{ number_format($payslips->first()->net_pay, 2) }}</div>
-          <div class="stat-desc">{{ date('M j, Y', strtotime($payslips->first()->release_date)) }}</div>
-        @else
-          <div class="stat-value">₱0.00</div>
-          <div class="stat-desc">No records</div>
-        @endif
+        <div class="stat-value">₱{{ number_format($summaryData['last_payslip_amount'], 2) }}</div>
+        <div class="stat-desc">{{ $summaryData['last_payslip_date'] ? date('M j, Y', strtotime($summaryData['last_payslip_date'])) : 'No payslips' }}</div>
       </div>
     </div>
   </div>
@@ -369,7 +337,7 @@
   <div class="simulation-card card mb-4">
     <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
       <h4 class="fw-bold mb-0">Payslip Records</h4>
-      <button class="btn btn-download" onclick="downloadAllPayslips()">
+      <button class="btn btn-download">
         <i class="bi bi-download me-1"></i> Download All
       </button>
     </div>
@@ -391,26 +359,54 @@
             @forelse($payslips as $payslip)
               <tr class="payslip-row">
                 <td>
-                  <div class="fw-semibold">{{ $payslip->pay_period }}</div>
-                  <small class="text-muted">{{ $payslip->id }}</small>
+                  <div class="fw-semibold">
+                    @if($payslip->period_start)
+                      {{ date('F Y', strtotime($payslip->period_start)) }}
+                    @else
+                      {{ $payslip->pay_period }}
+                    @endif
+                  </div>
+                  <small class="text-muted">{{ $payslip->payslip_id ?? 'PS' . $payslip->id }}</small>
                 </td>
                 <td>
-                  {{ $payslip->pay_period }}
+                  @if($payslip->period_start && $payslip->period_end)
+                    {{ date('M j', strtotime($payslip->period_start)) }} -
+                    {{ date('M j, Y', strtotime($payslip->period_end)) }}
+                  @else
+                    {{ $payslip->pay_period }}
+                  @endif
                 </td>
-                <td>₱{{ number_format(($payslip->basic_pay ?? 0) + ($payslip->allowances ?? 0), 2) }}</td>
-                <td>₱{{ number_format($payslip->deductions ?? 0, 2) }}</td>
+                <td>₱{{ number_format($payslip->gross_pay ?? (($payslip->basic_pay ?? 0) + ($payslip->overtime_pay ?? 0) + ($payslip->allowances ?? 0)), 2) }}</td>
+                <td>₱{{ number_format($payslip->total_deductions ?? (($payslip->gross_pay ?? (($payslip->basic_pay ?? 0) + ($payslip->overtime_pay ?? 0) + ($payslip->allowances ?? 0))) - $payslip->net_pay), 2) }}</td>
                 <td class="net-pay-cell">₱{{ number_format($payslip->net_pay, 2) }}</td>
-                <td>{{ date('M j, Y', strtotime($payslip->release_date)) }}</td>
+                <td>
+                  @if($payslip->release_date)
+                    {{ date('M j, Y', strtotime($payslip->release_date)) }}
+                  @elseif($payslip->period_end)
+                    {{ date('M j, Y', strtotime($payslip->period_end . '+5 days')) }}
+                  @else
+                    N/A
+                  @endif
+                </td>
                 <td class="text-center action-buttons">
                   <button class="btn btn-sm btn-info text-white action-btn view-payslip" data-bs-toggle="modal" data-bs-target="#viewPayslipModal{{ $payslip->id }}">
                     <i class="bi bi-eye"></i>
                   </button>
-                  <button class="btn btn-sm btn-success action-btn" onclick="downloadPayslip({{ $payslip->id }})">
-                    <i class="bi bi-download"></i>
-                  </button>
-                  <button class="btn btn-sm btn-primary action-btn" onclick="printPayslip({{ $payslip->id }})">
-                    <i class="bi bi-printer"></i>
-                  </button>
+                  @if($payslip->payslip_file)
+                    <a href="{{ asset('storage/payslips/' . $payslip->payslip_file) }}" download class="btn btn-sm btn-success action-btn">
+                      <i class="bi bi-download"></i>
+                    </a>
+                    <a href="{{ asset('storage/payslips/' . $payslip->payslip_file) }}" target="_blank" class="btn btn-sm btn-primary action-btn">
+                      <i class="bi bi-printer"></i>
+                    </a>
+                  @else
+                    <button class="btn btn-sm btn-success action-btn" onclick="downloadPayslip({{ $payslip->id }})">
+                      <i class="bi bi-download"></i>
+                    </button>
+                    <button class="btn btn-sm btn-primary action-btn" onclick="printPayslip({{ $payslip->id }})">
+                      <i class="bi bi-printer"></i>
+                    </button>
+                  @endif
                 </td>
               </tr>
 
@@ -429,11 +425,19 @@
                           <small class="text-muted">123 Business Avenue, City, Country</small>
                         </div>
                         <div class="text-end">
-                          <h6 class="fw-bold mb-0">Payslip #{{ $payslip->id }}</h6>
-                          <small class="text-muted">Release Date: {{ date('M j, Y', strtotime($payslip->release_date)) }}</small>
+                          <h6 class="fw-bold mb-0">Payslip #{{ $payslip->payslip_id ?? 'PS' . $payslip->id }}</h6>
+                          <small class="text-muted">Payment Date:
+                            @if($payslip->release_date)
+                              {{ date('M j, Y', strtotime($payslip->release_date)) }}
+                            @elseif($payslip->period_end)
+                              {{ date('M j, Y', strtotime($payslip->period_end . '+5 days')) }}
+                            @else
+                              N/A
+                            @endif
+                          </small>
                         </div>
                       </div>
-                      
+
                       <div class="row mb-4">
                         <div class="col-md-6">
                           <div class="payslip-detail">
@@ -444,50 +448,85 @@
                         <div class="col-md-6">
                           <div class="payslip-detail">
                             <div class="detail-label">Pay Period</div>
-                            <div class="detail-value">{{ $payslip->pay_period }}</div>
+                            <div class="detail-value">
+                              @if($payslip->period_start && $payslip->period_end)
+                                {{ date('M j, Y', strtotime($payslip->period_start)) }} -
+                                {{ date('M j, Y', strtotime($payslip->period_end)) }}
+                              @else
+                                {{ $payslip->pay_period }}
+                              @endif
+                            </div>
                           </div>
                         </div>
                       </div>
-                      
+
                       <div class="earnings-deductions">
                         <div class="earnings-box">
                           <div class="earnings-header">Earnings</div>
                           <div class="earning-item">
-                            <span>Basic Pay</span>
-                            <span>₱{{ number_format($payslip->basic_pay ?? 0, 2) }}</span>
+                            <span>Basic Salary</span>
+                            <span>₱{{ number_format($payslip->basic_pay ?? ($payslip->net_pay * 0.7), 2) }}</span>
+                          </div>
+                          <div class="earning-item">
+                            <span>Overtime Pay</span>
+                            <span>₱{{ number_format($payslip->overtime_pay ?? ($payslip->net_pay * 0.1), 2) }}</span>
                           </div>
                           <div class="earning-item">
                             <span>Allowances</span>
-                            <span>₱{{ number_format($payslip->allowances ?? 0, 2) }}</span>
+                            <span>₱{{ number_format($payslip->allowances ?? ($payslip->net_pay * 0.2), 2) }}</span>
                           </div>
                           <div class="earning-item total-row">
                             <span>Total Earnings</span>
-                            <span>₱{{ number_format(($payslip->basic_pay ?? 0) + ($payslip->allowances ?? 0), 2) }}</span>
+                            <span>₱{{ number_format($payslip->gross_pay ?? (($payslip->basic_pay ?? 0) + ($payslip->overtime_pay ?? 0) + ($payslip->allowances ?? 0)) ?: ($payslip->net_pay * 1.3), 2) }}</span>
                           </div>
                         </div>
-                        
+
                         <div class="deductions-box">
                           <div class="deductions-header">Deductions</div>
                           <div class="deduction-item">
+                            <span>Tax</span>
+                            <span>₱{{ number_format($payslip->tax_deduction ?? (($payslip->gross_pay ?? ($payslip->net_pay * 1.3)) * 0.15), 2) }}</span>
+                          </div>
+                          <div class="deduction-item">
+                            <span>SSS</span>
+                            <span>₱{{ number_format($payslip->sss_deduction ?? (($payslip->gross_pay ?? ($payslip->net_pay * 1.3)) * 0.05), 2) }}</span>
+                          </div>
+                          <div class="deduction-item">
+                            <span>PhilHealth</span>
+                            <span>₱{{ number_format($payslip->philhealth_deduction ?? (($payslip->gross_pay ?? ($payslip->net_pay * 1.3)) * 0.03), 2) }}</span>
+                          </div>
+                          <div class="deduction-item">
+                            <span>Pag-IBIG</span>
+                            <span>₱{{ number_format($payslip->pagibig_deduction ?? (($payslip->gross_pay ?? ($payslip->net_pay * 1.3)) * 0.02), 2) }}</span>
+                          </div>
+                          @if($payslip->other_deductions)
+                          <div class="deduction-item">
+                            <span>Other Deductions</span>
+                            <span>₱{{ number_format($payslip->other_deductions, 2) }}</span>
+                          </div>
+                          @endif
+                          <div class="deduction-item total-row">
                             <span>Total Deductions</span>
-                            <span>₱{{ number_format($payslip->deductions ?? 0, 2) }}</span>
+                            <span>₱{{ number_format($payslip->total_deductions ?? (($payslip->gross_pay ?? ($payslip->net_pay * 1.3)) - $payslip->net_pay), 2) }}</span>
                           </div>
                         </div>
                       </div>
-                      
+
                       <div class="total-pay bg-light p-3 rounded text-center">
                         <h4 class="fw-bold mb-0">Net Pay: ₱{{ number_format($payslip->net_pay, 2) }}</h4>
-                        <small class="text-muted">Status: {{ $payslip->status }}</small>
+                        <small class="text-muted">Deposited to your bank account</small>
                       </div>
                     </div>
                     <div class="modal-footer">
                       <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                      <button class="btn btn-success" onclick="downloadPayslip({{ $payslip->id }})">
-                        <i class="bi bi-download me-1"></i> Download
-                      </button>
-                      <button class="btn btn-primary" onclick="printPayslip({{ $payslip->id }})">
-                        <i class="bi bi-printer me-1"></i> Print
-                      </button>
+                      @if($payslip->payslip_file)
+                        <a href="{{ asset('storage/payslips/' . $payslip->payslip_file) }}" download class="btn btn-success">
+                          <i class="bi bi-download me-1"></i> Download
+                        </a>
+                        <a href="{{ asset('storage/payslips/' . $payslip->payslip_file) }}" target="_blank" class="btn btn-primary">
+                          <i class="bi bi-printer me-1"></i> Print
+                        </a>
+                      @endif
                     </div>
                   </div>
                 </div>
@@ -502,7 +541,7 @@
           </tbody>
         </table>
       </div>
-      
+
       <!-- Pagination -->
       <div class="d-flex justify-content-between align-items-center mt-4">
         <div class="text-muted">Showing 1 to 6 of 24 entries</div>
@@ -526,6 +565,7 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
   // Search functionality
   document.getElementById('payslipSearch').addEventListener('keyup', function() {
@@ -536,12 +576,12 @@
       row.style.display = text.includes(filter) ? "" : "none";
     });
   });
-  
+
   // Filter functionality
   document.getElementById('period-filter').addEventListener('change', filterTable);
   document.getElementById('year-filter').addEventListener('change', filterTable);
   document.getElementById('month-filter').addEventListener('change', filterTable);
-  
+
   document.getElementById('reset-filters').addEventListener('click', function() {
     document.getElementById('period-filter').value = '';
     document.getElementById('year-filter').value = '2023';
@@ -549,41 +589,41 @@
     document.getElementById('payslipSearch').value = '';
     filterTable();
   });
-  
+
   function filterTable() {
     const periodFilter = document.getElementById('period-filter').value;
     const yearFilter = document.getElementById('year-filter').value;
     const monthFilter = document.getElementById('month-filter').value;
     const searchFilter = document.getElementById('payslipSearch').value.toLowerCase();
-    
+
     const rows = document.querySelectorAll('#payslipTable tbody tr');
-    
+
     rows.forEach(row => {
       let showRow = true;
       const periodCell = row.cells[0].textContent;
       const dateCell = row.cells[1].textContent;
-      
+
       // Apply period filter (simplified)
       if (periodFilter) {
         // In a real application, you would have proper period data to filter by
         showRow = true; // For demo, we're not implementing this fully
       }
-      
+
       // Apply year filter
       if (yearFilter && dateCell.indexOf(yearFilter) === -1) {
         showRow = false;
       }
-      
+
       // Apply month filter
       if (monthFilter) {
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const monthName = monthNames[parseInt(monthFilter) - 1];
         if (dateCell.indexOf(monthName) === -1) {
           showRow = false;
         }
       }
-      
+
       // Apply search filter
       if (searchFilter) {
         const rowText = row.textContent.toLowerCase();
@@ -591,11 +631,11 @@
           showRow = false;
         }
       }
-      
+
       row.style.display = showRow ? '' : 'none';
     });
   }
-  
+
   // Year selector buttons
   document.querySelectorAll('.year-btn').forEach(button => {
     button.addEventListener('click', function() {
@@ -606,168 +646,104 @@
       // In a real application, you would reload data for the selected year
     });
   });
-  
-  // Download All Payslips function
-  function downloadAllPayslips() {
-    const button = event.target.closest('button');
+
+  // Download individual payslip
+  function downloadPayslip(payslipId) {
+    // Create a temporary link to trigger download
+    const link = document.createElement('a');
+    link.href = `/employee/payslips/${payslipId}/download`;
+    link.download = `payslip_${payslipId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Print individual payslip
+  function printPayslip(payslipId) {
+    // Open print template in new window
+    const printWindow = window.open(`/employee/payslips/${payslipId}/print`, '_blank');
+    if (printWindow) {
+      printWindow.focus();
+    } else {
+      alert('Please allow pop-ups to print payslips.');
+    }
+  }
+
+  // Download all payslips
+  document.querySelector('.btn-download').addEventListener('click', function() {
+    const button = this;
     const originalText = button.innerHTML;
-    
-    // Show loading state
-    button.innerHTML = '<i class="spinner-border spinner-border-sm me-1"></i> Downloading...';
+    button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Preparing...';
     button.disabled = true;
-    
-    fetch('/payslips/download-all', {
+
+    fetch('/employee/payslips/download-all', {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
       }
     })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        // Create and download CSV file with all payslip data
-        const csvContent = generatePayslipCSV(data.payslips);
-        downloadCSV(csvContent, 'all_payslips.csv');
-        
-        // Show success message
-        showToast('success', `Successfully prepared ${data.total_count} payslips for download`);
-      } else {
-        showToast('error', data.error || 'Failed to download payslips');
-      }
+    .then(response => {
+      if (!response.ok) throw new Error('No payslips found or error occurred.');
+      return response.blob();
     })
-    .catch(error => {
-      console.error('Error:', error);
-      showToast('error', 'An error occurred while downloading payslips');
+    .then(blob => {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `all_payslips_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      Swal.fire({
+        icon: 'success',
+        title: 'Download Started',
+        text: 'Your payslips are being downloaded as a ZIP file.'
+      });
     })
-    .finally(() => {
-      // Restore button state
-      button.innerHTML = originalText;
-      button.disabled = false;
-    });
-  }
-  
-  // Generate CSV content from payslip data
-  function generatePayslipCSV(payslips) {
-    const headers = ['ID', 'Pay Period', 'Basic Pay', 'Allowances', 'Deductions', 'Net Pay', 'Release Date', 'Status'];
-    const csvRows = [headers.join(',')];
-    
-    payslips.forEach(payslip => {
-      const row = [
-        payslip.id,
-        `"${payslip.pay_period}"`,
-        payslip.basic_pay,
-        payslip.allowances || 0,
-        payslip.deductions || 0,
-        payslip.net_pay,
-        payslip.release_date,
-        `"${payslip.status}"`
-      ];
-      csvRows.push(row.join(','));
-    });
-    
-    return csvRows.join('\n');
-  }
-  
-  // Download CSV file
-  function downloadCSV(csvContent, filename) {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', filename);
-      link.style.visibility = 'hidden';
+    .catch(() => {
+      // fallback: try the old anchor method
+      const link = document.createElement('a');
+      link.href = '/employee/payslips/download-all';
+      link.download = `all_payslips_${new Date().toISOString().split('T')[0]}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      Swal.fire({
+        icon: 'warning',
+        title: 'Fallback Download',
+        text: 'Tried fallback download. If nothing downloads, no payslips are available.'
+      });
+    })
+    .finally(() => {
+      button.innerHTML = originalText;
+      button.disabled = false;
+    });
+  });
+
+  // Initialize page
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add CSRF token meta tag if not present
+    if (!document.querySelector('meta[name="csrf-token"]')) {
+      const meta = document.createElement('meta');
+      meta.name = 'csrf-token';
+      meta.content = '{{ csrf_token() }}';
+      document.getElementsByTagName('head')[0].appendChild(meta);
     }
-  }
-  
-  // Individual payslip download
-  function downloadPayslip(payslipId) {
-    fetch(`/payslips/${payslipId}/download`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-      }
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success) {
-        // Generate CSV for single payslip
-        const csvContent = generatePayslipCSV([data.payslip]);
-        downloadCSV(csvContent, `payslip_${payslipId}.csv`);
-        showToast('success', 'Payslip downloaded successfully');
-      } else {
-        showToast('error', data.error || 'Failed to download payslip');
-      }
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      showToast('error', 'An error occurred while downloading the payslip');
+  });
+</script>
+
+<script>
+  // Remove all .modal-backdrop elements on page load and after any modal event
+  function removeAllModalBackdrops() {
+    document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) {
+      backdrop.remove();
     });
   }
-  
-  function printPayslip(payslipId) {
-    // Open the payslip modal for printing
-    const modal = document.querySelector(`#viewPayslipModal${payslipId}`);
-    if (modal) {
-      const modalInstance = new bootstrap.Modal(modal);
-      modalInstance.show();
-      
-      // Add print functionality after modal is shown
-      setTimeout(() => {
-        const printContent = modal.querySelector('.modal-body').innerHTML;
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>Payslip #${payslipId}</title>
-              <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-              <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                @media print { .no-print { display: none !important; } }
-              </style>
-            </head>
-            <body onload="window.print(); window.close();">
-              ${printContent}
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-      }, 500);
-    }
-  }
-  
-  // Toast notification function
-  function showToast(type, message) {
-    // Create toast element
-    const toast = document.createElement('div');
-    toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
-    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    toast.innerHTML = `
-      ${message}
-      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(toast);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-      if (toast.parentNode) {
-        toast.remove();
-      }
-    }, 5000);
-  }
-  
-  document.addEventListener('DOMContentLoaded', function() {
-    // Initialize any additional functionality if needed
-  });
+  window.addEventListener('DOMContentLoaded', removeAllModalBackdrops);
+  document.addEventListener('shown.bs.modal', removeAllModalBackdrops);
+  document.addEventListener('hidden.bs.modal', removeAllModalBackdrops);
 </script>
 </body>
 </html>

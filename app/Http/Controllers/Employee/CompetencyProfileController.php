@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EmployeeCompetencyProfile;
 use App\Models\Employee;
 use App\Models\CompetencyLibrary;
+use App\Models\CompetencyFeedbackRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -106,6 +107,10 @@ class CompetencyProfileController extends Controller
         $proficiencyLevel = (int) $profile->proficiency_level;
         $gapScore = max(0, 5 - $proficiencyLevel);
         
+        // Get real progress data for this specific competency
+        $progressData = $this->calculateRealAverageProgress($employee->employee_id);
+        $realProgress = $this->getRealCompetencyProgress($profile, $progressData['training_progress']);
+        
         $competencyTracker = [
             'id' => $profile->id,
             'employee_id' => $profile->employee_id,
@@ -119,8 +124,8 @@ class CompetencyProfileController extends Controller
             'current_level' => $proficiencyLevel,
             'target_level' => 5,
             'gap_score' => $gapScore,
-            'progress_percentage' => ($proficiencyLevel / 5) * 100,
-            'progress_status' => $this->getProgressStatusFromLevel($proficiencyLevel),
+            'progress_percentage' => $realProgress,
+            'progress_status' => $this->getProgressStatusFromPercentage($realProgress),
             'gap_status' => $this->getGapStatusFromScore($gapScore),
             'status' => 'Active',
             'assessment_date' => $profile->assessment_date,
@@ -142,21 +147,38 @@ class CompetencyProfileController extends Controller
     {
         $request->validate([
             'competency_id' => 'required|integer',
-            'employee_id' => 'required|integer'
+            'employee_id' => 'required|string',
+            'request_message' => 'nullable|string|max:1000'
         ]);
 
         try {
-            // Here you would typically:
-            // 1. Create a feedback request record
-            // 2. Send notification to manager
-            // 3. Log the request
+            // Create feedback request record
+            $feedbackRequest = \App\Models\CompetencyFeedbackRequest::create([
+                'employee_id' => $request->employee_id,
+                'competency_id' => $request->competency_id,
+                'request_message' => $request->request_message ?? 'Employee has requested feedback on their competency progress.',
+                'status' => 'pending'
+            ]);
+
+            // Log the request for audit trail
+            Log::info('Competency feedback request created', [
+                'request_id' => $feedbackRequest->id,
+                'employee_id' => $request->employee_id,
+                'competency_id' => $request->competency_id
+            ]);
             
-            // For now, we'll simulate success
             return response()->json([
                 'success' => true,
-                'message' => 'Feedback request sent to your manager successfully!'
+                'message' => 'Feedback request sent to your manager successfully!',
+                'request_id' => $feedbackRequest->id
             ]);
         } catch (\Exception $e) {
+            Log::error('Failed to create competency feedback request', [
+                'error' => $e->getMessage(),
+                'employee_id' => $request->employee_id ?? null,
+                'competency_id' => $request->competency_id ?? null
+            ]);
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send feedback request. Please try again.'
@@ -467,8 +489,20 @@ class CompetencyProfileController extends Controller
         
         if ($matchingTraining->isNotEmpty()) {
             $trainingAvg = $matchingTraining->avg('progress');
-            // Weighted average: 60% proficiency, 40% training
-            return round(($proficiencyProgress * 0.6) + ($trainingAvg * 0.4), 1);
+            
+            // If proficiency level is 5 stars (100%), always return 100%
+            if ($profile->proficiency_level >= 5) {
+                return 100.0;
+            }
+            
+            // If proficiency level is 4 stars (80%), use the higher of proficiency or training progress
+            if ($profile->proficiency_level >= 4) {
+                return round(max($proficiencyProgress, $trainingAvg), 1);
+            }
+            
+            // For lower levels, use weighted average but ensure it doesn't exceed proficiency level expectation
+            $weightedAverage = ($proficiencyProgress * 0.6) + ($trainingAvg * 0.4);
+            return round(max($proficiencyProgress, $weightedAverage), 1);
         }
         
         return round($proficiencyProgress, 1);

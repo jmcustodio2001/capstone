@@ -158,7 +158,8 @@ class ProfileUpdateController extends Controller
 
         $validationRules = [
             'field_name' => 'required|string|max:255',
-            'reason' => 'nullable|string|max:1000'
+            'reason' => 'nullable|string|max:1000',
+            'password_verification' => 'required|string|min:6'
         ];
 
         // Add validation rules based on field type
@@ -169,6 +170,11 @@ class ProfileUpdateController extends Controller
         }
 
         $request->validate($validationRules);
+
+        // Verify employee password
+        if (!Hash::check($request->password_verification, $employee->password)) {
+            return redirect()->back()->withErrors(['password_verification' => 'Invalid password. Please enter your correct password.']);
+        }
 
         // Get the current value from employee record with proper field mapping
         $fieldMapping = [
@@ -206,8 +212,14 @@ class ProfileUpdateController extends Controller
             'reason' => $request->reason
         ]);
 
+        Log::info('Profile update request updated successfully', [
+            'employee_id' => $employee->employee_id,
+            'update_id' => $profileUpdate->id,
+            'field_name' => $request->field_name
+        ]);
+
         return redirect()->route('employee.profile_updates.index')
-            ->with('success', 'Profile update request updated successfully!');
+            ->with('success', 'Profile update request updated successfully! Your changes have been saved and are pending approval.');
     }
 
     /**
@@ -249,7 +261,7 @@ class ProfileUpdateController extends Controller
     /**
      * Remove the specified profile update from storage.
      */
-    public function destroy(ProfileUpdate $profileUpdate)
+    public function destroy(Request $request, ProfileUpdate $profileUpdate)
     {
         $employee = Auth::guard('employee')->user();
 
@@ -258,10 +270,26 @@ class ProfileUpdateController extends Controller
             abort(403, 'Cannot delete this profile update.');
         }
 
+        // Validate password verification
+        $request->validate([
+            'password_verification' => 'required|string|min:6'
+        ]);
+
+        // Verify employee password
+        if (!Hash::check($request->password_verification, $employee->password)) {
+            return redirect()->back()->withErrors(['password_verification' => 'Invalid password. Please enter your correct password.']);
+        }
+
+        Log::info('Profile update request deleted', [
+            'employee_id' => $employee->employee_id,
+            'update_id' => $profileUpdate->id,
+            'field_name' => $profileUpdate->field_name
+        ]);
+
         $profileUpdate->delete();
 
         return redirect()->route('employee.profile_updates.index')
-            ->with('success', 'Profile update request deleted successfully!');
+            ->with('success', 'Profile update request deleted successfully! The request has been cancelled and removed from your profile.');
     }
 
     /**

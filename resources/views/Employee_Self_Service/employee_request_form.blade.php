@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}" />
   <title>Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
     .simulation-card {
       border-radius: 8px;
@@ -130,9 +133,9 @@
                 <td>{{ $request->request_type }}</td>
                 <td>{{ $request->reason }}</td>
                 <td>
-                  @if($request->status === 'approved')
+                  @if(strtolower($request->status) === 'approved')
                     <span class="badge bg-success bg-opacity-10 text-success badge-simulation">Approved</span>
-                  @elseif($request->status === 'pending')
+                  @elseif(strtolower($request->status) === 'pending')
                     <span class="badge bg-warning bg-opacity-10 text-warning badge-simulation">Pending</span>
                   @else
                     <span class="badge bg-danger bg-opacity-10 text-danger badge-simulation">Rejected</span>
@@ -140,23 +143,25 @@
                 </td>
                 <td>{{ \Carbon\Carbon::parse($request->requested_date)->format('d/m/Y') }}</td>
                 <td class="text-center action-btns">
-                  @if($request->status === 'pending')
-                    <button class="btn btn-success btn-sm me-1" onclick="updateRequestStatus({{ $request->request_id }}, 'approved')">
-                      <i class="bi bi-check-circle"></i> Approve
+                  <div class="btn-group" role="group">
+                    @if(strtolower($request->status) === 'pending')
+                      <button class="btn btn-success btn-sm" onclick="approveRequestWithConfirmation({{ $request->request_id }})" title="Approve Request">
+                        <i class="bi bi-check-circle"></i>
+                      </button>
+                      <button class="btn btn-danger btn-sm" onclick="rejectRequestWithConfirmation({{ $request->request_id }})" title="Reject Request">
+                        <i class="bi bi-x-circle"></i>
+                      </button>
+                    @endif
+                    <button class="btn btn-primary btn-sm" onclick="editRequestWithConfirmation({{ $request->request_id }}, '{{ addslashes($request->employee_id) }}', '{{ addslashes($request->request_type) }}', '{{ addslashes($request->reason) }}', '{{ $request->status }}', '{{ $request->requested_date }}', '{{ addslashes($request->rejection_reason ?? '') }}')" title="Edit Request">
+                      <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-danger btn-sm me-1" onclick="showRejectModal({{ $request->request_id }})">
-                      <i class="bi bi-x-circle"></i> Reject
+                    <button class="btn btn-info btn-sm" onclick="viewRequestDetails({{ $request->request_id }}, '{{ addslashes($request->employee ? $request->employee->first_name . ' ' . $request->employee->last_name : 'N/A') }}', '{{ addslashes($request->employee_id) }}', '{{ addslashes($request->request_type) }}', '{{ addslashes($request->reason) }}', '{{ $request->status }}', '{{ \Carbon\Carbon::parse($request->requested_date)->format('d/m/Y') }}', '{{ addslashes($request->rejection_reason ?? '') }}')" title="View Details">
+                      <i class="bi bi-eye"></i>
                     </button>
-                  @endif
-                  <button class="btn btn-primary btn-sm me-1" data-bs-toggle="modal" data-bs-target="#editRequestModal{{ $request->request_id }}">
-                    <i class="bi bi-pencil"></i> Edit
-                  </button>
-                  <button class="btn btn-info btn-sm me-1" data-bs-toggle="modal" data-bs-target="#viewRequestModal{{ $request->request_id }}">
-                    <i class="bi bi-eye"></i> View
-                  </button>
-                  <button class="btn btn-danger btn-sm" onclick="confirmDelete({{ $request->request_id }})">
-                    <i class="bi bi-trash"></i> Delete
-                  </button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteRequestWithConfirmation({{ $request->request_id }})" title="Delete Request">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
               
@@ -176,9 +181,9 @@
                         <li class="list-group-item"><strong>Request Type:</strong> {{ $request->request_type }}</li>
                         <li class="list-group-item"><strong>Reason:</strong> {{ $request->reason }}</li>
                         <li class="list-group-item"><strong>Status:</strong> 
-                          @if($request->status === 'approved')
+                          @if(strtolower($request->status) === 'approved')
                             <span class="badge bg-success">Approved</span>
-                          @elseif($request->status === 'pending')
+                          @elseif(strtolower($request->status) === 'pending')
                             <span class="badge bg-warning text-dark">Pending</span>
                           @else
                             <span class="badge bg-danger">Rejected</span>
@@ -191,7 +196,7 @@
                       </ul>
                     </div>
                     <div class="modal-footer">
-                      @if($request->status === 'pending')
+                      @if(strtolower($request->status) === 'pending')
                         <button type="button" class="btn btn-success" onclick="updateRequestStatus({{ $request->request_id }}, 'approved')">
                           <i class="bi bi-check-circle me-1"></i>Approve
                         </button>
@@ -296,112 +301,167 @@
     </div>
   </main>
 
-  <!-- Rejection Reason Modal -->
-  <div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title fw-bold"><i class="bi bi-x-circle me-2 text-danger"></i>Reject Request</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <p class="text-muted mb-3">Please provide a reason for rejecting this request:</p>
-          <textarea id="rejectionReason" class="form-control" rows="4" placeholder="Enter rejection reason..." required></textarea>
-          <div class="invalid-feedback" id="rejectionError" style="display: none;">
-            Please provide a reason for rejection.
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger" onclick="submitRejection()">
-            <i class="bi bi-x-circle me-1"></i>Reject Request
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Delete Confirmation Modal -->
-  <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title fw-bold"><i class="bi bi-trash me-2 text-danger"></i>Delete Request</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="text-center">
-            <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
-            <h5 class="mt-3 mb-3">Are you sure you want to delete this request?</h5>
-            <p class="text-muted mb-0">This action cannot be undone. The request will be permanently deleted from the system.</p>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-danger" onclick="deleteRequest()">
-            <i class="bi bi-trash me-1"></i>Delete Request
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   
-  <!-- Request Status Update Script -->
+  <!-- SweetAlert Enhanced Request Management Script -->
   <script>
-    let currentRequestId = null;
-
-    function updateRequestStatus(requestId, status) {
-      if (confirm(`Are you sure you want to ${status} this request?`)) {
-        fetch(`/admin/employee-request-forms/${requestId}/update-status`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-          },
-          body: JSON.stringify({ status: status })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            location.reload();
-          } else {
-            alert('Error updating request status');
+    // Approve Request with Password Confirmation
+    function approveRequestWithConfirmation(requestId) {
+      Swal.fire({
+        title: '<i class="bi bi-check-circle text-success"></i> Approve Request',
+        html: `
+          <div class="text-start">
+            <p class="mb-3">Please enter your admin password to approve this request:</p>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Admin Password:</label>
+              <input type="password" id="approvePassword" class="form-control" placeholder="Enter your password" minlength="3">
+              <div class="form-text text-muted">
+                <i class="bi bi-shield-lock"></i> Password verification required for security
+              </div>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Approve Request',
+        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
+        confirmButtonColor: '#198754',
+        cancelButtonColor: '#6c757d',
+        focusConfirm: false,
+        preConfirm: () => {
+          const password = document.getElementById('approvePassword').value;
+          if (!password) {
+            Swal.showValidationMessage('Please enter your password');
+            return false;
           }
+          if (password.length < 3) {
+            Swal.showValidationMessage('Password must be at least 3 characters');
+            return false;
+          }
+          return password;
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          submitApproval(requestId, result.value);
+        }
+      });
+    }
+
+    function submitApproval(requestId, password) {
+      Swal.fire({
+        title: 'Processing...',
+        text: 'Approving request, please wait...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      fetch(`/admin/employee-request-forms/${requestId}/update-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({ 
+          status: 'approved',
+          password: password
         })
-        .catch(error => {
-          console.error('Error:', error);
-          alert('Error updating request status');
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Request Approved!',
+            text: 'The employee request has been successfully approved.',
+            confirmButtonColor: '#198754',
+            timer: 2000,
+            timerProgressBar: true
+          }).then(() => {
+            location.reload();
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Approval Failed',
+            text: data.message || 'Invalid password. Please enter your correct admin password.',
+            confirmButtonColor: '#dc3545'
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Network Error',
+          text: 'Failed to approve request. Please check your connection and try again.',
+          confirmButtonColor: '#dc3545'
         });
-      }
+      });
     }
 
-    function showRejectModal(requestId) {
-      currentRequestId = requestId;
-      document.getElementById('rejectionReason').value = '';
-      document.getElementById('rejectionError').style.display = 'none';
-      document.getElementById('rejectionReason').classList.remove('is-invalid');
-      
-      const modal = new bootstrap.Modal(document.getElementById('rejectModal'));
-      modal.show();
+    // Reject Request with Password Confirmation
+    function rejectRequestWithConfirmation(requestId) {
+      Swal.fire({
+        title: '<i class="bi bi-x-circle text-danger"></i> Reject Request',
+        html: `
+          <div class="text-start">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Rejection Reason:</label>
+              <textarea id="rejectionReason" class="form-control" rows="3" placeholder="Please provide a reason for rejection..." required></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Admin Password:</label>
+              <input type="password" id="rejectPassword" class="form-control" placeholder="Enter your password" minlength="3">
+              <div class="form-text text-muted">
+                <i class="bi bi-shield-lock"></i> Password verification required for security
+              </div>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-x-circle me-1"></i>Reject Request',
+        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        focusConfirm: false,
+        preConfirm: () => {
+          const reason = document.getElementById('rejectionReason').value.trim();
+          const password = document.getElementById('rejectPassword').value;
+          
+          if (!reason) {
+            Swal.showValidationMessage('Please provide a rejection reason');
+            return false;
+          }
+          if (!password) {
+            Swal.showValidationMessage('Please enter your password');
+            return false;
+          }
+          if (password.length < 3) {
+            Swal.showValidationMessage('Password must be at least 3 characters');
+            return false;
+          }
+          return { reason, password };
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          submitRejection(requestId, result.value.reason, result.value.password);
+        }
+      });
     }
 
-    function submitRejection() {
-      const reason = document.getElementById('rejectionReason').value.trim();
-      const errorDiv = document.getElementById('rejectionError');
-      const textarea = document.getElementById('rejectionReason');
+    function submitRejection(requestId, reason, password) {
+      Swal.fire({
+        title: 'Processing...',
+        text: 'Rejecting request, please wait...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
 
-      if (!reason) {
-        textarea.classList.add('is-invalid');
-        errorDiv.style.display = 'block';
-        return;
-      }
-
-      textarea.classList.remove('is-invalid');
-      errorDiv.style.display = 'none';
-
-      fetch(`/admin/employee-request-forms/${currentRequestId}/update-status`, {
+      fetch(`/admin/employee-request-forms/${requestId}/update-status`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -409,57 +469,354 @@
         },
         body: JSON.stringify({ 
           status: 'rejected',
-          rejection_reason: reason
+          rejection_reason: reason,
+          password: password
         })
       })
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          const modal = bootstrap.Modal.getInstance(document.getElementById('rejectModal'));
-          modal.hide();
-          location.reload();
+          Swal.fire({
+            icon: 'success',
+            title: 'Request Rejected',
+            text: 'The employee request has been rejected with the provided reason.',
+            confirmButtonColor: '#dc3545',
+            timer: 2000,
+            timerProgressBar: true
+          }).then(() => {
+            location.reload();
+          });
         } else {
-          alert('Error rejecting request');
+          Swal.fire({
+            icon: 'error',
+            title: 'Rejection Failed',
+            text: data.message || 'Invalid password. Please enter your correct admin password.',
+            confirmButtonColor: '#dc3545'
+          });
         }
       })
       .catch(error => {
         console.error('Error:', error);
-        alert('Error rejecting request');
+        Swal.fire({
+          icon: 'error',
+          title: 'Network Error',
+          text: 'Failed to reject request. Please check your connection and try again.',
+          confirmButtonColor: '#dc3545'
+        });
       });
     }
 
-    // Delete functionality
-    let deleteRequestId = null;
+    // View Request Details
+    function viewRequestDetails(requestId, employeeName, employeeId, requestType, reason, status, requestedDate, rejectionReason) {
+      const statusBadge = status.toLowerCase() === 'approved' ? 
+        '<span class="badge bg-success">Approved</span>' :
+        status.toLowerCase() === 'pending' ?
+        '<span class="badge bg-warning text-dark">Pending</span>' :
+        '<span class="badge bg-danger">Rejected</span>';
 
-    function confirmDelete(requestId) {
-      deleteRequestId = requestId;
-      const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
-      modal.show();
+      const rejectionSection = rejectionReason ? 
+        `<tr><td class="fw-bold">Rejection Reason:</td><td class="text-danger">${rejectionReason}</td></tr>` : '';
+
+      Swal.fire({
+        title: '<i class="bi bi-eye text-info"></i> Request Details',
+        html: `
+          <div class="text-start">
+            <table class="table table-borderless">
+              <tr><td class="fw-bold">Request ID:</td><td>${requestId}</td></tr>
+              <tr><td class="fw-bold">Employee:</td><td>${employeeName}</td></tr>
+              <tr><td class="fw-bold">Employee ID:</td><td>${employeeId}</td></tr>
+              <tr><td class="fw-bold">Request Type:</td><td>${requestType}</td></tr>
+              <tr><td class="fw-bold">Reason:</td><td>${reason}</td></tr>
+              <tr><td class="fw-bold">Status:</td><td>${statusBadge}</td></tr>
+              <tr><td class="fw-bold">Requested Date:</td><td>${requestedDate}</td></tr>
+              ${rejectionSection}
+            </table>
+          </div>
+        `,
+        confirmButtonText: '<i class="bi bi-check-lg me-1"></i>Close',
+        confirmButtonColor: '#6c757d',
+        width: '600px'
+      });
     }
 
-    function deleteRequest() {
-      if (!deleteRequestId) return;
+    // Edit Request with Password Confirmation
+    function editRequestWithConfirmation(requestId, employeeId, requestType, reason, status, requestedDate, rejectionReason) {
+      Swal.fire({
+        title: '<i class="bi bi-shield-lock text-warning"></i> Password Verification',
+        html: `
+          <div class="text-start">
+            <p class="mb-3">Please enter your admin password to edit this request:</p>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Admin Password:</label>
+              <input type="password" id="editPassword" class="form-control" placeholder="Enter your password" minlength="3">
+              <div class="form-text text-muted">
+                <i class="bi bi-shield-lock"></i> Password verification required for security
+              </div>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-arrow-right me-1"></i>Continue to Edit',
+        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
+        confirmButtonColor: '#0d6efd',
+        cancelButtonColor: '#6c757d',
+        focusConfirm: false,
+        preConfirm: () => {
+          const password = document.getElementById('editPassword').value;
+          if (!password) {
+            Swal.showValidationMessage('Please enter your password');
+            return false;
+          }
+          if (password.length < 3) {
+            Swal.showValidationMessage('Password must be at least 3 characters');
+            return false;
+          }
+          return password;
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          showEditRequestForm(requestId, employeeId, requestType, reason, status, requestedDate, rejectionReason, result.value);
+        }
+      });
+    }
 
-      fetch(`/admin/employee-request-forms/${deleteRequestId}`, {
-        method: 'DELETE',
+    function showEditRequestForm(requestId, employeeId, requestType, reason, status, requestedDate, rejectionReason, password) {
+      const requestTypeOptions = [
+        'Leave / Time-Off Request Form',
+        'Overtime Request Form', 
+        'Work From Home / Remote Work Request Form',
+        'Shift Change / Schedule Adjustment Request',
+        'Expense Reimbursement Request',
+        'Training & Development Request',
+        'Travel Request Form',
+        'Equipment / Asset Request',
+        'Payroll / Salary Adjustment Request',
+        'Personal Information Update Request'
+      ];
+
+      const requestTypeOptionsHtml = requestTypeOptions.map(option => 
+        `<option value="${option}" ${option === requestType ? 'selected' : ''}>${option}</option>`
+      ).join('');
+
+      Swal.fire({
+        title: '<i class="bi bi-pencil text-primary"></i> Edit Request',
+        html: `
+          <div class="text-start">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Employee ID:</label>
+                  <input type="text" id="editEmployeeId" class="form-control" value="${employeeId}" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Request Type:</label>
+                  <select id="editRequestType" class="form-select" required>
+                    ${requestTypeOptionsHtml}
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Status:</label>
+                  <select id="editStatus" class="form-select" required>
+                    <option value="pending" ${status === 'pending' ? 'selected' : ''}>Pending</option>
+                    <option value="approved" ${status === 'approved' ? 'selected' : ''}>Approved</option>
+                    <option value="rejected" ${status === 'rejected' ? 'selected' : ''}>Rejected</option>
+                  </select>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Requested Date:</label>
+                  <input type="date" id="editRequestedDate" class="form-control" value="${requestedDate}" required>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Reason:</label>
+                  <textarea id="editReason" class="form-control" rows="3" required>${reason}</textarea>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-bold">Rejection Reason:</label>
+                  <textarea id="editRejectionReason" class="form-control" rows="2" placeholder="Enter rejection reason if status is rejected...">${rejectionReason}</textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Update Request',
+        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
+        confirmButtonColor: '#0d6efd',
+        cancelButtonColor: '#6c757d',
+        width: '800px',
+        focusConfirm: false,
+        preConfirm: () => {
+          const formData = {
+            employee_id: document.getElementById('editEmployeeId').value.trim(),
+            request_type: document.getElementById('editRequestType').value,
+            reason: document.getElementById('editReason').value.trim(),
+            status: document.getElementById('editStatus').value,
+            requested_date: document.getElementById('editRequestedDate').value,
+            rejection_reason: document.getElementById('editRejectionReason').value.trim()
+          };
+          
+          if (!formData.employee_id || !formData.request_type || !formData.reason || !formData.requested_date) {
+            Swal.showValidationMessage('Please fill in all required fields');
+            return false;
+          }
+          
+          return formData;
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          submitEditForm(requestId, result.value, password);
+        }
+      });
+    }
+
+    function submitEditForm(requestId, formData, password) {
+      Swal.fire({
+        title: 'Processing...',
+        text: 'Updating request, please wait...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      // Add password to form data
+      formData.password = password;
+
+      fetch(`/admin/employee-request-forms/${requestId}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        }
+        },
+        body: JSON.stringify(formData)
       })
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          const modal = bootstrap.Modal.getInstance(document.getElementById('deleteModal'));
-          modal.hide();
-          location.reload();
+          Swal.fire({
+            icon: 'success',
+            title: 'Request Updated!',
+            text: 'The employee request has been successfully updated.',
+            confirmButtonColor: '#198754',
+            timer: 2000,
+            timerProgressBar: true
+          }).then(() => {
+            location.reload();
+          });
         } else {
-          alert('Error deleting request');
+          Swal.fire({
+            icon: 'error',
+            title: 'Update Failed',
+            text: data.message || 'Invalid password. Please enter your correct admin password.',
+            confirmButtonColor: '#dc3545'
+          });
         }
       })
       .catch(error => {
         console.error('Error:', error);
-        alert('Error deleting request');
+        Swal.fire({
+          icon: 'error',
+          title: 'Network Error',
+          text: 'Failed to update request. Please check your connection and try again.',
+          confirmButtonColor: '#dc3545'
+        });
+      });
+    }
+
+    // Delete Request with Password Confirmation
+    function deleteRequestWithConfirmation(requestId) {
+      Swal.fire({
+        title: '<i class="bi bi-exclamation-triangle text-warning"></i> Delete Request',
+        html: `
+          <div class="text-start">
+            <div class="alert alert-warning">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              <strong>Warning:</strong> This action cannot be undone. The request will be permanently deleted from the system.
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-bold">Admin Password:</label>
+              <input type="password" id="deletePassword" class="form-control" placeholder="Enter your password to confirm deletion" minlength="3">
+              <div class="form-text text-muted">
+                <i class="bi bi-shield-lock"></i> Password verification required for security
+              </div>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-trash me-1"></i>Delete Request',
+        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d',
+        focusConfirm: false,
+        preConfirm: () => {
+          const password = document.getElementById('deletePassword').value;
+          if (!password) {
+            Swal.showValidationMessage('Please enter your password');
+            return false;
+          }
+          if (password.length < 3) {
+            Swal.showValidationMessage('Password must be at least 3 characters');
+            return false;
+          }
+          return password;
+        }
+      }).then((result) => {
+        if (result.isConfirmed) {
+          submitDeleteRequest(requestId, result.value);
+        }
+      });
+    }
+
+    function submitDeleteRequest(requestId, password) {
+      Swal.fire({
+        title: 'Processing...',
+        text: 'Deleting request, please wait...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      fetch(`/admin/employee-request-forms/${requestId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify({ password: password })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          Swal.fire({
+            icon: 'success',
+            title: 'Request Deleted!',
+            text: 'The employee request has been successfully deleted.',
+            confirmButtonColor: '#198754',
+            timer: 2000,
+            timerProgressBar: true
+          }).then(() => {
+            location.reload();
+          });
+        } else {
+          Swal.fire({
+            icon: 'error',
+            title: 'Deletion Failed',
+            text: data.message || 'Invalid password. Please enter your correct admin password.',
+            confirmButtonColor: '#dc3545'
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Network Error',
+          text: 'Failed to delete request. Please check your connection and try again.',
+          confirmButtonColor: '#dc3545'
+        });
       });
     }
   </script>

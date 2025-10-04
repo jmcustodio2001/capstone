@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
+use Barryvdh\DomPDF\Facade\Pdf;
+
 class AICertificateGeneratorService
 {
     /**
@@ -14,447 +16,649 @@ class AICertificateGeneratorService
     public function generateCertificate($employeeName, $courseName, $completionDate, $employeeId = null)
     {
         try {
+            Log::info('Starting certificate generation', [
+                'employee_name' => $employeeName,
+                'course_name' => $courseName,
+                'completion_date' => $completionDate,
+                'employee_id' => $employeeId
+            ]);
+
+            // Sanitize and validate employee name
+            $originalEmployeeName = $employeeName;
+            $employeeName = $this->sanitizeEmployeeName($employeeName);
+            if (empty($employeeName)) {
+                Log::error('Missing or invalid employee name for certificate generation', [
+                    'original_employee_name' => $originalEmployeeName,
+                    'sanitized_employee_name' => $employeeName,
+                    'course_name' => $courseName,
+                    'employee_id' => $employeeId
+                ]);
+                
+                // Try to use original name if sanitization failed
+                if (!empty($originalEmployeeName)) {
+                    $employeeName = trim((string) $originalEmployeeName);
+                    Log::warning('Using original employee name after sanitization failed', [
+                        'employee_name' => $employeeName
+                    ]);
+                } else {
+                    throw new \Exception('Valid employee name is required');
+                }
+            }
+
+            // Sanitize and validate course name
+            $originalCourseName = $courseName;
+            $courseName = $this->sanitizeCourseName($courseName);
+            if (empty($courseName)) {
+                Log::error('Missing or invalid course name for certificate generation', [
+                    'employee_name' => $employeeName,
+                    'original_course_name' => $originalCourseName,
+                    'sanitized_course_name' => $courseName,
+                    'employee_id' => $employeeId
+                ]);
+                
+                // Try to use original course name if sanitization failed
+                if (!empty($originalCourseName)) {
+                    $courseName = trim((string) $originalCourseName);
+                    Log::warning('Using original course name after sanitization failed', [
+                        'course_name' => $courseName
+                    ]);
+                } else {
+                    throw new \Exception('Valid course name is required');
+                }
+            }
+
+            // Validate and parse completion date
+            $parsedDate = $this->validateAndParseDate($completionDate, $employeeName, $courseName, $employeeId);
+            if (!$parsedDate) {
+                throw new \Exception('Valid completion date is required');
+            }
+
+            // Ensure storage directory exists
+            $certificatesPath = storage_path('app/public/certificates');
+            if (!file_exists($certificatesPath)) {
+                if (!@mkdir($certificatesPath, 0755, true)) {
+                    Log::error('Failed to create certificates directory', [
+                        'certificates_path' => $certificatesPath
+                    ]);
+                    throw new \Exception('Failed to create certificates directory: ' . $certificatesPath);
+                }
+            }
+            if (!is_writable($certificatesPath)) {
+                Log::error('Certificates directory is not writable', [
+                    'certificates_path' => $certificatesPath
+                ]);
+                throw new \Exception('Certificates directory is not writable: ' . $certificatesPath);
+            }
+
             // Generate unique certificate number
             $certificateNumber = $this->generateCertificateNumber($employeeId);
-            
+            Log::info('Generated certificate number: ' . $certificateNumber);
+
             // Create AI-designed certificate template
             $certificateHtml = $this->createAICertificateTemplate($employeeName, $courseName, $completionDate, $certificateNumber);
-            
-            // Convert HTML to PDF and save
+            Log::info('Created certificate HTML template');
+
+            // Save PDF certificate
             $fileName = $this->saveCertificateAsPDF($certificateHtml, $certificateNumber);
-            
+            Log::info('Saved certificate PDF file: ' . $fileName);
+
             return [
                 'success' => true,
                 'certificate_number' => $certificateNumber,
                 'file_path' => $fileName,
                 'file_url' => '/storage/certificates/' . $fileName
             ];
-            
         } catch (\Exception $e) {
-            Log::error('Certificate generation failed: ' . $e->getMessage());
+            Log::error('Certificate generation failed: ' . $e->getMessage(), [
+                'employee_name' => $employeeName ?? 'N/A',
+                'course_name' => $courseName ?? 'N/A',
+                'employee_id' => $employeeId ?? 'N/A',
+                'completion_date' => $completionDate ?? 'N/A',
+                'trace' => $e->getTraceAsString()
+            ]);
             return [
                 'success' => false,
                 'error' => $e->getMessage()
             ];
         }
     }
-    
+
+                /**
+                 * Save certificate as PDF file using DomPDF
+                 */
+                private function saveCertificateAsPDF($html, $certificateNumber)
+                {
+                    try {
+                        $certificatesPath = storage_path('app/public/certificates');
+                        if (!file_exists($certificatesPath)) {
+                            if (!@mkdir($certificatesPath, 0755, true)) {
+                                throw new \Exception('Failed to create certificates directory: ' . $certificatesPath);
+                            }
+                        }
+                        if (!is_writable($certificatesPath)) {
+                            throw new \Exception('Certificates directory is not writable: ' . $certificatesPath);
+                        }
+
+                        $sanitizedCertNumber = preg_replace('/[^a-zA-Z0-9\-_]/', '', $certificateNumber);
+                        $fileName = 'certificate_' . $sanitizedCertNumber . '_' . time() . '.pdf';
+                        $filePath = $certificatesPath . DIRECTORY_SEPARATOR . $fileName;
+
+                        // Generate PDF using DomPDF with optimized settings for single-page printing
+                        $pdf = Pdf::loadHTML($html);
+                        $pdf->setPaper('A4', 'landscape');
+                        $pdf->setOptions([
+                            'isHtml5ParserEnabled' => true,
+                            'isPhpEnabled' => true,
+                            'defaultFont' => 'Times-Roman',
+                            'dpi' => 96,
+                            'defaultPaperSize' => 'A4',
+                            'defaultPaperOrientation' => 'landscape',
+                            'isFontSubsettingEnabled' => true,
+                            'isRemoteEnabled' => false
+                        ]);
+                        $output = $pdf->output();
+                        $bytesWritten = @file_put_contents($filePath, $output, LOCK_EX);
+
+                        if ($bytesWritten === false) {
+                            throw new \Exception('Failed to write certificate PDF to disk: ' . $filePath);
+                        }
+                        if (!file_exists($filePath) || !is_readable($filePath) || filesize($filePath) === 0) {
+                            throw new \Exception('Certificate PDF file was not created or is not readable: ' . $filePath);
+                        }
+
+                        Log::info('Certificate PDF file saved successfully', [
+                            'file_path' => $filePath,
+                            'file_size' => $bytesWritten,
+                            'certificate_number' => $certificateNumber,
+                            'file_name' => $fileName
+                        ]);
+
+                        return $fileName;
+                    } catch (\Exception $e) {
+                        Log::error('Failed to save certificate PDF file', [
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                            'certificates_path' => $certificatesPath ?? 'N/A',
+                            'certificate_number' => $certificateNumber ?? 'N/A'
+                        ]);
+                        // Fallback to simple number
+                        return 'CERT-' . date('Ymd') . '-' . rand(10000, 99999);
+                    }
+                }
+
     /**
-     * Generate unique certificate number
-     */
-    private function generateCertificateNumber($employeeId = null)
-    {
-        $prefix = 'CERT';
-        $year = date('Y');
-        $month = date('m');
-        $empId = $employeeId ? substr($employeeId, -3) : rand(100, 999);
-        $random = rand(1000, 9999);
-        
-        return $prefix . '-' . $year . $month . '-' . $empId . '-' . $random;
-    }
-    
-    /**
-     * Create AI-designed certificate template with dynamic styling
+     * Create AI-designed certificate template with realistic travel and tours theme
+     * Enhanced with professional styling, gradients, and travel-specific elements
      */
     private function createAICertificateTemplate($employeeName, $courseName, $completionDate, $certificateNumber)
     {
-        // AI-powered template selection based on course type
-        $templateStyle = $this->selectTemplateStyleBasedOnCourse($courseName);
-        
         $formattedDate = Carbon::parse($completionDate)->format('F j, Y');
-        $currentYear = date('Y');
+        $issuedDate = Carbon::parse($completionDate)->format('M j, Y');
         
         $html = '<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Certificate of Completion</title>
+    <title>Certificate of Achievement - Travel & Tours Training</title>
     <style>
-        @import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Open+Sans:wght@300;400;600&display=swap");
+        @page {
+            size: A4 landscape;
+            margin: 0.2in;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         
         body {
-            margin: 0;
-            padding: 20px;
-            font-family: "Open Sans", sans-serif;
-            background: ' . $templateStyle['background'] . ';
-            color: #333;
+            font-family: "Georgia", "Times New Roman", serif;
+            background: #f8f9fa;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
         }
         
         .certificate-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border: ' . $templateStyle['border'] . ';
-            border-radius: 15px;
-            padding: 60px 40px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            background: #fff;
+            width: 100%;
+            max-width: 10.5in;
+            height: 7.5in;
+            border: 8px solid #2d3a5a;
+            border-radius: 6px;
             position: relative;
+            padding: 25px;
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
             overflow: hidden;
         }
         
-        .certificate-container::before {
-            content: "";
+        .inner-border {
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: ' . $templateStyle['decorative_pattern'] . ';
-            opacity: 0.05;
-            z-index: 1;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            bottom: 15px;
+            border: 2px solid #87ceeb;
+            border-radius: 3px;
+            pointer-events: none;
         }
         
-        .certificate-content {
+        
+        .certificate-header {
+            text-align: center;
+            margin-bottom: 15px;
             position: relative;
             z-index: 2;
-            text-align: center;
         }
         
-        .header {
-            margin-bottom: 40px;
+        .logo-container {
+            position: relative;
+            display: inline-block;
+            margin-bottom: 10px;
         }
         
-        .company-logo {
-            width: 100px;
-            height: 100px;
-            margin: 0 auto 20px;
+        .logo {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto;
+            border-radius: 50%;
+            overflow: hidden;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: white;
-            border-radius: 50%;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            border: 3px solid ' . $templateStyle['accent_color'] . ';
+            background: linear-gradient(135deg, #2d3a5a, #4a5568);
+            border: 3px solid #ffffff;
+            box-shadow: 0 4px 8px rgba(45, 58, 90, 0.3);
         }
         
-        .company-logo img {
-            width: 70px;
-            height: 70px;
-            object-fit: contain;
+        .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .certificate-title {
-            font-family: "Playfair Display", serif;
             font-size: 48px;
-            font-weight: 700;
-            color: ' . $templateStyle['primary_color'] . ';
-            margin: 20px 0;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .certificate-subtitle {
-            font-size: 18px;
-            color: #666;
-            margin-bottom: 40px;
-            font-weight: 300;
-        }
-        
-        .recipient-section {
-            margin: 40px 0;
-            padding: 30px;
-            background: ' . $templateStyle['highlight_bg'] . ';
-            border-radius: 10px;
-            border-left: 5px solid ' . $templateStyle['accent_color'] . ';
-        }
-        
-        .presented-to {
-            font-size: 16px;
-            color: #666;
-            margin-bottom: 10px;
-            text-transform: uppercase;
+            font-weight: bold;
+            color: #2d3a5a;
+            margin-bottom: 5px;
             letter-spacing: 2px;
         }
         
-        .recipient-name {
-            font-family: "Playfair Display", serif;
-            font-size: 36px;
-            font-weight: 700;
-            color: ' . $templateStyle['primary_color'] . ';
-            margin: 10px 0 20px;
-            text-decoration: underline;
-            text-decoration-color: ' . $templateStyle['accent_color'] . ';
-            text-underline-offset: 8px;
+        .certificate-subtitle {
+            font-size: 16px;
+            color: #2d3a5a;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            font-weight: 300;
         }
         
-        .completion-text {
-            font-size: 16px;
-            line-height: 1.6;
-            color: #555;
-            margin: 20px 0;
+        .travel-tagline {
+            font-size: 12px;
+            color: #2d3a5a;
+            font-style: italic;
+            margin-bottom: 15px;
+        }
+        
+        .certificate-body {
+            text-align: center;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            margin: 15px 0;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .certification-text {
+            font-size: 14px;
+            color: #2d3a5a;
+            margin-bottom: 10px;
+            line-height: 1.2;
+            font-weight: 400;
+        }
+        
+        .recipient-name {
+            font-size: 48px;
+            font-family: cursive;
+            font-weight: bold;
+            color: #2d3a5a;
+            margin: 10px 0;
+            letter-spacing: 1px;
         }
         
         .course-name {
-            font-family: "Playfair Display", serif;
-            font-size: 24px;
-            font-weight: 600;
-            color: ' . $templateStyle['course_color'] . ';
-            margin: 15px 0;
-            padding: 15px;
-            background: ' . $templateStyle['course_bg'] . ';
-            border-radius: 8px;
-            border: 2px solid ' . $templateStyle['course_border'] . ';
+            background: #2196f3;
+            color: white;
+            padding: 8px 25px;
+            border-radius: 5px;
+            font-size: 28px;
+            font-weight: bold;
+            margin: 12px auto;
+            display: inline-block;
         }
         
         .completion-date {
-            font-size: 16px;
-            color: #666;
-            margin: 30px 0;
+            font-size: 12px;
+            color: #2d3a5a;
+            margin: 12px 0;
+            font-weight: 500;
+        }
+        
+        .certificate-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 20px;
+            padding-top: 10px;
+            position: relative;
+            z-index: 2;
         }
         
         .signature-section {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 60px;
-            padding-top: 30px;
-            border-top: 2px solid ' . $templateStyle['accent_color'] . ';
-        }
-        
-        .signature-block {
             text-align: center;
             flex: 1;
-            margin: 0 20px;
+            position: relative;
         }
         
         .signature-line {
-            width: 200px;
-            height: 2px;
-            background: #ccc;
-            margin: 0 auto 10px;
+            width: 100px;
+            height: 1px;
+            background: #2d3a5a;
+            margin: 0 auto 5px;
+        }
+        
+        .signature-name {
+            font-weight: bold;
+            font-size: 12px;
+            color: #2d3a5a;
+            margin-bottom: 2px;
         }
         
         .signature-title {
-            font-size: 14px;
-            color: #666;
-            font-weight: 600;
+            font-size: 10px;
+            color: #2d3a5a;
+            font-style: italic;
         }
         
-        .certificate-number {
-            position: absolute;
-            bottom: 20px;
-            right: 30px;
-            font-size: 12px;
-            color: #999;
-            font-family: monospace;
-        }
-        
-        .achievement-badge {
-            position: absolute;
-            top: 30px;
-            right: 30px;
-            width: 80px;
-            height: 80px;
-            background: ' . $templateStyle['badge_color'] . ';
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
+        .certificate-info {
             text-align: center;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        
-        .decorative-elements {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            width: 60px;
-            height: 60px;
-            background: ' . $templateStyle['decorative_color'] . ';
-            border-radius: 50%;
-            opacity: 0.1;
-        }
-        
-        .decorative-elements::after {
-            content: "";
-            position: absolute;
-            bottom: -40px;
-            right: -40px;
-            width: 40px;
-            height: 40px;
-            background: ' . $templateStyle['decorative_color'] . ';
-            border-radius: 50%;
+            margin-top: 15px;
+            font-size: 10px;
+            color: #555;
         }
         
         @media print {
-            body { background: white; padding: 0; }
-            .certificate-container { box-shadow: none; border: 2px solid #333; }
+            @page {
+                size: A4 landscape;
+                margin: 0.2in;
+            }
+            
+            body {
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                height: auto !important;
+            }
+            
+            .certificate-container {
+                max-width: 10.5in !important;
+                width: 10.5in !important;
+                height: 7.5in !important;
+                max-height: 7.5in !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                margin: 0 auto !important;
+                box-shadow: none !important;
+            }
         }
     </style>
 </head>
 <body>
     <div class="certificate-container">
-        <div class="decorative-elements"></div>
-        <div class="achievement-badge">
-            CERTIFIED<br>COMPLETE
+        <div class="inner-border"></div>
+        
+        <div class="certificate-header">
+            <div class="logo-container">
+                <div class="logo">
+                    <img src="/assets/images/jetlouge_logo.png" alt="Jetlouge Logo" onerror="this.parentElement.innerHTML=\'&lt;div style=&quot;background:linear-gradient(135deg, #2d3a5a, #4a5568);width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-weight:bold;&quot;&gt;JT&lt;/div&gt;\'">
+                </div>
+            </div>
+            <div class="certificate-title">CERTIFICATE</div>
+            <div class="certificate-subtitle">OF ACHIEVEMENT</div>
+            <div class="travel-tagline">Excellence in Travel & Tourism Training</div>
         </div>
         
-        <div class="certificate-content">
-            <div class="header">
-                <div class="company-logo">
-                    <img src="data:image/png;base64,' . base64_encode(file_get_contents(public_path('assets/images/jetlouge_logo.png'))) . '" alt="Jetlouge Travels Logo">
-                </div>
-                <h1 class="certificate-title">Certificate of Completion</h1>
-                <p class="certificate-subtitle">Jetlouge Travels - Excellence in Professional Development</p>
-            </div>
+        <div class="certificate-body">
+            <div class="certification-text">This is to proudly certify that</div>
             
-            <div class="recipient-section">
-                <p class="presented-to">This is to certify that</p>
-                <h2 class="recipient-name">' . htmlspecialchars($employeeName) . '</h2>
-                <p class="completion-text">
-                    has successfully completed the comprehensive training program and demonstrated 
-                    proficiency in all required competencies for:
-                </p>
-                <div class="course-name">' . htmlspecialchars($courseName) . '</div>
-                <p class="completion-date">
-                    <strong>Date of Completion:</strong> ' . $formattedDate . '
-                </p>
+            <div class="recipient-name">' . htmlspecialchars($employeeName) . '</div>
+            
+            <div class="certification-text">has successfully completed the comprehensive training program and demonstrated exceptional proficiency in</div>
+            
+            <div class="course-name">' . htmlspecialchars($courseName) . '</div>
+            
+            <div class="completion-date">Completed with distinction on <strong>' . $formattedDate . '</strong></div>
+        </div>
+        
+        <div class="certificate-footer">
+            <div class="signature-section">
+                <div class="signature-line"></div>
+                <div class="signature-name">John Mark Custodio</div>
+                <div class="signature-title">Training Director</div>
             </div>
             
             <div class="signature-section">
-                <div class="signature-block">
-                    <div class="signature-line"></div>
-                    <p class="signature-title">Training Director</p>
-                </div>
-                <div class="signature-block">
-                    <div class="signature-line"></div>
-                    <p class="signature-title">HR Manager</p>
-                </div>
-                <div class="signature-block">
-                    <div class="signature-line"></div>
-                    <p class="signature-title">Date: ' . $formattedDate . '</p>
-                </div>
+                <div class="signature-line"></div>
+                <div class="signature-name">Jetlouge Admin</div>
+                <div class="signature-title">HR Manager</div>
             </div>
         </div>
         
-        <div class="certificate-number">Certificate No: ' . $certificateNumber . '</div>
+        <div class="certificate-info">
+            Certificate ID: ' . htmlspecialchars($certificateNumber) . ' &nbsp; | &nbsp; Issued: ' . $issuedDate . '
+        </div>
     </div>
 </body>
 </html>';
-
+        
         return $html;
     }
-    
+
+                /**
+                 * AI-powered template style selection based on course type
+                 */
+                private function selectTemplateStyleBasedOnCourse($courseName)
+                {
+                    $courseNameLower = strtolower($courseName);
+                    // ...existing code for style selection...
+                    return [
+                        'primary_color' => '#2d3748',
+                        'accent_color' => '#4a5568',
+                        'background' => 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+                        'border' => '3px solid #4a5568',
+                        'highlight_bg' => 'rgba(74, 85, 104, 0.1)',
+                        'course_color' => '#2d3748',
+                        'course_bg' => 'rgba(74, 85, 104, 0.05)',
+                        'course_border' => '#4a5568',
+                        'badge_color' => 'linear-gradient(135deg, #4a5568, #2d3748)',
+                        'decorative_color' => '#4a5568',
+                        'decorative_pattern' => 'radial-gradient(circle, #4a5568 1px, transparent 1px)'
+                    ];
+                }
     /**
-     * AI-powered template style selection based on course type
+     * Generate unique certificate number
      */
-    private function selectTemplateStyleBasedOnCourse($courseName)
+    private function generateCertificateNumber($employeeId = null)
     {
-        $courseNameLower = strtolower($courseName);
-        
-        // AI logic to determine appropriate colors and styling based on course content
-        if (strpos($courseNameLower, 'leadership') !== false || strpos($courseNameLower, 'management') !== false) {
-            return [
-                'primary_color' => '#1a365d',
-                'accent_color' => '#3182ce',
-                'background' => 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                'border' => '3px solid #3182ce',
-                'highlight_bg' => 'rgba(49, 130, 206, 0.1)',
-                'course_color' => '#1a365d',
-                'course_bg' => 'rgba(26, 54, 93, 0.05)',
-                'course_border' => '#3182ce',
-                'badge_color' => 'linear-gradient(135deg, #3182ce, #1a365d)',
-                'decorative_color' => '#3182ce',
-                'decorative_pattern' => 'radial-gradient(circle, #3182ce 1px, transparent 1px)'
-            ];
-        } elseif (strpos($courseNameLower, 'communication') !== false || strpos($courseNameLower, 'customer') !== false) {
-            return [
-                'primary_color' => '#2d3748',
-                'accent_color' => '#38a169',
-                'background' => 'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)',
-                'border' => '3px solid #38a169',
-                'highlight_bg' => 'rgba(56, 161, 105, 0.1)',
-                'course_color' => '#2d3748',
-                'course_bg' => 'rgba(56, 161, 105, 0.05)',
-                'course_border' => '#38a169',
-                'badge_color' => 'linear-gradient(135deg, #38a169, #2d3748)',
-                'decorative_color' => '#38a169',
-                'decorative_pattern' => 'radial-gradient(circle, #38a169 1px, transparent 1px)'
-            ];
-        } elseif (strpos($courseNameLower, 'technical') !== false || strpos($courseNameLower, 'software') !== false || strpos($courseNameLower, 'it') !== false) {
-            return [
-                'primary_color' => '#2a2a2a',
-                'accent_color' => '#e53e3e',
-                'background' => 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
-                'border' => '3px solid #e53e3e',
-                'highlight_bg' => 'rgba(229, 62, 62, 0.1)',
-                'course_color' => '#2a2a2a',
-                'course_bg' => 'rgba(229, 62, 62, 0.05)',
-                'course_border' => '#e53e3e',
-                'badge_color' => 'linear-gradient(135deg, #e53e3e, #2a2a2a)',
-                'decorative_color' => '#e53e3e',
-                'decorative_pattern' => 'radial-gradient(circle, #e53e3e 1px, transparent 1px)'
-            ];
-        } elseif (strpos($courseNameLower, 'safety') !== false || strpos($courseNameLower, 'security') !== false) {
-            return [
-                'primary_color' => '#744210',
-                'accent_color' => '#d69e2e',
-                'background' => 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
-                'border' => '3px solid #d69e2e',
-                'highlight_bg' => 'rgba(214, 158, 46, 0.1)',
-                'course_color' => '#744210',
-                'course_bg' => 'rgba(214, 158, 46, 0.05)',
-                'course_border' => '#d69e2e',
-                'badge_color' => 'linear-gradient(135deg, #d69e2e, #744210)',
-                'decorative_color' => '#d69e2e',
-                'decorative_pattern' => 'radial-gradient(circle, #d69e2e 1px, transparent 1px)'
-            ];
-        } else {
-            // Default professional template
-            return [
-                'primary_color' => '#2d3748',
-                'accent_color' => '#4a5568',
-                'background' => 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-                'border' => '3px solid #4a5568',
-                'highlight_bg' => 'rgba(74, 85, 104, 0.1)',
-                'course_color' => '#2d3748',
-                'course_bg' => 'rgba(74, 85, 104, 0.05)',
-                'course_border' => '#4a5568',
-                'badge_color' => 'linear-gradient(135deg, #4a5568, #2d3748)',
-                'decorative_color' => '#4a5568',
-                'decorative_pattern' => 'radial-gradient(circle, #4a5568 1px, transparent 1px)'
-            ];
+        try {
+            $prefix = 'CERT';
+            $year = date('Y');
+            $month = date('m');
+            // Ensure employeeId is numeric and not empty
+            if (is_numeric($employeeId) && $employeeId > 0) {
+                $empId = substr(str_pad($employeeId, 3, '0', STR_PAD_LEFT), -3);
+            } else {
+                // If employeeId is missing, null, or invalid, use a random 3-digit number
+                $empId = str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+                Log::warning('Employee ID missing or invalid for certificate number generation, using random value', [
+                    'provided_employee_id' => $employeeId
+                ]);
+            }
+            $random = rand(1000, 9999);
+
+            $certificateNumber = $prefix . '-' . $year . $month . '-' . $empId . '-' . $random;
+
+            Log::info('Generated certificate number', [
+                'certificate_number' => $certificateNumber,
+                'employee_id' => $employeeId,
+                'empId_used' => $empId
+            ]);
+
+            return $certificateNumber;
+        } catch (\Exception $e) {
+            Log::error('Failed to generate certificate number', [
+                'employee_id' => $employeeId,
+                'error' => $e->getMessage()
+            ]);
+            // Fallback to simple number
+            return 'CERT-' . date('Ymd') . '-' . rand(10000, 99999);
         }
     }
-    
+
     /**
-     * Save certificate as PDF file
+     * Sanitize employee name to prevent issues
      */
-    private function saveCertificateAsPDF($html, $certificateNumber)
+    private function sanitizeEmployeeName($employeeName)
     {
-        // Create certificates directory if it doesn't exist
-        $certificatesPath = storage_path('app/public/certificates');
-        if (!file_exists($certificatesPath)) {
-            mkdir($certificatesPath, 0755, true);
+        if (is_null($employeeName) || $employeeName === '') {
+            return null;
         }
+
+        // Convert to string and trim
+        $name = trim((string) $employeeName);
         
-        // Generate filename
-        $fileName = 'certificate_' . $certificateNumber . '_' . time() . '.html';
-        $filePath = $certificatesPath . '/' . $fileName;
+        // Handle common invalid values
+        if (in_array(strtolower($name), ['unknown', 'null', 'n/a', 'na', ''])) {
+            return null;
+        }
+
+        // Remove extra whitespace and sanitize
+        $name = preg_replace('/\s+/', ' ', $name);
+        $name = preg_replace('/[^\p{L}\p{N}\s\-\.\']/u', '', $name);
         
-        // Save HTML file (can be converted to PDF later with libraries like dompdf or wkhtmltopdf)
-        file_put_contents($filePath, $html);
-        
-        // For now, we'll save as HTML. In production, you might want to use:
-        // - dompdf: composer require dompdf/dompdf
-        // - wkhtmltopdf: for better PDF rendering
-        // - puppeteer: for high-quality PDF generation
-        
-        return $fileName;
+        return trim($name) ?: null;
     }
-    
+
     /**
-     * Get certificate template preview for testing
+     * Sanitize course name to prevent issues
      */
-    public function getTemplatePreview($courseName = "Sample Course")
+    private function sanitizeCourseName($courseName)
     {
-        return $this->createAICertificateTemplate(
-            "John Doe", 
-            $courseName, 
-            now()->format('Y-m-d'), 
-            "PREVIEW-001"
-        );
+        if (is_null($courseName) || $courseName === '') {
+            return null;
+        }
+
+        // Convert to string and trim
+        $name = trim((string) $courseName);
+        
+        // Handle common invalid values
+        if (in_array(strtolower($name), ['unknown', 'null', 'n/a', 'na', 'no course', 'unknown course', ''])) {
+            return null;
+        }
+
+        // Remove extra whitespace and sanitize
+        $name = preg_replace('/\s+/', ' ', $name);
+        $name = preg_replace('/[^\p{L}\p{N}\s\-\.\'\(\)&]/u', '', $name);
+        
+        return trim($name) ?: null;
+    }
+
+    /**
+     * Validate and parse completion date
+     */
+    private function validateAndParseDate($completionDate, $employeeName, $courseName, $employeeId)
+    {
+        if (empty($completionDate)) {
+            Log::error('Missing completion date for certificate generation', [
+                'employee_name' => $employeeName,
+                'course_name' => $courseName,
+                'employee_id' => $employeeId
+            ]);
+            return null;
+        }
+
+        try {
+            // Handle Carbon objects passed directly
+            if ($completionDate instanceof \Carbon\Carbon) {
+                return $completionDate;
+            }
+
+            // Parse string dates
+            $parsedDate = \Carbon\Carbon::parse($completionDate);
+            
+            // Validate date is not in the future (with 1 day tolerance)
+            if ($parsedDate->isFuture() && $parsedDate->diffInDays(now()) > 1) {
+                Log::warning('Completion date is in the future, adjusting to today', [
+                    'original_date' => $completionDate,
+                    'employee_name' => $employeeName,
+                    'course_name' => $courseName
+                ]);
+                $parsedDate = now();
+            }
+
+            // Validate date is not too old (more than 10 years)
+            if ($parsedDate->diffInYears(now()) > 10) {
+                Log::warning('Completion date is very old, adjusting to 1 year ago', [
+                    'original_date' => $completionDate,
+                    'employee_name' => $employeeName,
+                    'course_name' => $courseName
+                ]);
+                $parsedDate = now()->subYear();
+            }
+
+            return $parsedDate;
+
+        } catch (\Exception $dateEx) {
+            Log::error('Invalid completion date format', [
+                'completion_date' => $completionDate,
+                'employee_name' => $employeeName,
+                'course_name' => $courseName,
+                'employee_id' => $employeeId,
+                'error' => $dateEx->getMessage()
+            ]);
+            
+            // Return current date as fallback
+            Log::info('Using current date as fallback for invalid completion date');
+            return now();
+        }
+    }
+
+    /**
+     * Get template preview for testing with enhanced travel theme
+     */
+    public function getTemplatePreview($courseName = 'Sample Travel & Tourism Course')
+    {
+        try {
+            return $this->createAICertificateTemplate(
+                'Sample Employee Name',
+                $courseName,
+                now(),
+                'PREVIEW-CERT-001'
+            );
+        } catch (\Exception $e) {
+            Log::error('Template preview generation failed: ' . $e->getMessage());
+            return '<html><body><h1>Template Preview Error</h1><p>' . htmlspecialchars($e->getMessage()) . '</p></body></html>';
+        }
     }
 }

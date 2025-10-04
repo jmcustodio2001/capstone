@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
@@ -16,6 +17,100 @@
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
+    }
+
+    /* Employee Competency Card Styles */
+    .employee-competency-card {
+      transition: all 0.3s ease;
+      border-radius: 15px !important;
+      overflow: hidden;
+    }
+
+    .employee-competency-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15) !important;
+    }
+
+    .employee-competency-card .card-header {
+      border-radius: 15px 15px 0 0 !important;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .employee-competency-card .card-header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(45deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+      pointer-events: none;
+    }
+
+    .employee-competency-card .card-footer {
+      border-radius: 0 0 15px 15px !important;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+    }
+
+    .employee-competency-card .progress {
+      border-radius: 10px;
+      background-color: rgba(0,0,0,0.1);
+    }
+
+    .employee-competency-card .progress-bar {
+      border-radius: 10px;
+      background: linear-gradient(90deg, currentColor 0%, rgba(255,255,255,0.2) 50%, currentColor 100%);
+      background-size: 200% 100%;
+      animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .employee-competency-card .btn {
+      border-radius: 8px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .employee-competency-card .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+
+    .employee-competency-card .badge {
+      border-radius: 8px;
+      font-weight: 500;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .employee-competency-card .card-header img {
+        width: 50px !important;
+        height: 50px !important;
+      }
+      
+      .employee-competency-card .card-header h5 {
+        font-size: 1rem;
+      }
+      
+      .employee-competency-card .btn {
+        font-size: 0.8rem;
+        padding: 0.375rem 0.5rem;
+      }
+    }
+
+    /* Empty state styling */
+    .empty-state {
+      animation: fadeIn 0.5s ease-in;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
@@ -50,7 +145,6 @@
         <nav aria-label="breadcrumb">
           <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Home</a></li>
-            <li class="breadcrumb-item"><a href="{{ route('potential_successors.index') }}" class="text-decoration-none">Succession Planning</a></li>
             <li class="breadcrumb-item active" aria-current="page">Employee Competency Profile</li>
           </ol>
         </nav>
@@ -94,6 +188,13 @@
                 @foreach($competencylibrary as $competency)
                   <option value="{{ $competency->id }}">{{ $competency->competency_name }}</option>
                 @endforeach
+                @if(isset($destinationTrainings) && $destinationTrainings->count() > 0)
+                  <optgroup label="Possible Training Destinations">
+                    @foreach($destinationTrainings as $destination)
+                      <option value="destination_{{ $loop->index }}">{{ $destination }}</option>
+                    @endforeach
+                  </optgroup>
+                @endif
               </select>
             </div>
             <div class="col-md-2">
@@ -104,277 +205,297 @@
               <input type="date" name="assessment_date" class="form-control" required>
             </div>
             <div class="col-md-2">
-              <button type="button" class="btn btn-primary w-100" id="addProfileBtn">Add</button>
+              <button type="button" class="btn btn-primary w-100" id="addProfileBtn">
+                <i class="bi bi-plus-circle me-1"></i>Add Profile
+              </button>
             </div>
           </div>
         </form>
 
-        <table class="table table-bordered">
-          <thead class="table-primary">
-            <tr>
-              <th class="fw-bold">Employee</th>
-              <th class="fw-bold">Competency</th>
-              <th class="fw-bold">Proficiency Level</th>
-              <th class="fw-bold">Assessment Date</th>
-              <th class="fw-bold text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            @foreach($profiles as $profile)
-            <tr>
-              <td>
-                <div class="d-flex align-items-center">
-                  <div class="avatar-sm me-2">
-                    @php
-                      $firstName = $profile->employee->first_name ?? 'Unknown';
-                      $lastName = $profile->employee->last_name ?? 'Employee';
-                      $fullName = $firstName . ' ' . $lastName;
+        <!-- Employee Competency Cards -->
+        <div class="row g-4">
+          @foreach($profiles as $profile)
+            @php
+              $firstName = $profile->employee->first_name ?? 'Unknown';
+              $lastName = $profile->employee->last_name ?? 'Employee';
+              $fullName = $firstName . ' ' . $lastName;
 
-                      // Check if profile picture exists - simplified approach
-                      $profilePicUrl = null;
-                      if ($profile->employee->profile_picture) {
-                          // Direct asset URL generation - Laravel handles the storage symlink
-                          $profilePicUrl = asset('storage/' . $profile->employee->profile_picture);
+              // Check if profile picture exists - simplified approach
+              $profilePicUrl = null;
+              if ($profile->employee->profile_picture) {
+                  // Direct asset URL generation - Laravel handles the storage symlink
+                  $profilePicUrl = asset('storage/' . $profile->employee->profile_picture);
+              }
+
+              // Generate consistent color based on employee name for fallback - vibrant colors like in the design
+              $colors = ['FF9A56', 'FF6B9D', '4ECDC4', '45B7D1', 'FFA726', 'AB47BC', 'EF5350', '66BB6A', 'FFCA28', '26A69A'];
+              $employeeId = $profile->employee->employee_id ?? 'default';
+              $colorIndex = abs(crc32($employeeId)) % count($colors);
+              $bgColor = $colors[$colorIndex];
+
+              // Fallback to UI Avatars if no profile picture found
+              if (!$profilePicUrl) {
+                  $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
+                                 "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+              }
+
+              // Progress calculation logic (same as before)
+              $competencyName = $profile->competency->competency_name;
+              $storedProficiency = ($profile->proficiency_level / 5) * 100;
+              $actualProgress = 0;
+              $progressSource = 'profile';
+
+              // Check if this is a destination knowledge competency
+              $isDestinationCompetency = stripos($competencyName, 'Destination Knowledge') !== false;
+
+              if ($isDestinationCompetency) {
+                // For destination competencies, prefer destination training completion (100%) regardless of delivery mode
+                $locationName = str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $competencyName);
+                $locationName = trim($locationName);
+
+                if (!empty($locationName)) {
+                  // Find matching destination knowledge training record
+                  $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $profile->employee_id)
+                    ->where('destination_name', 'LIKE', '%' . $locationName . '%')
+                    ->first();
+                  if ($destinationRecord) {
+                    // If destination record is marked completed OR progress is 100 -> show 100%
+                    $status = strtolower($destinationRecord->status ?? '');
+                    if ($status === 'completed' || ($destinationRecord->progress ?? 0) >= 100) {
+                      $actualProgress = 100;
+                      $progressSource = 'destination';
+                    } else {
+                      // Otherwise, try to compute from exam/training dashboard regardless of delivery mode
+                      $destinationNameClean = str_replace([' Training', 'Training'], '', $destinationRecord->destination_name);
+                      $matchingCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $destinationNameClean . '%')->first();
+                      $courseId = $matchingCourse ? $matchingCourse->course_id : null;
+                      $combinedProgress = 0;
+                      if ($courseId) {
+                        $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($destinationRecord->employee_id, $courseId);
                       }
-
-                      // Generate consistent color based on employee name for fallback
-                      $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-                      $employeeId = $profile->employee->employee_id ?? 'default';
-                      $colorIndex = abs(crc32($employeeId)) % count($colors);
-                      $bgColor = $colors[$colorIndex];
-
-                      // Fallback to UI Avatars if no profile picture found
-                      if (!$profilePicUrl) {
-                          $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
-                                         "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+                      if ($combinedProgress == 0 && $courseId) {
+                        $trainingProgress = \App\Models\EmployeeTrainingDashboard::where('employee_id', $destinationRecord->employee_id)
+                          ->where('course_id', $courseId)
+                          ->value('progress');
+                        $combinedProgress = $trainingProgress ?? $destinationRecord->progress ?? 0;
+                      } else if ($combinedProgress == 0) {
+                        $combinedProgress = $destinationRecord->progress ?? 0;
                       }
-                    @endphp
+                      $actualProgress = min(100, round($combinedProgress));
+                      $progressSource = 'destination';
+                    }
+                  }
+                }
+              } else {
+                // For non-destination competencies, check if manually set - be more conservative
+                $isManuallySet = $profile->proficiency_level > 0 ||
+                                 ($profile->proficiency_level >= 1 && $profile->assessment_date &&
+                                  \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 30);
 
+                if (!$isManuallySet) {
+                  // Use employee training dashboard for non-destination competencies
+                  $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $profile->employee_id)->get();
+
+                  foreach ($trainingRecords as $record) {
+                    $courseTitle = $record->training_title ?? '';
+
+                    // General competency matching
+                    $cleanCompetency = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $competencyName);
+                    $cleanCourse = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $courseTitle);
+
+                    if (stripos($cleanCourse, $cleanCompetency) !== false || stripos($cleanCompetency, $cleanCourse) !== false) {
+                      // Get progress from this training record
+                      $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($profile->employee_id, $record->course_id);
+                      $trainingProgress = $record->progress ?? 0;
+
+                      // Priority: Exam progress > Training record progress
+                      $actualProgress = $examProgress > 0 ? $examProgress : $trainingProgress;
+                      $progressSource = 'training';
+                      break;
+                    }
+                  }
+                }
+              }
+
+              // SIMPLIFIED DISPLAY LOGIC - Always show manual proficiency level as percentage
+              // This matches the new additive scoring system where each competency contributes based on its level
+              if ($profile->proficiency_level > 0) {
+                // Convert proficiency level (1-5) to percentage for display
+                $displayProgress = ($profile->proficiency_level / 5) * 100;
+                $progressSource = 'manual';
+              } else {
+                // If no proficiency level set, show 0%
+                $displayProgress = 0;
+                $progressSource = 'no_data';
+              }
+
+              // Check if competency is approved and active (proficiency level 5 = 100% = approved/active)
+              $isApprovedAndActive = $profile->proficiency_level >= 5;
+            @endphp
+
+            <div class="col-lg-4 col-md-6 col-sm-12">
+              <div class="card h-100 shadow-sm border-0 employee-competency-card" style="transition: all 0.3s ease;">
+                <!-- Card Header with Employee Info -->
+                <div class="card-header text-white border-0 py-3" style="background-color: #{{ $bgColor }};">
+                  <div class="d-flex align-items-center">
                     <img src="{{ $profilePicUrl }}"
                          alt="{{ $firstName }} {{ $lastName }}"
-                         class="rounded-circle"
-                         style="width: 40px; height: 40px; object-fit: cover;">
+                         class="rounded-circle me-3"
+                         style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);">
+                    <div class="flex-grow-1">
+                      <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
+                      <small class="text-dark fw-bold">
+                        <i class="bi bi-person-badge me-1"></i>
+                        Employee ID: {{ $profile->employee->employee_id }}
+                      </small>
+                    </div>
                   </div>
-                  <span class="fw-semibold">
-                    {{ $firstName }} {{ $lastName }}
-                  </span>
                 </div>
-              </td>
-              <td>{{ $profile->competency->competency_name }}</td>
-              <td>
-                @php
-                  $competencyName = $profile->competency->competency_name;
-                  $storedProficiency = ($profile->proficiency_level / 5) * 100;
-                  $actualProgress = 0;
-                  $progressSource = 'profile';
 
-                  // Check if this is a destination knowledge competency
-                  $isDestinationCompetency = stripos($competencyName, 'Destination Knowledge') !== false;
-
-                  if ($isDestinationCompetency) {
-                    // For destination competencies, prefer destination training completion (100%) regardless of delivery mode
-                    $locationName = str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $competencyName);
-                    $locationName = trim($locationName);
-
-                    if (!empty($locationName)) {
-                      // Find matching destination knowledge training record
-                      $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $profile->employee_id)
-                        ->where('destination_name', 'LIKE', '%' . $locationName . '%')
-                        ->first();
-                      if ($destinationRecord) {
-                        // If destination record is marked completed OR progress is 100 -> show 100%
-                        $status = strtolower($destinationRecord->status ?? '');
-                        if ($status === 'completed' || ($destinationRecord->progress ?? 0) >= 100) {
-                          $actualProgress = 100;
-                          $progressSource = 'destination';
-                        } else {
-                          // Otherwise, try to compute from exam/training dashboard regardless of delivery mode
-                          $destinationNameClean = str_replace([' Training', 'Training'], '', $destinationRecord->destination_name);
-                          $matchingCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $destinationNameClean . '%')->first();
-                          $courseId = $matchingCourse ? $matchingCourse->course_id : null;
-                          $combinedProgress = 0;
-                          if ($courseId) {
-                            $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($destinationRecord->employee_id, $courseId);
-                          }
-                          if ($combinedProgress == 0 && $courseId) {
-                            $trainingProgress = \App\Models\EmployeeTrainingDashboard::where('employee_id', $destinationRecord->employee_id)
-                              ->where('course_id', $courseId)
-                              ->value('progress');
-                            $combinedProgress = $trainingProgress ?? $destinationRecord->progress ?? 0;
-                          } else if ($combinedProgress == 0) {
-                            $combinedProgress = $destinationRecord->progress ?? 0;
-                          }
-                          $actualProgress = min(100, round($combinedProgress));
-                          $progressSource = 'destination';
-                        }
-                      }
-                    }
-                  } else {
-                    // For non-destination competencies, check if manually set - be more conservative
-                    $isManuallySet = $profile->proficiency_level > 1 ||
-                                     ($profile->proficiency_level >= 1 && $profile->assessment_date &&
-                                      \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 7);
-
-                    if (!$isManuallySet) {
-                      // Use employee training dashboard for non-destination competencies
-                      $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $profile->employee_id)->get();
-
-                      foreach ($trainingRecords as $record) {
-                        $courseTitle = $record->training_title ?? '';
-
-                        // General competency matching
-                        $cleanCompetency = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $competencyName);
-                        $cleanCourse = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $courseTitle);
-
-                        if (stripos($cleanCourse, $cleanCompetency) !== false || stripos($cleanCompetency, $cleanCourse) !== false) {
-                          // Get progress from this training record
-                          $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($profile->employee_id, $record->course_id);
-                          $trainingProgress = $record->progress ?? 0;
-
-                          // Priority: Exam progress > Training record progress
-                          $actualProgress = $examProgress > 0 ? $examProgress : $trainingProgress;
-                          $progressSource = 'training';
-                          break;
-                        }
-                      }
-                    }
-                  }
-
-                  // Final display logic - ALWAYS prioritize actual training progress over stored proficiency
-                  if ($actualProgress > 0) {
-                    $displayProgress = $actualProgress;
-                  } else {
-                    // Check if we have any training records for this employee-competency combination
-                    $hasTrainingRecord = false;
-                    $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $profile->employee_id)->get();
-
-                    foreach ($trainingRecords as $record) {
-                      $courseTitle = $record->training_title ?? '';
-
-                      // Enhanced matching for destination knowledge competencies
-                      $cleanCompetency = str_replace(['Destination Knowledge - ', ' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $competencyName);
-                      $cleanCourse = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $courseTitle);
-
-                      // Multiple matching strategies
-                      $isMatch = false;
-
-                      // Strategy 1: Direct match after cleaning
-                      if (stripos($cleanCourse, $cleanCompetency) !== false || stripos($cleanCompetency, $cleanCourse) !== false) {
-                        $isMatch = true;
-                      }
-
-                      // Strategy 2: For destination competencies, check if course contains the location name
-                      if (!$isMatch && $isDestinationCompetency) {
-                        $locationName = trim(str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $competencyName));
-                        if (!empty($locationName) && (stripos($courseTitle, $locationName) !== false || stripos($cleanCourse, $locationName) !== false)) {
-                          $isMatch = true;
-                        }
-                      }
-
-                      // Strategy 3: Check if competency name contains course name or vice versa
-                      if (!$isMatch) {
-                        $competencyWords = explode(' ', strtoupper($cleanCompetency));
-                        $courseWords = explode(' ', strtoupper($cleanCourse));
-
-                        foreach ($competencyWords as $compWord) {
-                          if (strlen($compWord) > 2) { // Skip short words
-                            foreach ($courseWords as $courseWord) {
-                              if (strlen($courseWord) > 2 && $compWord === $courseWord) {
-                                $isMatch = true;
-                                break 2;
-                              }
-                            }
-                          }
-                        }
-                      }
-
-                      if ($isMatch) {
-                        $hasTrainingRecord = true;
-                        // Get actual progress from training record
-                        $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($profile->employee_id, $record->course_id);
-                        $trainingProgress = $record->progress ?? 0;
-                        $actualTrainingProgress = $examProgress > 0 ? $examProgress : $trainingProgress;
-
-                        $displayProgress = $actualTrainingProgress;
-                        $progressSource = 'training';
-                        break;
-                      }
-                    }
-
-                    // If no training record found, use stored proficiency only if manually set
-                    if (!$hasTrainingRecord) {
-                      // Check if this is a manually set proficiency that should be preserved
-                      $isManuallySetForDisplay = false;
-                      if ($isDestinationCompetency) {
-                        $isManuallySetForDisplay = $profile->proficiency_level > 1 ||
-                                                 ($profile->proficiency_level >= 1 && $profile->assessment_date &&
-                                                  \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 30);
-                      } else {
-                        $isManuallySetForDisplay = $profile->proficiency_level > 1 ||
-                                                 ($profile->proficiency_level >= 1 && $profile->assessment_date &&
-                                                  \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 7);
-                      }
-                      
-                      if ($isManuallySetForDisplay) {
-                        $displayProgress = $storedProficiency;
-                        $progressSource = 'manual';
-                      } else {
-                        $displayProgress = 0; // Start from 0% instead of 20%
-                        $progressSource = 'no_data';
-                      }
-                    }
-                  }
-                @endphp
-                <div class="d-flex align-items-center">
-                  <div class="progress me-2" style="width: 80px; height: 20px;">
-                    <div class="progress-bar bg-warning" data-progress="{{ round($displayProgress) }}" style="width: 0%;"></div>
+                <!-- Card Body with Competency Details -->
+                <div class="card-body">
+                  <!-- Competency Name -->
+                  <div class="mb-3">
+                    <h6 class="text-muted mb-1">
+                      <i class="bi bi-award me-1"></i>
+                      Competency
+                    </h6>
+                    <p class="fw-semibold mb-0 text-dark">{{ $profile->competency->competency_name }}</p>
                   </div>
-                  <span class="fw-semibold">{{ round($displayProgress) }}%</span>
-                  @if($progressSource === 'manual')
-                    <small class="text-warning ms-1" title="Manual proficiency level: {{ $storedProficiency }}%">(manual)</small>
-                  @elseif($progressSource === 'destination')
-                    <small class="text-success ms-1" title="From destination knowledge training: {{ $actualProgress }}%">(destination)</small>
-                  @elseif($progressSource === 'training')
-                    <small class="text-primary ms-1" title="From employee training dashboard: {{ $actualProgress }}%">(training)</small>
-                  @elseif($progressSource === 'no_data')
-                    <small class="text-muted ms-1" title="No training progress or proficiency data found">(0% - not started)</small>
-                  @elseif($storedProficiency > 0)
-                    <small class="text-info ms-1" title="Using stored proficiency level: {{ $storedProficiency }}%">(profile)</small>
-                  @else
-                    <small class="text-muted ms-1" title="No training data or proficiency level found">(no data)</small>
-                  @endif
+
+                  <!-- Proficiency Level with Progress Bar -->
+                  <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                      <h6 class="text-muted mb-0">
+                        <i class="bi bi-graph-up me-1"></i>
+                        Proficiency Level
+                      </h6>
+                      <div class="d-flex align-items-center">
+                        <span class="fw-bold text-primary me-2">{{ round($displayProgress) }}%</span>
+                        @if($progressSource === 'manual')
+                          <span class="badge bg-success">Level {{ $profile->proficiency_level }}/5</span>
+                        @else
+                          <span class="badge bg-secondary">Not Assessed</span>
+                        @endif
+                      </div>
+                    </div>
+                    <div class="progress" style="height: 12px;">
+                      <div class="progress-bar 
+                        @if($displayProgress >= 80) bg-success 
+                        @elseif($displayProgress >= 60) bg-info 
+                        @elseif($displayProgress >= 40) bg-warning 
+                        @else bg-danger 
+                        @endif" 
+                        data-progress="{{ round($displayProgress) }}" 
+                        style="width: 0%; transition: width 1s ease-in-out;"
+                        role="progressbar" 
+                        aria-valuenow="{{ round($displayProgress) }}" 
+                        aria-valuemin="0" 
+                        aria-valuemax="100">
+                      </div>
+                    </div>
+                    @if($progressSource === 'manual')
+                      <small class="text-success mt-1 d-block">
+                        <i class="bi bi-check-circle me-1"></i>
+                        Proficiency Level {{ $profile->proficiency_level }}/5 = {{ round($displayProgress) }}%
+                      </small>
+                    @else
+                      <small class="text-muted mt-1 d-block">
+                        <i class="bi bi-exclamation-circle me-1"></i>
+                        No proficiency level set
+                      </small>
+                    @endif
+                  </div>
+
+                  <!-- Assessment Date -->
+                  <div class="mb-3">
+                    <h6 class="text-muted mb-1">
+                      <i class="bi bi-calendar-check me-1"></i>
+                      Assessment Date
+                    </h6>
+                    <p class="mb-0">
+                      <span class="badge bg-light text-dark">
+                        {{ date('d/m/Y', strtotime($profile->assessment_date)) }}
+                      </span>
+                    </p>
+                  </div>
+
+                  <!-- Status Badge -->
+                  <div class="mb-3">
+                    @if($isApprovedAndActive)
+                      <span class="badge bg-success fs-6">
+                        <i class="bi bi-check-circle me-1"></i>
+                        Approved & Active
+                      </span>
+                    @else
+                      <span class="badge bg-warning text-dark fs-6">
+                        <i class="bi bi-clock me-1"></i>
+                        Pending Approval
+                      </span>
+                    @endif
+                  </div>
                 </div>
-              </td>
-              <td>{{ date('d/m/Y', strtotime($profile->assessment_date)) }}</td>
-              <td class="text-center">
-<!-- Edit Button -->
-<button class="btn btn-warning btn-sm edit-btn"
-        data-id="{{ $profile->id }}"
-        data-employee-id="{{ $profile->employee_id }}"
-        data-competency-id="{{ $profile->competency_id }}"
-        data-proficiency="{{ $profile->proficiency_level }}"
-        data-assessment-date="{{ $profile->assessment_date }}">
-  <i class="bi bi-pencil"></i> Edit
-</button>
 
-<!-- Delete Button -->
-<form action="{{ route('employee_competency_profiles.destroy', $profile->id) }}"
-      method="POST"
-      class="d-inline delete-form"
-      data-profile-id="{{ $profile->id }}">
-  @csrf
-  @method('DELETE')
-  <button type="button" class="btn btn-danger btn-sm delete-btn">
-    <i class="bi bi-trash"></i> Delete
-  </button>
-</form>
+                <!-- Card Footer with Action Buttons -->
+                <div class="card-footer bg-light border-0">
+                  <div class="d-flex justify-content-center gap-2 flex-wrap">
+                    <!-- View Button -->
+                    <button class="btn btn-info btn-sm view-btn"
+                            data-employee-name="{{ $profile->employee->first_name }} {{ $profile->employee->last_name }}"
+                            data-competency-name="{{ $profile->competency->competency_name }}"
+                            data-proficiency="{{ $profile->proficiency_level }}"
+                            data-assessment-date="{{ $profile->assessment_date }}"
+                            title="View Details">
+                      <i class="bi bi-eye me-1"></i>View
+                    </button>
 
-                </form>
-              </td>
-            </tr>
-            @endforeach
-          </tbody>
-        </table>
+                    <!-- Edit Button -->
+                    <button class="btn btn-warning btn-sm edit-btn"
+                            data-id="{{ $profile->id }}"
+                            data-employee-id="{{ $profile->employee_id }}"
+                            data-competency-id="{{ $profile->competency_id }}"
+                            data-proficiency="{{ $profile->proficiency_level }}"
+                            data-assessment-date="{{ $profile->assessment_date }}"
+                            title="Edit Profile">
+                      <i class="bi bi-pencil me-1"></i>Edit
+                    </button>
+
+                    <!-- Notify Course Mgmt Button -->
+                    <button class="btn btn-outline-success btn-sm notify-course-btn {{ $isApprovedAndActive ? 'disabled' : '' }}"
+                            data-id="{{ $profile->id }}"
+                            data-competency-id="{{ $profile->competency_id }}"
+                            data-competency-name="{{ $profile->competency->competency_name }}"
+                            data-employee-name="{{ $profile->employee->first_name }} {{ $profile->employee->last_name }}"
+                            data-proficiency="{{ $profile->proficiency_level }}"
+                            title="{{ $isApprovedAndActive ? 'Competency already approved and active' : 'Notify Course Management' }}"
+                            {{ $isApprovedAndActive ? 'disabled' : '' }}>
+                      <i class="bi bi-bell me-1"></i>Notify
+                    </button>
+
+                    <!-- Delete Button -->
+                    <button type="button" class="btn btn-danger btn-sm delete-btn"
+                            data-id="{{ $profile->id }}"
+                            data-employee-name="{{ $profile->employee->first_name }} {{ $profile->employee->last_name }}"
+                            data-competency-name="{{ $profile->competency->competency_name }}"
+                            title="Delete Profile">
+                      <i class="bi bi-trash me-1"></i>Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          @endforeach
+        </div>
+
+        @if($profiles->isEmpty())
+          <div class="text-center py-5 empty-state">
+            <div class="mb-4">
+              <i class="bi bi-person-x display-1 text-muted"></i>
+            </div>
+            <h4 class="text-muted">No Employee Competency Profiles Found</h4>
+            <p class="text-muted">Start by adding competency profiles for your employees using the form above.</p>
+          </div>
+        @endif
       </div>
     </div>
   </main>
@@ -407,6 +528,13 @@
                 @foreach($competencylibrary as $competency)
                   <option value="{{ $competency->id }}">{{ $competency->competency_name }}</option>
                 @endforeach
+                @if(isset($destinationTrainings) && $destinationTrainings->count() > 0)
+                  <optgroup label="Possible Training Destinations">
+                    @foreach($destinationTrainings as $destination)
+                      <option value="destination_{{ $loop->index }}">{{ $destination }}</option>
+                    @endforeach
+                  </optgroup>
+                @endif
               </select>
             </div>
             <div class="mb-3">
@@ -459,6 +587,9 @@
 
     document.addEventListener('DOMContentLoaded', function() {
       const editButtons = document.querySelectorAll('.edit-btn');
+      const viewButtons = document.querySelectorAll('.view-btn');
+      const deleteButtons = document.querySelectorAll('.delete-btn');
+      const notifyButtons = document.querySelectorAll('.notify-course-btn');
       const editModal = new bootstrap.Modal(document.getElementById('editModal'));
       const editForm = document.getElementById('editForm');
       let passwordConfirmModal = null;
@@ -658,185 +789,369 @@
         bar.style.width = value + '%';
       });
 
+      // Enhanced Edit functionality with comprehensive SweetAlert
       editButtons.forEach(button => {
         button.addEventListener('click', function() {
-          const buttonElement = this;
-
-          // Check if password is already verified
-          checkPasswordVerification().then(isVerified => {
-            if (isVerified) {
-              // Password already verified, proceed with edit
-              performEditAction(buttonElement);
-            } else {
-              // Show password confirmation
-              showPasswordConfirmation(() => performEditAction(buttonElement));
-            }
-          }).catch(error => {
-            console.error('Error checking password verification:', error);
-            Swal.fire({
-              icon: 'error',
-              title: 'Verification Error',
-              text: error.message || 'Failed to check password verification status. Please try again.',
-              confirmButtonText: 'OK'
-            });
-          });
+          const profileId = this.getAttribute('data-id');
+          const employeeId = this.getAttribute('data-employee-id');
+          const competencyId = this.getAttribute('data-competency-id');
+          const proficiency = this.getAttribute('data-proficiency');
+          const assessmentDate = this.getAttribute('data-assessment-date');
+          
+          editProfileWithConfirmation(profileId, employeeId, competencyId, proficiency, assessmentDate);
         });
       });
 
-      // Function to perform the actual edit action
-      function performEditAction(buttonElement) {
-        document.getElementById('overlay').style.display = 'none';
+      function editProfileWithConfirmation(profileId, employeeId, competencyId, proficiency, assessmentDate) {
+        // Get employee and competency names for display
+        const employeeSelect = addProfileForm.querySelector('select[name="employee_id"]');
+        const competencySelect = addProfileForm.querySelector('select[name="competency_id"]');
+        
+        let employeeName = 'Unknown Employee';
+        let competencyName = 'Unknown Competency';
+        
+        // Find employee name
+        for (let option of employeeSelect.options) {
+          if (option.value === employeeId) {
+            employeeName = option.text;
+            break;
+          }
+        }
+        
+        // Find competency name
+        for (let option of competencySelect.options) {
+          if (option.value === competencyId) {
+            competencyName = option.text;
+            break;
+          }
+        }
 
-        const id = buttonElement.getAttribute('data-id');
-        const employeeId = buttonElement.getAttribute('data-employee-id');
-        const competencyId = buttonElement.getAttribute('data-competency-id');
-        const proficiency = buttonElement.getAttribute('data-proficiency');
-        const assessmentDate = buttonElement.getAttribute('data-assessment-date');
+        Swal.fire({
+          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
+          html: `
+            <div class="text-start mb-3">
+              <p class="text-muted mb-3">
+                <i class="bi bi-info-circle text-info"></i> 
+                For security purposes, please enter your password to edit this competency profile.
+              </p>
+              <div class="bg-light p-3 rounded mb-3">
+                <strong>Profile to Edit:</strong><br>
+                <strong>Employee:</strong> ${employeeName}<br>
+                <strong>Competency:</strong> ${competencyName}<br>
+                <strong>Current Proficiency:</strong> ${proficiency}/5<br>
+                <strong>Assessment Date:</strong> ${new Date(assessmentDate).toLocaleDateString()}
+              </div>
+            </div>
+            <input type="password" id="swal-edit-password" class="swal2-input" placeholder="Enter your password" required>
+          `,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: '<i class="bi bi-pencil"></i> Edit Profile',
+          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
+          confirmButtonColor: '#ffc107',
+          cancelButtonColor: '#6c757d',
+          preConfirm: () => {
+            const password = document.getElementById('swal-edit-password').value;
+            if (!password) {
+              Swal.showValidationMessage('Password is required');
+              return false;
+            }
+            return password;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            verifyPasswordAndEdit(profileId, employeeId, competencyId, proficiency, assessmentDate, result.value);
+          }
+        });
+      }
 
-        console.log('Setting form action to:', `/admin/employee-competency-profiles/${id}`);
-        editForm.action = `/admin/employee-competency-profiles/${id}`;
-        console.log('Form action after setting:', editForm.action);
+      function verifyPasswordAndEdit(profileId, employeeId, competencyId, proficiency, assessmentDate, password) {
+        Swal.fire({
+          title: 'Verifying...',
+          text: 'Checking password...',
+          icon: 'info',
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
 
+        // Verify password first
+        verifyPassword(password).then(() => {
+          // Password verified, show edit form
+          Swal.close();
+          showEditForm(profileId, employeeId, competencyId, proficiency, assessmentDate);
+        }).catch(error => {
+          Swal.fire({
+            icon: 'error',
+            title: 'Authentication Failed',
+            text: error.message || 'Invalid password. Please try again.',
+            confirmButtonText: 'Try Again',
+            confirmButtonColor: '#dc3545'
+          }).then(() => {
+            // Retry the edit process
+            editProfileWithConfirmation(profileId, employeeId, competencyId, proficiency, assessmentDate);
+          });
+        });
+      }
+
+      function showEditForm(profileId, employeeId, competencyId, proficiency, assessmentDate) {
+        editForm.action = `/admin/employee-competency-profiles/${profileId}`;
         editForm.querySelector('select[name="employee_id"]').value = employeeId;
         editForm.querySelector('select[name="competency_id"]').value = competencyId;
         editForm.querySelector('input[name="proficiency_level"]').value = proficiency;
         editForm.querySelector('input[name="assessment_date"]').value = assessmentDate;
-
         editModal.show();
       }
 
-      // Delete button handlers
-      const deleteButtons = document.querySelectorAll('.delete-btn');
+      // Enhanced Delete functionality with comprehensive SweetAlert
       deleteButtons.forEach(button => {
         button.addEventListener('click', function() {
-          const form = this.closest('.delete-form');
-          const profileId = form.getAttribute('data-profile-id');
+          const profileId = this.getAttribute('data-id');
+          const employeeName = this.getAttribute('data-employee-name');
+          const competencyName = this.getAttribute('data-competency-name');
+          
+          deleteProfileWithConfirmation(profileId, employeeName, competencyName);
+        });
+      });
 
-          // Check if password is already verified
-          checkPasswordVerification().then(isVerified => {
-            if (isVerified) {
-              // Password already verified, proceed with delete
-              Swal.fire({
-                title: 'Are you sure?',
-                text: 'Delete this profile?',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#d33',
-                cancelButtonColor: '#3085d6',
-                confirmButtonText: 'Yes, delete it!'
-              }).then((result) => {
-                if (result.isConfirmed) {
-                  form.submit();
-                }
-              });
-            } else {
-              // Show password confirmation
-              showPasswordConfirmation(() => {
-                Swal.fire({
-                  title: 'Are you sure?',
-                  text: 'Delete this profile?',
-                  icon: 'warning',
-                  showCancelButton: true,
-                  confirmButtonColor: '#d33',
-                  cancelButtonColor: '#3085d6',
-                  confirmButtonText: 'Yes, delete it!'
-                }).then((result) => {
-                  if (result.isConfirmed) {
-                    form.submit();
-                  }
-                });
-              });
+      function deleteProfileWithConfirmation(profileId, employeeName, competencyName) {
+        Swal.fire({
+          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
+          html: `
+            <div class="text-start mb-3">
+              <div class="alert alert-warning" role="alert">
+                <i class="bi bi-exclamation-triangle"></i>
+                <strong>Warning:</strong> This action cannot be undone!
+              </div>
+              <p class="text-muted mb-3">
+                <i class="bi bi-info-circle text-info"></i> 
+                For security purposes, please enter your password to confirm deleting this competency profile.
+              </p>
+              <div class="bg-light p-3 rounded mb-3">
+                <strong>Profile to Delete:</strong><br>
+                <strong>Employee:</strong> ${employeeName}<br>
+                <strong>Competency:</strong> ${competencyName}
+              </div>
+            </div>
+            <input type="password" id="swal-delete-password" class="swal2-input" placeholder="Enter your password" required>
+          `,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: '<i class="bi bi-trash"></i> Delete Profile',
+          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
+          confirmButtonColor: '#dc3545',
+          cancelButtonColor: '#6c757d',
+          preConfirm: () => {
+            const password = document.getElementById('swal-delete-password').value;
+            if (!password) {
+              Swal.showValidationMessage('Password is required');
+              return false;
             }
-          }).catch(error => {
-            console.error('Error checking password verification:', error);
-            Swal.fire({
-              icon: 'error',
-              title: 'Verification Error',
-              text: error.message || 'Failed to check password verification status. Please try again.',
-              confirmButtonText: 'OK'
-            });
+            return password;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            submitDeleteProfile(profileId, result.value);
+          }
+        });
+      }
+
+      function submitDeleteProfile(profileId, password) {
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Deleting competency profile...',
+          icon: 'info',
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        // Verify password first
+        verifyPassword(password).then(() => {
+          // Password verified, proceed with deletion
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = `/admin/employee-competency-profiles/${profileId}`;
+          
+          const csrfToken = document.createElement('input');
+          csrfToken.type = 'hidden';
+          csrfToken.name = '_token';
+          csrfToken.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+          
+          const methodField = document.createElement('input');
+          methodField.type = 'hidden';
+          methodField.name = '_method';
+          methodField.value = 'DELETE';
+          
+          form.appendChild(csrfToken);
+          form.appendChild(methodField);
+          document.body.appendChild(form);
+          form.submit();
+        }).catch(error => {
+          Swal.fire({
+            icon: 'error',
+            title: 'Authentication Failed',
+            text: error.message || 'Invalid password. Please try again.',
+            confirmButtonText: 'Try Again',
+            confirmButtonColor: '#dc3545'
+          }).then(() => {
+            // Retry the delete process
+            deleteProfileWithConfirmation(profileId, employeeName, competencyName);
+          });
+        });
+      }
+
+      // View Details functionality
+      viewButtons.forEach(button => {
+        button.addEventListener('click', function() {
+          const employeeName = this.getAttribute('data-employee-name');
+          const competencyName = this.getAttribute('data-competency-name');
+          const proficiency = this.getAttribute('data-proficiency');
+          const assessmentDate = this.getAttribute('data-assessment-date');
+          
+          const proficiencyPercent = Math.round((proficiency / 5) * 100);
+          const formattedDate = new Date(assessmentDate).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+          Swal.fire({
+            title: '<i class="bi bi-person-badge text-primary"></i> Competency Profile Details',
+            html: `
+              <div class="text-start">
+                <div class="row mb-3">
+                  <div class="col-4"><strong>Employee:</strong></div>
+                  <div class="col-8">${employeeName}</div>
+                </div>
+                <div class="row mb-3">
+                  <div class="col-4"><strong>Competency:</strong></div>
+                  <div class="col-8">${competencyName}</div>
+                </div>
+                <div class="row mb-3">
+                  <div class="col-4"><strong>Proficiency Level:</strong></div>
+                  <div class="col-8">
+                    <span class="badge bg-primary">${proficiency}/5</span>
+                    <span class="text-muted">(${proficiencyPercent}%)</span>
+                  </div>
+                </div>
+                <div class="row mb-3">
+                  <div class="col-4"><strong>Assessment Date:</strong></div>
+                  <div class="col-8">${formattedDate}</div>
+                </div>
+              </div>
+            `,
+            icon: 'info',
+            confirmButtonText: '<i class="bi bi-check-lg"></i> Close',
+            confirmButtonColor: '#0d6efd',
+            width: '500px'
           });
         });
       });
 
-      // Add button handler
+      // Add Profile with Password Confirmation
       const addProfileBtn = document.getElementById('addProfileBtn');
       const addProfileForm = document.getElementById('addProfileForm');
 
       if (addProfileBtn && addProfileForm) {
-        console.log('Add button handler attached');
         addProfileBtn.addEventListener('click', function(e) {
-          console.log('Add button clicked');
-          e.preventDefault(); // Prevent default form submission
+          e.preventDefault();
+          addProfileWithConfirmation();
+        });
+      }
 
-          // Validate required fields first
-          const employeeSelect = addProfileForm.querySelector('select[name="employee_id"]');
-          const competencySelect = addProfileForm.querySelector('select[name="competency_id"]');
-          const proficiencyInput = addProfileForm.querySelector('input[name="proficiency_level"]');
-          const dateInput = addProfileForm.querySelector('input[name="assessment_date"]');
+      function addProfileWithConfirmation() {
+        // Validate required fields first
+        const employeeSelect = addProfileForm.querySelector('select[name="employee_id"]');
+        const competencySelect = addProfileForm.querySelector('select[name="competency_id"]');
+        const proficiencyInput = addProfileForm.querySelector('input[name="proficiency_level"]');
+        const dateInput = addProfileForm.querySelector('input[name="assessment_date"]');
 
-          console.log('Form values:', {
-            employee: employeeSelect.value,
-            competency: competencySelect.value,
-            proficiency: proficiencyInput.value,
-            date: dateInput.value
+        if (!employeeSelect.value || !competencySelect.value || !proficiencyInput.value || !dateInput.value) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Validation Error',
+            text: 'Please fill in all required fields before proceeding.',
+            confirmButtonText: 'OK'
           });
+          return;
+        }
 
-          if (!employeeSelect.value || !competencySelect.value || !proficiencyInput.value || !dateInput.value) {
-            // Show validation error using SweetAlert
-            Swal.fire({
-              icon: 'warning',
-              title: 'Validation Error',
-              text: 'Please fill in all required fields before proceeding.',
-              confirmButtonText: 'OK'
-            });
-            return;
-          }
+        // Get selected option texts for display
+        const employeeName = employeeSelect.options[employeeSelect.selectedIndex].text;
+        const competencyName = competencySelect.options[competencySelect.selectedIndex].text;
 
-          // Show loading state on button
-          const originalBtnText = this.innerHTML;
-          this.disabled = true;
-          this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
-
-          // Check if password is already verified
-          checkPasswordVerification().then(isVerified => {
-            console.log('Password verification result:', isVerified);
-            if (isVerified) {
-              // Password already verified, proceed with add
-              console.log('Password already verified, submitting form');
-              addProfileForm.submit();
-            } else {
-              // Reset button state before showing modal
-              this.disabled = false;
-              this.innerHTML = originalBtnText;
-
-              // Show password confirmation
-              console.log('Password not verified, showing modal');
-              showPasswordConfirmation(() => {
-                console.log('Password confirmed, submitting form');
-                // Show loading again after confirmation
-                addProfileBtn.disabled = true;
-                addProfileBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Adding...';
-                addProfileForm.submit();
-              });
+        Swal.fire({
+          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
+          html: `
+            <div class="text-start mb-3">
+              <p class="text-muted mb-3">
+                <i class="bi bi-info-circle text-info"></i> 
+                For security purposes, please enter your password to confirm adding this competency profile.
+              </p>
+              <div class="bg-light p-3 rounded mb-3">
+                <strong>Profile Details:</strong><br>
+                <strong>Employee:</strong> ${employeeName}<br>
+                <strong>Competency:</strong> ${competencyName}<br>
+                <strong>Proficiency Level:</strong> ${proficiencyInput.value}/5<br>
+                <strong>Assessment Date:</strong> ${new Date(dateInput.value).toLocaleDateString()}
+              </div>
+            </div>
+            <input type="password" id="swal-password" class="swal2-input" placeholder="Enter your password" required>
+          `,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: '<i class="bi bi-plus-circle"></i> Add Profile',
+          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
+          confirmButtonColor: '#198754',
+          cancelButtonColor: '#6c757d',
+          preConfirm: () => {
+            const password = document.getElementById('swal-password').value;
+            if (!password) {
+              Swal.showValidationMessage('Password is required');
+              return false;
             }
-          }).catch(error => {
-            console.error('Error checking password verification:', error);
-            // Reset button state
-            this.disabled = false;
-            this.innerHTML = originalBtnText;
+            return password;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            submitAddProfileForm(result.value);
+          }
+        });
+      }
 
-            // Show error alert using SweetAlert
-            Swal.fire({
-              icon: 'error',
-              title: 'Verification Error',
-              text: error.message || 'Failed to check password verification. Please try again.',
-              confirmButtonText: 'OK'
-            });
+      function submitAddProfileForm(password) {
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Adding competency profile...',
+          icon: 'info',
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        // Verify password first
+        verifyPassword(password).then(() => {
+          // Password verified, submit the form
+          addProfileForm.submit();
+        }).catch(error => {
+          Swal.fire({
+            icon: 'error',
+            title: 'Authentication Failed',
+            text: error.message || 'Invalid password. Please try again.',
+            confirmButtonText: 'Try Again',
+            confirmButtonColor: '#dc3545'
+          }).then(() => {
+            // Retry the add process
+            addProfileWithConfirmation();
           });
         });
-      } else {
-        console.error('Add button or form not found:', { addProfileBtn, addProfileForm });
       }
 
       // Sync Training Progress functionality
@@ -1001,6 +1316,159 @@
         .finally(function() {
           buttonElement.innerHTML = originalText;
           buttonElement.disabled = false;
+        });
+      }
+
+      // ========== COURSE MANAGEMENT NOTIFICATION FUNCTIONALITY ==========
+      notifyButtons.forEach(button => {
+        button.addEventListener('click', function() {
+          // Skip if button is disabled
+          if (this.disabled || this.classList.contains('disabled')) {
+            return;
+          }
+
+          const profileId = this.getAttribute('data-id');
+          const competencyId = this.getAttribute('data-competency-id');
+          const competencyName = this.getAttribute('data-competency-name');
+          const employeeName = this.getAttribute('data-employee-name');
+          const proficiency = this.getAttribute('data-proficiency');
+          
+          notifyCourseManagementWithConfirmation(profileId, competencyId, competencyName, employeeName, proficiency);
+        });
+      });
+
+      function notifyCourseManagementWithConfirmation(profileId, competencyId, competencyName, employeeName, proficiency) {
+        Swal.fire({
+          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
+          html: `
+            <div class="text-start mb-3">
+              <p class="text-muted mb-3">
+                <i class="bi bi-info-circle text-info"></i> 
+                For security purposes, please enter your password to send notification to course management.
+              </p>
+              <div class="bg-light p-3 rounded mb-3">
+                <strong>Notification Details:</strong><br>
+                <strong>Employee:</strong> ${employeeName}<br>
+                <strong>Competency:</strong> ${competencyName}<br>
+                <strong>Current Proficiency:</strong> ${proficiency}/5 (${Math.round((proficiency/5)*100)}%)<br>
+                <strong>Action:</strong> Notify course management about competency status
+              </div>
+              <div class="alert alert-info" role="alert">
+                <i class="bi bi-bell"></i>
+                This will send a notification to course management about the current status of this competency profile.
+              </div>
+            </div>
+            <input type="password" id="swal-notify-password" class="swal2-input" placeholder="Enter your password" required>
+          `,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: '<i class="bi bi-bell"></i> Send Notification',
+          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
+          confirmButtonColor: '#198754',
+          cancelButtonColor: '#6c757d',
+          preConfirm: () => {
+            const password = document.getElementById('swal-notify-password').value;
+            if (!password) {
+              Swal.showValidationMessage('Password is required');
+              return false;
+            }
+            return password;
+          }
+        }).then((result) => {
+          if (result.isConfirmed) {
+            submitNotificationRequest(profileId, competencyId, competencyName, employeeName, proficiency, result.value);
+          }
+        });
+      }
+
+      function submitNotificationRequest(profileId, competencyId, competencyName, employeeName, proficiency, password) {
+        Swal.fire({
+          title: 'Processing...',
+          text: 'Sending notification to course management...',
+          icon: 'info',
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        // Verify password first
+        verifyPassword(password).then(() => {
+          // Password verified, send notification
+          return fetch(`/admin/employee-competency-profiles/${profileId}/notify-course-management`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              competency_id: competencyId,
+              competency_name: competencyName,
+              employee_name: employeeName,
+              proficiency_level: proficiency
+            })
+          });
+        }).then(response => {
+          if (!response.ok) {
+            return response.text().then(text => {
+              let errorMessage = `Notification failed (${response.status})`;
+              try {
+                const errorData = JSON.parse(text);
+                if (errorData.message) {
+                  errorMessage = errorData.message;
+                }
+              } catch (e) {
+                if (response.statusText) {
+                  errorMessage = `${response.status} ${response.statusText}`;
+                }
+              }
+              throw new Error(errorMessage);
+            });
+          }
+          return response.json();
+        }).then(data => {
+          if (data.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Notification Sent Successfully',
+              html: `
+                <div class="text-start">
+                  <p><strong>Competency:</strong> ${competencyName}</p>
+                  <p><strong>Employee:</strong> ${employeeName}</p>
+                  <p><strong>Message:</strong> ${data.message}</p>
+                  ${data.active_courses_count ? `<p><strong>Active Courses Affected:</strong> ${data.active_courses_count}</p>` : ''}
+                </div>
+              `,
+              confirmButtonText: 'OK',
+              confirmButtonColor: '#198754',
+              timer: 5000,
+              timerProgressBar: true
+            }).then(() => {
+              // Disable the button after successful notification
+              const notifyBtn = document.querySelector(`[data-id="${profileId}"].notify-course-btn`);
+              if (notifyBtn) {
+                notifyBtn.disabled = true;
+                notifyBtn.classList.add('disabled');
+                notifyBtn.title = 'Notification already sent';
+                notifyBtn.innerHTML = '<i class="bi bi-check-circle"></i>';
+              }
+            });
+          } else {
+            throw new Error(data.message || 'Failed to send notification');
+          }
+        }).catch(error => {
+          Swal.fire({
+            icon: 'error',
+            title: 'Notification Failed',
+            text: error.message || 'Failed to send notification. Please try again.',
+            confirmButtonText: 'Try Again',
+            confirmButtonColor: '#dc3545'
+          }).then(() => {
+            // Retry the notification process
+            notifyCourseManagementWithConfirmation(profileId, competencyId, competencyName, employeeName, proficiency);
+          });
         });
       }
     });

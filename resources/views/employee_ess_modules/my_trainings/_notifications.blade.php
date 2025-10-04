@@ -15,21 +15,21 @@
         </thead>
         <tbody>
           @php
-            $uniqueNotifications = collect($notifications)->unique('notification_id');
+            $uniqueNotifications = collect($notifications)->unique('id');
           @endphp
           @forelse($uniqueNotifications as $n)
             <tr>
-              <td>{{ $n->notification_id }}</td>
+              <td>{{ $n->id }}</td>
               <td>{{ $n->message }}</td>
-              <td>{{ $n->sent_at }}</td>
+              <td>{{ $n->sent_at ? $n->sent_at->format('M d, Y H:i') : 'N/A' }}</td>
               <td class="text-center">
                 <button
                   class="btn btn-info btn-sm"
                   data-bs-toggle="modal"
                   data-bs-target="#viewNotificationModal"
-                  data-id="{{ $n->notification_id }}"
+                  data-id="{{ $n->id }}"
                   data-message="{{ $n->message }}"
-                  data-sent="{{ $n->sent_at }}"
+                  data-sent="{{ $n->sent_at ? $n->sent_at->format('M d, Y H:i') : 'N/A' }}"
                 ><i class="bi bi-eye"></i></button>
               </td>
             </tr>

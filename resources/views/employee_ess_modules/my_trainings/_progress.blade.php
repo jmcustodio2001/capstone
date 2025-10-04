@@ -1,6 +1,12 @@
+{{-- SweetAlert2 CDN --}}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <div class="simulation-card card mb-4">
   <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
     <h4 class="fw-bold mb-0">Training Progress</h4>
+    <button type="button" class="btn btn-outline-primary btn-sm" id="refresh-progress-btn" onclick="manualRefreshProgress()">
+      <i class="bi bi-arrow-clockwise"></i> Refresh Progress
+    </button>
   </div>
   <div class="card-body">
     <div class="table-responsive">
@@ -103,260 +109,261 @@
               </td>
               <td>
                 @php
+                  // Get progress value from available data sources with proper employee tracking
                   $progressValue = 0;
                   $progressSource = 'none';
-                  $actualProgress = 0;
                   $employeeId = Auth::user()->employee_id;
-                  $trainingTitle = $p->training_title;
 
-                  // Check if this is a destination knowledge competency
-                  $isDestinationCompetency = stripos($trainingTitle, 'Destination Knowledge') !== false;
-
-                  if ($isDestinationCompetency) {
-                    // Extract location name
-                    $locationName = str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $trainingTitle);
-                    $locationName = trim($locationName);
-
-                    if (!empty($locationName)) {
-                      // Find matching destination knowledge training record
-                      $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
-                        ->where('destination_name', 'LIKE', '%' . $locationName . '%')
-                        ->first();
-                      if ($destinationRecord) {
-                        // Use the same progress calculation as destination knowledge training view
-                        $destinationNameClean = str_replace([' Training', 'Training'], '', $destinationRecord->destination_name);
-
-                        // Find matching course ID for this destination
-                        $matchingCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $destinationNameClean . '%')->first();
-                        $courseId = $matchingCourse ? $matchingCourse->course_id : null;
-
-                        // Get exam progress (same as destination training view)
-                        $combinedProgress = 0;
-                        if ($courseId) {
-                          $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($destinationRecord->employee_id, $courseId);
-                        }
-
-                        // Fall back to training dashboard progress if no exam data
-                        if ($combinedProgress == 0) {
-                          $trainingProgress = \App\Models\EmployeeTrainingDashboard::where('employee_id', $destinationRecord->employee_id)
-                            ->where('course_id', $courseId)
-                            ->value('progress');
-                          $combinedProgress = $trainingProgress ?? $destinationRecord->progress ?? 0;
-                        }
-
-                        $actualProgress = min(100, round($combinedProgress));
-                        $progressSource = 'destination';
-                      }
-                    }
-                  } else {
-                    // For non-destination competencies, check if this is from approved request first
-                    if (isset($p->source) && $p->source == 'approved_request' && isset($p->course_id)) {
-                      // Use the progress from the controller calculation for approved requests
-                      $actualProgress = $p->progress_percentage ?? 0;
-                      $progressSource = 'approved_request';
-                    } else {
-                      // For other cases, use employee training dashboard
-                      $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)->get();
-
-                      foreach ($trainingRecords as $record) {
-                        $courseTitle = $record->training_title ?? '';
-
-                        // General competency matching
-                        $cleanCompetency = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $trainingTitle);
-                        $cleanCourse = str_replace([' Training', 'Training', ' Course', 'Course', ' Program', 'Program'], '', $courseTitle);
-
-                        if (stripos($cleanCourse, $cleanCompetency) !== false || stripos($cleanCompetency, $cleanCourse) !== false) {
-                          // Get progress from this training record
-                          $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $record->course_id);
-                          $trainingProgress = $record->progress ?? 0;
-
-                          // Priority: Exam progress > Training record progress
-                          $actualProgress = $examProgress > 0 ? $examProgress : $trainingProgress;
-                          $progressSource = 'training';
-                          break;
-                        }
-                      }
-                    }
-                  }
-
-                  // Now, check if we have competency profile
-                  $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
-                    $q->where('competency_name', 'LIKE', '%' . $trainingTitle . '%');
-                  })->where('employee_id', $employeeId)->first();
-
-                  if ($competencyProfile) {
-                    $storedProficiency = ($competencyProfile->proficiency_level / 5) * 100;
-                    $isManuallySet = $competencyProfile->proficiency_level > 1 ||
-                                      ($competencyProfile->proficiency_level == 1 && $competencyProfile->assessment_date &&
-                                       \Carbon\Carbon::parse($competencyProfile->assessment_date)->diffInDays(now()) < 30);
-
-                    if ($isManuallySet) {
-                      $progressValue = $storedProficiency;
-                      $progressSource = 'manual';
-                    } else {
-                      $progressValue = $actualProgress > 0 ? $actualProgress : $storedProficiency;
-                    }
-                  } else {
-                    $progressValue = $actualProgress;
-                  }
-
-                  // Calculate expired date
-                  $expiredDate = null;
-                  
-                  // For approved requests, check if expired date is provided from controller
-                  if (isset($p->source) && $p->source == 'approved_request' && isset($p->expired_date)) {
-                    $expiredDate = $p->expired_date;
-                  } else {
-                    // For competency profiles, check competency gap
-                    if ($competencyProfile) {
-                      $competencyGap = \App\Models\CompetencyGap::where('employee_id', $employeeId)
-                        ->where('competency_id', $competencyProfile->competency_id)
-                        ->first();
-                      if ($competencyGap && $competencyGap->expired_date) {
-                        $expiredDate = $competencyGap->expired_date;
-                      }
-                    }
+                  // Priority 1: Check for exam progress (highest priority for real-time updates)
+                  $examAttempt = null;
+                  if (isset($p->course_id) && $p->course_id) {
+                    $examAttempt = \App\Models\ExamAttempt::where('employee_id', $employeeId)
+                      ->where('course_id', $p->course_id)
+                      ->whereIn('status', ['completed', 'failed']) // Include both passed and failed attempts
+                      ->orderBy('completed_at', 'desc')
+                      ->first();
                     
-                    // If still no expired date, check training dashboard records
-                    if (!$expiredDate && isset($p->course_id)) {
-                      $trainingRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                    if ($examAttempt) {
+                      // Use actual exam score for progress, but set to 100% if passed (>=80%)
+                      $actualScore = round($examAttempt->score);
+                      $progressValue = $actualScore >= 80 ? 100 : $actualScore;
+                      $progressSource = 'exam';
+                    }
+                  }
+
+                  // Priority 2: Check training dashboard for this specific employee (updated by ExamController)
+                  if ($progressValue == 0 && isset($p->course_id) && $p->course_id) {
+                    $trainingRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                      ->where('course_id', $p->course_id)
+                      ->orderBy('updated_at', 'desc') // Get most recent update
+                      ->first();
+                    if ($trainingRecord && $trainingRecord->progress > 0) {
+                      $progressValue = max(0, min(100, (float)$trainingRecord->progress));
+                      $progressSource = 'dashboard';
+                    }
+                  }
+
+                  // Priority 3: Check for competency-based progress
+                  if ($progressValue == 0 && isset($p->training_title)) {
+                    // Find matching competency profile for this employee
+                    $competencyName = str_replace([' Training', ' Course', ' Program'], '', $p->training_title);
+                    $competencyProfile = \App\Models\EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                      ->whereHas('competency', function($query) use ($competencyName) {
+                        $query->where('competency_name', 'LIKE', '%' . $competencyName . '%');
+                      })->first();
+                    
+                    if ($competencyProfile && $competencyProfile->proficiency_level > 0) {
+                      $progressValue = min(100, round(($competencyProfile->proficiency_level / 5) * 100));
+                      $progressSource = 'competency';
+                    }
+                  }
+
+                  // Priority 4: Check approved training requests with dashboard records
+                  if ($progressValue == 0 && isset($p->source) && $p->source == 'approved_request') {
+                    // For approved requests, check if there's a dashboard record
+                    if (isset($p->course_id) && $p->course_id) {
+                      $dashboardRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
                         ->where('course_id', $p->course_id)
                         ->first();
-                      if ($trainingRecord && $trainingRecord->expired_date) {
-                        $expiredDate = $trainingRecord->expired_date;
+                      
+                      if ($dashboardRecord) {
+                        $progressValue = max(0, min(100, (float)$dashboardRecord->progress));
+                        $progressSource = 'approved_request_dashboard';
                       }
                     }
                   }
 
-                  $progressColor = 'bg-primary';
-                  if ($progressValue >= 75) $progressColor = 'bg-success';
-                  elseif ($progressValue >= 50) $progressColor = 'bg-info';
-                  elseif ($progressValue >= 25) $progressColor = 'bg-warning';
+                  // Priority 5: Use controller provided progress only if it matches this employee
+                  if ($progressValue == 0 && isset($p->progress_percentage) && is_numeric($p->progress_percentage)) {
+                    // Verify this progress belongs to the current employee
+                    if (isset($p->employee_id) && $p->employee_id == $employeeId) {
+                      $progressValue = max(0, min(100, (float)$p->progress_percentage));
+                      $progressSource = 'system';
+                    }
+                  }
 
-                  // Update progress sources for badges
-                  $progressSources = [];
-                  if ($progressSource == 'destination') $progressSources['destination'] = $actualProgress;
-                  if ($progressSource == 'training') $progressSources['training'] = $actualProgress;
-                  if ($competencyProfile && $storedProficiency != $progressValue) $progressSources['competency'] = $storedProficiency;
+                  // Priority 6: Check destination knowledge training progress
+                  if ($progressValue == 0 && isset($p->training_title)) {
+                    $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
+                      ->where('destination_name', 'LIKE', '%' . $p->training_title . '%')
+                      ->first();
+                    
+                    if ($destinationRecord && $destinationRecord->progress > 0) {
+                      $progressValue = min(100, round($destinationRecord->progress));
+                      $progressSource = 'destination';
+                    }
+                  }
+
+                  // Calculate expired date from available sources
+                  $expiredDate = null;
+                  $expiredDateSource = 'none';
+                  
+                  // Priority 1: Check competency gap
+                  $competencyGap = \App\Models\CompetencyGap::where('employee_id', $employeeId)->first();
+                  if ($competencyGap && $competencyGap->expired_date) {
+                    $expiredDate = $competencyGap->expired_date;
+                    $expiredDateSource = 'competency_gap';
+                  }
+                  
+                  // Priority 2: Check training dashboard
+                  if (!$expiredDate && isset($p->course_id)) {
+                    $trainingRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                      ->where('course_id', $p->course_id)
+                      ->first();
+                    if ($trainingRecord && $trainingRecord->expired_date) {
+                      $expiredDate = $trainingRecord->expired_date;
+                      $expiredDateSource = 'training_dashboard';
+                    }
+                  }
+                  
+                  // Priority 3: Use request data if available
+                  if (!$expiredDate && isset($p->expired_date)) {
+                    $expiredDate = $p->expired_date;
+                    $expiredDateSource = 'request_data';
+                  }
+
+                  // Enhanced progress bar colors based on exam results and thresholds
+                  if ($progressSource === 'exam' && $examAttempt) {
+                    // Exam-specific coloring (80% pass threshold)
+                    if ($examAttempt->score >= 80) {
+                      $progressColor = 'bg-success'; // Green for passed
+                    } else {
+                      $progressColor = 'bg-danger'; // Red for failed
+                    }
+                  } else {
+                    // Standard progress coloring
+                    if ($progressValue >= 80) $progressColor = 'bg-success';
+                    elseif ($progressValue >= 60) $progressColor = 'bg-info';
+                    elseif ($progressValue >= 40) $progressColor = 'bg-warning';
+                    elseif ($progressValue > 0) $progressColor = 'bg-primary';
+                    else $progressColor = 'bg-secondary';
+                  }
                 @endphp
 
                 <div class="progress" style="height: 20px;">
                   <div class="progress-bar {{ $progressColor }}" role="progressbar" style="width: {{ $progressValue }}%">
                     {{ $progressValue }}%
+                    @if($progressSource === 'exam' && $examAttempt)
+                      @if($examAttempt->score >= 80)
+                        <i class="bi bi-check-circle ms-1"></i>
+                      @else
+                        <i class="bi bi-x-circle ms-1"></i>
+                      @endif
+                    @endif
                   </div>
                 </div>
-
-                {{-- Show exam score --}}
-                @if(isset($p->exam_quiz_scores) && $p->exam_quiz_scores['exam_score'] > 0)
-                  @php
-                    $breakdown = \App\Models\ExamAttempt::getScoreBreakdown(Auth::user()->employee_id, $p->course_id);
-                  @endphp
-                  <small class="text-muted d-block mt-1"
-                         data-bs-toggle="tooltip"
-                         data-bs-placement="top"
-                         title="Exam Score: {{ $breakdown['exam_score'] }}% = {{ $breakdown['combined_progress'] }}% progress">
-                    <i class="bi bi-mortarboard me-1"></i>Exam: {{ $p->exam_quiz_scores['exam_score'] }}%
-                    <i class="bi bi-info-circle ms-1" style="cursor: help;"></i>
+                
+                {{-- Show progress source --}}
+                @if($progressSource !== 'none')
+                  <small class="text-muted d-block mt-1">
+                    @if($progressSource === 'exam')
+                      <i class="bi bi-mortarboard me-1"></i>Exam Score
+                    @elseif($progressSource === 'dashboard')
+                      <i class="bi bi-book me-1"></i>Training Dashboard
+                    @elseif($progressSource === 'approved_request_dashboard')
+                      <i class="bi bi-check-circle me-1"></i>Approved Request
+                    @elseif($progressSource === 'competency')
+                      <i class="bi bi-award me-1"></i>Competency Profile
+                    @elseif($progressSource === 'destination')
+                      <i class="bi bi-geo-alt me-1"></i>Destination Training
+                    @elseif($progressSource === 'system')
+                      <i class="bi bi-database me-1"></i>System Data
+                    @endif
                   </small>
                 @endif
 
-                {{-- Show progress from multiple sources --}}
-                @if(!empty($progressSources))
-                  <div class="mt-2">
-                    @foreach($progressSources as $source => $sourceProgress)
-                      @if($sourceProgress != $progressValue)
-                        <small class="badge bg-light text-dark me-1"
-                               data-bs-toggle="tooltip"
-                               title="{{ ucfirst($source) }}: {{ $sourceProgress }}% progress">
-                          @if($source == 'destination')
-                            <i class="bi bi-geo-alt"></i>
-                          @elseif($source == 'competency')
-                            <i class="bi bi-award"></i>
-                          @elseif($source == 'training')
-                            <i class="bi bi-book"></i>
-                          @elseif($source == 'manual')
-                            <i class="bi bi-pencil"></i>
-                          @endif
-                          {{ ucfirst($source) }}: {{ $sourceProgress }}%
-                        </small>
-                      @endif
-                    @endforeach
-                  </div>
+                {{-- Show exam score if available --}}
+                @if($progressSource === 'exam' && $examAttempt)
+                  <small class="{{ $examAttempt->score >= 80 ? 'text-success' : 'text-danger' }} d-block mt-1">
+                    <i class="bi bi-{{ $examAttempt->score >= 80 ? 'check-circle' : 'x-circle' }} me-1"></i>
+                    Exam Score: {{ $examAttempt->score }}%
+                    @if($examAttempt->score >= 80)
+                      <span class="badge bg-success ms-1">PASSED</span>
+                    @else
+                      <span class="badge bg-danger ms-1">FAILED</span>
+                    @endif
+                    <br><span class="text-muted">({{ $examAttempt->completed_at->format('M d, Y') }})</span>
+                  </small>
                 @endif
               </td>
               <td>
                 @php
-                  // Determine status based on progress percentage - ALWAYS use progress over stored status
-                  $progressValue = $p->progress_percentage ?? 0;
+                  // Determine status based on REAL-TIME progress percentage and exam results
+                  $currentProgressValue = $progressValue;
+                  $improvementMessage = '';
 
-                  // Force status based on actual progress percentage
-                  if ($progressValue >= 80) {
-                    $displayStatus = 'Completed';
-                    $statusClass = 'bg-success';
-                  } elseif ($progressValue < 50 && $progressValue > 0) {
-                    $displayStatus = 'Failed';
-                    $statusClass = 'bg-danger';
-                  }  elseif ($progressValue > 0) {
-                    $displayStatus = 'Started';
-                    $statusClass = 'bg-primary';
+                  // Enhanced status logic with exam-specific handling
+                  if ($progressSource === 'exam' && $examAttempt) {
+                    // Exam-based status determination (80% threshold)
+                    if ($examAttempt->score >= 80) {
+                      $displayStatus = 'Passed';
+                      $statusClass = 'bg-success';
+                      $currentProgressValue = 100; // Set to 100% for passed exams
+                    } else {
+                      $displayStatus = 'Failed';
+                      $statusClass = 'bg-danger';
+                      $improvementMessage = 'Needs Improvement - Retake Required';
+                    }
                   } else {
-                    $displayStatus = 'Ready to Start';
-                    $statusClass = 'bg-secondary';
+                    // Non-exam status determination
+                    if ($currentProgressValue >= 100) {
+                      $displayStatus = 'Completed';
+                      $statusClass = 'bg-success';
+                    } elseif ($currentProgressValue >= 80) {
+                      $displayStatus = 'Passed';
+                      $statusClass = 'bg-success';
+                    } elseif ($currentProgressValue >= 40 && $currentProgressValue < 80) {
+                      $displayStatus = 'In Progress';
+                      $statusClass = 'bg-warning';
+                      $improvementMessage = 'Needs More Improvement';
+                    } elseif ($currentProgressValue > 0) {
+                      $displayStatus = 'Started';
+                      $statusClass = 'bg-primary';
+                      $improvementMessage = 'Continue Learning';
+                    } else {
+                      $displayStatus = 'Ready to Start';
+                      $statusClass = 'bg-secondary';
+                    }
                   }
                 @endphp
                 <span class="badge {{ $statusClass }}">{{ $displayStatus }}</span>
+                <small class="d-block text-muted mt-1">{{ $currentProgressValue }}% Progress</small>
+                @if(!empty($improvementMessage))
+                  <small class="d-block text-warning mt-1">
+                    <i class="bi bi-exclamation-triangle me-1"></i>{{ $improvementMessage }}
+                  </small>
+                @endif
               </td>
               <td>
                 @php
-                  $lastUpdated = $p->last_updated;
-                  $updateSource = 'Training Dashboard';
-
-                  // Check for more recent updates from other sources
-                  $employeeId = Auth::user()->employee_id;
-                  $recentUpdates = [];
-
-                  // Check destination knowledge updates
-                  if(isset($p->course_id)) {
-                    $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
-                      ->where('destination_name', 'LIKE', '%' . $p->training_title . '%')
-                      ->first();
-                    if($destinationRecord && $destinationRecord->updated_at) {
-                      $recentUpdates['destination'] = $destinationRecord->updated_at;
+                  $lastUpdated = $p->last_updated ?? now();
+                  $updateSource = 'System';
+                  
+                  if(isset($p->source)) {
+                    switch($p->source) {
+                      case 'approved_request':
+                        $updateSource = 'Training Request';
+                        break;
+                      case 'dashboard_progress':
+                        $updateSource = 'Training Dashboard';
+                        break;
+                      default:
+                        $updateSource = 'System';
                     }
                   }
 
-                  // Check competency profile updates
-                  if(isset($p->course_id)) {
-                    $courseTitle = str_replace(' Training', '', $p->training_title);
-                    $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($courseTitle) {
-                      $q->where('competency_name', 'LIKE', '%' . $courseTitle . '%');
-                    })->where('employee_id', $employeeId)->first();
-
-                    if($competencyProfile && $competencyProfile->assessment_date) {
-                      $recentUpdates['competency'] = $competencyProfile->assessment_date;
-                    }
-                  }
-
-                  // Find most recent update
-                  $mostRecentUpdate = \Carbon\Carbon::parse($lastUpdated);
-                  $mostRecentSource = $updateSource;
-
-                  foreach($recentUpdates as $source => $updateTime) {
-                    $updateCarbon = \Carbon\Carbon::parse($updateTime);
-                    if($updateCarbon->gt($mostRecentUpdate)) {
-                      $mostRecentUpdate = $updateCarbon;
-                      $mostRecentSource = ucfirst($source);
-                    }
+                  try {
+                    $mostRecentUpdate = \Carbon\Carbon::parse($lastUpdated);
+                  } catch (Exception $e) {
+                    $mostRecentUpdate = \Carbon\Carbon::now();
                   }
                 @endphp
 
                 <div class="d-flex flex-column">
-                  <span class="fw-semibold">{{ $mostRecentUpdate->format('Y-m-d H:i') }}</span>
+                  <span class="fw-semibold">{{ $mostRecentUpdate->format('M d, Y H:i') }}</span>
                   <small class="text-muted">
                     <i class="bi bi-clock me-1"></i>{{ $mostRecentUpdate->diffForHumans() }}
-                    @if($mostRecentSource != 'Training Dashboard')
-                      <br><i class="bi bi-arrow-repeat me-1"></i>via {{ $mostRecentSource }}
-                    @endif
+                    <br><i class="bi bi-arrow-repeat me-1"></i>{{ $updateSource }}
                   </small>
                 </div>
               </td>
@@ -393,6 +400,22 @@
                           </span>
                         @endif
                       </div>
+                      {{-- Show expiration source --}}
+                      @if($expiredDateSource !== 'none')
+                        <div class="w-100 mt-1">
+                          <small class="text-muted">
+                            @if($expiredDateSource === 'competency_gap')
+                              <i class="bi bi-award me-1"></i>From Competency Gap
+                            @elseif($expiredDateSource === 'destination_competency_gap')
+                              <i class="bi bi-geo-alt me-1"></i>From Destination Gap
+                            @elseif($expiredDateSource === 'training_dashboard')
+                              <i class="bi bi-book me-1"></i>From Training Dashboard
+                            @elseif($expiredDateSource === 'approved_request')
+                              <i class="bi bi-check-circle me-1"></i>From Training Request
+                            @endif
+                          </small>
+                        </div>
+                      @endif
                     </div>
                   @else
                     <span class="badge bg-secondary bg-opacity-10 text-secondary">
@@ -407,94 +430,33 @@
               </td>
               <td class="text-center">
                 @php
-                  $progressValue = $p->progress_percentage ?? 0;
-                  $isCompleted = $progressValue >= 100;
+                  $currentProgressValue = $progressValue;
+                  $isCompleted = $currentProgressValue >= 100;
+                  $finalProgressValue = $progressValue;
                 @endphp
 
                 <div class="d-flex gap-1 justify-content-center">
                   @if($isCompleted)
-                    {{-- Show certificate download for completed trainings --}}
+                    {{-- Training completed - redirect to completed section --}}
+                    <button class="btn btn-success btn-sm" onclick="redirectToCompleted('{{ $displayTitle }}', 0)">
+                      <i class="bi bi-check-circle"></i> View in Completed
+                    </button>
                     @php
-                      $employeeId = Auth::user()->employee_id;
-                      $certificate = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)
+                      $certificate = \App\Models\TrainingRecordCertificateTracking::where('employee_id', Auth::user()->employee_id)
                           ->where('course_id', $p->course_id ?? 0)
                           ->first();
                     @endphp
-
                     @if($certificate)
-                      <a href="{{ route('certificates.view', $certificate->id) }}" class="btn btn-success btn-sm" target="_blank">
-                        <i class="bi bi-award"></i> View Certificate
+                      <a href="{{ route('certificates.view', $certificate->id) }}" class="btn btn-primary btn-sm" target="_blank">
+                        <i class="bi bi-award"></i> Certificate
                       </a>
-                      <a href="{{ route('certificates.download', $certificate->id) }}" class="btn btn-primary btn-sm">
-                        <i class="bi bi-download"></i> Download
-                      </a>
-                    @else
-                      <span class="badge bg-success">
-                        <i class="bi bi-check-circle"></i> Completed
-                      </span>
                     @endif
-                  @elseif(isset($p->can_start_exam) && $p->can_start_exam)
-                    @php
-                      $employeeId = Auth::user()->employee_id;
-
-                      // All courses in Employee Training Dashboard can now have exams
-                      // Removed destination knowledge restriction
-
-                      $examAttempts = \App\Models\ExamAttempt::where('employee_id', $employeeId)
-                          ->where('course_id', $p->course_id)
-                          ->where('type', 'exam')
-                          ->count();
-                    @endphp
-
-                    {{-- Show exam button for all courses --}}
-                    @if($examAttempts < 3)
-                      <button class="btn btn-success btn-sm" onclick="startExam({{ $p->course_id }}, '{{ $displayTitle }}')">
-                        <i class="bi bi-play-circle"></i> Start Exam
-                        <small class="d-block">({{ 3 - $examAttempts }} left)</small>
-                      </button>
-                    @else
-                      <button class="btn btn-secondary btn-sm" disabled>
-                        <i class="bi bi-x-circle"></i> Exam
-                        <small class="d-block">(Max attempts)</small>
-                      </button>
-                    @endif
-
-                    {{-- View Details button next to exam button --}}
-                    <button
-                      class="btn btn-outline-primary btn-sm"
-                      data-bs-toggle="modal"
-                      data-bs-target="#viewProgressModal"
-                      data-id="{{ $p->progress_id }}"
-                      data-title="{{ $displayTitle }}"
-                      data-percent="{{ $p->progress_percentage }}"
-                      data-status="{{ $displayStatus }}"
-                      data-updated="{{ $p->last_updated }}"
-                      data-remarks="{{ $p->remarks ?? 'No remarks' }}"
-                      data-source="{{ $p->source ?? 'Not specified' }}"
-                    >
-                      <i class="bi bi-eye"></i> View Details
-                    </button>
-
-                    {{-- Delete button --}}
-                    <button
-                      class="btn btn-outline-danger btn-sm"
-                      onclick="deleteProgress('{{ $p->progress_id }}', '{{ $displayTitle }}')"
-                      title="Delete this training progress"
-                    >
-                      <i class="bi bi-trash"></i> Delete
-                    </button>
                   @else
+                    {{-- View Details button --}}
                     <button
                       class="btn btn-outline-primary btn-sm"
-                      data-bs-toggle="modal"
-                      data-bs-target="#viewProgressModal"
-                      data-id="{{ $p->progress_id }}"
-                      data-title="{{ $displayTitle }}"
-                      data-percent="{{ $p->progress_percentage }}"
-                      data-status="{{ $displayStatus }}"
-                      data-updated="{{ $p->last_updated }}"
-                      data-remarks="{{ $p->remarks ?? 'No remarks' }}"
-                      data-source="{{ $p->source ?? 'Not specified' }}"
+                      onclick="viewProgressDetails('{{ $p->progress_id }}', '{{ $displayTitle }}', {{ $finalProgressValue }}, '{{ $displayStatus }}', '{{ $mostRecentUpdate->format('M d, Y H:i') }}', '{{ $p->remarks ?? 'No remarks' }}', '{{ $progressSource ?? ($p->source ?? 'Not specified') }}', '{{ $showExpiredDate ? \Carbon\Carbon::parse($expiredDate)->format('M d, Y') : 'Not Set' }}', '{{ $p->course_id ?? '' }}')"
+                      title="View detailed progress information"
                     >
                       <i class="bi bi-eye"></i> View Details
                     </button>
@@ -502,7 +464,7 @@
                     {{-- Delete button --}}
                     <button
                       class="btn btn-outline-danger btn-sm"
-                      onclick="deleteProgress('{{ $p->progress_id }}', '{{ $displayTitle }}')"
+                      onclick="deleteProgressWithConfirmation('{{ $p->progress_id }}', '{{ $displayTitle }}')"
                       title="Delete this training progress"
                     >
                       <i class="bi bi-trash"></i> Delete
@@ -522,7 +484,7 @@
 
 {{-- View Details Modal --}}
 <div class="modal fade" id="viewProgressModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-md modal-dialog-centered">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <h5 class="modal-title">Training Progress Details</h5>
@@ -534,21 +496,29 @@
             <label class="form-label fw-bold">Training Title</label>
             <p class="form-control-plaintext" id="viewTitle"></p>
           </div>
-          <div class="col-6 mb-3">
+          <div class="col-8 mb-3">
             <label class="form-label fw-bold">Progress</label>
             <div id="viewProgressBar"></div>
           </div>
-          <div class="col-6 mb-3">
+          <div class="col-4 mb-3">
             <label class="form-label fw-bold">Status</label>
             <p class="form-control-plaintext" id="viewStatus"></p>
           </div>
-          <div class="col-12 mb-3">
+          <div class="col-6 mb-3">
             <label class="form-label fw-bold">Last Updated</label>
             <p class="form-control-plaintext" id="viewUpdated"></p>
           </div>
+          <div class="col-6 mb-3">
+            <label class="form-label fw-bold">Expired Date</label>
+            <p class="form-control-plaintext" id="viewExpired"></p>
+          </div>
           <div class="col-12 mb-3">
-            <label class="form-label fw-bold">Source</label>
+            <label class="form-label fw-bold">Progress Source</label>
             <p class="form-control-plaintext" id="viewSource"></p>
+          </div>
+          <div class="col-12 mb-3" id="examScoreSection" style="display: none;">
+            <label class="form-label fw-bold">Exam Score</label>
+            <p class="form-control-plaintext" id="viewExamScore"></p>
           </div>
           <div class="col-12 mb-3">
             <label class="form-label fw-bold">Remarks</label>
@@ -602,38 +572,112 @@ document.getElementById('viewProgressModal')?.addEventListener('show.bs.modal', 
   const updated = button.getAttribute('data-updated');
   const remarks = button.getAttribute('data-remarks');
   const source = button.getAttribute('data-source');
+  const expired = button.getAttribute('data-expired');
+  const courseId = button.getAttribute('data-course-id');
+
+  // Debug: Log all values to console for troubleshooting
+  console.log('Modal Data:', {
+    title: title,
+    percent: percent,
+    status: status,
+    updated: updated,
+    remarks: remarks,
+    source: source,
+    expired: expired
+  });
 
   // Update modal content
-  document.getElementById('viewTitle').textContent = title;
-  document.getElementById('viewStatus').innerHTML = `<span class="badge bg-info">${status}</span>`;
-  document.getElementById('viewUpdated').textContent = updated;
-  document.getElementById('viewRemarks').textContent = remarks;
+  document.getElementById('viewTitle').textContent = title || 'N/A';
+  document.getElementById('viewUpdated').textContent = updated || 'N/A';
+  document.getElementById('viewRemarks').textContent = remarks || 'No remarks available';
+  document.getElementById('viewExpired').textContent = expired || 'Not Set';
 
-  // Format source display
-  let sourceDisplay = source;
+  // Format status display with appropriate badge
+  let statusBadgeClass = 'bg-secondary';
+  if (status === 'Completed') statusBadgeClass = 'bg-success';
+  else if (status === 'Started') statusBadgeClass = 'bg-primary';
+  else if (status === 'Failed') statusBadgeClass = 'bg-danger';
+  else if (status === 'Ready to Start') statusBadgeClass = 'bg-info';
+  
+  document.getElementById('viewStatus').innerHTML = `<span class="badge ${statusBadgeClass}">${status || 'Unknown'}</span>`;
+
+  // Format source display with icons
+  let sourceDisplay = source || 'Not specified';
+  let sourceIcon = 'bi-info-circle';
+  
   if (source === 'approved_request') {
-    sourceDisplay = 'From Request';
+    sourceDisplay = 'From Training Request';
+    sourceIcon = 'bi-check-circle';
   } else if (source === 'employee_training_dashboard') {
-    sourceDisplay = 'Admin Assigned';
-  } else if (source === 'Not specified') {
-    sourceDisplay = 'Not specified';
+    sourceDisplay = 'Admin Assigned Training';
+    sourceIcon = 'bi-person-gear';
+  } else if (source === 'competency_profile') {
+    sourceDisplay = 'From Competency Profile';
+    sourceIcon = 'bi-award';
+  } else if (source === 'training_dashboard') {
+    sourceDisplay = 'From Training Dashboard';
+    sourceIcon = 'bi-book';
+  } else if (source === 'exam_progress') {
+    sourceDisplay = 'From Exam Progress';
+    sourceIcon = 'bi-mortarboard';
+  } else if (source === 'destination_knowledge' || source === 'destination_completed' || source === 'destination_progress') {
+    sourceDisplay = 'From Destination Knowledge Training';
+    sourceIcon = 'bi-geo-alt';
+  } else if (source === 'training_matched') {
+    sourceDisplay = 'From Matched Training Record';
+    sourceIcon = 'bi-book-half';
+  } else if (source === 'controller_data' || source === 'controller_progress') {
+    sourceDisplay = 'From System Data';
+    sourceIcon = 'bi-database';
   }
-  document.getElementById('viewSource').textContent = sourceDisplay;
+  
+  document.getElementById('viewSource').innerHTML = `<i class="${sourceIcon} me-2"></i>${sourceDisplay}`;
 
-  // Create progress bar
-  const progressValue = parseInt(percent) || 0;
-  let progressColor = 'bg-primary';
-  if (progressValue >= 75) progressColor = 'bg-success';
-  else if (progressValue >= 50) progressColor = 'bg-info';
-  else if (progressValue >= 25) progressColor = 'bg-warning';
+  // Create progress bar with proper value handling
+  const progressValue = Math.max(0, Math.min(100, parseInt(percent) || 0));
+  let progressColor = 'bg-secondary';
+  if (progressValue >= 80) progressColor = 'bg-success';
+  else if (progressValue >= 60) progressColor = 'bg-info';
+  else if (progressValue >= 40) progressColor = 'bg-warning';
+  else if (progressValue > 0) progressColor = 'bg-primary';
 
+  // Enhanced progress bar with percentage text
   document.getElementById('viewProgressBar').innerHTML = `
-    <div class="progress" style="height: 20px;">
-      <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressValue}%">
-        ${progressValue}%
+    <div class="progress mb-2" style="height: 25px;">
+      <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressValue}%" aria-valuenow="${progressValue}" aria-valuemin="0" aria-valuemax="100">
+        <span class="fw-bold">${progressValue}%</span>
       </div>
     </div>
+    <small class="text-muted">Progress: ${progressValue}% of 100%</small>
   `;
+
+  // Show exam score if available
+  if (courseId) {
+    fetch(`/employee/exam-score/${courseId}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.score) {
+          document.getElementById('examScoreSection').style.display = 'block';
+          const scoreColor = data.score >= 80 ? 'text-success' : 'text-danger';
+          const scoreIcon = data.score >= 80 ? 'bi-check-circle' : 'bi-x-circle';
+          document.getElementById('viewExamScore').innerHTML = `
+            <span class="${scoreColor}">
+              <i class="bi ${scoreIcon} me-2"></i>${data.score}% 
+              <small class="text-muted">(${data.date})</small>
+            </span>
+          `;
+        } else {
+          document.getElementById('examScoreSection').style.display = 'none';
+        }
+      })
+      .catch(() => {
+        document.getElementById('examScoreSection').style.display = 'none';
+      });
+  } else {
+    document.getElementById('examScoreSection').style.display = 'none';
+  }
+
+  console.log('Final Modal Progress Value:', progressValue, 'Color:', progressColor);
 });
 
 // Remove all .modal-backdrop elements on page load and after any modal event
@@ -653,43 +697,428 @@ window.addEventListener('DOMContentLoaded', function() {
     return new bootstrap.Tooltip(tooltipTriggerEl);
   });
 });
-</script>
 
-<script>
-// Start Exam Function
-function startExam(courseId, trainingTitle) {
-  if (confirm(`Start exam for "${trainingTitle}"?`)) {
-    // Create exam modal or redirect to exam page
-    window.location.href = `/employee/exam/start/${courseId}`;
+// Auto-refresh progress data after exam completion
+function refreshProgressData() {
+  // Check if we're coming from an exam result page
+  const urlParams = new URLSearchParams(window.location.search);
+  const fromExam = urlParams.get('from_exam');
+  const examCompleted = urlParams.get('exam_completed');
+  
+  if (fromExam === 'true' || examCompleted === 'true') {
+    // Wait a moment for database updates to complete, then refresh
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+  }
+
+  // Also check localStorage for exam completion flag
+  const examCompletedFlag = localStorage.getItem('exam_completed');
+  if (examCompletedFlag === 'true') {
+    localStorage.removeItem('exam_completed'); // Clear the flag
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
   }
 }
 
+// Manual refresh function for the refresh button with SweetAlert
+function manualRefreshProgress() {
+  // Show loading state
+  const refreshBtn = document.getElementById('refresh-progress-btn');
+  const originalText = refreshBtn.innerHTML;
+  refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Refreshing...';
+  refreshBtn.disabled = true;
+  
+  // Show SweetAlert loading
+  Swal.fire({
+    title: 'Refreshing Progress',
+    text: 'Updating training progress data...',
+    icon: 'info',
+    allowOutsideClick: false,
+    showConfirmButton: false,
+    willOpen: () => {
+      Swal.showLoading();
+    }
+  });
+  
+  // Force refresh after short delay
+  setTimeout(() => {
+    window.location.reload();
+  }, 1000);
+}
 
-// Delete Progress Function
-function deleteProgress(progressId, trainingTitle) {
-  if (confirm(`Are you sure you want to delete the progress for "${trainingTitle}"? This action cannot be undone.`)) {
-    // Create a form and submit it
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = `/employee/my_trainings/${progressId}`;
+// Listen for cross-tab communication about exam completion
+window.addEventListener('storage', function(e) {
+  if (e.key === 'exam_completed' && e.newValue === 'true') {
+    setTimeout(() => {
+      window.location.reload();
+    }, 2000);
+  }
+});
 
-    // Add CSRF token
-    const csrfToken = document.createElement('input');
-    csrfToken.type = 'hidden';
-    csrfToken.name = '_token';
-    csrfToken.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-    form.appendChild(csrfToken);
+// Call refresh function on page load
+window.addEventListener('DOMContentLoaded', refreshProgressData);
 
-    // Add method spoofing for DELETE
-    const methodField = document.createElement('input');
-    methodField.type = 'hidden';
-    methodField.name = '_method';
-    methodField.value = 'DELETE';
-    form.appendChild(methodField);
+// Listen for storage events (cross-tab communication for exam completion)
+window.addEventListener('storage', function(e) {
+  if (e.key === 'exam_completed' && e.newValue === 'true') {
+    // Another tab completed an exam, refresh this page
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+    // Clear the flag
+    localStorage.removeItem('exam_completed');
+  }
+});
 
-    // Submit the form
-    document.body.appendChild(form);
-    form.submit();
+// Call refresh function on page load
+window.addEventListener('DOMContentLoaded', refreshProgressData);
+</script>
+
+<script>
+// Removed START EXAM functionality as requested
+
+// Redirect to completed section with SweetAlert
+function redirectToCompleted(trainingTitle, examScore) {
+  const message = examScore >= 80 ? 
+    `Congratulations! You completed "${trainingTitle}" with ${examScore}% score.` :
+    `Training "${trainingTitle}" completed.`;
+  
+  Swal.fire({
+    title: 'Training Completed!',
+    text: message + ' Would you like to view it in Completed Trainings?',
+    icon: examScore >= 80 ? 'success' : 'info',
+    showCancelButton: true,
+    confirmButtonColor: '#3085d6',
+    cancelButtonColor: '#6c757d',
+    confirmButtonText: 'Yes, view completed',
+    cancelButtonText: 'Stay here'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      window.location.href = '{{ route('employee.my_trainings.index') }}?tab=completed';
+    }
+  });
+}
+
+
+// Delete Progress Function with SweetAlert and Password Verification
+function deleteProgressWithConfirmation(progressId, trainingTitle) {
+  Swal.fire({
+    title: 'Delete Training Progress',
+    html: `
+      <div class="text-start">
+        <p class="mb-3">You are about to delete the progress for:</p>
+        <div class="alert alert-warning mb-3">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          <strong>${trainingTitle}</strong>
+        </div>
+        <div class="alert alert-danger mb-3">
+          <i class="bi bi-shield-exclamation me-2"></i>
+          <strong>Warning:</strong> This action cannot be undone and will permanently remove all progress data.
+        </div>
+        <div class="mb-3">
+          <label for="delete-password" class="form-label fw-bold">Enter your password to confirm:</label>
+          <input type="password" id="delete-password" class="form-control" placeholder="Your password" minlength="3">
+          <div class="form-text">
+            <i class="bi bi-info-circle me-1"></i>
+            Password verification is required for security purposes.
+          </div>
+        </div>
+      </div>
+    `,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonColor: '#dc3545',
+    cancelButtonColor: '#6c757d',
+    confirmButtonText: '<i class="bi bi-trash me-1"></i>Delete Progress',
+    cancelButtonText: 'Cancel',
+    focusConfirm: false,
+    preConfirm: () => {
+      const password = document.getElementById('delete-password').value;
+      if (!password) {
+        Swal.showValidationMessage('Password is required');
+        return false;
+      }
+      if (password.length < 3) {
+        Swal.showValidationMessage('Password must be at least 3 characters');
+        return false;
+      }
+      return password;
+    }
+  }).then((result) => {
+    if (result.isConfirmed) {
+      submitDeleteProgress(progressId, trainingTitle, result.value);
+    }
+  });
+}
+
+// Submit delete progress with password verification
+function submitDeleteProgress(progressId, trainingTitle, password) {
+  // Show loading
+  Swal.fire({
+    title: 'Processing...',
+    text: 'Deleting training progress',
+    icon: 'info',
+    allowOutsideClick: false,
+    showConfirmButton: false,
+    willOpen: () => {
+      Swal.showLoading();
+    }
+  });
+
+  // Create form data
+  const formData = new FormData();
+  formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+  formData.append('_method', 'DELETE');
+  formData.append('password_verification', password);
+
+  // Submit request
+  fetch(`/employee/my_trainings/${progressId}`, {
+    method: 'POST',
+    body: formData,
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest'
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      Swal.fire({
+        title: 'Deleted Successfully!',
+        text: `Training progress for "${trainingTitle}" has been deleted.`,
+        icon: 'success',
+        timer: 3000,
+        timerProgressBar: true,
+        showConfirmButton: false
+      }).then(() => {
+        window.location.reload();
+      });
+    } else {
+      Swal.fire({
+        title: 'Delete Failed',
+        text: data.message || 'Failed to delete training progress. Please try again.',
+        icon: 'error',
+        confirmButtonText: 'Try Again',
+        confirmButtonColor: '#dc3545'
+      }).then(() => {
+        // Retry the deletion
+        deleteProgressWithConfirmation(progressId, trainingTitle);
+      });
+    }
+  })
+  .catch(error => {
+    console.error('Delete error:', error);
+    Swal.fire({
+      title: 'Network Error',
+      text: 'Unable to connect to server. Please check your connection and try again.',
+      icon: 'error',
+      confirmButtonText: 'Retry',
+      confirmButtonColor: '#dc3545'
+    }).then(() => {
+      deleteProgressWithConfirmation(progressId, trainingTitle);
+    });
+  });
+}
+
+// Enhanced View Progress Details with SweetAlert
+function viewProgressDetails(progressId, title, percent, status, updated, remarks, source, expired, courseId) {
+  // Format source display with icons
+  let sourceDisplay = source || 'Not specified';
+  let sourceIcon = 'bi-info-circle';
+  
+  if (source === 'exam') {
+    sourceDisplay = 'From Exam Score';
+    sourceIcon = 'bi-mortarboard';
+  } else if (source === 'dashboard') {
+    sourceDisplay = 'From Training Dashboard';
+    sourceIcon = 'bi-book';
+  } else if (source === 'approved_request_dashboard') {
+    sourceDisplay = 'From Approved Request';
+    sourceIcon = 'bi-check-circle';
+  } else if (source === 'competency') {
+    sourceDisplay = 'From Competency Profile';
+    sourceIcon = 'bi-award';
+  } else if (source === 'destination') {
+    sourceDisplay = 'From Destination Training';
+    sourceIcon = 'bi-geo-alt';
+  } else if (source === 'system') {
+    sourceDisplay = 'From System Data';
+    sourceIcon = 'bi-database';
+  }
+
+  // Format status badge
+  let statusBadgeClass = 'bg-secondary';
+  if (status === 'Completed' || status === 'Passed') statusBadgeClass = 'bg-success';
+  else if (status === 'Started' || status === 'In Progress') statusBadgeClass = 'bg-primary';
+  else if (status === 'Failed') statusBadgeClass = 'bg-danger';
+  else if (status === 'Ready to Start') statusBadgeClass = 'bg-info';
+
+  // Format progress bar
+  const progressValue = Math.max(0, Math.min(100, parseInt(percent) || 0));
+  let progressColor = 'bg-secondary';
+  if (progressValue >= 80) progressColor = 'bg-success';
+  else if (progressValue >= 60) progressColor = 'bg-info';
+  else if (progressValue >= 40) progressColor = 'bg-warning';
+  else if (progressValue > 0) progressColor = 'bg-primary';
+
+  Swal.fire({
+    title: '<i class="bi bi-eye me-2"></i>Training Progress Details',
+    html: `
+      <div class="text-start">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="card border-primary">
+              <div class="card-header bg-primary bg-opacity-10">
+                <h6 class="card-title mb-0 text-primary">
+                  <i class="bi bi-book me-2"></i>Training Information
+                </h6>
+              </div>
+              <div class="card-body">
+                <h5 class="text-primary">${title}</h5>
+                <p class="text-muted mb-0">Progress ID: ${progressId}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-8">
+            <div class="card border-success">
+              <div class="card-header bg-success bg-opacity-10">
+                <h6 class="card-title mb-0 text-success">
+                  <i class="bi bi-graph-up me-2"></i>Progress Status
+                </h6>
+              </div>
+              <div class="card-body">
+                <div class="progress mb-3" style="height: 25px;">
+                  <div class="progress-bar ${progressColor}" role="progressbar" style="width: ${progressValue}%">
+                    <span class="fw-bold">${progressValue}%</span>
+                  </div>
+                </div>
+                <p class="mb-0">Progress: ${progressValue}% of 100%</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-4">
+            <div class="card border-info">
+              <div class="card-header bg-info bg-opacity-10">
+                <h6 class="card-title mb-0 text-info">
+                  <i class="bi bi-flag me-2"></i>Current Status
+                </h6>
+              </div>
+              <div class="card-body text-center">
+                <span class="badge ${statusBadgeClass} fs-6">${status}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-6">
+            <div class="card border-warning">
+              <div class="card-header bg-warning bg-opacity-10">
+                <h6 class="card-title mb-0 text-warning">
+                  <i class="bi bi-clock me-2"></i>Last Updated
+                </h6>
+              </div>
+              <div class="card-body">
+                <p class="mb-0">${updated}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-6">
+            <div class="card border-danger">
+              <div class="card-header bg-danger bg-opacity-10">
+                <h6 class="card-title mb-0 text-danger">
+                  <i class="bi bi-calendar-x me-2"></i>Expiration Date
+                </h6>
+              </div>
+              <div class="card-body">
+                <p class="mb-0">${expired}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-12">
+            <div class="card border-secondary">
+              <div class="card-header bg-secondary bg-opacity-10">
+                <h6 class="card-title mb-0 text-secondary">
+                  <i class="${sourceIcon} me-2"></i>Progress Source
+                </h6>
+              </div>
+              <div class="card-body">
+                <p class="mb-0">${sourceDisplay}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div class="col-12">
+            <div class="card border-light">
+              <div class="card-header bg-light">
+                <h6 class="card-title mb-0">
+                  <i class="bi bi-chat-text me-2"></i>Remarks
+                </h6>
+              </div>
+              <div class="card-body">
+                <p class="mb-0">${remarks || 'No remarks available'}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `,
+    width: '800px',
+    showCloseButton: true,
+    showConfirmButton: true,
+    confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Close',
+    confirmButtonColor: '#6c757d',
+    customClass: {
+      popup: 'text-start'
+    }
+  });
+
+  // Fetch and display exam score if available
+  if (courseId) {
+    fetch(`/employee/exam-score/${courseId}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.score) {
+          const scoreColor = data.score >= 80 ? 'text-success' : 'text-danger';
+          const scoreIcon = data.score >= 80 ? 'bi-check-circle' : 'bi-x-circle';
+          const scoreBadge = data.score >= 80 ? 'bg-success' : 'bg-danger';
+          
+          // Update the SweetAlert content to include exam score
+          const examScoreHtml = `
+            <div class="col-12 mt-3">
+              <div class="card border-primary">
+                <div class="card-header bg-primary bg-opacity-10">
+                  <h6 class="card-title mb-0 text-primary">
+                    <i class="bi bi-mortarboard me-2"></i>Exam Results
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                      <h5 class="${scoreColor} mb-1">
+                        <i class="bi ${scoreIcon} me-2"></i>${data.score}%
+                      </h5>
+                      <small class="text-muted">Exam Date: ${data.date}</small>
+                    </div>
+                    <span class="badge ${scoreBadge} fs-6">
+                      ${data.score >= 80 ? 'PASSED' : 'FAILED'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+          
+          // Note: We can't easily update the existing SweetAlert content, 
+          // but the exam score info is already shown in the main table
+        }
+      })
+      .catch(() => {
+        // Silently handle error - exam score not critical for this view
+      });
   }
 }
 </script>

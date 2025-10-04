@@ -46,7 +46,7 @@ class TrainingFeedback extends Model {
 
     public function course()
     {
-        return $this->belongsTo(CourseManagement::class, 'course_id');
+        return $this->belongsTo(CourseManagement::class, 'course_id', 'course_id');
     }
 
     // Helper methods

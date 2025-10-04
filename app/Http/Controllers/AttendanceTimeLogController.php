@@ -37,8 +37,7 @@ class AttendanceTimeLogController extends Controller
                     $table->foreign('employee_id')->references('employee_id')->on('employees')->onDelete('cascade');
                 });
                 
-                // Create sample data if table is empty
-                $this->createSampleData();
+                // Sample data creation removed - no automatic entries
             }
         } catch (Exception $e) {
             // Log error but don't break functionality
@@ -46,60 +45,6 @@ class AttendanceTimeLogController extends Controller
         }
     }
     
-    /**
-     * Create sample attendance data for testing
-     */
-    private function createSampleData()
-    {
-        try {
-            // Check if we have any data
-            $count = DB::table('attendance_time_logs')->count();
-            
-            if ($count == 0) {
-                // Get first employee for sample data
-                $employee = DB::table('employees')->first();
-                
-                if ($employee) {
-                    $sampleData = [
-                        [
-                            'employee_id' => $employee->employee_id,
-                            'log_date' => Carbon::today()->subDays(2)->format('Y-m-d'),
-                            'time_in' => '08:30:00',
-                            'time_out' => '17:15:00',
-                            'hours_worked' => 8.75,
-                            'status' => 'Present',
-                            'created_at' => now(),
-                            'updated_at' => now()
-                        ],
-                        [
-                            'employee_id' => $employee->employee_id,
-                            'log_date' => Carbon::today()->subDays(1)->format('Y-m-d'),
-                            'time_in' => '09:15:00',
-                            'time_out' => '17:30:00',
-                            'hours_worked' => 8.25,
-                            'status' => 'Late',
-                            'created_at' => now(),
-                            'updated_at' => now()
-                        ],
-                        [
-                            'employee_id' => $employee->employee_id,
-                            'log_date' => Carbon::today()->format('Y-m-d'),
-                            'time_in' => '08:45:00',
-                            'time_out' => null,
-                            'hours_worked' => null,
-                            'status' => 'Present',
-                            'created_at' => now(),
-                            'updated_at' => now()
-                        ]
-                    ];
-                    
-                    DB::table('attendance_time_logs')->insert($sampleData);
-                }
-            }
-        } catch (Exception $e) {
-            error_log("Error creating sample attendance data: " . $e->getMessage());
-        }
-    }
 
     public function index()
     {

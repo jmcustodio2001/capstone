@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Competency Details - {{ isset($competencyTracker['competency']) ? $competencyTracker['competency']['competency_name'] : ($competencyTracker['competency_name'] ?? 'Unknown') }}</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/employee_dashboard-style.css') }}">
+  <!-- SweetAlert2 -->
+  <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.min.css" rel="stylesheet">
   <style>
     .competency-detail-card {
       border-radius: 15px;
@@ -104,7 +107,6 @@
           <ol class="breadcrumb mb-0">
             <li class="breadcrumb-item"><a href="{{ route('employee.dashboard') }}" class="text-decoration-none">Home</a></li>
             <li class="breadcrumb-item"><a href="{{ route('employee.competency_profile.index') }}" class="text-decoration-none">Competency Tracker</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Details</li>
           </ol>
         </nav>
       </div>
@@ -232,24 +234,6 @@
         </div>
       </div>
       
-      <div class="col-md-6">
-        <div class="card-header training-card">
-          <h5 class="mb-3"><i class="bi bi-book me-2"></i>Recommended Training</h5>
-          @if($competencyTracker['recommended_training'] ?? null)
-            <div class="d-flex align-items-start">
-              <i class="bi bi-lightbulb me-2 mt-1"></i>
-              <div>
-                <p class="mb-2">{{ $competencyTracker['recommended_training'] ?? '' }}</p>
-                <button class="btn btn-light btn-sm">
-                  <i class="bi bi-play-circle me-1"></i>Start Training
-                </button>
-              </div>
-            </div>
-          @else
-            <p class="mb-0 opacity-75">No specific training recommendations yet. Check back after your next assessment.</p>
-          @endif
-        </div>
-      </div>
     </div>
 
     <!-- Timeline & Deadlines -->
@@ -315,144 +299,132 @@
       <button class="btn btn-primary me-2" onclick="requestFeedback()">
         <i class="bi bi-chat-dots me-1"></i>Request Feedback
       </button>
-      <button class="btn btn-success" onclick="updateProgress()">
-        <i class="bi bi-graph-up me-1"></i>Update Progress
-      </button>
     </div>
   </main>
 
-  <!-- Update Progress Modal -->
-  <div class="modal fade" id="updateProgressModal" tabindex="-1" aria-labelledby="updateProgressModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="updateProgressModalLabel">
-            <i class="bi bi-graph-up me-2"></i>Update Progress
-          </h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label for="newProficiencyLevel" class="form-label">New Proficiency Level</label>
-            <select class="form-select" id="newProficiencyLevel">
-              <option value="">Select level...</option>
-              <option value="1" {{ ($competencyTracker['current_level'] ?? 0) == 1 ? 'selected' : '' }}>1 - Beginner</option>
-              <option value="2" {{ ($competencyTracker['current_level'] ?? 0) == 2 ? 'selected' : '' }}>2 - Developing</option>
-              <option value="3" {{ ($competencyTracker['current_level'] ?? 0) == 3 ? 'selected' : '' }}>3 - Proficient</option>
-              <option value="4" {{ ($competencyTracker['current_level'] ?? 0) == 4 ? 'selected' : '' }}>4 - Advanced</option>
-              <option value="5" {{ ($competencyTracker['current_level'] ?? 0) == 5 ? 'selected' : '' }}>5 - Expert</option>
-            </select>
-            <div class="form-text">Current level: {{ $competencyTracker['current_level'] ?? 0 }}/5</div>
-          </div>
-          <div class="mb-3">
-            <label for="progressNotes" class="form-label">Progress Notes (Optional)</label>
-            <textarea class="form-control" id="progressNotes" rows="3" placeholder="Describe your progress, achievements, or areas of improvement..."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-success" id="submitProgressBtn" onclick="submitProgressUpdate()">
-            <i class="bi bi-check-circle me-1"></i>Update Progress
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.all.min.js"></script>
   
   <script>
     function requestFeedback() {
-      if (confirm('Send feedback request to your manager?')) {
-        // Show loading state
-        const btn = event.target;
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Sending...';
-        btn.disabled = true;
-        
-        // Simulate API call
-        fetch('/employee/competency-profile/request-feedback', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-          },
-          body: JSON.stringify({
-            competency_id: {{ $competencyTracker['competency_id'] ?? 'null' }},
-            employee_id: {{ $competencyTracker['employee_id'] ?? 'null' }}
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Request Sent';
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-success');
-            setTimeout(() => {
-              btn.innerHTML = originalText;
-              btn.classList.remove('btn-success');
-              btn.classList.add('btn-primary');
-              btn.disabled = false;
-            }, 3000);
-          } else {
-            throw new Error(data.message || 'Failed to send request');
-          }
-        })
-        .catch(error => {
-          alert('Error: ' + error.message);
-          btn.innerHTML = originalText;
-          btn.disabled = false;
-        });
-      }
-    }
-    
-    function updateProgress() {
-      // Open modal for self-assessment
-      const modal = new bootstrap.Modal(document.getElementById('updateProgressModal'));
-      modal.show();
-    }
-    
-    function submitProgressUpdate() {
-      const newLevel = document.getElementById('newProficiencyLevel').value;
-      const notes = document.getElementById('progressNotes').value;
+      const competencyName = '{{ $competencyTracker['competency_name'] ?? 'this competency' }}';
       
-      if (!newLevel) {
-        alert('Please select a proficiency level');
-        return;
-      }
-      
-      // Show loading state
-      const btn = document.getElementById('submitProgressBtn');
-      const originalText = btn.innerHTML;
-      btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Updating...';
-      btn.disabled = true;
-      
-      fetch('/employee/competency-profile/update-progress', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+      // Show SweetAlert confirmation
+      Swal.fire({
+        title: 'Request Feedback',
+        html: `Do you want to request feedback from your manager about your progress in <strong>"${competencyName}"</strong>?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-send me-1"></i>Send Request',
+        cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+        customClass: {
+          confirmButton: 'btn btn-primary me-2',
+          cancelButton: 'btn btn-secondary'
         },
-        body: JSON.stringify({
-          competency_id: {{ $competencyTracker['competency_id'] ?? 'null' }},
-          employee_id: {{ $competencyTracker['employee_id'] ?? 'null' }},
-          new_level: newLevel,
-          notes: notes
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          alert('Progress updated successfully! Page will reload to show changes.');
-          location.reload();
-        } else {
-          throw new Error(data.message || 'Failed to update progress');
+        buttonsStyling: false
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // Show loading state
+          const btn = event.target;
+          const originalText = btn.innerHTML;
+          btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Sending...';
+          btn.disabled = true;
+          
+          // Show loading alert
+          Swal.fire({
+            title: 'Sending Request...',
+            html: 'Please wait while we send your feedback request.',
+            icon: 'info',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => {
+              Swal.showLoading();
+            }
+          });
+          
+          // Send API call to create feedback request
+          fetch('/employee/competency-profile/request-feedback', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({
+              competency_id: {{ $competencyTracker['competency_id'] ?? 'null' }},
+              employee_id: '{{ $competencyTracker['employee_id'] ?? '' }}',
+              request_message: `Employee has requested feedback on their progress in "${competencyName}".`
+            })
+          })
+          .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+          })
+          .then(data => {
+            console.log('Response data:', data);
+            if (data.success) {
+              btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Request Sent';
+              btn.classList.remove('btn-primary');
+              btn.classList.add('btn-success');
+              
+              // Show success message with SweetAlert
+              Swal.fire({
+                title: 'Request Sent Successfully!',
+                html: `
+                  <div class="text-start">
+                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>Your feedback request has been sent to your manager.</p>
+                    <p><i class="bi bi-info-circle-fill text-info me-2"></i>Competency: <strong>${competencyName}</strong></p>
+                    <p><i class="bi bi-clock-fill text-warning me-2"></i>You will be notified when your manager responds.</p>
+                    <p><i class="bi bi-eye-fill text-primary me-2"></i>You can check the status in the admin feedback section.</p>
+                  </div>
+                `,
+                icon: 'success',
+                confirmButtonText: '<i class="bi bi-check me-1"></i>Got it!',
+                customClass: {
+                  confirmButton: 'btn btn-success'
+                },
+                buttonsStyling: false
+              });
+              
+              setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-primary');
+                btn.disabled = false;
+              }, 5000);
+            } else {
+              throw new Error(data.message || 'Failed to send request');
+            }
+          })
+          .catch(error => {
+            console.error('Error sending feedback request:', error);
+            
+            // Show error message with SweetAlert
+            Swal.fire({
+              title: 'Request Failed',
+              html: `
+                <div class="text-start">
+                  <p><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Failed to send feedback request.</p>
+                  <p><i class="bi bi-info-circle-fill text-info me-2"></i>Error: ${error.message}</p>
+                  <p><i class="bi bi-arrow-clockwise text-primary me-2"></i>Please try again or contact support if the problem persists.</p>
+                </div>
+              `,
+              icon: 'error',
+              confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
+              customClass: {
+                confirmButton: 'btn btn-danger'
+              },
+              buttonsStyling: false
+            });
+            
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+          });
         }
-      })
-      .catch(error => {
-        alert('Error: ' + error.message);
-        btn.innerHTML = originalText;
-        btn.disabled = false;
       });
     }
   </script>

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Jetlouge Travels - Discover Your Next Adventure</title>
+    <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
     <link href="../assets/css/landing-style.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -20,7 +21,7 @@
                 <a href="#home" class="nav-link">Home</a>
                 <a href="#features" class="nav-link">About</a>
                 <a href="#footer" class="nav-link">Contact</a>
-                <a href="{{ route('welcome.page') }}" onclick="openLoginModal()" class="nav-link btn-portal">Login</a>
+                <a href="{{ route('welcome.page') }}" class="nav-link btn-portal">Login</a>
             </div>
             <div class="nav-toggle">
                 <span class="bar"></span>

@@ -10,6 +10,7 @@ use App\Models\UpcomingTraining;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
@@ -18,16 +19,31 @@ class CourseManagementController extends Controller
 {
     public function index()
     {
-        $courses = CourseManagement::all();
+        try {
+            $courses = CourseManagement::all();
+        } catch (\Exception $e) {
+            Log::error('Error fetching courses: ' . $e->getMessage());
+            $courses = collect();
+        }
 
         // Get both regular training assignments and competency-based assignments
-        $assignedTrainings = EmployeeTrainingDashboard::with(['employee', 'course'])
-            ->orderByDesc('created_at')
-            ->get();
+        try {
+            $assignedTrainings = EmployeeTrainingDashboard::with(['employee', 'course'])
+                ->orderByDesc('created_at')
+                ->get();
+        } catch (\Exception $e) {
+            Log::error('Error fetching assigned trainings: ' . $e->getMessage());
+            $assignedTrainings = collect();
+        }
 
-        $competencyAssignments = \App\Models\CompetencyCourseAssignment::with(['employee', 'course'])
-            ->orderByDesc('created_at')
-            ->get();
+        try {
+            $competencyAssignments = \App\Models\CompetencyCourseAssignment::with(['employee', 'course'])
+                ->orderByDesc('created_at')
+                ->get();
+        } catch (\Exception $e) {
+            Log::error('Error fetching competency assignments: ' . $e->getMessage());
+            $competencyAssignments = collect();
+        }
 
         // Get training requests from employees - with enhanced error handling
         try {
@@ -97,10 +113,17 @@ class CourseManagementController extends Controller
 
         // Get competency notifications for course management
         try {
-            $competencyNotifications = CourseManagementNotification::with('competency')
-                ->orderByDesc('created_at')
-                ->limit(10)
-                ->get();
+            // First check if the table exists
+            if (Schema::hasTable('course_management_notifications')) {
+                $competencyNotifications = CourseManagementNotification::with('competency')
+                    ->orderByDesc('created_at')
+                    ->limit(10)
+                    ->get();
+            } else {
+                Log::info('course_management_notifications table does not exist, creating it...');
+                $this->ensureCourseManagementNotificationsTableExists();
+                $competencyNotifications = collect();
+            }
         } catch (\Exception $e) {
             Log::error('Error fetching competency notifications: ' . $e->getMessage());
             $competencyNotifications = collect();
@@ -116,31 +139,86 @@ class CourseManagementController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'course_title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
-            'status' => 'required|string',
-        ]);
+        try {
+            $request->validate([
+                'course_title' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'start_date' => 'required|date',
+                'status' => 'required|string',
+                'password' => 'required|string'
+            ]);
 
-        // Check for duplicate course titles
-        $existingCourse = CourseManagement::where('course_title', $request->course_title)->first();
-        if ($existingCourse) {
-            return redirect()->back()
-                ->withInput()
-                ->with('error', 'A course with the title "' . $request->course_title . '" already exists. Please use a different title.');
+            // Check for duplicate course titles
+            $existingCourse = CourseManagement::where('course_title', $request->course_title)->first();
+            if ($existingCourse) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'A course with the title "' . $request->course_title . '" already exists. Please use a different title.',
+                        'errors' => ['course_title' => ['Course title already exists']]
+                    ], 422);
+                }
+                return redirect()->back()
+                    ->withInput()
+                    ->with('error', 'A course with the title "' . $request->course_title . '" already exists. Please use a different title.');
+            }
+
+            // Validate admin password (simple check - you may want to enhance this)
+            $adminUser = Auth::guard('admin')->user();
+            if (!$adminUser || !Hash::check($request->password, $adminUser->password)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid admin password. Please enter your correct password.',
+                        'errors' => ['password' => ['Invalid password']]
+                    ], 422);
+                }
+                return redirect()->back()->withInput()->with('error', 'Invalid admin password.');
+            }
+
+            $course = CourseManagement::create([
+                'course_title' => $request->course_title,
+                'description' => $request->description,
+                'start_date' => $request->start_date,
+                'status' => $request->status
+            ]);
+            
+            ActivityLog::createLog([
+                'module' => 'Learning Management',
+                'action' => 'create',
+                'description' => 'Created course: ' . $course->course_title,
+                'model_type' => CourseManagement::class,
+                'model_id' => $course->id,
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Course created successfully!',
+                    'course' => $course
+                ]);
+            }
+            
+            return redirect()->route('admin.course_management.index')->with('success', 'Course created successfully.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error creating course: ' . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while creating the course: ' . $e->getMessage()
+                ], 500);
+            }
+            return redirect()->back()->withInput()->with('error', 'An error occurred while creating the course.');
         }
-
-        $course = CourseManagement::create($request->all());
-        ActivityLog::createLog([
-            'module' => 'Learning Management',
-            'action' => 'create',
-            'description' => 'Created course: ' . $course->course_title,
-            'model_type' => CourseManagement::class,
-            'model_id' => $course->id,
-        ]);
-        return redirect()->route('admin.course_management.index')->with('success', 'Course created successfully.');
     }
 
     public function show($id)
@@ -158,9 +236,9 @@ class CourseManagementController extends Controller
 
     public function update(Request $request, $id)
     {
-        // Handle AJAX requests for status-only updates
-        if ($request->expectsJson() && $request->has('status') && count($request->all()) === 1) {
-            try {
+        try {
+            // Handle AJAX requests for status-only updates
+            if ($request->expectsJson() && $request->has('status') && count($request->all()) === 1) {
                 $course = CourseManagement::findOrFail($id);
                 $course->status = $request->status;
                 $course->save();
@@ -169,49 +247,136 @@ class CourseManagementController extends Controller
                     'success' => true,
                     'message' => 'Course status updated successfully'
                 ]);
-            } catch (\Exception $e) {
+            }
+
+            // Handle full course updates with password validation
+            $request->validate([
+                'course_title' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'start_date' => 'required|date',
+                'status' => 'required|string',
+                'password' => 'required|string'
+            ]);
+
+            // Validate admin password
+            $adminUser = Auth::guard('admin')->user();
+            if (!$adminUser || !Hash::check($request->password, $adminUser->password)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid admin password. Please enter your correct password.',
+                        'errors' => ['password' => ['Invalid password']]
+                    ], 422);
+                }
+                return redirect()->back()->withInput()->with('error', 'Invalid admin password.');
+            }
+
+            $course = CourseManagement::findOrFail($id);
+            $course->update([
+                'course_title' => $request->course_title,
+                'description' => $request->description,
+                'start_date' => $request->start_date,
+                'status' => $request->status
+            ]);
+
+            ActivityLog::createLog([
+                'module' => 'Learning Management',
+                'action' => 'update',
+                'description' => 'Updated course: ' . $course->course_title,
+                'model_type' => CourseManagement::class,
+                'model_id' => $course->id,
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Course updated successfully!',
+                    'course' => $course
+                ]);
+            }
+            
+            return redirect()->route('admin.course_management.index')->with('success', 'Course updated successfully.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Error updating course status: ' . $e->getMessage()
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error updating course: ' . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while updating the course: ' . $e->getMessage()
                 ], 500);
             }
+            return redirect()->back()->withInput()->with('error', 'An error occurred while updating the course.');
         }
-
-        // Handle regular form updates
-        $request->validate([
-            'course_title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
-            'status' => 'required|string',
-        ]);
-
-        $course = CourseManagement::findOrFail($id);
-        $course->update($request->all());
-
-        ActivityLog::createLog([
-            'module' => 'Learning Management',
-            'action' => 'update',
-            'description' => 'Updated course: ' . $course->course_title,
-            'model_type' => CourseManagement::class,
-            'model_id' => $course->id,
-        ]);
-        return redirect()->route('admin.course_management.index')->with('success', 'Course updated successfully.');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $course = CourseManagement::findOrFail($id);
-        $courseTitle = $course->course_title;
-        $course->delete();
-        ActivityLog::createLog([
-            'module' => 'Learning Management',
-            'action' => 'delete',
-            'description' => 'Deleted course: ' . $courseTitle,
-            'model_type' => CourseManagement::class,
-            'model_id' => $id,
-        ]);
-        return redirect()->route('admin.course_management.index')->with('success', 'Course deleted successfully.');
+        try {
+            // Validate password for deletion
+            $request->validate([
+                'password' => 'required|string'
+            ]);
+
+            // Validate admin password
+            $adminUser = Auth::guard('admin')->user();
+            if (!$adminUser || !Hash::check($request->password, $adminUser->password)) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid admin password. Please enter your correct password.',
+                        'errors' => ['password' => ['Invalid password']]
+                    ], 422);
+                }
+                return redirect()->back()->with('error', 'Invalid admin password.');
+            }
+
+            $course = CourseManagement::findOrFail($id);
+            $courseTitle = $course->course_title;
+            $course->delete();
+            
+            ActivityLog::createLog([
+                'module' => 'Learning Management',
+                'action' => 'delete',
+                'description' => 'Deleted course: ' . $courseTitle,
+                'model_type' => CourseManagement::class,
+                'model_id' => $id,
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Course deleted successfully!'
+                ]);
+            }
+            
+            return redirect()->route('admin.course_management.index')->with('success', 'Course deleted successfully.');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error deleting course: ' . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while deleting the course: ' . $e->getMessage()
+                ], 500);
+            }
+            return redirect()->back()->with('error', 'An error occurred while deleting the course.');
+        }
     }
 
     /**
@@ -412,6 +577,7 @@ class CourseManagementController extends Controller
                                     'status' => 'Scheduled',
                                     'source' => 'competency_auto_assign',
                                     'assigned_by' => Auth::id(),
+                                    'assigned_by_name' => Auth::user()->name ?? 'System Admin',
                                     'assigned_date' => Carbon::now(),
                                     'needs_response' => true // Employee needs to accept/decline
                                 ]);
@@ -445,6 +611,7 @@ class CourseManagementController extends Controller
                                         'employee_id' => $employeeId,
                                         'course_id' => $course->course_id,
                                         'assigned_date' => now(),
+                                        'assigned_by' => Auth::id(),
                                         'status' => 'Assigned',
                                         'is_destination_knowledge' => false
                                     ]);
@@ -592,6 +759,42 @@ class CourseManagementController extends Controller
     }
 
     /**
+     * Ensure the course_management_notifications table exists
+     */
+    private function ensureCourseManagementNotificationsTableExists()
+    {
+        if (!Schema::hasTable('course_management_notifications')) {
+            Log::info('Creating course_management_notifications table...');
+            
+            Schema::create('course_management_notifications', function (Blueprint $table) {
+                $table->id();
+                $table->unsignedBigInteger('competency_id')->nullable();
+                $table->string('competency_name');
+                $table->text('message');
+                $table->string('notification_type')->default('competency_update');
+                $table->boolean('is_read')->default(false);
+                $table->timestamp('read_at')->nullable();
+                $table->unsignedBigInteger('created_by')->nullable();
+                $table->timestamps();
+
+                $table->index('competency_id');
+                $table->index('is_read');
+                $table->index('created_by');
+                
+                // Add foreign key constraints if tables exist
+                if (Schema::hasTable('competency_library')) {
+                    $table->foreign('competency_id')->references('id')->on('competency_library')->onDelete('set null');
+                }
+                if (Schema::hasTable('users')) {
+                    $table->foreign('created_by')->references('id')->on('users')->onDelete('set null');
+                }
+            });
+            
+            Log::info('course_management_notifications table created successfully');
+        }
+    }
+
+    /**
      * Auto-assign courses to ALL employees based on their competency gaps
      */
     public function autoAssignCoursesToAll(Request $request)
@@ -702,6 +905,7 @@ class CourseManagementController extends Controller
                                             'employee_id' => $employeeId,
                                             'course_id' => $course->course_id,
                                             'assigned_date' => now(),
+                                            'assigned_by' => Auth::id(),
                                             'status' => 'Assigned',
                                             'is_destination_knowledge' => false
                                         ]);

@@ -4,10 +4,232 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  <title>Jetlouge Travels Admin</title>
+  <title>Employee Training Dashboard - Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
+  <link rel="stylesheet" href="{{ asset('resources/css/responsive.css') }}">
+  <!-- SweetAlert2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <!-- jQuery for AJAX functionality -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    .dashboard-card {
+      transition: transform 0.3s ease;
+    }
+    
+    .dashboard-card:hover {
+      transform: translateY(-2px);
+    }
+    
+    /* Training Card Styles */
+    .training-card {
+      border: none;
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .training-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    }
+    
+    .training-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #007bff, #28a745, #ffc107, #dc3545);
+    }
+    
+    .card-header-custom {
+      background: rgba(13, 110, 253, 0.05);
+      border-bottom: 1px solid rgba(13, 110, 253, 0.1);
+      padding: 1rem 1.25rem;
+    }
+    
+    .employee-avatar {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 3px solid #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    .progress-container {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+    }
+    
+    .progress-bar-custom {
+      height: 8px;
+      border-radius: 4px;
+      background: #e9ecef;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.8s ease;
+      background: linear-gradient(90deg, #007bff, #28a745);
+    }
+
+    /* Enhanced Progress Bar Styling */
+    .progress {
+      background-color: #e9ecef !important;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .progress .progress-bar {
+      background: linear-gradient(90deg, #007bff 0%, #0056b3 50%, #28a745 100%) !important;
+      transition: width 1s ease-in-out;
+      border-radius: 5px;
+    }
+
+    /* Progress bar color variations based on percentage */
+    .progress .progress-bar[aria-valuenow="0"] {
+      background: #6c757d !important;
+    }
+    
+    .status-badge-custom {
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .course-badge {
+      background: linear-gradient(135deg, #007bff, #0056b3);
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 15px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-top: 1rem;
+    }
+    
+    .btn-action {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      transition: all 0.3s ease;
+      font-size: 1.1rem;
+    }
+    
+    .btn-action:hover {
+      transform: scale(1.1);
+    }
+    
+    .info-row {
+      display: flex;
+      align-items: center;
+      margin: 0.5rem 0;
+      padding: 0.25rem 0;
+    }
+    
+    .info-icon {
+      width: 20px;
+      margin-right: 0.5rem;
+      color: #6c757d;
+    }
+    
+    .readiness-score {
+      background: linear-gradient(135deg, #28a745, #20c997);
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 25px;
+      font-weight: bold;
+      text-align: center;
+      min-width: 60px;
+    }
+    
+    .expired-indicator {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: #dc3545;
+      color: white;
+      padding: 0.25rem 0.5rem;
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+    
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    
+    @media (max-width: 767px) {
+      .page-header h2 {
+        font-size: 1.5rem;
+      }
+      
+      .dashboard-logo img {
+        width: 40px;
+        height: 40px;
+      }
+      
+      .card-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+      
+      .training-card {
+        margin: 0 0.5rem;
+      }
+      
+      .action-buttons {
+        flex-wrap: wrap;
+      }
+    }
+    
+    @media (max-width: 480px) {
+      .card-grid {
+        grid-template-columns: 1fr;
+        margin: 0 -0.5rem;
+      }
+      
+      .employee-avatar {
+        width: 40px;
+        height: 40px;
+      }
+    }
+  </style>
 </head>
 <body style="background-color: #f8f9fa !important;">
 
@@ -17,613 +239,495 @@
   <div id="overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50" style="z-index:1040; display: none;"></div>
 
   <main id="main-content">
-    <!-- Page Header -->
-    <div class="page-header-container mb-4">
-      <div class="d-flex justify-content-between align-items-center page-header">
-        <div class="d-flex align-items-center">
-          <div class="dashboard-logo me-3">
-            <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels" class="logo-img">
-          </div>
-          <div>
-            <h2 class="fw-bold mb-1">Employee Training Dashboard</h2>
-            <p class="text-muted mb-0">
-              Welcome back,
-              @if(Auth::check())
-                {{ Auth::user()->name }}
-              @else
-                Admin
-              @endif
-              ! Track employee training progress here.
-            </p>
-          </div>
-        </div>
-        <nav aria-label="breadcrumb">
-          <ol class="breadcrumb mb-0">
-            <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Home</a></li>
-            <li class="breadcrumb-item active" aria-current="page">Training Dashboard</li>
-          </ol>
-        </nav>
+<!-- Page Header -->
+<div class="page-header-container mb-4">
+  <div class="d-flex justify-content-between align-items-center page-header flex-wrap">
+    <div class="d-flex align-items-center mb-2 mb-md-0">
+      <div class="dashboard-logo me-3 mobile-hidden">
+        <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels" class="logo-img" style="width: 50px; height: 50px;">
+      </div>
+      <div>
+        <h2 class="fw-bold mb-1">Employee Training Dashboard</h2>
+        <p class="text-muted mb-0 d-none d-md-block">
+          Welcome back,
+          @if(Auth::check())
+            {{ Auth::user()->name }}
+          @else
+            Admin
+          @endif
+          ! Track employee training progress here.
+        </p>
+      </div>
+    </div>
+    <nav aria-label="breadcrumb" class="mobile-hidden">
+      <ol class="breadcrumb mb-0">
+        <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none">Home</a></li>
+        <li class="breadcrumb-item active" aria-current="page">Employee Training Dashboard</li>
+      </ol>
+    </nav>
+  </div>
+</div>
+
+<!-- Table Section -->
+<div class="card shadow-sm border-0 dashboard-card">
+  <div class="card-header">
+    <div class="d-flex justify-content-between align-items-center flex-wrap">
+      <h4 class="fw-bold mb-2 mb-md-0">Employee Training Records</h4>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button class="btn btn-success btn-sm d-flex align-items-center mobile-hidden" onclick="createMissingEntriesWithConfirmation()">
+          <i class="bi bi-arrow-repeat me-1"></i> <span class="d-none d-lg-inline">Create Missing Entries</span>
+        </button>
+        <button class="btn btn-info btn-sm d-flex align-items-center mobile-hidden" onclick="fixExpiredDatesWithConfirmation()">
+          <i class="bi bi-calendar-check me-1"></i> <span class="d-none d-lg-inline">Fix Expired Dates</span>
+        </button>
+        <button class="btn btn-warning btn-sm d-flex align-items-center mobile-hidden" onclick="removeUnknownCoursesWithConfirmation()">
+          <i class="bi bi-trash me-1"></i> <span class="d-none d-lg-inline">Remove Unknown Courses</span>
+        </button>
+        <button class="btn btn-sm btn-outline-primary d-flex align-items-center" onclick="exportTrainingDataWithConfirmation()">
+          <i class="bi bi-download me-1"></i> <span class="d-none d-sm-inline">Export</span>
+        </button>
+      </div>
+    </div>
+  </div>
+      <div class="card-body">
+    <!-- Filter Section -->
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-md-6 col-lg-3">
+        <label class="form-label small text-muted d-block d-md-none">Employee</label>
+        <select class="form-select form-select-sm" id="filterEmployee">
+          <option value="">All Employees</option>
+          @foreach($employees as $employee)
+            <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <label class="form-label small text-muted d-block d-md-none">Course</label>
+        <select class="form-select form-select-sm" id="filterCourse">
+          <option value="">All Courses</option>
+          @foreach($courses as $course)
+              <option value="{{ $course->course_id }}">{{ $course->course_title }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <label class="form-label small text-muted d-block d-md-none">Status</label>
+        <select class="form-select form-select-sm" id="filterStatus">
+          <option value="">All Statuses</option>
+          <option value="completed">Completed</option>
+          <option value="in-progress">In Progress</option>
+          <option value="not-started">Not Started</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <button class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center" id="applyFilters">
+          <i class="bi bi-funnel me-1"></i> Apply Filters
+        </button>
       </div>
     </div>
 
-    <!-- Table Section -->
-    <div class="card shadow-sm border-0">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h4 class="fw-bold mb-0">Employee Training Records</h4>
-        <div class="d-flex align-items-center gap-2">
-          <button class="btn btn-success btn-sm d-flex align-items-center" id="createMissingEntriesBtn">
-            <i class="bi bi-arrow-repeat me-1"></i> Create Missing Entries
-          </button>
-          <button class="btn btn-info btn-sm d-flex align-items-center" id="fixExpiredDatesBtn">
-            <i class="bi bi-calendar-check me-1"></i> Fix Expired Dates
-          </button>
-          <button class="btn btn-sm btn-outline-primary d-flex align-items-center">
-            <i class="bi bi-download me-1"></i> Export
-          </button>
-        </div>
-      </div>
-      <div class="card-body">
-        <!-- Filter Section -->
-        <div class="row g-3 mb-4">
-          <div class="col-md-3">
-            <select class="form-select form-select-sm" id="filterEmployee">
-              <option value="">All Employees</option>
-              @foreach($employees as $employee)
-                <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
-              @endforeach
-            </select>
-          </div>
-          <div class="col-md-3">
-            <select class="form-select form-select-sm" id="filterCourse">
-              <option value="">All Courses</option>
-              @foreach($courses as $course)
-                  <option value="{{ $course->course_id }}">{{ $course->course_title }}</option>
-              @endforeach
-            </select>
-          </div>
-          <div class="col-md-3">
-            <select class="form-select form-select-sm" id="filterStatus">
-              <option value="">All Statuses</option>
-              <option value="completed">Completed</option>
-              <option value="in-progress">In Progress</option>
-              <option value="not-started">Not Started</option>
-            </select>
-          </div>
-          <div class="col-md-3">
-            <button class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center" id="applyFilters">
-              <i class="bi bi-funnel me-1"></i> Apply Filters
-            </button>
-          </div>
-        </div>
+    <!-- Training Cards Grid -->
+    <div class="card-grid">
+      @forelse($trainingRecords as $record)
+        @php
+          $firstName = $record->employee->first_name ?? 'Unknown';
+          $lastName = $record->employee->last_name ?? 'Employee';
+          $fullName = $firstName . ' ' . $lastName;
+          $initials = strtoupper(substr($firstName, 0, 1)) . strtoupper(substr($lastName, 0, 1));
 
-        <div class="table-responsive">
-          <table class="table table-bordered">
-            <thead class="table-primary">
-              <tr>
-                <th class="fw-bold">Employee</th>
-                <th class="fw-bold">Readiness Score</th>
-                <th class="fw-bold">Course</th>
-                <th class="fw-bold">Progress</th>
-                <th class="fw-bold">Status</th>
-                <th class="fw-bold">Expired Date</th>
-                <th class="fw-bold">Last Accessed</th>
-                <th class="fw-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              @forelse($trainingRecords as $record)
-              <tr>
-                <td>
-                  <div class="d-flex align-items-center">
-                    <div class="avatar-sm me-2">
-                      @php
-                        $firstName = $record->employee->first_name ?? 'Unknown';
-                        $lastName = $record->employee->last_name ?? 'Employee';
-                        $fullName = $firstName . ' ' . $lastName;
-                        $initials = strtoupper(substr($firstName, 0, 1)) . strtoupper(substr($lastName, 0, 1));
+          // Check if profile picture exists - simplified approach
+          $profilePicUrl = null;
+          if ($record->employee->profile_picture) {
+              // Direct asset URL generation - Laravel handles the storage symlink
+              $profilePicUrl = asset('storage/' . $record->employee->profile_picture);
+          }
 
-                        // Check if profile picture exists - simplified approach
-                        $profilePicUrl = null;
-                        if ($record->employee->profile_picture) {
-                            // Direct asset URL generation - Laravel handles the storage symlink
-                            $profilePicUrl = asset('storage/' . $record->employee->profile_picture);
-                        }
+          // Generate consistent color based on employee name for fallback
+          $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
+          $employeeId = $record->employee->employee_id ?? 'default';
+          $colorIndex = abs(crc32($employeeId)) % count($colors);
+          $bgColor = $colors[$colorIndex];
 
-                        // Generate consistent color based on employee name for fallback
-                        $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-                        $employeeId = $record->employee->employee_id ?? 'default';
-                        $colorIndex = abs(crc32($employeeId)) % count($colors);
-                        $bgColor = $colors[$colorIndex];
+          // Fallback to UI Avatars if no profile picture found
+          if (!$profilePicUrl) {
+              $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
+                             "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+          }
+        @endphp
 
-                        // Fallback to UI Avatars if no profile picture found
-                        if (!$profilePicUrl) {
-                            $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
-                                           "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
-                        }
-                      @endphp
+        <div class="card training-card">
+          <!-- Card Header with Employee Info -->
+          <div class="card-header-custom">
+            <div class="d-flex align-items-center justify-content-between">
+              <div class="d-flex align-items-center">
+                <img src="{{ $profilePicUrl }}"
+                     alt="{{ $firstName }} {{ $lastName }}"
+                     class="employee-avatar me-3">
+                <div>
+                  <h6 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
+                  <small class="text-muted">Employee ID: {{ $record->employee->employee_id ?? 'N/A' }}</small>
+                </div>
+              </div>
+              @php
+                // Check if we should hide direct input data (when coming from auto-assign)
+                $hideInput = request()->has('hide_input');
 
-                      <img src="{{ $profilePicUrl }}"
-                           alt="{{ $firstName }} {{ $lastName }}"
-                           class="rounded-circle"
-                           style="width: 40px; height: 40px; object-fit: cover;">
-                    </div>
-                    <span class="fw-semibold">
-                      {{ $firstName }} {{ $lastName }}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  @php
-                    // Check if we should hide direct input data (when coming from auto-assign)
-                    $hideInput = request()->has('hide_input');
-
-                    if ($hideInput) {
-                      // Use simplified readiness calculation when coming from auto-assign
-                      $readiness = 'N/A';
-                    } else {
-                      // Calculate actual readiness score using unified algorithm
-                      $employee = $record->employee;
-
-                      // Get competency data - handle null employee
-                      $employeeId = $employee->employee_id ?? null;
-                      $competencyProfiles = $employeeId ? \App\Models\EmployeeCompetencyProfile::where('employee_id', $employeeId)->get() : collect();
-
-                      // Calculate competency metrics
-                      $avgProficiency = 0;
-                      $leadershipCount = 0;
-                      $totalCompetencies = $competencyProfiles->count();
-
-                    if ($totalCompetencies > 0) {
-                        $totalProficiency = 0;
-                        foreach ($competencyProfiles as $profile) {
-                            $totalProficiency += $profile->proficiency_level;
-
-                            // Check if it's a leadership competency
-                            $competencyName = strtolower($profile->competency->competency_name ?? '');
-                            if (strpos($competencyName, 'leadership') !== false ||
-                                strpos($competencyName, 'management') !== false ||
-                                strpos($competencyName, 'supervisor') !== false) {
-                                $leadershipCount++;
-                            }
-                        }
-                        $avgProficiency = $totalProficiency / $totalCompetencies; // Keep as level (1-5)
-                    }
-
-                    // Get training data - FRESH query to ensure latest progress is included
-                    $trainingRecords = $employeeId ? \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)->get()->fresh() : collect();
-                    $totalCourses = $trainingRecords->count();
-                    $completedCourses = $trainingRecords->where('progress', '>=', 100)->count();
-                    $totalProgress = $trainingRecords->sum('progress');
-                    $avgTrainingProgress = $totalCourses > 0 ? $totalProgress / $totalCourses : 0;
-                    $completionRate = $totalCourses > 0 ? ($completedCourses / $totalCourses) * 100 : 0;
-
-
-                    // Fixed readiness calculation: 70% Employee Competency Profile + 30% Training Records
-
-                    // Calculate competency profile component (70% weight) - Additive approach that rewards growth
-                    $competencyProfileScore = 0;
-                    if ($totalCompetencies > 0) {
-                        // NEW: Additive proficiency scoring - each competency contributes based on its individual level
-                        // This ensures adding new competencies ALWAYS increases the score
-                        $totalProficiencyPoints = 0;
-                        foreach ($competencyProfiles as $profile) {
-                            // Each competency contributes points based on its proficiency level (1-5)
-                            // Level 5 = 7 points, Level 4 = 5.6 points, Level 3 = 4.2 points, Level 2 = 2.8 points, Level 1 = 1.4 points
-                            $totalProficiencyPoints += ($profile->proficiency_level * 1.4);
-                        }
-                        // Cap proficiency score at 35% but scale based on total points
-                        $proficiencyScore = min($totalProficiencyPoints, 35);
-
-                        // Leadership score - based on actual leadership competencies, not ratio
-                        $leadershipScore = min($leadershipCount * 3, 20); // 3% per leadership competency, max 20%
-
-                        // Competency breadth - progressive scoring that rewards more competencies
-                        if ($totalCompetencies >= 20) {
-                            $competencyBreadthScore = 15; // Full 15% for 20+ competencies
-                        } elseif ($totalCompetencies >= 10) {
-                            $competencyBreadthScore = 10; // 10% for 10-19 competencies
-                        } elseif ($totalCompetencies >= 5) {
-                            $competencyBreadthScore = 7; // 7% for 5-9 competencies
-                        } else {
-                            $competencyBreadthScore = $totalCompetencies * 1.5; // 1.5% per competency for 1-4
-                        }
-
-                        // Weighted average that rewards competency development
-                        $competencyProfileScore = ($proficiencyScore * 0.6) + ($leadershipScore * 0.25) + ($competencyBreadthScore * 0.15);
-                    }
-
-                    // Calculate training records component (30% weight) - Enhanced to properly reflect completion
-                    $trainingRecordsScore = 0;
-                    if ($totalCourses > 0) {
-                        // Enhanced training progress scoring - more responsive to completion
-                        $trainingProgressScore = min($avgTrainingProgress * 0.25, 25); // Increased from 0.15 to 0.25
-
-                        // Enhanced completion rate scoring
-                        $completionRateScore = min($completionRate * 0.20, 20); // Increased from 0.12 to 0.20
-
-                        // Assignment scoring based on course count
-                        $assignmentScore = min(($totalCourses / 30) * 12, 12); // Reduced threshold from 50 to 30
-
-                        // Certificate scoring
-                        $certificates = $employeeId ? \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)->count() : 0;
-                        $certificateScore = $certificates > 0 ? min(($certificates / 10) * 8, 8) : 0; // Reduced threshold from 15 to 10
-
-                        // Enhanced weighted average - prioritizes progress and completion
-                        $trainingRecordsScore = ($trainingProgressScore * 0.5) + ($completionRateScore * 0.3) + ($assignmentScore * 0.15) + ($certificateScore * 0.05);
-
-                    }
-
-                    // Final weighted calculation: 70% competency + 30% training (capped at 100%)
-                    if ($totalCompetencies > 0 && $totalCourses > 0) {
-                        // Both competency and training data available
-                        $readiness = ($competencyProfileScore * 0.70) + ($trainingRecordsScore * 0.30);
-                    } elseif ($totalCompetencies > 0) {
-                        // Only competency data available
-                        $readiness = $competencyProfileScore;
-                    } elseif ($totalCourses > 0) {
-                        // Only training data available
-                        $readiness = $trainingRecordsScore;
-                    } else {
-                        // No data available
-                        $readiness = 0; // Baseline score for employees with no data
-                    }
-
-                    // Ensure maximum is 100%
-                    $readiness = min(round($readiness), 100);
+                if ($hideInput) {
+                  // Use simplified readiness calculation when coming from auto-assign
+                  $readiness = 'N/A';
+                } else {
+                  // Use the same backend calculation as succession planning system
+                  $employee = $record->employee;
+                  $employeeId = $employee->employee_id ?? null;
+                  
+                  if ($employeeId) {
+                    // Call the same controller method that succession planning uses
+                    $controller = new \App\Http\Controllers\SuccessionReadinessRatingController();
+                    $readiness = round($controller->calculateEmployeeReadinessScore($employeeId));
+                  } else {
+                    $readiness = 0;
                   }
-                  @endphp
-                  <span class="fw-semibold">{{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}</span>
-                </td>
-                <td>
-                  <div class="fw-semibold">
-                    @if($record->course && isset($record->course->course_title))
-                      {{ $record->course->course_title }}
+                }
+              @endphp
+              <div class="readiness-score">
+                {{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}
+              </div>
+            </div>
+          </div>
 
-                                            @php
-                        $isDestinationCourse = false;
-                        if($record->course) {
-                          $courseTitle = strtolower($record->course->course_title);
-                          $courseDescription = strtolower($record->course->description ?? '');
+          <!-- Card Body with Course Information -->
+          <div class="card-body">
+            @php
+              // Priority system for course title: training_title > course->course_title > fallback
+              $displayTitle = '';
+              $displayDescription = '';
+              
+              if (!empty($record->training_title)) {
+                // Use training_title from the record (highest priority)
+                $displayTitle = $record->training_title;
+                $displayDescription = $record->course->description ?? 'Training course: ' . $record->training_title;
+              } elseif ($record->course && !empty($record->course->course_title)) {
+                // Use course relationship title
+                $displayTitle = $record->course->course_title;
+                $displayDescription = $record->course->description ?? 'Course: ' . $record->course->course_title;
+              } else {
+                // Fallback - check if this is a training request
+                $isTrainingRequest = str_starts_with($record->id, 'request_');
+                if ($isTrainingRequest && !empty($record->course_title)) {
+                  $displayTitle = $record->course_title;
+                  $displayDescription = 'Training requested by employee';
+                } else {
+                  $displayTitle = 'Unknown Training';
+                  $displayDescription = 'No course information available';
+                }
+              }
+            @endphp
 
-                          $destinationKeywords = [
-                            'destination', 'location', 'place', 'city', 'terminal', 'station',
-                            'baesa', 'quezon', 'cubao', 'baguio', 'boracay', 'cebu', 'davao',
-                            'manila', 'geography', 'route', 'travel', 'area knowledge'
-                          ];
+            <!-- Course Title and Badges -->
+            <div class="mb-3">
+              <h5 class="card-title mb-2">{{ $displayTitle }}</h5>
+              
+              @php
+                $isDestinationCourse = false;
+                $courseTitle = strtolower($displayTitle);
+                $courseDescription = strtolower($displayDescription);
 
-                          foreach($destinationKeywords as $keyword) {
-                            if(strpos($courseTitle, $keyword) !== false || strpos($courseDescription, $keyword) !== false) {
-                              $isDestinationCourse = true;
-                              break;
-                            }
-                          }
-                        }
-                      @endphp
+                $destinationKeywords = [
+                  'destination', 'location', 'place', 'city', 'terminal', 'station',
+                  'baesa', 'quezon', 'cubao', 'baguio', 'boracay', 'cebu', 'davao',
+                  'manila', 'geography', 'route', 'travel', 'area knowledge'
+                ];
 
-                      @if($isDestinationCourse)
-                        <span class="badge bg-success ms-2" title="Exam and Quiz Available">
-                          <i class="bi bi-mortarboard"></i> Exam Enabled
-                        </span>
-                      @else
-                        <span class="badge bg-info ms-2" title="Announcement Only - No Exam/Quiz">
-                          <i class="bi bi-megaphone"></i> Announcement Only
-                        </span>
-                      @endif
-                    @else
-                      <span class="text-muted">No course</span>
-                    @endif
-                  </div>
-                  <small class="text-muted">
-                    @if($record->course && isset($record->course->description))
-                      {{ Str::limit($record->course->description, 50) }}
-                    @else
-                      No description
-                    @endif
-                  </small>
-                </td>
-                <td>
-                  @php
-                    // Check if this is an approved request record (from pseudo record)
-                    $isApprovedRequest = isset($record->source) && $record->source == 'Training Request (Approved)';
-                    
-                    // Initialize combinedProgress for all cases
-                    $combinedProgress = 0;
-                    
-                    if ($isApprovedRequest) {
-                        // For approved requests, use the progress calculated in the controller
-                        $displayProgress = $record->progress ?? 0;
-                        $progressSource = 'approved_request';
-                    } else {
-                        // Use exam progress instead of raw progress to match employee view
-                        $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $record->course_id);
-                        $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
-                        $progressSource = $combinedProgress > 0 ? 'exam' : 'training';
-                    }
-                  @endphp
-                  @php
-                    // Check if we should hide direct input data (when coming from auto-assign)
-                    $hideInput = request()->has('hide_input');
+                foreach($destinationKeywords as $keyword) {
+                  if(strpos($courseTitle, $keyword) !== false || strpos($courseDescription, $keyword) !== false) {
+                    $isDestinationCourse = true;
+                    break;
+                  }
+                }
+              @endphp
 
-                    if (!$hideInput) {
-                      // Only perform these calculations if not coming from auto-assign
-                      // Get current level from training record itself
-                      $courseTitle = $record->course->course_title ?? '';
-                      $currentLevelProgress = 0;
-                      $competencyProgressSource = 'none';
+              <div class="d-flex flex-wrap gap-2">
+                @if($isDestinationCourse)
+                  <span class="course-badge bg-success" title="Exam and Quiz Available">
+                    <i class="bi bi-mortarboard me-1"></i> Exam Enabled
+                  </span>
+                @else
+                  <span class="course-badge bg-info" title="Announcement Only - No Exam/Quiz">
+                    <i class="bi bi-megaphone me-1"></i> Announcement Only
+                  </span>
+                @endif
+              </div>
+              
+              <p class="text-muted small mt-2 mb-0">{{ Str::limit($displayDescription, 80) }}</p>
+            </div>
 
-                      // Use our own training data model rather than directly querying competency gap
-                      $competencyProfile = null;
+            @php
+              // Check if this is an approved request record (from pseudo record)
+              $isApprovedRequest = isset($record->source) && $record->source == 'Training Request (Approved)';
+              
+              // Initialize combinedProgress for all cases
+              $combinedProgress = 0;
+              
+              if ($isApprovedRequest) {
+                  // For approved requests, use the progress calculated in the controller
+                  $displayProgress = $record->progress ?? 0;
+                  $progressSource = 'approved_request';
+              } else {
+                  // Use exam progress instead of raw progress to match employee view
+                  $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $record->course_id);
+                  $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+                  $progressSource = $combinedProgress > 0 ? 'exam' : 'training';
+              }
 
-                      // Get employee's training profile directly from training dashboard records
-                      $trainingProfile = \App\Models\EmployeeTrainingDashboard::where('employee_id', $record->employee_id)
-                          ->where('course_id', $record->course_id)
-                          ->first();
+              // Enhanced progress calculation with competency profile fallback
+              if ($displayProgress == 0) {
+                  $trainingTitle = $record->training_title ?? ($record->course->course_title ?? '');
+                  
+                  // Check competency profiles for proficiency levels
+                  $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
+                      $q->where('competency_name', $trainingTitle)
+                        ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+                  })->where('employee_id', $record->employee_id)->first();
+                  
+                  if ($competencyProfile && $competencyProfile->proficiency_level) {
+                      $displayProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+                      $progressSource = 'competency_profile';
+                  }
+              }
 
-                      if ($trainingProfile) {
-                            // Simplified approach that doesn't rely on competency gap data
-                            // Use the training record's own progress
-                            $actualProgress = 0;
+              // Ensure progress is never negative and is properly formatted
+              $displayProgress = max(0, min(100, (int)$displayProgress));
+            @endphp
 
-                            // First check for exam progress
-                            $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $record->course_id);
-
-                            // If we have exam progress, use that
-                            if ($examProgress > 0) {
-                                $actualProgress = $examProgress;
-                                $competencyProgressSource = 'exam';
-                            } else {
-                                // Otherwise use the training progress
-                                $actualProgress = $trainingProfile->progress ?? 0;
-                                $competencyProgressSource = 'training';
-                            }
-
-                            // Check if this is destination knowledge training
-                            $isDestinationCourse = false;
-                            if($record->course) {
-                                $courseTitle = strtolower($record->course->course_title);
-                                if(strpos($courseTitle, 'destination') !== false) {
-                                    $isDestinationCourse = true;
-
-                                    // Check for destination knowledge specific progress
-                                    $cleanDestinationName = str_replace(['training', 'course', 'program'], '', $courseTitle);
-                                    $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $record->employee_id)
-                                        ->where('destination_name', 'LIKE', '%' . trim($cleanDestinationName) . '%')
-                                        ->first();
-
-                                    if ($destinationRecord && $destinationRecord->progress > 0) {
-                                        $actualProgress = $destinationRecord->progress;
-                                        $competencyProgressSource = 'destination';
-                                    }
-                                }
-                            }
-
-                            $currentLevelProgress = min(100, round($actualProgress));
-                        }
-
-                        // Use the progress we calculated (only for non-approved requests)
-                        if (!$isApprovedRequest && $combinedProgress == 0 && $currentLevelProgress > 0) {
-                            $displayProgress = $currentLevelProgress;
-                            $progressSource = $competencyProgressSource;
-                        }
-                    }
-                  @endphp
-                  <div class="d-flex align-items-center">
-                    <progress class="flex-grow-1 me-2" value="{{ $displayProgress }}" max="100" style="height: 8px; width: 100%;"></progress>
-                    <span class="fw-semibold">{{ $displayProgress }}%</span>
-                  </div>
+            <!-- Progress Section -->
+            <div class="progress-container">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Training Progress</span>
+                <span class="fw-bold text-primary">{{ $displayProgress }}%</span>
+              </div>
+              
+              <!-- Bootstrap Progress Bar -->
+              @php
+                // Dynamic color based on progress percentage
+                if ($displayProgress == 0) {
+                  $progressColor = '#6c757d'; // Gray for 0%
+                } elseif ($displayProgress < 40) {
+                  $progressColor = 'linear-gradient(90deg, #dc3545, #fd7e14)'; // Red to Orange for low progress
+                } elseif ($displayProgress < 70) {
+                  $progressColor = 'linear-gradient(90deg, #fd7e14, #ffc107)'; // Orange to Yellow for medium progress
+                } elseif ($displayProgress < 90) {
+                  $progressColor = 'linear-gradient(90deg, #ffc107, #20c997)'; // Yellow to Teal for good progress
+                } else {
+                  $progressColor = 'linear-gradient(90deg, #20c997, #28a745)'; // Teal to Green for excellent progress
+                }
+              @endphp
+              <div class="progress mb-2" style="height: 12px; background-color: #e9ecef; border-radius: 6px;">
+                <div class="progress-bar" 
+                     role="progressbar" 
+                     style="width: {{ $displayProgress }}%; background: {{ $progressColor }} !important; border-radius: 6px;" 
+                     aria-valuenow="{{ $displayProgress }}" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100">
+                </div>
+              </div>
+              
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="d-flex flex-wrap gap-1">
                   @if($progressSource === 'manual')
-                    <small class="text-warning ms-1" title="Manual proficiency level">(manual)</small>
-                  @elseif($progressSource === 'destination')
-                    <small class="text-success ms-1" title="From destination knowledge training">(destination)</small>
+                    <small class="badge bg-warning" title="Manual proficiency level">Manual</small>
+                  @elseif($progressSource === 'destination' || $progressSource === 'destination_training')
+                    <small class="badge bg-success" title="From destination knowledge training">Destination</small>
                   @elseif($progressSource === 'training')
-                    <small class="text-primary ms-1" title="From employee training dashboard">(training)</small>
-                  @elseif($progressSource === 'profile')
-                    <small class="text-info ms-1" title="Using stored proficiency level">(profile)</small>
+                    <small class="badge bg-primary" title="From employee training dashboard">Training</small>
+                  @elseif($progressSource === 'competency_profile')
+                    <small class="badge bg-info" title="From competency profile">Competency</small>
+                  @elseif($progressSource === 'exam')
+                    <small class="badge bg-success" title="From exam results">Exam</small>
+                  @elseif($progressSource === 'approved_request')
+                    <small class="badge bg-warning" title="From approved training request">Request</small>
                   @else
-                    <small class="text-muted ms-1" title="No data found">(no data)</small>
+                    <small class="badge bg-secondary" title="No data found">No Data</small>
                   @endif
-
-                                    @if($combinedProgress > 0)
-                    @php
-                      $breakdown = \App\Models\ExamAttempt::getScoreBreakdown($record->employee_id, $record->course_id);
-                    @endphp
-                    <small class="text-muted mt-1 d-block"
-                           data-bs-toggle="tooltip"
-                           data-bs-placement="top"
-                           title="Exam Score: {{ $breakdown['exam_score'] }}% = {{ $breakdown['combined_progress'] }}% total progress">
-                      @if($breakdown['exam_score'] > 0)
-                        <i class="bi bi-mortarboard me-1"></i>Exam: {{ $breakdown['exam_score'] }}%
-                      @endif
-                      <i class="bi bi-info-circle ms-1" style="cursor: help;"></i>
+                </div>
+                
+                @if($combinedProgress > 0)
+                  @php
+                    $breakdown = \App\Models\ExamAttempt::getScoreBreakdown($record->employee_id, $record->course_id);
+                  @endphp
+                  @if($breakdown['exam_score'] > 0)
+                    <small class="text-success" title="Exam Score: {{ $breakdown['exam_score'] }}%">
+                      <i class="bi bi-mortarboard me-1"></i>{{ $breakdown['exam_score'] }}%
                     </small>
                   @endif
-                </td>
-                <td>
-                  @php
-                    // Get expired date from multiple sources - check both systems
-                    $finalExpiredDate = null;
+                @endif
+              </div>
+            </div>
 
-                    // First check: Employee Training Dashboard record itself
-                    if (isset($record->expired_date) && $record->expired_date) {
-                      $finalExpiredDate = $record->expired_date;
-                    }
+            @php
+              // Get expired date from multiple sources - check both systems
+              $finalExpiredDate = null;
 
-                    // Second check: Course Management table
-                    if (!$finalExpiredDate && $record->course && isset($record->course->expired_date) && $record->course->expired_date) {
-                      $finalExpiredDate = $record->course->expired_date;
-                    }
+              // First check: Employee Training Dashboard record itself
+              if (isset($record->expired_date) && $record->expired_date) {
+                $finalExpiredDate = $record->expired_date;
+              }
 
-                    // Third check: Destination Knowledge Training (for destination-specific courses)
-                    if (!$finalExpiredDate) {
-                      $destinationTraining = \App\Models\DestinationKnowledgeTraining::where('employee_id', $record->employee_id)
-                          ->where('destination_name', 'LIKE', '%' . str_replace(['Training', 'Course', 'Program'], '', $record->course->course_title ?? '') . '%')
-                          ->first();
+              // Second check: Course Management table
+              if (!$finalExpiredDate && $record->course && isset($record->course->expired_date) && $record->course->expired_date) {
+                $finalExpiredDate = $record->course->expired_date;
+              }
 
-                      if ($destinationTraining && $destinationTraining->expired_date) {
-                        $finalExpiredDate = $destinationTraining->expired_date;
-                      }
-                    }
+              // Determine accurate status based on progress and expiry date
+              $currentProgress = $displayProgress;
 
-                    // Fourth check: Competency Gap table (for competency-based training)
-                    if (!$finalExpiredDate) {
-                      $competencyName = str_replace(['Training', 'Course', 'Program'], '', $record->course->course_title ?? '');
-                      $competencyGap = \App\Models\CompetencyGap::where('employee_id', $record->employee_id)
-                          ->whereHas('competency', function($query) use ($competencyName) {
-                              $query->where('competency_name', 'LIKE', '%' . $competencyName . '%');
-                          })
-                          ->first();
+              // Check if expired using the calculated expired date
+              $isExpired = false;
+              if ($finalExpiredDate) {
+                $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
+                $isExpired = \Carbon\Carbon::now()->gt($expiredDate);
+              }
 
-                      if ($competencyGap && $competencyGap->expired_date) {
-                        $finalExpiredDate = $competencyGap->expired_date;
-                      }
-                    }
+              // Determine final status
+              if ($isExpired && $currentProgress < 100) {
+                $statusBadgeClass = 'bg-danger';
+                $statusTextClass = 'text-danger';
+                $statusText = 'Expired';
+              } elseif ($currentProgress >= 100) {
+                $statusBadgeClass = 'bg-success';
+                $statusTextClass = 'text-success';
+                $statusText = 'Completed';
+              } elseif ($currentProgress > 0) {
+                $statusBadgeClass = 'bg-primary';
+                $statusTextClass = 'text-primary';
+                $statusText = 'In Progress';
+              } else {
+                $statusBadgeClass = 'bg-secondary';
+                $statusTextClass = 'text-secondary';
+                $statusText = 'Not Started';
+              }
+            @endphp
 
-                    // Determine accurate status based on progress and expiry date
-                    $currentProgress = $displayProgress;
+            <!-- Status and Dates Information -->
+            <div class="row g-2 mb-3">
+              <div class="col-12 col-md-4 mb-2">
+                <div class="d-flex align-items-center">
+                  <i class="bi bi-flag-fill me-2 text-muted"></i>
+                  <div class="flex-grow-1">
+                    <small class="text-muted d-block mb-1">Status</small>
+                    <span class="badge {{ $statusBadgeClass }} {{ $statusTextClass }} px-2 py-1">{{ $statusText }}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="col-12 col-md-4 mb-2">
+                <div class="d-flex align-items-center">
+                  <i class="bi bi-calendar-x-fill me-2 text-muted"></i>
+                  <div class="flex-grow-1">
+                    <small class="text-muted d-block mb-1">Expires</small>
+                    @if($finalExpiredDate)
+                      @php
+                        $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
+                        $now = \Carbon\Carbon::now();
+                        $daysUntilExpiry = $now->diffInDays($expiredDate, false);
 
-                    // Check if expired using the calculated expired date
-                    $isExpired = false;
-                    if ($finalExpiredDate) {
-                      $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
-                      $isExpired = \Carbon\Carbon::now()->gt($expiredDate);
-                    }
-
-                    // Determine final status
-                    if ($isExpired && $currentProgress < 100) {
-                      $statusBadgeClass = 'bg-danger';
-                      $statusTextClass = 'text-danger';
-                      $statusText = 'Expired';
-                    } elseif ($currentProgress >= 100) {
-                      $statusBadgeClass = 'bg-success';
-                      $statusTextClass = 'text-success';
-                      $statusText = 'Completed';
-                    } elseif ($currentProgress > 0) {
-                      $statusBadgeClass = 'bg-primary';
-                      $statusTextClass = 'text-primary';
-                      $statusText = 'In Progress';
-                    } else {
-                      $statusBadgeClass = 'bg-secondary';
-                      $statusTextClass = 'text-secondary';
-                      $statusText = 'Not Started';
-                    }
-                  @endphp
-                  <span class="badge {{ $statusBadgeClass }} bg-opacity-10 {{ $statusTextClass }} fs-6">{{ $statusText }}</span>
-                </td>
-                <td>
-                  @php
-                    // Check if we should hide direct input data (when coming from auto-assign)
-                    $hideInput = request()->has('hide_input');
-
-                    // Get expired date without directly querying competency gap
-                    $finalExpiredDate = null;
-
-                    if (!$hideInput) {
-                        // First check: Employee Training Dashboard record itself (primary source)
-                        if (isset($record->expired_date) && $record->expired_date) {
-                          $finalExpiredDate = $record->expired_date;
+                        if ($daysUntilExpiry < 0) {
+                          $dateClass = 'text-danger fw-bold';
+                          $statusBadge = 'bg-danger text-white';
+                          $statusLabel = 'EXPIRED';
+                        } elseif ($daysUntilExpiry <= 7) {
+                          $dateClass = 'text-warning fw-bold';
+                          $statusBadge = 'bg-warning text-dark';
+                          $statusLabel = 'URGENT';
+                        } elseif ($daysUntilExpiry <= 30) {
+                          $dateClass = 'text-info fw-bold';
+                          $statusBadge = 'bg-info text-white';
+                          $statusLabel = 'SOON';
+                        } else {
+                          $dateClass = 'text-success fw-bold';
+                          $statusBadge = 'bg-success text-white';
+                          $statusLabel = 'ACTIVE';
                         }
-
-                        // Second check: Course Management table
-                        if (!$finalExpiredDate && $record->course && isset($record->course->expired_date) && $record->course->expired_date) {
-                          $finalExpiredDate = $record->course->expired_date;
-                        }
-
-                        // Third check: Destination Knowledge Training (for destination-specific courses)
-                        if (!$finalExpiredDate && $record->course) {
-                          $courseTitle = $record->course->course_title ?? '';
-                          if (stripos($courseTitle, 'destination') !== false) {
-                              $destinationTraining = \App\Models\DestinationKnowledgeTraining::where('employee_id', $record->employee_id)
-                                  ->where('destination_name', 'LIKE', '%' . str_replace(['Training', 'Course', 'Program'], '', $courseTitle) . '%')
-                                  ->first();
-
-                              if ($destinationTraining && $destinationTraining->expired_date) {
-                                $finalExpiredDate = $destinationTraining->expired_date;
-                              }
-                          }
-                        }
-                   } else {
-                     // When hide_input is true, use simplified approach
-                     $finalExpiredDate = isset($record->expired_date) ? $record->expired_date : null;
-                   }
-                 @endphp
-
-                  @if($finalExpiredDate)
-                    @php
-                      $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
-                      $now = \Carbon\Carbon::now();
-                      $daysUntilExpiry = $now->diffInDays($expiredDate, false);
-
-                      // Color coding based on days until expiry (same as Destination Knowledge Training)
-                      if ($daysUntilExpiry < 0) {
-                        // Already expired - red
-                        $colorClass = 'text-danger fw-bold';
-                        $bgClass = 'bg-danger text-white';
-                        $status = 'EXPIRED';
-                      } elseif ($daysUntilExpiry <= 7) {
-                        // Expires within 7 days - orange/warning
-                        $colorClass = 'text-warning fw-bold';
-                        $bgClass = 'bg-warning text-dark';
-                        $status = 'URGENT';
-                      } elseif ($daysUntilExpiry <= 30) {
-                        // Expires within 30 days - yellow
-                        $colorClass = 'text-info fw-bold';
-                        $bgClass = 'bg-info text-white';
-                        $status = 'SOON';
-                      } else {
-                        // More than 30 days - green
-                        $colorClass = 'text-success fw-bold';
-                        $bgClass = 'bg-success text-white';
-                        $status = 'ACTIVE';
-                      }
-                    @endphp
-                    <div class="d-flex flex-column align-items-center">
-                      <span class="{{ $colorClass }}">{{ $expiredDate->format('Y-m-d') }}</span>
-                      <small class="badge {{ $bgClass }} mt-1">{{ $status }}</small>
-                      @if($daysUntilExpiry > 0)
-                        <small class="text-muted">{{ floor($daysUntilExpiry) }} days left</small>
-                      @elseif($daysUntilExpiry < 0)
-                        @php $overdueDays = floor(abs($daysUntilExpiry)); @endphp
-                        @if($overdueDays > 0)
-                          <small class="text-danger">{{ $overdueDays }} days overdue</small>
-                        @endif
+                      @endphp
+                      <div class="d-flex align-items-center flex-wrap">
+                        <span class="{{ $dateClass }} me-1">{{ $expiredDate->format('M d, Y') }}</span>
+                        <small class="badge {{ $statusBadge }}">{{ $statusLabel }}</small>
+                      </div>
+                    @else
+                      <span class="text-muted">Not Set</span>
+                    @endif
+                  </div>
+                </div>
+              </div>
+              
+              <div class="col-12 col-md-4 mb-2">
+                <div class="d-flex align-items-center">
+                  <i class="bi bi-clock-history me-2 text-muted"></i>
+                  <div class="flex-grow-1">
+                    <small class="text-muted d-block mb-1">Last Accessed</small>
+                    <span class="fw-semibold">
+                      @if(isset($record->last_accessed) && $record->last_accessed)
+                        {{ \Carbon\Carbon::parse($record->last_accessed)->format('M d, Y') }}
+                      @else
+                        <span class="text-muted">Never</span>
                       @endif
-                    </div>
-                  @else
-                    <span class="badge bg-secondary">Not Set</span>
-                  @endif
-                </td>
-                <td>
-                  @if($record->last_accessed)
-                    {{ \Carbon\Carbon::parse($record->last_accessed)->format('d/m/Y h:i A') }}
-                  @else
-                    <span class="text-muted">Never</span>
-                  @endif
-                </td>
-                <td class="text-center">
-                  <button class="btn btn-warning btn-sm me-1" data-bs-toggle="modal" data-bs-target="#editTrainingModal"
-                    data-id="{{ $record->id }}"
-                    data-employee-id="{{ $record->employee_id }}"
-                    data-course-id="{{ $record->course_id }}"
-                    data-progress="{{ $record->progress }}"
-                    data-last-accessed="{{ $record->last_accessed }}">
-                    <i class="bi bi-pencil"></i> Edit
-                  </button>
-                  <button type="button" class="btn btn-danger btn-sm delete-btn"
-                    data-id="{{ $record->id }}"
-                    data-employee="{{ ($record->employee->first_name ?? 'Unknown') }} {{ ($record->employee->last_name ?? 'Employee') }}"
-                    data-course="{{ $record->course ? $record->course->course_title : 'No course' }}">
-                    <i class="bi bi-trash"></i> Delete
-                  </button>
-                </td>
-              </tr>
-              @empty
-              <tr>
-                <td colspan="8" class="text-center text-muted">No training records found.</td>
-              </tr>
-              @endforelse
-            </tbody>
-          </table>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Buttons -->
+            @php
+              $isTrainingRequest = str_starts_with($record->id, 'request_');
+            @endphp
+            
+            @if(!$isTrainingRequest)
+              <div class="action-buttons">
+                <button class="btn btn-outline-primary btn-action" 
+                        onclick="viewTrainingDetails('{{ $record->id }}', '{{ ($record->employee->first_name ?? 'Unknown') }} {{ ($record->employee->last_name ?? 'Employee') }}', '{{ $displayTitle }}', '{{ $displayProgress }}', '{{ $statusText }}', '{{ $finalExpiredDate ? \Carbon\Carbon::parse($finalExpiredDate)->format('Y-m-d H:i') : 'Not Set' }}', '{{ $record->last_accessed ? \Carbon\Carbon::parse($record->last_accessed)->format('Y-m-d H:i') : 'Never' }}')"
+                        data-bs-toggle="tooltip" title="View Details">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <button class="btn btn-outline-warning btn-action" 
+                        onclick="editTrainingWithConfirmation('{{ $record->id }}', '{{ $record->employee_id }}', '{{ $record->course_id }}', '{{ $record->progress }}', '{{ $record->last_accessed }}')"
+                        data-bs-toggle="tooltip" title="Edit Training">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-outline-danger btn-action" 
+                        onclick="deleteTrainingWithConfirmation('{{ $record->id }}', '{{ ($record->employee->first_name ?? 'Unknown') }} {{ ($record->employee->last_name ?? 'Employee') }}', '{{ $displayTitle }}')"
+                        data-bs-toggle="tooltip" title="Delete Training">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            @else
+              <div class="text-center">
+                <span class="badge bg-info text-dark fs-6">
+                  <i class="bi bi-file-earmark-text me-1"></i> Training Request
+                </span>
+                <small class="text-muted d-block mt-1">Manage in Training Requests</small>
+              </div>
+            @endif
+
+            <!-- Expired Indicator -->
+            @if($isExpired && $currentProgress < 100)
+              <div class="expired-indicator">
+                <i class="bi bi-exclamation-triangle me-1"></i>EXPIRED
+              </div>
+            @endif
+          </div>
         </div>
+      @empty
+        <div class="col-12">
+          <div class="card text-center py-5">
+            <div class="card-body">
+              <i class="bi bi-inbox display-1 text-muted mb-3"></i>
+              <h5 class="text-muted">No Training Records Found</h5>
+              <p class="text-muted">There are no training records to display at the moment.</p>
+            </div>
+          </div>
+        </div>
+      @endforelse
+    </div>
         <!-- Pagination -->
         @if(method_exists($trainingRecords, 'hasPages') && $trainingRecords->hasPages())
         <div class="d-flex justify-content-between align-items-center mt-3">
@@ -640,168 +744,29 @@
   </main>
 
 
-  <!-- Edit Training Modal -->
-  <div class="modal fade" id="editTrainingModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="card-header modal-header">
-          <h5 class="modal-title">Update Training Progress</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <form id="editTrainingForm" method="POST">
-          @csrf
-          @method('PUT')
-          <div class="modal-body">
-            <input type="hidden" name="id" id="editTrainingId">
-            <div class="mb-3">
-              <label class="form-label">Employee</label>
-              <select name="employee_id" id="editEmployeeId" class="form-select">
-                @foreach($employees as $employee)
-                  <option value="{{ $employee->employee_id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
-                @endforeach
-              </select>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Course</label>
-              <select name="course_id" id="editCourseId" class="form-select">
-                @foreach($courses as $course)
-                    <option value="{{ $course->course_id }}">{{ $course->course_title }}</option>
-                @endforeach
-              </select>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Progress (%)</label>
-              <input type="number" name="progress" id="editProgress" class="form-control" min="0" max="100">
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Last Accessed</label>
-              <input type="datetime-local" name="last_accessed" id="editLastAccessed" class="form-control">
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Training Date</label>
-              <input type="date" name="training_date" id="editTrainingDate" class="form-control" required>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+  <!-- SweetAlert Integration - No modal needed -->
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
-  // Initialize tooltips for score breakdown
+  // Initialize tooltips and basic functionality
   document.addEventListener('DOMContentLoaded', function() {
     var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
       return new bootstrap.Tooltip(tooltipTriggerEl);
     });
-  });
 
-  document.addEventListener('DOMContentLoaded', function() {
-    // Initialize edit modal
-    const editTrainingModal = document.getElementById('editTrainingModal');
-    if (editTrainingModal) {
-      editTrainingModal.addEventListener('show.bs.modal', function(event) {
-        const button = event.relatedTarget;
-        const id = button.getAttribute('data-id');
-        const employeeId = button.getAttribute('data-employee-id');
-        const courseId = button.getAttribute('data-course-id');
-        const progress = button.getAttribute('data-progress');
-        const lastAccessed = button.getAttribute('data-last-accessed');
-
-        const modal = this;
-        modal.querySelector('#editTrainingId').value = id;
-        modal.querySelector('#editEmployeeId').value = employeeId;
-        modal.querySelector('#editCourseId').value = courseId;
-        modal.querySelector('#editProgress').value = progress;
-
-        if (lastAccessed) {
-          const date = new Date(lastAccessed);
-          const formattedDate = date.toISOString().slice(0, 16);
-          modal.querySelector('#editLastAccessed').value = formattedDate;
-        } else {
-          modal.querySelector('#editLastAccessed').value = '';
-        }
-
-        // Set form action and method for standard POST
-        const form = modal.querySelector('#editTrainingForm');
-        form.action = `{{ url('/admin/employee-trainings-dashboard') }}/${id}`;
-        form.setAttribute('method', 'POST');
-      });
-    }
-
-    // Filter functionality
-    document.getElementById('applyFilters').addEventListener('click', function() {
-      const employeeFilter = document.getElementById('filterEmployee').value;
-      const courseFilter = document.getElementById('filterCourse').value;
-      const statusFilter = document.getElementById('filterStatus').value;
-
-      // This would typically be an AJAX call to filter server-side
-      // For demo purposes, we'll just show an alert
-      alert(`Filters applied:\nEmployee: ${employeeFilter || 'All'}\nCourse: ${courseFilter || 'All'}\nStatus: ${statusFilter || 'All'}`);
-
-      // In a real implementation, you would:
-      // 1. Send filter parameters to server via AJAX
-      // 2. Update the table with the filtered results
+    // Animate Bootstrap progress bars
+    document.querySelectorAll('.progress-bar').forEach((bar, index) => {
+      const width = bar.style.width;
+      bar.style.width = '0%';
+      setTimeout(() => {
+        bar.style.transition = 'width 1s ease-in-out';
+        bar.style.width = width;
+      }, 200 + (index * 100)); // Stagger animation
     });
 
-    // Delete functionality
-    document.querySelectorAll('.delete-btn').forEach(button => {
-      button.addEventListener('click', async function() {
-        const recordId = this.getAttribute('data-id');
-        const employeeName = this.getAttribute('data-employee');
-        const courseName = this.getAttribute('data-course');
-
-        if (!confirm(`Are you sure you want to delete the training record for ${employeeName} - ${courseName}?`)) {
-          return;
-        }
-
-        try {
-          this.disabled = true;
-          this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-
-          const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-          if (!csrfToken) {
-            throw new Error('CSRF token not found');
-          }
-
-          const response = await fetch(`{{ url('/admin/employee-trainings-dashboard') }}/${recordId}`, {
-            method: 'DELETE',
-            headers: {
-              'X-CSRF-TOKEN': csrfToken,
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            }
-          });
-
-          const result = await response.json();
-
-          if (response.ok && result.success) {
-            // Remove the row from the table
-            const row = this.closest('tr');
-            row.remove();
-
-            // Show success message
-            alert(result.message || 'Training record deleted successfully!');
-          } else {
-            const errorMessage = result.message || `Server error: ${response.status} ${response.statusText}`;
-            throw new Error(errorMessage);
-          }
-        } catch (error) {
-          console.error('Delete error:', error);
-          alert('Failed to delete record: ' + error.message);
-          this.disabled = false;
-          this.innerHTML = '<i class="bi bi-trash"></i> Delete';
-        }
-      });
-    });
-
-    // Animate progress bars
+    // Animate old progress bars (fallback)
     document.querySelectorAll('progress').forEach(bar => {
       const value = bar.value;
       bar.value = 0;
@@ -810,100 +775,922 @@
       }, 100);
     });
 
-    // Create Missing Entries functionality
-    document.getElementById('createMissingEntriesBtn').addEventListener('click', async function() {
-      const button = this;
-      const originalText = button.innerHTML;
+    // Filter functionality
+    document.getElementById('applyFilters').addEventListener('click', function() {
+      const employeeFilter = document.getElementById('filterEmployee').value;
+      const courseFilter = document.getElementById('filterCourse').value;
+      const statusFilter = document.getElementById('filterStatus').value;
 
-      try {
-        // Show loading state
-        button.disabled = true;
-        button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Creating...';
-
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-        if (!csrfToken) {
-          throw new Error('CSRF token not found');
-        }
-
-        const response = await fetch('{{ route("admin.employee_trainings_dashboard.sync_existing") }}', {
-          method: 'POST',
-          headers: {
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-          // Show success message
-          alert(result.message || 'Missing entries created successfully!');
-
-          // Refresh the page to show updated data
-          window.location.reload();
-        } else {
-          const errorMessage = result.message || `Server error: ${response.status} ${response.statusText}`;
-          throw new Error(errorMessage);
-        }
-      } catch (error) {
-        console.error('Create missing entries error:', error);
-        alert('Error creating missing entries. Please try again: ' + error.message);
-
-        // Restore button state
-        button.disabled = false;
-        button.innerHTML = originalText;
-      }
+      Swal.fire({
+        title: 'Filters Applied',
+        html: `<strong>Employee:</strong> ${employeeFilter || 'All'}<br>
+               <strong>Course:</strong> ${courseFilter || 'All'}<br>
+               <strong>Status:</strong> ${statusFilter || 'All'}`,
+        icon: 'info',
+        confirmButtonText: 'OK'
+      });
     });
-
-    // Fix Expired Dates functionality
-    document.getElementById('fixExpiredDatesBtn').addEventListener('click', async function() {
-      const button = this;
-      const originalText = button.innerHTML;
-
-      try {
-        // Show loading state
-        button.disabled = true;
-        button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Fixing...';
-
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-        if (!csrfToken) {
-          throw new Error('CSRF token not found');
-        }
-
-        const response = await fetch('{{ route("admin.employee_trainings_dashboard.fix_expired_dates") }}', {
-          method: 'POST',
-          headers: {
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-          // Show success message
-          alert(result.message || 'Expired dates fixed successfully!');
-
-          // Refresh the page to show updated data
-          window.location.reload();
-        } else {
-          const errorMessage = result.message || `Server error: ${response.status} ${response.statusText}`;
-          throw new Error(errorMessage);
-        }
-      } catch (error) {
-        console.error('Fix expired dates error:', error);
-        alert('Error fixing expired dates. Please try again: ' + error.message);
-
-        // Restore button state
-        button.disabled = false;
-        button.innerHTML = originalText;
-      }
-    });
-
   });
+
+  // Password verification function
+  async function verifyAdminPassword(password) {
+    try {
+      const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+      const response = await fetch('/admin/verify-password', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': csrfToken,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: password })
+      });
+      
+      const data = await response.json();
+      console.log('Password verification response:', data); // Debug log
+      
+      // AdminController returns 'success' field, not 'valid'
+      if (response.ok && data.success === true) {
+        return true;
+      } else {
+        console.log('Password verification failed:', data.message || 'Invalid password');
+        return false;
+      }
+    } catch (error) {
+      console.error('Password verification error:', error);
+      return false;
+    }
+  }
+
+  // View Training Details
+  function viewTrainingDetails(id, employeeName, courseName, progress, status, expiredDate, lastAccessed) {
+    Swal.fire({
+      title: '<i class="bi bi-eye text-primary"></i> Training Details',
+      html: `
+        <div class="text-start">
+          <div class="row mb-3">
+            <div class="col-sm-4"><strong>Employee:</strong></div>
+            <div class="col-sm-8">${employeeName}</div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-sm-4"><strong>Course:</strong></div>
+            <div class="col-sm-8">${courseName}</div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-sm-4"><strong>Progress:</strong></div>
+            <div class="col-sm-8">
+              <div class="progress" style="height: 20px;">
+                <div class="progress-bar" role="progressbar" style="width: ${progress}%">${progress}%</div>
+              </div>
+            </div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-sm-4"><strong>Status:</strong></div>
+            <div class="col-sm-8"><span class="badge bg-primary">${status}</span></div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-sm-4"><strong>Expired Date:</strong></div>
+            <div class="col-sm-8">${expiredDate}</div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-sm-4"><strong>Last Accessed:</strong></div>
+            <div class="col-sm-8">${lastAccessed}</div>
+          </div>
+        </div>
+      `,
+      width: '600px',
+      showConfirmButton: true,
+      confirmButtonText: '<i class="bi bi-check"></i> Close',
+      confirmButtonColor: '#0d6efd'
+    });
+  }
+
+  // Edit Training with Password Confirmation
+  function editTrainingWithConfirmation(id, employeeId, courseId, progress, lastAccessed) {
+    Swal.fire({
+      title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification Required',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>Security Notice:</strong> You are about to edit a training record. 
+            Please enter your admin password to verify your identity.
+          </div>
+          <label for="admin-password" class="form-label">Admin Password:</label>
+          <input type="password" id="admin-password" class="form-control" placeholder="Enter your admin password" minlength="3">
+          <small class="text-muted">Password must be at least 3 characters long.</small>
+        </div>
+      `,
+      width: '500px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-check"></i> Verify & Continue',
+      cancelButtonText: '<i class="bi bi-x"></i> Cancel',
+      confirmButtonColor: '#ffc107',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('admin-password').value;
+        if (!password) {
+          Swal.showValidationMessage('Please enter your admin password');
+          return false;
+        }
+        if (password.length < 3) {
+          Swal.showValidationMessage('Password must be at least 3 characters long');
+          return false;
+        }
+        return password;
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        verifyAdminPassword(result.value).then(isValid => {
+          if (isValid) {
+            showEditTrainingForm(id, employeeId, courseId, progress, lastAccessed, result.value);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please enter your correct admin password.',
+              icon: 'error',
+              confirmButtonText: 'Try Again'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Show Edit Training Form
+  function showEditTrainingForm(id, employeeId, courseId, progress, lastAccessed, password) {
+    const employees = @json($employees);
+    const courses = @json($courses);
+
+    let employeeOptions = '';
+    employees.forEach(emp => {
+      const selected = emp.employee_id === employeeId ? 'selected' : '';
+      employeeOptions += `<option value="${emp.employee_id}" ${selected}>${emp.first_name} ${emp.last_name}</option>`;
+    });
+
+    let courseOptions = '';
+    courses.forEach(course => {
+      const selected = course.course_id == courseId ? 'selected' : '';
+      courseOptions += `<option value="${course.course_id}" ${selected}>${course.course_title}</option>`;
+    });
+
+    let formattedLastAccessed = '';
+    if (lastAccessed && lastAccessed !== 'null' && lastAccessed !== 'Never') {
+      const date = new Date(lastAccessed);
+      if (!isNaN(date.getTime())) {
+        formattedLastAccessed = date.toISOString().slice(0, 16);
+      }
+    }
+
+    Swal.fire({
+      title: '<i class="bi bi-pencil text-warning"></i> Edit Training Record',
+      html: `
+        <form id="editTrainingForm" class="text-start">
+          <input type="hidden" id="edit-password" value="${password}">
+          <div class="mb-3">
+            <label for="edit-employee" class="form-label">Employee:</label>
+            <select id="edit-employee" class="form-select" required>
+              ${employeeOptions}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="edit-course" class="form-label">Course:</label>
+            <select id="edit-course" class="form-select" required>
+              ${courseOptions}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="edit-progress" class="form-label">Progress (%):</label>
+            <input type="number" id="edit-progress" class="form-control" min="0" max="100" value="${progress || 0}" required>
+          </div>
+          <div class="mb-3">
+            <label for="edit-last-accessed" class="form-label">Last Accessed:</label>
+            <input type="datetime-local" id="edit-last-accessed" class="form-control" value="${formattedLastAccessed}">
+          </div>
+          <div class="mb-3">
+            <label for="edit-training-date" class="form-label">Training Date:</label>
+            <input type="date" id="edit-training-date" class="form-control" required>
+          </div>
+        </form>
+      `,
+      width: '600px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-check"></i> Save Changes',
+      cancelButtonText: '<i class="bi bi-x"></i> Cancel',
+      confirmButtonColor: '#198754',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const employee = document.getElementById('edit-employee').value;
+        const course = document.getElementById('edit-course').value;
+        const progress = document.getElementById('edit-progress').value;
+        const trainingDate = document.getElementById('edit-training-date').value;
+
+        if (!employee || !course || !progress || !trainingDate) {
+          Swal.showValidationMessage('Please fill in all required fields');
+          return false;
+        }
+
+        if (progress < 0 || progress > 100) {
+          Swal.showValidationMessage('Progress must be between 0 and 100');
+          return false;
+        }
+
+        return {
+          employee_id: employee,
+          course_id: course,
+          progress: progress,
+          last_accessed: document.getElementById('edit-last-accessed').value,
+          training_date: trainingDate,
+          password: document.getElementById('edit-password').value
+        };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        submitEditTrainingForm(id, result.value);
+      }
+    });
+  }
+
+  // Submit Edit Training Form
+  function submitEditTrainingForm(id, formData) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Updating training record...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    fetch(`{{ url('/admin/employee-trainings-dashboard') }}/${id}`, {
+      method: 'PUT',
+      headers: {
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formData)
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          title: 'Success!',
+          text: data.message || 'Training record updated successfully!',
+          icon: 'success',
+          timer: 3000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        throw new Error(data.message || 'Failed to update training record');
+      }
+    })
+    .catch(error => {
+      console.error('Edit error:', error);
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to update training record: ' + error.message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    });
+  }
+
+  // Delete Training with Password Confirmation
+  function deleteTrainingWithConfirmation(id, employeeName, courseName) {
+    if (id.startsWith('request_')) {
+      Swal.fire({
+        title: 'Cannot Delete',
+        text: 'Cannot delete training requests from this dashboard. Please manage training requests from the Training Requests section.',
+        icon: 'warning',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
+
+    Swal.fire({
+      title: '<i class="bi bi-exclamation-triangle text-danger"></i> Delete Training Record',
+      html: `
+        <div class="text-start">
+          <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>Warning:</strong> You are about to permanently delete this training record. This action cannot be undone.
+          </div>
+          <div class="mb-3">
+            <strong>Employee:</strong> ${employeeName}<br>
+            <strong>Course:</strong> ${courseName}
+          </div>
+          <div class="alert alert-warning">
+            <i class="bi bi-shield-lock"></i>
+            <strong>Security Notice:</strong> Please enter your admin password to verify your identity.
+          </div>
+          <label for="delete-password" class="form-label">Admin Password:</label>
+          <input type="password" id="delete-password" class="form-control" placeholder="Enter your admin password" minlength="3">
+          <small class="text-muted">Password must be at least 3 characters long.</small>
+        </div>
+      `,
+      width: '500px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-trash"></i> Delete Record',
+      cancelButtonText: '<i class="bi bi-x"></i> Cancel',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('delete-password').value;
+        if (!password) {
+          Swal.showValidationMessage('Please enter your admin password');
+          return false;
+        }
+        if (password.length < 3) {
+          Swal.showValidationMessage('Password must be at least 3 characters long');
+          return false;
+        }
+        return password;
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        verifyAdminPassword(result.value).then(isValid => {
+          if (isValid) {
+            submitDeleteTraining(id, result.value);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please enter your correct admin password.',
+              icon: 'error',
+              confirmButtonText: 'Try Again'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Submit Delete Training
+  function submitDeleteTraining(id, password) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Deleting training record...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    fetch(`{{ url('/admin/employee-trainings-dashboard') }}/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password: password })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          title: 'Deleted!',
+          text: data.message || 'Training record deleted successfully!',
+          icon: 'success',
+          timer: 3000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        throw new Error(data.message || 'Failed to delete training record');
+      }
+    })
+    .catch(error => {
+      console.error('Delete error:', error);
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to delete training record: ' + error.message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    });
+  }
+
+  // Create Missing Entries with Password Confirmation
+  function createMissingEntriesWithConfirmation() {
+    Swal.fire({
+      title: '<i class="bi bi-shield-lock text-success"></i> Security Verification Required',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            <strong>Action:</strong> Create missing training entries for all employees.
+          </div>
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>Security Notice:</strong> Please enter your admin password to verify your identity.
+          </div>
+          <label for="create-password" class="form-label">Admin Password:</label>
+          <input type="password" id="create-password" class="form-control" placeholder="Enter your admin password" minlength="3">
+          <small class="text-muted">Password must be at least 3 characters long.</small>
+        </div>
+      `,
+      width: '500px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-arrow-repeat"></i> Create Entries',
+      cancelButtonText: '<i class="bi bi-x"></i> Cancel',
+      confirmButtonColor: '#198754',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('create-password').value;
+        if (!password) {
+          Swal.showValidationMessage('Please enter your admin password');
+          return false;
+        }
+        if (password.length < 3) {
+          Swal.showValidationMessage('Password must be at least 3 characters long');
+          return false;
+        }
+        return password;
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        verifyAdminPassword(result.value).then(isValid => {
+          if (isValid) {
+            submitCreateMissingEntries(result.value);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please enter your correct admin password.',
+              icon: 'error',
+              confirmButtonText: 'Try Again'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Submit Create Missing Entries
+  function submitCreateMissingEntries(password) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Creating missing training entries...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    // Use GET method with password as query parameter since route only supports GET
+    console.log('Making GET request to create missing entries with password verification');
+    console.log('Request URL:', `/admin/create-missing-training-entries?password=${encodeURIComponent(password)}&_t=${Date.now()}`);
+    console.log('Request method: GET');
+    
+    fetch(`/admin/create-missing-training-entries?password=${encodeURIComponent(password)}&_t=${Date.now()}`, {
+      method: 'GET',
+      headers: {
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          title: 'Success!',
+          text: data.message || 'Missing entries created successfully!',
+          icon: 'success',
+          timer: 3000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        throw new Error(data.message || 'Failed to create missing entries');
+      }
+    })
+    .catch(error => {
+      console.error('Create missing entries error:', error);
+      console.error('Error details:', error.stack);
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to create missing entries: ' + error.message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    });
+  }
+
+  // Fix Expired Dates with Password Confirmation
+  function fixExpiredDatesWithConfirmation() {
+    Swal.fire({
+      title: '<i class="bi bi-shield-lock text-info"></i> Security Verification Required',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-info">
+            <i class="bi bi-calendar-check"></i>
+            <strong>Action:</strong> Fix expired dates for all training records.
+          </div>
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>Security Notice:</strong> Please enter your admin password to verify your identity.
+          </div>
+          <label for="fix-password" class="form-label">Admin Password:</label>
+          <input type="password" id="fix-password" class="form-control" placeholder="Enter your admin password" minlength="3">
+          <small class="text-muted">Password must be at least 3 characters long.</small>
+        </div>
+      `,
+      width: '500px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-calendar-check"></i> Fix Dates',
+      cancelButtonText: '<i class="bi bi-x"></i> Cancel',
+      confirmButtonColor: '#0dcaf0',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('fix-password').value;
+        if (!password) {
+          Swal.showValidationMessage('Please enter your admin password');
+          return false;
+        }
+        if (password.length < 3) {
+          Swal.showValidationMessage('Password must be at least 3 characters long');
+          return false;
+        }
+        return password;
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        verifyAdminPassword(result.value).then(isValid => {
+          if (isValid) {
+            submitFixExpiredDates(result.value);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please enter your correct admin password.',
+              icon: 'error',
+              confirmButtonText: 'Try Again'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Submit Fix Expired Dates
+  function submitFixExpiredDates(password) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Fixing expired dates...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    fetch('{{ route("admin.employee_trainings_dashboard.fix_expired_dates") }}', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ password: password })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        Swal.fire({
+          title: 'Success!',
+          text: data.message || 'Expired dates fixed successfully!',
+          icon: 'success',
+          timer: 3000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        throw new Error(data.message || 'Failed to fix expired dates');
+      }
+    })
+    .catch(error => {
+      console.error('Fix expired dates error:', error);
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to fix expired dates: ' + error.message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    });
+  }
+
+  // Export Training Data with Password Confirmation
+  function exportTrainingDataWithConfirmation() {
+    Swal.fire({
+      title: '<i class="bi bi-shield-lock text-primary"></i> Security Verification Required',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-info">
+            <i class="bi bi-download"></i>
+            <strong>Action:</strong> Export training data to Excel/CSV format.
+          </div>
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>Security Notice:</strong> Please enter your admin password to verify your identity and proceed with data export.
+          </div>
+          <div class="mb-3">
+            <label for="export-format" class="form-label">Export Format:</label>
+            <select id="export-format" class="form-select">
+              <option value="excel">Excel (.xlsx)</option>
+              <option value="csv">CSV (.csv)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="export-password" class="form-label">Admin Password:</label>
+            <input type="password" id="export-password" class="form-control" placeholder="Enter your admin password" minlength="3">
+            <small class="text-muted">Password must be at least 3 characters long.</small>
+          </div>
+        </div>
+      `,
+      width: '500px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-download"></i> Export Data',
+      cancelButtonText: '<i class="bi bi-x"></i> Cancel',
+      confirmButtonColor: '#0d6efd',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('export-password').value;
+        const format = document.getElementById('export-format').value;
+        
+        if (!password) {
+          Swal.showValidationMessage('Please enter your admin password');
+          return false;
+        }
+        if (password.length < 3) {
+          Swal.showValidationMessage('Password must be at least 3 characters long');
+          return false;
+        }
+        return { password: password, format: format };
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        verifyAdminPassword(result.value.password).then(isValid => {
+          if (isValid) {
+            submitExportTrainingData(result.value.password, result.value.format);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please enter your correct admin password.',
+              icon: 'error',
+              confirmButtonText: 'Try Again'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Submit Export Training Data
+  function submitExportTrainingData(password, format) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Exporting training data...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    // Create a form to submit the export request
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/admin/employee-trainings-dashboard/export';
+    form.style.display = 'none';
+
+    // Add CSRF token
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = '_token';
+    csrfInput.value = csrfToken;
+    form.appendChild(csrfInput);
+
+    // Add password
+    const passwordInput = document.createElement('input');
+    passwordInput.type = 'hidden';
+    passwordInput.name = 'password';
+    passwordInput.value = password;
+    form.appendChild(passwordInput);
+
+    // Add format
+    const formatInput = document.createElement('input');
+    formatInput.type = 'hidden';
+    formatInput.name = 'format';
+    formatInput.value = format;
+    form.appendChild(formatInput);
+
+    // Add current filters if any
+    const employeeFilter = document.getElementById('filterEmployee')?.value;
+    const courseFilter = document.getElementById('filterCourse')?.value;
+    const statusFilter = document.getElementById('filterStatus')?.value;
+
+    if (employeeFilter) {
+      const empInput = document.createElement('input');
+      empInput.type = 'hidden';
+      empInput.name = 'employee_filter';
+      empInput.value = employeeFilter;
+      form.appendChild(empInput);
+    }
+
+    if (courseFilter) {
+      const courseInput = document.createElement('input');
+      courseInput.type = 'hidden';
+      courseInput.name = 'course_filter';
+      courseInput.value = courseFilter;
+      form.appendChild(courseInput);
+    }
+
+    if (statusFilter) {
+      const statusInput = document.createElement('input');
+      statusInput.type = 'hidden';
+      statusInput.name = 'status_filter';
+      statusInput.value = statusFilter;
+      form.appendChild(statusInput);
+    }
+
+    document.body.appendChild(form);
+
+    // Submit form to trigger download
+    form.submit();
+
+    // Clean up
+    document.body.removeChild(form);
+
+    // Show success message after a short delay
+    setTimeout(() => {
+      Swal.fire({
+        title: 'Export Started!',
+        text: `Your ${format.toUpperCase()} file download should begin shortly.`,
+        icon: 'success',
+        timer: 3000,
+        timerProgressBar: true,
+        showConfirmButton: false
+      });
+    }, 1000);
+  }
+
+  // Remove Unknown Courses with Password Confirmation
+  function removeUnknownCoursesWithConfirmation() {
+    Swal.fire({
+      title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification Required',
+      html: `
+        <div class="text-start mb-3">
+          <div class="alert alert-warning">
+            <i class="bi bi-trash"></i>
+            <strong>Action:</strong> Remove training records with "Unknown Course" or invalid course associations.
+          </div>
+          <div class="alert alert-danger">
+            <i class="bi bi-exclamation-triangle"></i>
+            <strong>Warning:</strong> This will permanently delete training records that have:
+            <ul class="mt-2 mb-0">
+              <li>Training titles containing "Unknown Course"</li>
+              <li>Empty or null training titles</li>
+              <li>Course IDs that don't exist in the course management table</li>
+            </ul>
+          </div>
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            <strong>Security Notice:</strong> Please enter your admin password to verify your identity and proceed with cleanup.
+          </div>
+          <div class="mb-3">
+            <label for="cleanup-password" class="form-label">Admin Password:</label>
+            <input type="password" id="cleanup-password" class="form-control" placeholder="Enter your admin password" minlength="3">
+            <small class="text-muted">Password must be at least 3 characters long.</small>
+          </div>
+        </div>
+      `,
+      width: '600px',
+      showCancelButton: true,
+      confirmButtonText: '<i class="bi bi-trash"></i> Remove Unknown Courses',
+      cancelButtonText: '<i class="bi bi-x"></i> Cancel',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('cleanup-password').value;
+        
+        if (!password) {
+          Swal.showValidationMessage('Please enter your admin password');
+          return false;
+        }
+        if (password.length < 3) {
+          Swal.showValidationMessage('Password must be at least 3 characters long');
+          return false;
+        }
+        return password;
+      }
+    }).then((result) => {
+      if (result.isConfirmed) {
+        verifyAdminPassword(result.value).then(isValid => {
+          if (isValid) {
+            submitRemoveUnknownCourses(result.value);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please enter your correct admin password.',
+              icon: 'error',
+              confirmButtonText: 'Try Again'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // Submit Remove Unknown Courses
+  function submitRemoveUnknownCourses(password) {
+    Swal.fire({
+      title: 'Processing...',
+      text: 'Removing unknown course records...',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+    // Use GET method with password as query parameter
+    fetch(`/admin/employee-trainings-dashboard/remove-unknown-courses?password=${encodeURIComponent(password)}&_t=${Date.now()}`, {
+      method: 'GET',
+      headers: {
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache'
+      }
+    })
+    .then(response => {
+      console.log('Response status:', response.status);
+      console.log('Response OK:', response.ok);
+      return response.json();
+    })
+    .then(data => {
+      console.log('Response data:', data);
+      if (data.success) {
+        Swal.fire({
+          title: 'Success!',
+          text: data.message || 'Unknown course records removed successfully!',
+          icon: 'success',
+          timer: 3000,
+          timerProgressBar: true,
+          showConfirmButton: false
+        }).then(() => {
+          window.location.reload();
+        });
+      } else {
+        throw new Error(data.message || 'Failed to remove unknown course records');
+      }
+    })
+    .catch(error => {
+      console.error('Remove unknown courses error:', error);
+      console.error('Error details:', error.stack);
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to remove unknown course records: ' + error.message,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+    });
+  }
   </script>
 
+  </main>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="{{ asset('resources/js/responsive.js') }}"></script>
 </body>
 </html>

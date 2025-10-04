@@ -11,9 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
-            $table->string('status')->default('Not Started')->after('progress');
-        });
+        if (Schema::hasTable('destination_knowledge_trainings')) {
+            Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
+                if (!Schema::hasColumn('destination_knowledge_trainings', 'status')) {
+                    $table->string('status')->default('not-started')->after('progress');
+                }
+            });
+        }
     }
 
     /**
@@ -21,8 +25,12 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
-            $table->dropColumn('status');
-        });
+        if (Schema::hasTable('destination_knowledge_trainings')) {
+            Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
+                if (Schema::hasColumn('destination_knowledge_trainings', 'status')) {
+                    $table->dropColumn('status');
+                }
+            });
+        }
     }
 };

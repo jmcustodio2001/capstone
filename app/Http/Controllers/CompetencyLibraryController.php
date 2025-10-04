@@ -18,16 +18,15 @@ class CompetencyLibraryController extends Controller
 
     public function index()
     {
-        // Filter out auto-created course entries that don't follow "Destination Knowledge - (NAME)" format
-        $competencies = CompetencyLibrary::where(function($query) {
-            $query->where('category', '!=', 'Destination Knowledge')
-                  ->orWhere(function($subQuery) {
-                      $subQuery->where('category', 'Destination Knowledge')
-                               ->where('competency_name', 'LIKE', 'Destination Knowledge - %');
-                  });
-        })
-        ->orderBy('id', 'desc')
-        ->get();
+        // Exclude all destination training related competencies from the library view
+        $competencies = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
+            ->where('category', '!=', 'General')
+            ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+            ->where('competency_name', 'NOT LIKE', '%ITALY%')
+            ->where('competency_name', 'NOT LIKE', '%destination%')
+            ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
+            ->orderBy('id', 'desc')
+            ->get();
 
         $employees = Employee::all();
         $gaps = CompetencyGap::with(['employee', 'competency'])->get();
@@ -441,6 +440,61 @@ class CompetencyLibraryController extends Controller
         } catch (\Exception $e) {
             return redirect()->route('admin.competency_library.index')
                 ->with('error', 'Error during cleanup: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Remove all destination training competencies from competency library
+     */
+    public function removeDestinationTrainingCompetencies()
+    {
+        // Check if user is admin
+        if (!Auth::guard('admin')->check() || strtoupper(Auth::guard('admin')->user()->role) !== 'ADMIN') {
+            abort(403, 'Access denied. Admin privileges required.');
+        }
+
+        try {
+            // Find all destination training related competencies
+            $destinationCompetencies = CompetencyLibrary::where(function($query) {
+                $query->where('category', 'Destination Knowledge')
+                    ->orWhere('category', 'General')
+                    ->orWhere('competency_name', 'LIKE', '%BESTLINK%')
+                    ->orWhere('competency_name', 'LIKE', '%ITALY%')
+                    ->orWhere('competency_name', 'LIKE', '%destination%')
+                    ->orWhere('description', 'LIKE', '%Auto-created from destination knowledge training%');
+            })->get();
+
+            $deletedCount = 0;
+            $profilesDeleted = 0;
+            $gapsDeleted = 0;
+
+            foreach ($destinationCompetencies as $competency) {
+                // Delete related employee competency profiles
+                $profiles = EmployeeCompetencyProfile::where('competency_id', $competency->id)->delete();
+                $profilesDeleted += $profiles;
+
+                // Delete related competency gaps
+                $gaps = CompetencyGap::where('competency_id', $competency->id)->delete();
+                $gapsDeleted += $gaps;
+
+                // Delete the competency itself
+                $competency->delete();
+                $deletedCount++;
+            }
+
+            ActivityLog::createLog([
+                'module' => 'Competency Management',
+                'action' => 'cleanup',
+                'description' => "Removed {$deletedCount} destination training competencies from competency library, {$profilesDeleted} related profiles, and {$gapsDeleted} related gaps. Destination training data should only exist in Destination Knowledge Training system.",
+                'model_type' => CompetencyLibrary::class,
+            ]);
+
+            return redirect()->route('admin.competency_library.index')
+                ->with('success', "Successfully removed {$deletedCount} destination training competencies from competency library. These should only exist in the Destination Knowledge Training system.");
+
+        } catch (\Exception $e) {
+            return redirect()->route('admin.competency_library.index')
+                ->with('error', 'Error during removal: ' . $e->getMessage());
         }
     }
 

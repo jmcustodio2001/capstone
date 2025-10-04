@@ -141,3 +141,104 @@
   height: 8px;
   border-radius: 4px;
 }
+
+/* Real Data Simulation Results Styling */
+.simulation-results {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+}
+
+.simulation-metric {
+  background: white;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  border-left: 4px solid #007bff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.simulation-metric strong {
+  color: #495057;
+  font-weight: 600;
+}
+
+.simulation-metric .metric-value {
+  color: #007bff;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.risk-level-high {
+  border-left-color: #dc3545 !important;
+}
+
+.risk-level-high .metric-value {
+  color: #dc3545 !important;
+}
+
+.risk-level-medium {
+  border-left-color: #ffc107 !important;
+}
+
+.risk-level-medium .metric-value {
+  color: #ffc107 !important;
+}
+
+.risk-level-low {
+  border-left-color: #28a745 !important;
+}
+
+.risk-level-low .metric-value {
+  color: #28a745 !important;
+}
+
+.recommendations-list {
+  background: #e8f4fd;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.recommendations-list ul {
+  margin-bottom: 0;
+  padding-left: 1.2rem;
+}
+
+.recommendations-list li {
+  margin-bottom: 0.5rem;
+  color: #495057;
+}
+
+.simulation-status-completed {
+  background: #d4edda;
+  color: #155724;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.data-source-indicator {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: #17a2b8;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.real-data-badge {
+  background: linear-gradient(45deg, #28a745, #20c997);
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: inline-block;
+  margin-left: 0.5rem;
+}

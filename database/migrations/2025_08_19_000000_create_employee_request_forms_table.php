@@ -13,7 +13,7 @@ return new class extends Migration
             $table->unsignedBigInteger('employee_id');
             $table->string('request_type');
             $table->text('request_details');
-            $table->string('status')->default('Pending');
+            $table->string('status')->default('pending');
             $table->timestamps();
             // $table->foreign('employee_id')->references('id')->on('employees'); // Uncomment if you want FK
         });

@@ -4,17 +4,20 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\TrainingFeedback;
+use App\Models\CompetencyFeedbackRequest;
 use App\Models\Employee;
 use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AdminTrainingFeedbackController extends Controller
 {
     public function index(Request $request)
     {
-        // Get all feedback with filters
+        // Get all training feedback with filters
         $query = TrainingFeedback::with('employee');
         
         // Apply filters
@@ -47,26 +50,77 @@ class AdminTrainingFeedbackController extends Controller
             }
         }
         
-        $allFeedback = $query->orderBy('submitted_at', 'desc')->paginate(20);
+        $allFeedback = $query->orderBy('submitted_at', 'desc')->get();
+        
+        // Get competency feedback requests with filters
+        $competencyQuery = CompetencyFeedbackRequest::with(['employee', 'competency', 'manager']);
+        
+        // Apply same filters to competency requests
+        if ($request->employee) {
+            $competencyQuery->where('employee_id', $request->employee);
+        }
+        
+        if ($request->date_range) {
+            switch ($request->date_range) {
+                case 'today':
+                    $competencyQuery->whereDate('created_at', Carbon::today());
+                    break;
+                case 'week':
+                    $competencyQuery->whereBetween('created_at', [Carbon::now()->startOfWeek(), Carbon::now()->endOfWeek()]);
+                    break;
+                case 'month':
+                    $competencyQuery->whereMonth('created_at', Carbon::now()->month);
+                    break;
+                case 'quarter':
+                    $competencyQuery->whereBetween('created_at', [Carbon::now()->startOfQuarter(), Carbon::now()->endOfQuarter()]);
+                    break;
+            }
+        }
+        
+        $competencyRequests = $competencyQuery->orderBy('created_at', 'desc')->get();
         
         // Get statistics
         $totalFeedback = TrainingFeedback::count();
-        $avgRating = TrainingFeedback::avg('overall_rating');
+        $totalCompetencyRequests = CompetencyFeedbackRequest::count();
+        $avgRating = TrainingFeedback::avg('overall_rating') ?: 0;
         $thisWeekFeedback = TrainingFeedback::whereBetween('submitted_at', [
             Carbon::now()->startOfWeek(), 
             Carbon::now()->endOfWeek()
         ])->count();
-        $recommendationRate = TrainingFeedback::where('recommend_training', true)->count() / max($totalFeedback, 1) * 100;
+        $thisWeekCompetencyRequests = CompetencyFeedbackRequest::whereBetween('created_at', [
+            Carbon::now()->startOfWeek(), 
+            Carbon::now()->endOfWeek()
+        ])->count();
+        $recommendationRate = $totalFeedback > 0 ? 
+            (TrainingFeedback::where('recommend_training', true)->count() / $totalFeedback * 100) : 0;
+        
+        // Add combined statistics for both feedback types
+        $totalCombined = $totalFeedback + $totalCompetencyRequests;
+        $thisWeekCombined = $thisWeekFeedback + $thisWeekCompetencyRequests;
         
         // Get filter options
         $employees = Employee::select('employee_id', 'first_name', 'last_name')->orderBy('first_name')->get();
         $trainings = TrainingFeedback::distinct()->pluck('training_title')->filter()->sort()->values();
         
+        // Log statistics for debugging
+        Log::info('Admin Feedback Statistics:', [
+            'totalFeedback' => $totalFeedback,
+            'totalCompetencyRequests' => $totalCompetencyRequests,
+            'avgRating' => $avgRating,
+            'thisWeekFeedback' => $thisWeekFeedback,
+            'recommendationRate' => $recommendationRate,
+            'allFeedback_count' => $allFeedback->count(),
+            'competencyRequests_count' => $competencyRequests->count()
+        ]);
+
         return view('Employee_Self_Service.employee_feedback', compact(
             'allFeedback', 
+            'competencyRequests',
             'totalFeedback', 
+            'totalCompetencyRequests',
             'avgRating', 
             'thisWeekFeedback', 
+            'thisWeekCompetencyRequests',
             'recommendationRate',
             'employees',
             'trainings'
@@ -87,6 +141,8 @@ class AdminTrainingFeedbackController extends Controller
         // Log activity
         ActivityLog::create([
             'employee_id' => 'ADMIN',
+            'module' => 'Training Management',
+            'action' => 'Mark as Reviewed',
             'activity_type' => 'Feedback Review',
             'description' => "Marked feedback {$feedback->feedback_id} as reviewed for training: {$feedback->training_title}",
             'activity_date' => now()
@@ -116,6 +172,8 @@ class AdminTrainingFeedbackController extends Controller
         // Log activity
         ActivityLog::create([
             'employee_id' => 'ADMIN',
+            'module' => 'Training Management',
+            'action' => 'Respond to Feedback',
             'activity_type' => 'Feedback Response',
             'description' => "Responded to feedback {$feedback->feedback_id} for training: {$feedback->training_title}",
             'activity_date' => now()
@@ -126,6 +184,8 @@ class AdminTrainingFeedbackController extends Controller
             // Add notification logic here if needed
             ActivityLog::create([
                 'employee_id' => $feedback->employee_id,
+                'module' => 'Training Management',
+                'action' => 'Receive Response',
                 'activity_type' => 'Feedback Response',
                 'description' => "Admin responded to your feedback for training: {$feedback->training_title}",
                 'activity_date' => now()
@@ -240,5 +300,132 @@ class AdminTrainingFeedbackController extends Controller
         ];
         
         return response()->json($analytics);
+    }
+    
+    // Competency Feedback Request Methods
+    public function showCompetencyRequest($id)
+    {
+        $request = CompetencyFeedbackRequest::with(['employee', 'competency', 'manager'])->findOrFail($id);
+        
+        return response()->json([
+            'id' => $request->id,
+            'employee' => [
+                'employee_id' => $request->employee->employee_id ?? 'N/A',
+                'first_name' => $request->employee->first_name ?? 'Unknown',
+                'last_name' => $request->employee->last_name ?? 'User',
+                'department' => $request->employee->department ?? 'N/A'
+            ],
+            'competency' => [
+                'competency_name' => $request->competency->competency_name ?? 'Unknown Competency',
+                'description' => $request->competency->description ?? 'No description',
+                'category' => $request->competency->category ?? 'General'
+            ],
+            'request_message' => $request->request_message,
+            'status' => $request->status,
+            'manager_response' => $request->manager_response,
+            'manager' => $request->manager ? [
+                'name' => $request->manager->name,
+                'email' => $request->manager->email
+            ] : null,
+            'created_at' => $request->created_at->format('Y-m-d H:i:s'),
+            'responded_at' => $request->responded_at ? $request->responded_at->format('Y-m-d H:i:s') : null
+        ]);
+    }
+    
+    public function respondToCompetencyRequest(Request $request, $id)
+    {
+        $request->validate([
+            'manager_response' => 'required|string|max:2000'
+        ]);
+
+        try {
+            $feedbackRequest = CompetencyFeedbackRequest::findOrFail($id);
+            
+            $feedbackRequest->update([
+                'manager_response' => $request->manager_response,
+                'manager_id' => Auth::id(),
+                'status' => 'responded',
+                'responded_at' => now()
+            ]);
+
+            // Log activity
+            ActivityLog::create([
+                'employee_id' => 'ADMIN',
+                'module' => 'Competency Management',
+                'action' => 'Respond to Request',
+                'activity_type' => 'Competency Feedback Response',
+                'description' => "Responded to competency feedback request from {$feedbackRequest->employee->first_name} {$feedbackRequest->employee->last_name}",
+                'activity_date' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Response sent successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send response. Please try again.'
+            ], 500);
+        }
+    }
+    
+    public function markCompetencyRequestAsReviewed($id)
+    {
+        try {
+            Log::info("Attempting to mark competency request as reviewed", ['id' => $id]);
+            
+            $feedbackRequest = CompetencyFeedbackRequest::with('employee')->findOrFail($id);
+            
+            Log::info("Found competency request", [
+                'id' => $feedbackRequest->id,
+                'current_status' => $feedbackRequest->status,
+                'employee_id' => $feedbackRequest->employee_id
+            ]);
+            
+            $feedbackRequest->update([
+                'status' => 'closed',
+                'manager_id' => Auth::id()
+            ]);
+
+            Log::info("Updated competency request status", [
+                'id' => $feedbackRequest->id,
+                'new_status' => $feedbackRequest->status,
+                'manager_id' => Auth::id()
+            ]);
+
+            // Log activity with safe employee name access
+            $employeeName = 'Unknown Employee';
+            if ($feedbackRequest->employee) {
+                $employeeName = ($feedbackRequest->employee->first_name ?? 'Unknown') . ' ' . ($feedbackRequest->employee->last_name ?? 'User');
+            }
+            
+            ActivityLog::create([
+                'employee_id' => 'ADMIN',
+                'module' => 'Competency Management',
+                'action' => 'Mark as Reviewed',
+                'activity_type' => 'Competency Feedback Review',
+                'description' => "Marked competency feedback request from {$employeeName} as reviewed",
+                'activity_date' => now()
+            ]);
+
+            Log::info("Successfully marked competency request as reviewed", ['id' => $id]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Request marked as reviewed successfully!'
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Failed to mark competency request as reviewed", [
+                'id' => $id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update request status: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

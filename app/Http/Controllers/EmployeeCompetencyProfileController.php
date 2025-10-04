@@ -7,7 +7,9 @@ use App\Models\Employee;
 use App\Models\CompetencyLibrary;
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
+use App\Models\CourseManagementNotification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class EmployeeCompetencyProfileController extends Controller
 {
@@ -15,8 +17,27 @@ class EmployeeCompetencyProfileController extends Controller
     {
         $profiles = EmployeeCompetencyProfile::with(['employee', 'competency'])->orderBy('id')->get();
         $employees = Employee::all();
-        $competencylibrary = CompetencyLibrary::all();
-        return view('competency_management.employee_competency_profiles', compact('profiles', 'employees', 'competencylibrary'));
+        // Exclude all destination training related competencies from the main competency dropdown
+        $competencylibrary = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
+            ->where('category', '!=', 'General')
+            ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+            ->where('competency_name', 'NOT LIKE', '%ITALY%')
+            ->where('competency_name', 'NOT LIKE', '%destination%')
+            ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
+            ->get();
+        
+        // Get unique destination names from DestinationKnowledgeTraining
+        $destinationTrainings = \App\Models\DestinationKnowledgeTraining::select('destination_name')
+            ->distinct()
+            ->whereNotNull('destination_name')
+            ->where('destination_name', '!=', '')
+            ->orderBy('destination_name')
+            ->get()
+            ->pluck('destination_name')
+            ->unique()
+            ->values();
+        
+        return view('competency_management.employee_competency_profiles', compact('profiles', 'employees', 'competencylibrary', 'destinationTrainings'));
     }
 
     /**
@@ -224,12 +245,49 @@ class EmployeeCompetencyProfileController extends Controller
 
     public function store(Request $request)
     {
+        // Handle destination training selections
+        $competencyId = $request->input('competency_id');
+        
+        if (substr($competencyId, 0, 12) === 'destination_') {
+            // Extract destination name from the destinations array
+            $destinationIndex = (int) str_replace('destination_', '', $competencyId);
+            $destinationTrainings = \App\Models\DestinationKnowledgeTraining::select('destination_name')
+                ->distinct()
+                ->whereNotNull('destination_name')
+                ->where('destination_name', '!=', '')
+                ->orderBy('destination_name')
+                ->get()
+                ->pluck('destination_name')
+                ->unique()
+                ->values();
+            
+            if (!isset($destinationTrainings[$destinationIndex])) {
+                return redirect()->route('employee_competency_profiles.index')
+                    ->with('error', 'Invalid destination selection.');
+            }
+            
+            $destinationName = $destinationTrainings[$destinationIndex];
+            
+            // Create or find competency for this destination
+            $competencyName = 'Destination Knowledge - ' . $destinationName;
+            $competency = CompetencyLibrary::firstOrCreate(
+                ['competency_name' => $competencyName],
+                [
+                    'description' => 'Knowledge and expertise about ' . $destinationName . ' destination',
+                    'category' => 'Destination Knowledge'
+                ]
+            );
+            
+            $competencyId = $competency->id;
+        }
+        
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,employee_id',
-            'competency_id' => 'required|exists:competency_library,id',
             'proficiency_level' => 'required|string|max:255',
             'assessment_date' => 'required|date',
         ]);
+        
+        $validated['competency_id'] = $competencyId;
 
         // Check for existing competency profile to prevent duplicates
         $existingProfile = EmployeeCompetencyProfile::where('employee_id', $validated['employee_id'])
@@ -251,17 +309,54 @@ class EmployeeCompetencyProfileController extends Controller
             'model_type' => EmployeeCompetencyProfile::class,
             'model_id' => $profile->id,
         ]);
-        return redirect()->route('employee_competency_profiles.index')->with('success', 'Training progress synced successfully!');
+        return redirect()->route('employee_competency_profiles.index')->with('success', 'Profile created successfully!');
     }
 
     public function update(Request $request, $id)
     {
+        // Handle destination training selections
+        $competencyId = $request->input('competency_id');
+        
+        if (substr($competencyId, 0, 12) === 'destination_') {
+            // Extract destination name from the destinations array
+            $destinationIndex = (int) str_replace('destination_', '', $competencyId);
+            $destinationTrainings = \App\Models\DestinationKnowledgeTraining::select('destination_name')
+                ->distinct()
+                ->whereNotNull('destination_name')
+                ->where('destination_name', '!=', '')
+                ->orderBy('destination_name')
+                ->get()
+                ->pluck('destination_name')
+                ->unique()
+                ->values();
+            
+            if (!isset($destinationTrainings[$destinationIndex])) {
+                return redirect()->route('employee_competency_profiles.index')
+                    ->with('error', 'Invalid destination selection.');
+            }
+            
+            $destinationName = $destinationTrainings[$destinationIndex];
+            
+            // Create or find competency for this destination
+            $competencyName = 'Destination Knowledge - ' . $destinationName;
+            $competency = CompetencyLibrary::firstOrCreate(
+                ['competency_name' => $competencyName],
+                [
+                    'description' => 'Knowledge and expertise about ' . $destinationName . ' destination',
+                    'category' => 'Destination Knowledge'
+                ]
+            );
+            
+            $competencyId = $competency->id;
+        }
+        
         $validated = $request->validate([
             'employee_id' => 'required|exists:employees,employee_id',
-            'competency_id' => 'required|exists:competency_library,id',
             'proficiency_level' => 'required|string|max:255',
             'assessment_date' => 'required|date',
         ]);
+        
+        $validated['competency_id'] = $competencyId;
 
         $profile = EmployeeCompetencyProfile::findOrFail($id);
         $profile->update($validated);
@@ -508,5 +603,87 @@ class EmployeeCompetencyProfileController extends Controller
         }
 
         return 'General';
+    }
+
+    /**
+     * Notify course management about employee competency profile status
+     */
+    public function notifyCourseManagement(Request $request, $id)
+    {
+        // Check if user is admin
+        if (!Auth::guard('admin')->check() || strtoupper(Auth::guard('admin')->user()->role) !== 'ADMIN') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied. Admin privileges required.'
+            ], 403);
+        }
+
+        try {
+            $profile = EmployeeCompetencyProfile::with(['employee', 'competency'])->findOrFail($id);
+            
+            // Check if competency is already approved and active (proficiency level 5)
+            if ($profile->proficiency_level >= 5) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'This competency is already approved and active. Notification not needed.'
+                ], 400);
+            }
+
+            $competency = $profile->competency;
+            $employee = $profile->employee;
+
+            // Find active courses that use this competency
+            $activeCourses = \App\Models\CourseManagement::where('status', 'Active')
+                ->where(function($query) use ($competency) {
+                    $query->where('course_title', 'LIKE', '%' . $competency->competency_name . '%')
+                          ->orWhere('description', 'LIKE', '%' . $competency->competency_name . '%');
+                })
+                ->get();
+
+            // Create notification for course management
+            $notification = CourseManagementNotification::create([
+                'competency_id' => $competency->id,
+                'competency_name' => $competency->competency_name,
+                'message' => 'Employee competency profile update: ' . $employee->first_name . ' ' . $employee->last_name . 
+                           ' has proficiency level ' . $profile->proficiency_level . '/5 in "' . $competency->competency_name . '". ' .
+                           ($activeCourses->count() > 0 ?
+                           'Found ' . $activeCourses->count() . ' active courses that may be affected.' :
+                           'No active courses found using this competency.'),
+                'notification_type' => 'employee_competency_update',
+                'created_by' => Auth::guard('admin')->id(),
+                'employee_id' => $employee->employee_id,
+                'proficiency_level' => $profile->proficiency_level,
+            ]);
+
+            // Log the notification action
+            ActivityLog::createLog([
+                'module' => 'Employee Competency Profile',
+                'action' => 'notification',
+                'description' => 'Sent notification to course management about employee competency: ' . 
+                               $employee->first_name . ' ' . $employee->last_name . ' - ' . $competency->competency_name .
+                               ' (Level ' . $profile->proficiency_level . '/5, ' . $activeCourses->count() . ' active courses affected)',
+                'model_type' => EmployeeCompetencyProfile::class,
+                'model_id' => $profile->id,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Notification sent to course management successfully. ' .
+                           ($activeCourses->count() > 0 ?
+                           $activeCourses->count() . ' active courses may be affected.' :
+                           'No active courses found using this competency.'),
+                'employee' => $employee->first_name . ' ' . $employee->last_name,
+                'competency' => $competency->competency_name,
+                'proficiency_level' => $profile->proficiency_level,
+                'active_courses_count' => $activeCourses->count(),
+                'notification_id' => $notification->id
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send notification: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

@@ -6,7 +6,10 @@ use Illuminate\Http\Request;
 use App\Models\RequestForm;
 use App\Models\CourseManagement;
 use App\Models\ActivityLog;
+use App\Models\Employee;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class RequestFormController extends Controller
 {
@@ -19,15 +22,449 @@ class RequestFormController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'employee_id' => 'required|string',
-            'request_type' => 'required|string',
-            'reason' => 'required|string',
-            'status' => 'required|string',
-            'requested_date' => 'required|date',
-        ]);
-        RequestForm::create($validated);
-        return redirect()->route('employee.requests.index')->with('success', 'Request submitted successfully!');
+        try {
+            Log::info('RequestForm store method called', [
+                'request_data' => $request->all(),
+                'auth_guard_check' => Auth::guard('employee')->check(),
+                'auth_user_id' => Auth::guard('employee')->id(),
+                'session_id' => session()->getId(),
+                'csrf_token' => $request->header('X-CSRF-TOKEN'),
+                'content_type' => $request->header('Content-Type'),
+                'expects_json' => $request->expectsJson()
+            ]);
+
+            // Always return JSON for AJAX requests
+            if ($request->expectsJson() || $request->ajax() || $request->wantsJson()) {
+                
+                // Validate the request data including password
+                try {
+                    $validated = $request->validate([
+                        'password' => 'required|string|min:3',
+                        'employee_id' => 'required|string',
+                        'request_type' => 'required|string',
+                        'reason' => 'required|string',
+                        'status' => 'required|string',
+                        'requested_date' => 'required|date',
+                    ]);
+                } catch (\Illuminate\Validation\ValidationException $e) {
+                    Log::error('Validation failed', ['errors' => $e->errors()]);
+                    $errorMessages = [];
+                    foreach ($e->errors() as $field => $messages) {
+                        $errorMessages = array_merge($errorMessages, $messages);
+                    }
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Validation failed: ' . implode(', ', $errorMessages)
+                    ], 422);
+                }
+
+                Log::info('Request validation passed', ['validated_data' => $validated]);
+
+                // Check if user is authenticated
+                if (!Auth::guard('employee')->check()) {
+                    Log::error('Unauthenticated user attempting to create request', [
+                        'session_data' => session()->all(),
+                        'guards' => [
+                            'employee' => Auth::guard('employee')->check(),
+                            'web' => Auth::guard('web')->check(),
+                            'admin' => Auth::guard('admin')->check()
+                        ]
+                    ]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Your session has expired. Please refresh the page and log in again.'
+                    ], 401);
+                }
+
+                // Get authenticated user
+                $employee = Auth::guard('employee')->user();
+                if (!$employee) {
+                    Log::error('No authenticated employee found during create');
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Authentication required. Please refresh the page and log in again.'
+                    ], 401);
+                }
+
+                Log::info('Employee authenticated for request creation', [
+                    'employee_id' => $employee->employee_id,
+                    'employee_email' => $employee->email
+                ]);
+
+                // Verify employee password
+                if (!$this->verifyEmployeePassword($validated['password'])) {
+                    Log::warning('Invalid password attempt for employee', ['employee_id' => $employee->employee_id]);
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid password. Please enter your correct password.'
+                    ], 401);
+                }
+
+                Log::info('Password verification passed');
+
+                // Remove password from data before storing
+                unset($validated['password']);
+
+                // Create the request
+                $requestForm = RequestForm::create($validated);
+                Log::info('Request form created successfully', ['request_id' => $requestForm->request_id]);
+
+                // Log the activity using ActivityLog's proper method
+                try {
+                    ActivityLog::createLog([
+                        'module' => 'Request Management',
+                        'action' => 'create',
+                        'description' => 'Created document request: ' . $validated['request_type'] . ' for employee ID: ' . $validated['employee_id'],
+                    ]);
+                } catch (\Exception $logException) {
+                    Log::warning('Failed to create activity log', [
+                        'error' => $logException->getMessage(),
+                        'request_id' => $requestForm->request_id ?? 'unknown'
+                    ]);
+                    // Don't fail the create operation if logging fails
+                }
+
+                // Always return JSON response for AJAX requests
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Document request submitted successfully!'
+                ]);
+            }
+
+            // Non-AJAX request handling (fallback)
+            $validated = $request->validate([
+                'password' => 'required|string|min:3',
+                'employee_id' => 'required|string',
+                'request_type' => 'required|string',
+                'reason' => 'required|string',
+                'status' => 'required|string',
+                'requested_date' => 'required|date',
+            ]);
+
+            if (!Auth::guard('employee')->check()) {
+                return redirect()->route('employee.login')->with('error', 'Please log in to continue.');
+            }
+
+            $employee = Auth::guard('employee')->user();
+            if (!$employee || !$this->verifyEmployeePassword($validated['password'])) {
+                return redirect()->back()->with('error', 'Invalid password. Please try again.');
+            }
+
+            unset($validated['password']);
+            $requestForm = RequestForm::create($validated);
+
+            try {
+                ActivityLog::createLog([
+                    'module' => 'Request Management',
+                    'action' => 'create',
+                    'description' => 'Created document request: ' . $validated['request_type'] . ' for employee ID: ' . $validated['employee_id'],
+                ]);
+            } catch (\Exception $logException) {
+                Log::warning('Failed to create activity log', ['error' => $logException->getMessage()]);
+            }
+
+            return redirect()->route('employee.requests.index')->with('success', 'Request submitted successfully!');
+
+        } catch (\Exception $e) {
+            Log::error('Error creating request form', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            
+            if ($request->expectsJson() || $request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to submit request: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()->with('error', 'Failed to submit request: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update the specified request
+     */
+    public function update(Request $request, $id)
+    {
+        try {
+            Log::info('RequestForm update method called', ['request_id' => $id, 'request_data' => $request->all()]);
+
+            // Validate the request data including password
+            try {
+                $validated = $request->validate([
+                    'password' => 'required|string|min:3',
+                    'request_type' => 'required|string',
+                    'reason' => 'required|string',
+                ]);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                Log::error('Update validation failed', ['errors' => $e->errors()]);
+                $errorMessages = [];
+                foreach ($e->errors() as $field => $messages) {
+                    $errorMessages = array_merge($errorMessages, $messages);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed: ' . implode(', ', $errorMessages)
+                ], 422);
+            }
+
+            Log::info('Update validation passed', ['validated_data' => $validated]);
+
+            // Check if user is authenticated
+            if (!Auth::guard('employee')->check()) {
+                Log::error('Unauthenticated user attempting to update request');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your session has expired. Please refresh the page and log in again.'
+                ], 401);
+            }
+
+            // Get authenticated user
+            $employee = Auth::guard('employee')->user();
+            if (!$employee) {
+                Log::error('No authenticated employee found during update');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication required. Please refresh the page and log in again.'
+                ], 401);
+            }
+
+            // Verify employee password
+            if (!$this->verifyEmployeePassword($validated['password'])) {
+                Log::warning('Invalid password attempt for employee during update', ['employee_id' => $employee->employee_id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid password. Please enter your correct password.'
+                ], 401);
+            }
+
+            Log::info('Password verification passed for update');
+
+            // Find the request and verify ownership
+            $requestForm = RequestForm::where('request_id', $id)
+                ->where('employee_id', $employee->employee_id)
+                ->first();
+
+            if (!$requestForm) {
+                Log::warning('Request not found or not owned by employee', ['request_id' => $id, 'employee_id' => $employee->employee_id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Request not found or you do not have permission to edit it.'
+                ], 404);
+            }
+
+            // Only allow editing of pending requests
+            if (strtolower($requestForm->status) !== 'pending') {
+                Log::warning('Attempt to edit non-pending request', ['request_id' => $id, 'status' => $requestForm->status]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending requests can be edited.'
+                ], 403);
+            }
+
+            // Remove password from data before updating
+            unset($validated['password']);
+
+            // Update the request
+            $requestForm->update($validated);
+            Log::info('Request form updated successfully', ['request_id' => $id]);
+
+            // Log the activity using ActivityLog's proper method
+            try {
+                ActivityLog::createLog([
+                    'module' => 'Request Management',
+                    'action' => 'update',
+                    'description' => 'Updated document request ID: ' . $id . ' for employee ID: ' . $employee->employee_id,
+                ]);
+            } catch (\Exception $logException) {
+                Log::warning('Failed to create activity log', [
+                    'error' => $logException->getMessage(),
+                    'request_id' => $id
+                ]);
+                // Don't fail the update operation if logging fails
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Document request updated successfully!'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error updating request form', ['request_id' => $id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update request: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete the specified request
+     */
+    public function destroy(Request $request, $id)
+    {
+        try {
+            Log::info('RequestForm destroy method called', [
+                'request_id' => $id, 
+                'request_id_type' => gettype($id),
+                'request_data' => $request->all(),
+                'auth_check' => Auth::guard('employee')->check(),
+                'user_id' => Auth::guard('employee')->id()
+            ]);
+
+            // Validate password
+            try {
+                $validated = $request->validate([
+                    'password' => 'required|string|min:3',
+                ]);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                Log::error('Delete validation failed', ['errors' => $e->errors()]);
+                $errorMessages = [];
+                foreach ($e->errors() as $field => $messages) {
+                    $errorMessages = array_merge($errorMessages, $messages);
+                }
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed: ' . implode(', ', $errorMessages)
+                ], 422);
+            }
+
+            Log::info('Delete validation passed');
+
+            // Check if user is authenticated
+            if (!Auth::guard('employee')->check()) {
+                Log::error('Unauthenticated user attempting to delete request');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Your session has expired. Please refresh the page and log in again.'
+                ], 401);
+            }
+
+            // Get authenticated user
+            $employee = Auth::guard('employee')->user();
+            if (!$employee) {
+                Log::error('No authenticated employee found during delete');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication required. Please refresh the page and log in again.'
+                ], 401);
+            }
+
+            // Verify employee password
+            if (!$this->verifyEmployeePassword($validated['password'])) {
+                Log::warning('Invalid password attempt for employee during delete', ['employee_id' => $employee->employee_id]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid password. Please enter your correct password.'
+                ], 401);
+            }
+
+            Log::info('Password verification passed for delete');
+
+            // Find the request and verify ownership
+            Log::info('Looking for request', [
+                'request_id' => $id,
+                'employee_id' => $employee->employee_id,
+                'all_requests_for_employee' => RequestForm::where('employee_id', $employee->employee_id)->pluck('request_id')->toArray()
+            ]);
+
+            $requestForm = RequestForm::where('request_id', $id)
+                ->where('employee_id', $employee->employee_id)
+                ->first();
+
+            if (!$requestForm) {
+                Log::warning('Request not found or not owned by employee during delete', [
+                    'request_id' => $id, 
+                    'employee_id' => $employee->employee_id,
+                    'request_exists_globally' => RequestForm::where('request_id', $id)->exists()
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Request not found or you do not have permission to delete it.'
+                ], 404);
+            }
+
+            // Only allow deletion of pending requests
+            if (strtolower($requestForm->status) !== 'pending') {
+                Log::warning('Attempt to delete non-pending request', ['request_id' => $id, 'status' => $requestForm->status]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only pending requests can be deleted.'
+                ], 403);
+            }
+
+            // Store request details for logging
+            $requestType = $requestForm->request_type;
+
+            try {
+                // Delete the request
+                $requestForm->delete();
+                Log::info('Request form deleted successfully', ['request_id' => $id]);
+
+                // Log the activity using ActivityLog's proper method
+                try {
+                    ActivityLog::createLog([
+                        'module' => 'Request Management',
+                        'action' => 'delete',
+                        'description' => 'Deleted document request ID: ' . $id . ' (' . $requestType . ') for employee ID: ' . $employee->employee_id,
+                    ]);
+                } catch (\Exception $logException) {
+                    Log::warning('Failed to create activity log', [
+                        'error' => $logException->getMessage(),
+                        'request_id' => $id
+                    ]);
+                    // Don't fail the delete operation if logging fails
+                }
+            } catch (\Exception $deleteException) {
+                Log::error('Error deleting request from database', [
+                    'request_id' => $id, 
+                    'error' => $deleteException->getMessage(),
+                    'trace' => $deleteException->getTraceAsString()
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to delete request from database: ' . $deleteException->getMessage()
+                ], 500);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Document request deleted successfully!'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error deleting request form', ['request_id' => $id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete request: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Verify employee password
+     */
+    private function verifyEmployeePassword($password)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            if (!$employee) {
+                Log::error('No authenticated employee found');
+                return false;
+            }
+
+            Log::info('Verifying password for employee', ['employee_id' => $employee->employee_id]);
+            
+            // Check password against employee's stored password
+            $isValid = Hash::check($password, $employee->password);
+            
+            Log::info('Password verification result', ['is_valid' => $isValid]);
+            
+            return $isValid;
+        } catch (\Exception $e) {
+            Log::error('Error verifying employee password', ['error' => $e->getMessage()]);
+            return false;
+        }
     }
 
     /**

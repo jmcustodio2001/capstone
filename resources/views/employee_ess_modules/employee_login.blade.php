@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Employee Portal - Jetlouge Travels Admin</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
 
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -14,6 +15,39 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <!-- Login Page Styles -->
   <link rel="stylesheet" href="{{ asset('assets/css/admin_login-style.css') }}">
+
+  <!-- OTP Specific Styles -->
+  <style>
+    .otp-input {
+      transition: all 0.3s ease;
+    }
+    .otp-input:focus {
+      box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+      border-color: var(--jetlouge-primary);
+    }
+    .otp-icon {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .timer-warning {
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.5; }
+    }
+    .form-transition {
+      transition: all 0.5s ease-in-out;
+    }
+    .btn-login:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
 <body>
   <div class="login-container">
@@ -54,7 +88,8 @@
           Sign In to Your Account
         </h3>
 
-  <form method="POST" action="{{ route('employee.login.submit') }}" id="loginForm" autocomplete="off">
+  <!-- Login Form -->
+  <form method="POST" action="{{ route('employee.login.submit') }}" id="loginForm" autocomplete="off" style="display: block;">
   <input type="hidden" name="force_session_renewal" value="1">
 
           @csrf
@@ -63,7 +98,9 @@
             <div class="alert alert-danger">
               <ul class="mb-0">
                 @foreach (session('errors')->all() as $error)
-                  <li>{{ $error }}</li>
+                  @if (stripos($error, 'csrf token mismatch') === false)
+                    <li>{{ $error }}</li>
+                  @endif
                 @endforeach
               </ul>
             </div>
@@ -110,16 +147,67 @@
           </div>
 
           <div class="mb-3 form-check">
-            <input type="checkbox" class="form-check-input" id="rememberMe" name="remember">
-            <label class="form-check-label" for="rememberMe">Remember me</label>
+            <input type="checkbox" class="form-check-input" id="rememberMe" name="remember" value="1">
+            <label class="form-check-label" for="rememberMe">
+              <i class="bi bi-person-check me-1"></i>Remember me
+            </label>
           </div>
 
-          <button type="submit" class="btn btn-login mb-3">
+          <button type="submit" class="btn btn-login mb-3" id="loginButton">
             <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
           </button>
 
           <div class="text-center">
-            <a href="#" class="btn-forgot">Forgot your password?</a>
+            <a href="{{ route('employee.forgot_password') }}" class="btn-forgot">Forgot your password?</a>
+          </div>
+
+          <hr class="my-4">
+        </form>
+
+        <!-- OTP Verification Form -->
+        <form id="otpForm" style="display: none;">
+          @csrf
+          <div class="text-center mb-4">
+            <div class="otp-icon mb-3">
+              <i class="bi bi-shield-check" style="font-size: 3rem; color: var(--jetlouge-primary);"></i>
+            </div>
+            <h4 style="color: var(--jetlouge-primary); font-weight: 700;">Verify Your Identity</h4>
+            <p class="text-muted">We've sent a 6-digit verification code to your email address.</p>
+            <p class="fw-bold" id="otpEmailDisplay"></p>
+          </div>
+
+          <div class="mb-3">
+            <label for="otp_code" class="form-label fw-semibold">Enter Verification Code</label>
+            <div class="otp-input-container">
+              <input type="tel" class="form-control otp-input" id="otp_code" name="otp_code"
+                     placeholder="000000" maxlength="6" autocomplete="off"
+                     inputmode="numeric" pattern="[0-9]*"
+                     style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem; font-weight: bold;">
+            </div>
+            <div class="invalid-feedback" id="otpError"></div>
+          </div>
+
+          <div class="mb-3 text-center">
+            <small class="text-muted">
+              <i class="bi bi-clock me-1"></i>
+              Code expires in <span id="otpTimer" class="fw-bold text-danger">10:00</span>
+            </small>
+          </div>
+
+          <button type="submit" class="btn btn-login mb-3" id="verifyOtpButton">
+            <i class="bi bi-check-circle me-2"></i> Verify Code
+          </button>
+
+          <div class="text-center mb-3">
+            <button type="button" class="btn btn-outline-secondary" id="resendOtpButton">
+              <i class="bi bi-arrow-clockwise me-2"></i> Resend Code
+            </button>
+          </div>
+
+          <div class="text-center">
+            <button type="button" class="btn-forgot" id="backToLoginButton">
+              <i class="bi bi-arrow-left me-1"></i> Back to Login
+            </button>
           </div>
 
           <hr class="my-4">
@@ -135,10 +223,28 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
-      // Password toggle functionality
+      // Global variables
+      let otpTimer;
+      let otpTimeLeft = 600; // 10 minutes in seconds
+      let currentUserEmail = '';
+
+      // Server-side attempt tracking - no client-side localStorage needed
+
+      // DOM elements
+      const loginForm = document.getElementById('loginForm');
+      const otpForm = document.getElementById('otpForm');
+      const loginButton = document.getElementById('loginButton');
+      const verifyOtpButton = document.getElementById('verifyOtpButton');
+      const resendOtpButton = document.getElementById('resendOtpButton');
+      const backToLoginButton = document.getElementById('backToLoginButton');
+      const otpInput = document.getElementById('otp_code');
+      const otpError = document.getElementById('otpError');
+      const otpEmailDisplay = document.getElementById('otpEmailDisplay');
+      const otpTimerDisplay = document.getElementById('otpTimer');
       const togglePassword = document.getElementById('togglePassword');
       const passwordInput = document.getElementById('password');
 
+      // Password toggle functionality
       togglePassword.addEventListener('click', function() {
         const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
         passwordInput.setAttribute('type', type);
@@ -148,72 +254,453 @@
         icon.classList.toggle('bi-eye-slash');
       });
 
-      // CSRF Token refresh mechanism to prevent 419 errors
-      function refreshCSRFToken() {
-        fetch('/csrf-token', {
-          method: 'GET',
+      // Remember Me functionality with visual feedback
+      const rememberMeCheckbox = document.getElementById('rememberMe');
+      const rememberMeLabel = document.querySelector('label[for="rememberMe"]');
+
+      rememberMeCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+          rememberMeLabel.style.color = 'var(--jetlouge-primary)';
+          rememberMeLabel.style.fontWeight = '600';
+          rememberMeLabel.setAttribute('title', 'You will stay logged in for 30 days');
+        } else {
+          rememberMeLabel.style.color = '';
+          rememberMeLabel.style.fontWeight = '';
+          rememberMeLabel.removeAttribute('title');
+        }
+      });
+
+      // Simplified CSRF token handling - no complex refresh
+      function getCSRFToken() {
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        return metaTag ? metaTag.getAttribute('content') : null;
+      }
+
+      // Simple token refresh only when needed (for 419 errors)
+      async function refreshCSRFTokenIfNeeded() {
+        try {
+          const response = await fetch('/employee/csrf-token', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.csrf_token || data.token) {
+              const newToken = data.csrf_token || data.token;
+              // Update meta tag
+              const metaTag = document.querySelector('meta[name="csrf-token"]');
+              if (metaTag) {
+                metaTag.setAttribute('content', newToken);
+              }
+              return newToken;
+            }
+          }
+        } catch (error) {
+          console.log('Token refresh failed, using existing token');
+        }
+        
+        // Always return existing token as fallback
+        return getCSRFToken();
+      }
+
+      // OTP Timer functionality
+      function startOTPTimer() {
+        otpTimeLeft = 600; // Reset to 10 minutes
+        updateTimerDisplay();
+
+        otpTimer = setInterval(() => {
+          otpTimeLeft--;
+          updateTimerDisplay();
+
+          if (otpTimeLeft <= 0) {
+            clearInterval(otpTimer);
+            showExpiredMessage();
+          }
+        }, 1000);
+      }
+
+      function updateTimerDisplay() {
+        const minutes = Math.floor(otpTimeLeft / 60);
+        const seconds = otpTimeLeft % 60;
+        otpTimerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        // Change color based on time remaining
+        if (otpTimeLeft <= 60) {
+          otpTimerDisplay.className = 'fw-bold text-danger';
+        } else if (otpTimeLeft <= 300) {
+          otpTimerDisplay.className = 'fw-bold text-warning';
+        } else {
+          otpTimerDisplay.className = 'fw-bold text-success';
+        }
+      }
+
+      function showExpiredMessage() {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Code Expired',
+          text: 'Your verification code has expired. Please request a new one.',
+          confirmButtonText: 'Request New Code',
+          confirmButtonColor: '#667eea'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            resendOTP();
+          }
+        });
+      }
+
+      // Show OTP form
+      function showOTPForm(email) {
+        currentUserEmail = email;
+        loginForm.style.display = 'none';
+        otpForm.style.display = 'block';
+        otpEmailDisplay.textContent = email;
+        otpInput.focus();
+        startOTPTimer();
+
+        // Clear any previous errors
+        otpError.textContent = '';
+        otpInput.classList.remove('is-invalid');
+      }
+
+      // Show login form
+      function showLoginForm() {
+        otpForm.style.display = 'none';
+        loginForm.style.display = 'block';
+
+        // Clear OTP form
+        otpInput.value = '';
+        otpError.textContent = '';
+        otpInput.classList.remove('is-invalid');
+
+        // Clear timer
+        if (otpTimer) {
+          clearInterval(otpTimer);
+        }
+      }
+
+      // Server-side attempt tracking - no client-side variables needed
+
+      // Login form submission
+      loginForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const submitButton = loginButton;
+        const originalText = submitButton.innerHTML;
+
+        // Show loading state
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Authenticating...';
+
+        try {
+          // Use existing token first, no pre-refresh
+          const csrfToken = getCSRFToken();
+          
+          if (!csrfToken) {
+            throw new Error('No CSRF token available');
+          }
+
+          const formData = new FormData(this);
+          // Don't override existing _token, just ensure it's there
+          if (!formData.has('_token')) {
+            formData.append('_token', csrfToken);
+          }
+
+          const response = await fetch('{{ route("employee.login.submit") }}', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRF-TOKEN': csrfToken
+            }
+          });
+
+          const data = await response.json();
+          console.log('Login response:', data); // Debug logging
+
+          if (data.success) {
+            if (data.step === 'otp_required') {
+              // Show success message and switch to OTP form
+              let message = data.message;
+
+              // If dev_otp is provided, show it clearly
+              if (data.dev_otp) {
+                message = `Verification code sent to your email. Use code: ${data.dev_otp}`;
+              }
+
+              Swal.fire({
+                icon: 'success',
+                title: 'Verification Code Sent!',
+                text: message,
+                timer: 3000,
+                showConfirmButton: false
+              });
+              showOTPForm(document.getElementById('email').value);
+            } else if (data.step === 'login_complete') {
+              // Direct login successful (if OTP is not required)
+              window.location.href = data.redirect_url;
+            }
+          } else {
+            // Handle server-side error responses
+            if (data.step === 'lockout') {
+              Swal.fire({
+                icon: 'error',
+                title: 'Account Temporarily Locked',
+                text: data.message,
+                confirmButtonColor: '#667eea',
+                width: '500px'
+              });
+            } else {
+              // Show error message (server already includes remaining attempts)
+              let errorText = data.message || 'An unknown error occurred.';
+              if (data.debug_info) {
+                errorText += '\n\nDebug Info: ' + data.debug_info;
+              }
+
+              Swal.fire({
+                icon: 'error',
+                title: 'Login Failed',
+                text: errorText,
+                confirmButtonColor: '#667eea',
+                width: '500px'
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Login error:', error);
+          Swal.fire({
+            icon: 'error',
+            title: 'Connection Error',
+            text: 'Unable to connect to the server. Please check your internet connection and try again.',
+            confirmButtonColor: '#667eea'
+          });
+        } finally {
+          // Restore button state
+          submitButton.disabled = false;
+          submitButton.innerHTML = originalText;
+        }
+      });
+
+      // OTP form submission
+      otpForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const otpCode = otpInput.value.trim();
+        if (otpCode.length !== 6) {
+          showOTPError('Please enter a 6-digit verification code.');
+          return;
+        }
+
+        const submitButton = verifyOtpButton;
+        const originalText = submitButton.innerHTML;
+
+        // Show loading state
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Verifying...';
+
+        try {
+          // Try with existing token first
+          let csrfToken = getCSRFToken();
+          
+          // Create form data
+          const formData = new FormData();
+          formData.append('otp_code', otpCode);
+          formData.append('_token', csrfToken);
+
+          let response = await fetch('{{ route("employee.verify_otp") }}', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRF-TOKEN': csrfToken
+            }
+          });
+
+          // If CSRF error, try refreshing token once
+          if (!response.ok && response.status === 419) {
+            console.log('CSRF token expired, refreshing...');
+            csrfToken = await refreshCSRFTokenIfNeeded();
+            
+            // Retry with new token
+            const retryFormData = new FormData();
+            retryFormData.append('otp_code', otpCode);
+            retryFormData.append('_token', csrfToken);
+
+            response = await fetch('{{ route("employee.verify_otp") }}', {
+              method: 'POST',
+              body: retryFormData,
+              credentials: 'same-origin',
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken
+              }
+            });
+          }
+
+          const data = await response.json();
+          
+          if (data.success && data.step === 'login_complete') {
+            // Clear timer on successful login
+            if (otpTimer) {
+              clearInterval(otpTimer);
+            }
+
+            // Show success message and redirect
+            Swal.fire({
+              icon: 'success',
+              title: 'Login Successful!',
+              text: data.message,
+              timer: 2000,
+              showConfirmButton: false
+            }).then(() => {
+              window.location.href = data.redirect_url;
+            });
+          } else {
+            showOTPError(data.message);
+            if (data.remaining_attempts !== undefined) {
+              showOTPError(`${data.message} (${data.remaining_attempts} attempts remaining)`);
+            }
+          }
+        } catch (error) {
+          console.error('OTP verification error:', error);
+          showOTPError('Unable to verify code. Please try again.');
+        } finally {
+          // Restore button state
+          submitButton.disabled = false;
+          submitButton.innerHTML = originalText;
+        }
+      });
+
+      // Resend OTP - simplified
+      function resendOTP() {
+        const submitButton = resendOtpButton;
+        const originalText = submitButton.innerHTML;
+
+        // Show loading state
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Sending...';
+
+        // Use existing token
+        const csrfToken = getCSRFToken();
+        
+        if (!csrfToken) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Session Error',
+            text: 'Please refresh the page and try again.',
+            confirmButtonColor: '#667eea'
+          });
+          submitButton.disabled = false;
+          submitButton.innerHTML = originalText;
+          return;
+        }
+
+        // Create form data for resend request
+        const formData = new FormData();
+        formData.append('_token', csrfToken);
+
+        fetch('{{ route("employee.resend_otp") }}', {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin',
           headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': csrfToken
           }
         })
         .then(response => response.json())
         .then(data => {
-          if (data.csrf_token) {
-            // Update meta tag
-            const metaTag = document.querySelector('meta[name="csrf-token"]');
-            if (metaTag) {
-              metaTag.setAttribute('content', data.csrf_token);
-            }
+          if (data.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Code Resent!',
+              text: data.message,
+              timer: 2000,
+              showConfirmButton: false
+            });
 
-            // Update form CSRF input
-            const csrfInput = document.querySelector('input[name="_token"]');
-            if (csrfInput) {
-              csrfInput.value = data.csrf_token;
-            }
-
-            console.log('CSRF token refreshed on login page');
+            // Restart timer
+            startOTPTimer();
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Resend Failed',
+              text: data.message,
+              confirmButtonColor: '#667eea'
+            });
           }
         })
         .catch(error => {
-          console.warn('Failed to refresh CSRF token:', error);
+          console.error('Resend OTP error:', error);
+          Swal.fire({
+            icon: 'error',
+            title: 'Connection Error',
+            text: 'Unable to resend code. Please try again.',
+            confirmButtonColor: '#667eea'
+          });
+        })
+        .finally(() => {
+          // Restore button state
+          submitButton.disabled = false;
+          submitButton.innerHTML = originalText;
         });
       }
 
-      // Refresh CSRF token every 10 minutes on login page
-      setInterval(refreshCSRFToken, 10 * 60 * 1000);
+      // Show OTP error
+      function showOTPError(message) {
+        otpError.textContent = message;
+        otpInput.classList.add('is-invalid');
+        otpError.style.display = 'block';
+      }
 
-      // Refresh token immediately on page load
-      setTimeout(refreshCSRFToken, 1000);
+      // Event listeners
+      resendOtpButton.addEventListener('click', resendOTP);
 
-      // Form submission with SweetAlert
-      const loginForm = document.getElementById('loginForm');
-      loginForm.addEventListener('submit', function(e) {
-        e.preventDefault();
+      backToLoginButton.addEventListener('click', function() {
         Swal.fire({
-          title: 'Signing In...',
-          text: 'Please wait while we authenticate you.',
-          allowOutsideClick: false,
-          showConfirmButton: false,
-          willOpen: () => {
-            Swal.showLoading();
+          title: 'Cancel Login?',
+          text: 'Are you sure you want to go back to the login form?',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'Yes, go back',
+          cancelButtonText: 'Continue with OTP',
+          confirmButtonColor: '#667eea'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            showLoginForm();
           }
         });
-        // Submit the form after showing the alert
-        setTimeout(() => {
-          this.submit();
-        }, 500);
       });
 
-      // Force CSRF/session renewal for new users (prevents 419 on first login)
-      if (!localStorage.getItem('employee_first_login_done')) {
-        refreshCSRFToken();
-        fetch('/employee_login', { method: 'GET', credentials: 'same-origin' })
-          .then(() => {
-            localStorage.setItem('employee_first_login_done', '1');
-          });
-      }
+      // OTP input formatting
+      otpInput.addEventListener('input', function() {
+        // Only allow numbers
+        this.value = this.value.replace(/[^0-9]/g, '');
 
+        // Clear error when user starts typing
+        if (this.classList.contains('is-invalid')) {
+          this.classList.remove('is-invalid');
+          otpError.style.display = 'none';
+        }
+
+        // Auto-submit when 6 digits are entered
+        if (this.value.length === 6) {
+          setTimeout(() => {
+            otpForm.dispatchEvent(new Event('submit'));
+          }, 500);
+        }
+      });
+
+      // Initialize page on load
+      window.addEventListener('load', () => {
+        // Page loaded successfully
+        console.log('Employee login page loaded');
+      });
 
       // Floating shapes animation
       const shapes = document.querySelectorAll('.shape');

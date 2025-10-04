@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Jetlouge Travels - Profile Updates</title>
+  <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/employee_dashboard-style.css') }}">
@@ -262,7 +263,43 @@
 
 <div id="overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50" style="z-index:1040; display: none;"></div>
 
-<main id="main-content" style="margin-left: 280px; margin-top: 4rem; padding: 2rem;">
+<main id="main-content" class="expanded" style="margin-left: 280px; margin-top: 4rem; padding: 2rem; transition: margin-left 0.3s cubic-bezier(.4,2,.6,1);">
+<style>
+#main-content.expanded {
+  margin-left: 0 !important;
+  transition: margin-left 0.3s cubic-bezier(.4,2,.6,1);
+}
+#main-content.collapsed {
+  margin-left: 280px !important;
+  transition: margin-left 0.3s cubic-bezier(.4,2,.6,1);
+}
+</style>
+<script>
+// Sidebar toggle logic to expand/collapse main content
+document.addEventListener('DOMContentLoaded', function() {
+  const sidebar = document.querySelector('.sidebar, #sidebar');
+  const mainContent = document.getElementById('main-content');
+  const toggleBtn = document.querySelector('.sidebar-toggle, #sidebarToggle, .toggle-sidebar');
+  function updateMainContent() {
+    if (sidebar && sidebar.classList.contains('collapsed')) {
+      mainContent.classList.add('expanded');
+      mainContent.classList.remove('collapsed');
+      mainContent.style.marginLeft = '0';
+    } else {
+      mainContent.classList.remove('expanded');
+      mainContent.classList.add('collapsed');
+      mainContent.style.marginLeft = '280px';
+    }
+  }
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', function() {
+      setTimeout(updateMainContent, 10);
+    });
+  }
+  // Initial state
+  updateMainContent();
+});
+</script>
   <!-- Page Header -->
   <div class="page-header-container mb-4">
     <div class="d-flex justify-content-between align-items-center page-header">
@@ -476,17 +513,19 @@
               </td>
               <td>{{ $update->requested_at ? $update->requested_at->format('M j, Y') : 'N/A' }}</td>
               <td class="text-center action-btns">
-                <button class="btn btn-sm btn-info text-white me-1" onclick="viewUpdate({{ $update->id }})">
-                  <i class="bi bi-eye"></i>
-                </button>
-                @if($update->status === 'pending')
-                  <button class="btn btn-sm btn-warning me-1" onclick="editUpdate({{ $update->id }})">
-                    <i class="bi bi-pencil"></i>
+                <div class="btn-group" role="group">
+                  <button class="btn btn-sm btn-info text-white" onclick="viewUpdate({{ $update->id }})" title="View Details">
+                    <i class="bi bi-eye"></i>
                   </button>
-                  <button class="btn btn-sm btn-danger" onclick="deleteUpdate({{ $update->id }})">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                @endif
+                  @if($update->status === 'pending')
+                    <button class="btn btn-sm btn-warning" onclick="editUpdateWithConfirmation({{ $update->id }})" title="Edit Request">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteUpdateWithConfirmation({{ $update->id }})" title="Delete Request">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  @endif
+                </div>
               </td>
             </tr>
             @empty
@@ -645,6 +684,8 @@
             <textarea class="form-control" id="edit_reason" name="reason" rows="3" maxlength="1000" placeholder="Please explain why you need this change..."></textarea>
             <div class="form-text">Optional: Explain why you need this change.</div>
           </div>
+          <!-- Hidden password field that gets populated after verification -->
+          <input type="hidden" id="edit_password_verification" name="password_verification" value="">
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1014,8 +1055,103 @@
     modal.show();
   }
 
-  // Edit update function
-  function editUpdate(updateId) {
+  // Edit update function with password confirmation
+  function editUpdateWithConfirmation(updateId) {
+    Swal.fire({
+      title: 'Edit Profile Update Request',
+      html: `
+        <div class="text-start">
+          <p class="mb-3">You are about to edit this profile update request.</p>
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Security Notice:</strong> Please enter your password to confirm this action.
+          </div>
+          <div class="mb-3">
+            <label for="edit-password-input" class="form-label">Your Password:</label>
+            <input type="password" id="edit-password-input" class="form-control" placeholder="Enter your password" minlength="6" required>
+            <div class="form-text">Password must be at least 6 characters long.</div>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Verify & Edit',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#ffc107',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('edit-password-input').value;
+        if (!password) {
+          Swal.showValidationMessage('Password is required');
+          return false;
+        }
+        if (password.length < 6) {
+          Swal.showValidationMessage('Password must be at least 6 characters long');
+          return false;
+        }
+        return password;
+      },
+      didOpen: () => {
+        document.getElementById('edit-password-input').focus();
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        const password = result.value;
+
+        // Show loading
+        Swal.fire({
+          title: 'Verifying Password...',
+          text: 'Please wait while we verify your password.',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        try {
+          // Verify password
+          const response = await fetch('/employee/verify-password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({ password: password })
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            Swal.close();
+            showEditUpdateForm(updateId, password);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please try again.',
+              icon: 'error',
+              confirmButtonText: 'Try Again',
+              confirmButtonColor: '#dc3545'
+            }).then(() => {
+              editUpdateWithConfirmation(updateId);
+            });
+          }
+        } catch (error) {
+          console.error('Password verification error:', error);
+          Swal.fire({
+            title: 'Verification Error',
+            text: 'An error occurred while verifying your password. Please try again.',
+            icon: 'error',
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#dc3545'
+          });
+        }
+      }
+    });
+  }
+
+  // Show edit update form after password verification
+  function showEditUpdateForm(updateId, password) {
     // Get the update data from the table row
     const row = document.querySelector(`tr[data-update-id="${updateId}"]`);
     if (row) {
@@ -1027,6 +1163,9 @@
       document.getElementById('edit_field_name').value = fieldName;
       document.getElementById('edit_new_value').value = newValue;
       document.getElementById('edit_reason').value = reason;
+
+      // Set the verified password in the hidden field
+      document.getElementById('edit_password_verification').value = password;
 
       // Update the current value display
       updateEditCurrentValue();
@@ -1040,32 +1179,157 @@
     }
   }
 
-  // Delete update function
+  // Legacy edit function for backward compatibility
+  function editUpdate(updateId) {
+    editUpdateWithConfirmation(updateId);
+  }
+
+  // Delete update function with password confirmation
+  function deleteUpdateWithConfirmation(updateId) {
+    Swal.fire({
+      title: 'Delete Profile Update Request',
+      html: `
+        <div class="text-start">
+          <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Warning:</strong> This action cannot be undone. The profile update request will be permanently cancelled.
+          </div>
+          <p class="mb-3">Are you sure you want to delete this profile update request?</p>
+          <div class="alert alert-info">
+            <i class="bi bi-shield-lock me-2"></i>
+            <strong>Security Notice:</strong> Please enter your password to confirm this action.
+          </div>
+          <div class="mb-3">
+            <label for="delete-password-input" class="form-label">Your Password:</label>
+            <input type="password" id="delete-password-input" class="form-control" placeholder="Enter your password" minlength="6" required>
+            <div class="form-text">Password must be at least 6 characters long.</div>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Verify & Delete',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#dc3545',
+      cancelButtonColor: '#6c757d',
+      preConfirm: () => {
+        const password = document.getElementById('delete-password-input').value;
+        if (!password) {
+          Swal.showValidationMessage('Password is required');
+          return false;
+        }
+        if (password.length < 6) {
+          Swal.showValidationMessage('Password must be at least 6 characters long');
+          return false;
+        }
+        return password;
+      },
+      didOpen: () => {
+        document.getElementById('delete-password-input').focus();
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        const password = result.value;
+
+        // Show loading
+        Swal.fire({
+          title: 'Verifying Password...',
+          text: 'Please wait while we verify your password.',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            Swal.showLoading();
+          }
+        });
+
+        try {
+          // Verify password
+          const response = await fetch('/employee/verify-password', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            },
+            body: JSON.stringify({ password: password })
+          });
+
+          const result = await response.json();
+
+          if (result.success) {
+            // Password verified, proceed with deletion
+            Swal.fire({
+              title: 'Processing...',
+              text: 'Deleting profile update request...',
+              allowOutsideClick: false,
+              allowEscapeKey: false,
+              showConfirmButton: false,
+              didOpen: () => {
+                Swal.showLoading();
+              }
+            });
+
+            submitDeleteRequest(updateId, password);
+          } else {
+            Swal.fire({
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please try again.',
+              icon: 'error',
+              confirmButtonText: 'Try Again',
+              confirmButtonColor: '#dc3545'
+            }).then(() => {
+              deleteUpdateWithConfirmation(updateId);
+            });
+          }
+        } catch (error) {
+          console.error('Password verification error:', error);
+          Swal.fire({
+            title: 'Verification Error',
+            text: 'An error occurred while verifying your password. Please try again.',
+            icon: 'error',
+            confirmButtonText: 'OK',
+            confirmButtonColor: '#dc3545'
+          });
+        }
+      }
+    });
+  }
+
+  // Submit delete request after password verification
+  function submitDeleteRequest(updateId, password) {
+    // Create a form to send DELETE request
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/employee/profile-updates/${updateId}`;
+
+    // Add CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = '_token';
+    csrfInput.value = csrfToken;
+    form.appendChild(csrfInput);
+
+    // Add method override for DELETE
+    const methodInput = document.createElement('input');
+    methodInput.type = 'hidden';
+    methodInput.name = '_method';
+    methodInput.value = 'DELETE';
+    form.appendChild(methodInput);
+
+    // Add password verification
+    const passwordInput = document.createElement('input');
+    passwordInput.type = 'hidden';
+    passwordInput.name = 'password_verification';
+    passwordInput.value = password;
+    form.appendChild(passwordInput);
+
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  // Legacy delete function for backward compatibility
   function deleteUpdate(updateId) {
-    if (confirm('Are you sure you want to cancel this profile update request?')) {
-      // Create a form to send DELETE request
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = `/employee/profile-updates/${updateId}`;
-
-      // Add CSRF token
-      const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-      const csrfInput = document.createElement('input');
-      csrfInput.type = 'hidden';
-      csrfInput.name = '_token';
-      csrfInput.value = csrfToken;
-      form.appendChild(csrfInput);
-
-      // Add method override for DELETE
-      const methodInput = document.createElement('input');
-      methodInput.type = 'hidden';
-      methodInput.name = '_method';
-      methodInput.value = 'DELETE';
-      form.appendChild(methodInput);
-
-      document.body.appendChild(form);
-      form.submit();
-    }
+    deleteUpdateWithConfirmation(updateId);
   }
 
   // Open edit from view
@@ -1076,8 +1340,8 @@
     // Get the update ID from the modal
     const updateId = document.getElementById('view-request-id').textContent.replace('#', '');
 
-    // Call the editUpdate function to open the edit modal
-    editUpdate(updateId);
+    // Call the editUpdateWithConfirmation function to open the edit modal with password verification
+    editUpdateWithConfirmation(updateId);
   }
 
   // Auto-refresh page every 60 seconds to show status updates

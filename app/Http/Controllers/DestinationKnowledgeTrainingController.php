@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Schema\Blueprint;
 use App\Models\DestinationKnowledgeTraining;
 use App\Models\Employee;
@@ -73,7 +74,7 @@ class DestinationKnowledgeTrainingController extends BaseController
             4 => 80,  // Advanced
             5 => 100  // Expert
         ];
-        
+
         return $levelMap[$level] ?? 0;
     }
 
@@ -96,16 +97,12 @@ class DestinationKnowledgeTrainingController extends BaseController
             }
 
             // Check if destination knowledge training already exists for this employee and competency
-            // IMPORTANT: Only check non-deleted AND active records since model uses SoftDeletes
+            // Use consolidated single table approach
             $existingRecord = DestinationKnowledgeTraining::where('employee_id', $request->employee_id)
                 ->where('destination_name', 'LIKE', '%' . $gap->competency->competency_name . '%')
+                ->where('training_type', 'destination')
                 ->where('is_active', true)
-                ->first(); // Laravel automatically excludes soft-deleted records
-
-            // Double-check: if record exists but is soft-deleted, allow creation
-            if ($existingRecord && $existingRecord->deleted_at !== null) {
-                $existingRecord = null; // Treat as no existing record
-            }
+                ->first();
 
             if ($existingRecord) {
                 // If record exists but is not active, activate it
@@ -129,16 +126,19 @@ class DestinationKnowledgeTrainingController extends BaseController
                 ]);
             }
 
-            // Create new destination knowledge training record
+            // Create new destination knowledge training record using consolidated approach
             $destinationRecord = DestinationKnowledgeTraining::create([
                 'employee_id' => $request->employee_id,
+                'training_type' => 'destination',
+                'training_title' => $gap->competency->competency_name,
                 'destination_name' => $gap->competency->competency_name,
                 'details' => 'Training assigned from competency gap analysis - ' . ($gap->competency->description ?? 'Competency development training'),
                 'progress' => max(0, round(($gap->current_level / max(1, $gap->required_level)) * 100)),
                 'status' => 'in-progress',
-                'delivery_mode' => 'Online Training', // Default to Online Training for competency gap assignments
-                'is_active' => true, // Set as active immediately
-                'admin_approved_for_upcoming' => false, // NOT approved for upcoming training yet - requires Auto-Assign button click
+                'delivery_mode' => 'Online Training',
+                'is_active' => true,
+                'admin_approved_for_upcoming' => false,
+                'source' => 'destination_knowledge_training',
             ]);
 
             // Create notification
@@ -180,16 +180,19 @@ class DestinationKnowledgeTrainingController extends BaseController
     }
     public function index()
     {
+        // Fix expiration dates for destination trainings that don't have proper expired_date
+        $this->fixExpirationDates();
+
         $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('created_at', 'desc')->get();
-        
+
         // Don't automatically update progress from competency gap - preserve admin's input
         // foreach ($destinations as $destination) {
         //     $this->updateProgressFromCompetencyGap($destination);
         // }
-        
+
         // Get all employees for destination knowledge training
         $employees = Employee::all();
-        
+
         // Get destination masters for auto-population (with fallback if table doesn't exist)
         try {
             $destinationMasters = DestinationMaster::active()->orderBy('destination_name')->get();
@@ -198,16 +201,25 @@ class DestinationKnowledgeTrainingController extends BaseController
             $destinationMasters = collect([]);
             \Illuminate\Support\Facades\Log::warning('destination_masters table not found, using empty collection');
         }
-        
+
         // Get possible destinations from destination_masters for display
         $possibleDestinations = $destinationMasters;
-        
-        // Get recent notifications for admin
-        $notifications = TrainingNotification::where('employee_id', 'ADMIN')
-            ->orderBy('sent_at', 'desc')
-            ->limit(10)
-            ->get();
-        
+
+        // Get recent notifications for admin with error handling
+        try {
+            // Ensure table exists before querying
+            TrainingNotification::ensureTableExists();
+
+            $notifications = TrainingNotification::where('employee_id', 'ADMIN')
+                ->orderBy('sent_at', 'desc')
+                ->limit(10)
+                ->get();
+        } catch (\Exception $e) {
+            // Handle gracefully if training_notifications table doesn't exist
+            Log::warning('Training notifications table not found or error occurred: ' . $e->getMessage());
+            $notifications = collect(); // Return empty collection
+        }
+
         return view('training_management.destination_knowledge_training', compact('destinations', 'employees', 'destinationMasters', 'possibleDestinations', 'notifications'));
     }
 
@@ -234,7 +246,7 @@ class DestinationKnowledgeTrainingController extends BaseController
                     'employee_id' => $validated['employee_id'],
                     'destination_name' => $validated['destination_name']
                 ]);
-                
+
                 // Update the existing record with new data
                 $existingRecord->update([
                     'details' => $validated['details'],
@@ -244,14 +256,14 @@ class DestinationKnowledgeTrainingController extends BaseController
                     'remarks' => $validated['remarks'] ?? $existingRecord->remarks,
                     'is_active' => true
                 ]);
-                
+
                 // Log activity
                 ActivityLog::createLog([
                     'action' => 'update',
                     'module' => self::MODULE_NAME,
                     'description' => 'Updated existing destination knowledge training record (ID: ' . $existingRecord->id . ') for same employee instead of creating duplicate',
                 ]);
-                
+
                 if ($request->wantsJson()) {
                     return response()->json([
                         'success' => true,
@@ -279,14 +291,14 @@ class DestinationKnowledgeTrainingController extends BaseController
                 $validated['progress_level'] = 0;
                 $progressPercentage = 0;
             }
-            
+
             // Keep the status as selected by user in the form
 
             // Auto-set status based on progress if not provided
             if (!isset($validated['status']) || empty($validated['status'])) {
                 $validated['status'] = 'not-started';
             }
-            
+
             // Check if all required fields are present
             $requiredFields = ['employee_id', 'destination_name', 'details', 'objectives', 'duration', 'delivery_mode'];
             foreach ($requiredFields as $field) {
@@ -307,7 +319,9 @@ class DestinationKnowledgeTrainingController extends BaseController
                     'progress' => $progressPercentage,
                     'status' => $validated['status'],
                     'is_active' => true,
-                    'admin_approved_for_upcoming' => false // Default to false - requires Auto-Assign button click
+                    'admin_approved_for_upcoming' => false, // Default to false - requires Auto-Assign button click
+                    'training_type' => 'destination',
+                    'source' => 'destination_knowledge_training'
                 ];
 
                 Log::info('Attempting to create record with test data:', $testData);
@@ -320,16 +334,16 @@ class DestinationKnowledgeTrainingController extends BaseController
                 if (isset($validated['expired_date']) && $validated['expired_date']) {
                     $record->expired_date = $validated['expired_date'];
                 }
-                
+
                 // Set completion date if status is completed
                 if ($validated['status'] === 'completed' && !$record->date_completed) {
                     $record->date_completed = now();
                 }
-                
+
                 if (isset($validated['remarks']) && $validated['remarks']) {
                     $record->remarks = $validated['remarks'];
                 }
-                
+
                 $record->save();
 
             } catch (\Exception $createException) {
@@ -351,13 +365,16 @@ class DestinationKnowledgeTrainingController extends BaseController
                 'sent_at' => now()
             ]);
 
+            // CRITICAL FIX: Create competency profile entry when destination training is created
+            $this->createCompetencyProfileFromDestination($record);
+
             // DO NOT create upcoming training record automatically - admin must use "Assign to Upcoming Training" button
 
             // Log activity
             ActivityLog::createLog([
                 'action' => 'create',
                 'module' => self::MODULE_NAME,
-                'description' => 'Added destination knowledge training record (ID: ' . $record->id . ')',
+                'description' => 'Added destination knowledge training record (ID: ' . $record->id . ') and created competency profile',
             ]);
 
             if ($request->wantsJson()) {
@@ -435,14 +452,17 @@ class DestinationKnowledgeTrainingController extends BaseController
             if ($validated['status'] === 'completed' && !$record->date_completed) {
                 $record->date_completed = now();
                 $record->save();
-                
+
                 // AUTO-TRANSFER to Completed Trainings section when 100% complete
                 $this->moveDestinationTrainingToCompleted($record);
             }
 
             // CRITICAL: Sync progress with Employee Training Dashboard using admin's input progress
             $this->syncProgressWithEmployeeTraining($record);
-            
+
+            // CRITICAL FIX: Update competency profile when destination training is updated
+            $this->updateCompetencyProfileFromDestination($record);
+
             // Sync progress with Employee Competency Profile and Competency Gap
             $this->syncProgressWithCompetencyProfile($record);
             $this->syncProgressWithCompetencyGap($record);
@@ -537,11 +557,11 @@ class DestinationKnowledgeTrainingController extends BaseController
             if ($competencyGap && $competencyGap->required_level > 0) {
                 // Calculate progress as percentage: (current_level / required_level) * 100
                 $calculatedProgress = min(100, round(($competencyGap->current_level / $competencyGap->required_level) * 100));
-                
+
                 // Only update if the calculated progress is different
                 if ($destinationRecord->progress != $calculatedProgress) {
                     $destinationRecord->progress = $calculatedProgress;
-                    
+
                     // Update status based on progress
                     if ($calculatedProgress >= 100) {
                         $destinationRecord->status = 'completed';
@@ -553,9 +573,9 @@ class DestinationKnowledgeTrainingController extends BaseController
                     } else {
                         $destinationRecord->status = 'not-started';
                     }
-                    
+
                     $destinationRecord->save();
-                    
+
                     // Log the progress update
                     ActivityLog::create([
                         'user_id' => Auth::id() ?? 1,
@@ -633,76 +653,7 @@ class DestinationKnowledgeTrainingController extends BaseController
         return redirect()->route('admin.destination-knowledge-training.index')->with('success', 'Training record deleted successfully.');
     }
 
-    /**
-     * Manually sync all destination knowledge training records with employee training dashboard
-     */
-    public function syncAllRecords()
-    {
-        try {
-            $syncedCount = 0;
-            $fixedCount = 0;
-            $destinationRecords = DestinationKnowledgeTraining::all();
-            
-            foreach ($destinationRecords as $record) {
-                // Find corresponding employee training record
-                $employeeTraining = \App\Models\EmployeeTrainingDashboard::where('employee_id', $record->employee_id)
-                    ->whereHas('course', function($q) use ($record) {
-                        $q->where('course_title', 'LIKE', '%' . $record->destination_name . '%');
-                    })
-                    ->first();
 
-                if ($employeeTraining) {
-                    $oldStatus = $employeeTraining->status;
-                    $oldProgress = $employeeTraining->progress;
-                    
-                    // Update progress
-                    $employeeTraining->progress = $record->progress ?? 0;
-
-                    // Update status based on destination record status and progress
-                    if ($record->status === 'completed' || $record->progress >= 100) {
-                        $employeeTraining->status = 'Completed';
-                        $employeeTraining->last_accessed = now();
-                    } elseif ($record->status === 'in-progress' || $record->progress > 0) {
-                        $employeeTraining->status = 'In Progress';
-                        $employeeTraining->last_accessed = now();
-                    } else {
-                        $employeeTraining->status = 'Not Started';
-                    }
-
-                    // Only save if there are changes
-                    if ($oldStatus !== $employeeTraining->status || $oldProgress !== $employeeTraining->progress) {
-                        $employeeTraining->save();
-                        $fixedCount++;
-                        
-                        \Illuminate\Support\Facades\Log::info("Fixed sync for {$record->employee_id} - {$record->destination_name}: {$oldStatus} -> {$employeeTraining->status}");
-                    }
-                }
-                
-                $syncedCount++;
-            }
-            
-            ActivityLog::create([
-                'user_id' => Auth::id() ?? 1,
-                'action' => 'sync',
-                'module' => 'Training Status Sync',
-                'description' => "Manually synced {$syncedCount} destination knowledge training records with employee training dashboard. Fixed {$fixedCount} status mismatches.",
-            ]);
-            
-            return response()->json([
-                'success' => true,
-                'message' => "Successfully synced {$syncedCount} training records. Fixed {$fixedCount} status mismatches.",
-                'synced_count' => $syncedCount,
-                'fixed_count' => $fixedCount
-            ]);
-            
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Error syncing all records: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error syncing records: ' . $e->getMessage()
-            ], 500);
-        }
-    }
 
     /**
      * Update progress when training dashboard is updated
@@ -728,7 +679,7 @@ class DestinationKnowledgeTrainingController extends BaseController
             if ($training->progress >= 100) {
                 $destination->date_completed = now();
                 $destination->status = 'completed';
-                
+
                 // AUTO-TRANSFER to Completed Trainings section when 100% complete
                 $this->moveDestinationTrainingToCompleted($destination);
             } elseif ($training->progress > 0) {
@@ -784,7 +735,7 @@ public function requestActivation(Request $request, $id)
 
         // Check if course already exists in Course Management
         $course = \App\Models\CourseManagement::where('course_title', $destination->destination_name)->first();
-        
+
         if (!$course) {
             // Create course in Course Management with "Pending Approval" status
             $course = \App\Models\CourseManagement::create([
@@ -812,7 +763,7 @@ public function requestActivation(Request $request, $id)
                     'redirect_url' => route('admin.course_management.index')
                 ]);
             }
-            
+
             // If course exists but not active, update to pending approval
             if ($course->status !== 'Active') {
                 $course->update([
@@ -856,29 +807,8 @@ public function requestActivation(Request $request, $id)
     private function syncProgressWithCompetencyProfile($destinationRecord)
     {
         try {
-            // Find corresponding competency profile
-            $competencyProfile = \App\Models\EmployeeCompetencyProfile::where('employee_id', $destinationRecord->employee_id)
-                ->whereHas('competency', function($q) use ($destinationRecord) {
-                    $destinationNameClean = str_replace([' Training', 'Training'], '', $destinationRecord->destination_name);
-                    $q->where('competency_name', 'LIKE', '%' . $destinationNameClean . '%');
-                })
-                ->first();
-
-            if ($competencyProfile) {
-                // Convert progress percentage to proficiency level (1-5 scale)
-                $proficiencyLevel = max(1, min(5, round(($destinationRecord->progress / 100) * 5)));
-                
-                $competencyProfile->proficiency_level = $proficiencyLevel;
-                $competencyProfile->save();
-
-                // Log the sync activity
-                ActivityLog::create([
-                    'user_id' => Auth::id() ?? 1,
-                    'action' => 'sync',
-                    'module' => 'Competency Profile Sync',
-                    'description' => "Synced proficiency level to {$proficiencyLevel} ({$destinationRecord->progress}%) from Destination Knowledge Training for {$destinationRecord->destination_name}",
-                ]);
-            }
+            // Use the new helper method to update competency profile
+            $this->updateCompetencyProfileFromDestination($destinationRecord);
         } catch (\Exception $e) {
             Log::error('Error syncing progress with competency profile: ' . $e->getMessage());
         }
@@ -890,29 +820,37 @@ public function requestActivation(Request $request, $id)
     private function syncProgressWithCompetencyGap($destinationRecord)
     {
         try {
-            // Find corresponding competency gap
-            $competencyGap = \App\Models\CompetencyGap::where('employee_id', $destinationRecord->employee_id)
-                ->whereHas('competency', function($q) use ($destinationRecord) {
-                    $destinationNameClean = str_replace([' Training', 'Training'], '', $destinationRecord->destination_name);
-                    $q->where('competency_name', 'LIKE', '%' . $destinationNameClean . '%');
-                })
-                ->first();
+            // Extract competency name from destination name
+            $competencyName = $this->extractCompetencyName($destinationRecord->destination_name);
 
-            if ($competencyGap) {
-                // Convert progress percentage to current level (1-5 scale)
-                $currentLevel = max(1, min(5, round(($destinationRecord->progress / 100) * 5)));
-                
-                $competencyGap->current_level = $currentLevel;
-                $competencyGap->gap = max(0, $competencyGap->required_level - $currentLevel);
-                $competencyGap->save();
+            // Find competency in library
+            $competency = $this->findCompetencyByName($competencyName);
 
-                // Log the sync activity
-                ActivityLog::create([
-                    'user_id' => Auth::id() ?? 1,
-                    'action' => 'sync',
-                    'module' => 'Competency Gap Sync',
-                    'description' => "Synced current level to {$currentLevel} ({$destinationRecord->progress}%) from Destination Knowledge Training for {$destinationRecord->destination_name}",
-                ]);
+            if ($competency) {
+                // Find corresponding competency gap
+                $competencyGap = CompetencyGap::where('employee_id', $destinationRecord->employee_id)
+                    ->where('competency_id', $competency->id)
+                    ->first();
+
+                if ($competencyGap) {
+                    // Convert progress percentage to current level (1-5 scale)
+                    $currentLevel = $this->convertProgressToProficiencyLevel($destinationRecord->progress ?? 0);
+
+                    $competencyGap->current_level = $currentLevel;
+                    $competencyGap->gap = max(0, $competencyGap->required_level - $currentLevel);
+                    $competencyGap->save();
+
+                    // Log the sync activity
+                    ActivityLog::create([
+                        'user_id' => Auth::id() ?? 1,
+                        'action' => 'sync',
+                        'module' => 'Competency Gap Sync',
+                        'description' => "Synced current level to {$currentLevel} ({$destinationRecord->progress}%) from Destination Knowledge Training for {$destinationRecord->destination_name}",
+                    ]);
+                } else {
+                    // Create competency gap if it doesn't exist
+                    $this->createCompetencyGapFromDestination($destinationRecord, $competency);
+                }
             }
         } catch (\Exception $e) {
             Log::error('Error syncing progress with competency gap: ' . $e->getMessage());
@@ -1018,7 +956,11 @@ public function requestActivation(Request $request, $id)
                     'training_title' => $destinationRecord->destination_name,
                     'start_date' => now(),
                     'end_date' => now()->addMonths(3),
-                    'status' => 'Scheduled'
+                    'status' => 'Scheduled',
+                    'source' => 'destination_assigned',
+                    'assigned_by' => Auth::id(),
+                    'assigned_by_name' => Auth::user()->name ?? 'System Admin',
+                    'assigned_date' => now()
                 ]);
 
                 Log::info("Created upcoming training record for employee {$destinationRecord->employee_id} - {$destinationRecord->destination_name}");
@@ -1079,7 +1021,7 @@ public function requestActivation(Request $request, $id)
         try {
             $destination = DestinationMaster::findOrFail($id);
             $destinationName = $destination->destination_name;
-            
+
             $destination->delete();
 
             // Log the activity
@@ -1110,7 +1052,7 @@ public function requestActivation(Request $request, $id)
         try {
             // Check if course already exists to prevent duplicates
             $course = \App\Models\CourseManagement::where('course_title', $destinationRecord->destination_name)->first();
-            
+
             // Only create if it doesn't exist
             if (!$course) {
                 $course = \App\Models\CourseManagement::create([
@@ -1125,7 +1067,7 @@ public function requestActivation(Request $request, $id)
             // Calculate initial progress based on competency gap
             $initialProgress = 0;
             $status = 'Assigned';
-            
+
             if ($gap) {
                 $initialProgress = round(($gap->current_level / 5) * 100);
                 if ($gap->current_level >= 3) {
@@ -1137,7 +1079,7 @@ public function requestActivation(Request $request, $id)
             $existingAssignment = \App\Models\EmployeeTrainingDashboard::where('employee_id', $destinationRecord->employee_id)
                 ->where('course_id', $course->course_id)
                 ->first();
-            
+
             if (!$existingAssignment) {
                 // Create Employee Training Dashboard record
                 \App\Models\EmployeeTrainingDashboard::create([
@@ -1164,7 +1106,7 @@ public function requestActivation(Request $request, $id)
     {
         try {
             Log::info('assignToUpcomingTraining called', ['request_data' => $request->all()]);
-            
+
             // Validate the request
             $request->validate([
                 'destination_id' => 'required|integer|exists:destination_knowledge_trainings,id'
@@ -1174,7 +1116,7 @@ public function requestActivation(Request $request, $id)
 
             // Get the destination record with employee relationship
             $destinationRecord = DestinationKnowledgeTraining::with('employee')->findOrFail($request->destination_id);
-            
+
             Log::info('Found destination record', [
                 'id' => $destinationRecord->id,
                 'employee_id' => $destinationRecord->employee_id,
@@ -1199,6 +1141,14 @@ public function requestActivation(Request $request, $id)
                 // Refresh the model instance
                 $destinationRecord = DestinationKnowledgeTraining::with('employee')->findOrFail($request->destination_id);
             }
+            
+            // Check if assigned_by_name column exists in upcoming_trainings, if not add it
+            if (!Schema::hasColumn('upcoming_trainings', 'assigned_by_name')) {
+                Schema::table('upcoming_trainings', function (Blueprint $table) {
+                    $table->string('assigned_by_name')->nullable()->after('assigned_by');
+                });
+                Log::info('Added assigned_by_name column to upcoming_trainings table');
+            }
 
             // Check if upcoming_trainings table exists, if not create it
             if (!Schema::hasTable('upcoming_trainings')) {
@@ -1209,6 +1159,7 @@ public function requestActivation(Request $request, $id)
                     $table->string('training_title');
                     $table->date('start_date');
                     $table->date('end_date')->nullable();
+                    $table->date('expired_date')->nullable(); // Add expired_date column
                     $table->string('status')->default('Assigned');
                     $table->string('source')->nullable();
                     $table->string('assigned_by')->nullable();
@@ -1216,12 +1167,23 @@ public function requestActivation(Request $request, $id)
                     $table->unsignedBigInteger('destination_training_id')->nullable();
                     $table->boolean('needs_response')->default(false);
                     $table->timestamps();
-                    
+
                     // Add indexes
                     $table->index('employee_id');
                     $table->index('destination_training_id');
                 });
                 Log::info('upcoming_trainings table created successfully');
+            }
+
+            // Check if expired_date column exists, if not add it
+            if (!Schema::hasColumn('upcoming_trainings', 'expired_date')) {
+                Schema::table('upcoming_trainings', function (Blueprint $table) {
+                    $table->date('expired_date')->nullable()->after('end_date');
+                });
+                Log::info('Added expired_date column to upcoming_trainings table');
+
+                // Sync existing records with destination training expired dates
+                $this->syncExistingUpcomingTrainingExpiredDates();
             }
 
             // Mark as approved for upcoming training and set status to pending response
@@ -1232,11 +1194,12 @@ public function requestActivation(Request $request, $id)
 
             Log::info('About to create/update UpcomingTraining record');
 
-            // Always create/update UpcomingTraining record to ensure it appears in employee's upcoming list
+            // Check for existing UpcomingTraining record to prevent duplicates
             $existingUpcoming = null;
             try {
                 $existingUpcoming = \App\Models\UpcomingTraining::where('employee_id', $destinationRecord->employee_id)
                     ->where('training_title', $destinationRecord->destination_name)
+                    ->where('source', 'destination_assigned')
                     ->first();
                 Log::info('Checked for existing upcoming training', ['found' => $existingUpcoming ? 'yes' : 'no']);
             } catch (\Exception $queryException) {
@@ -1244,21 +1207,50 @@ public function requestActivation(Request $request, $id)
                 $existingUpcoming = null;
             }
 
-            // Get assigned_by value safely
-            $assignedBy = 'Admin';
+            // Get assigned_by value safely with proper admin name
+            $assignedBy = 'Admin User';
+            $assignedByName = 'Admin User';
             try {
                 if (Auth::check() && Auth::user()) {
-                    $assignedBy = Auth::user()->name ?? Auth::user()->username ?? 'Admin';
+                    $user = Auth::user();
+                    
+                    // Get name from user table
+                    if (isset($user->name) && !empty($user->name)) {
+                        $assignedByName = $user->name;
+                    }
+                    // Try to get from employee record using email
+                    elseif (isset($user->email)) {
+                        try {
+                            $employee = \App\Models\Employee::where('email', $user->email)->first();
+                            if ($employee) {
+                                $assignedByName = trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? ''));
+                                if (empty(trim($assignedByName))) {
+                                    $assignedByName = $employee->employee_id ?? 'Admin User';
+                                }
+                            }
+                        } catch (\Exception $empException) {
+                            Log::warning('Employee lookup failed: ' . $empException->getMessage());
+                        }
+                    }
+                    
+                    // Clean up the name
+                    $assignedByName = trim($assignedByName);
+                    if (empty($assignedByName)) {
+                        $assignedByName = 'Admin User';
+                    }
+                    
+                    $assignedBy = $assignedByName;
                 }
             } catch (\Exception $authException) {
                 Log::warning('Auth issue in assignToUpcomingTraining: ' . $authException->getMessage());
-                $assignedBy = 'Admin';
+                $assignedBy = 'Admin User';
+                $assignedByName = 'Admin User';
             }
 
             Log::info('Prepared data for upcoming training', [
                 'employee_id' => $destinationRecord->employee_id,
                 'training_title' => $destinationRecord->destination_name,
-                'assigned_by' => $assignedBy,
+                'assigned_by' => $assignedByName,
                 'existing_record' => $existingUpcoming ? 'update' : 'create'
             ]);
 
@@ -1269,11 +1261,12 @@ public function requestActivation(Request $request, $id)
                     $existingUpcoming->update([
                         'status' => 'Assigned',
                         'source' => 'destination_assigned',
-                        'assigned_by' => $assignedBy,
+                        'assigned_by' => Auth::id() ?? 1,
+                        'assigned_by_name' => $assignedByName,
                         'assigned_date' => now(),
                         'destination_training_id' => $destinationRecord->id,
                         'needs_response' => true,
-                        'end_date' => $destinationRecord->expired_date
+                        'expired_date' => $destinationRecord->expired_date
                     ]);
                     Log::info('Successfully updated existing upcoming training record');
                 } else {
@@ -1283,17 +1276,19 @@ public function requestActivation(Request $request, $id)
                         'employee_id' => $destinationRecord->employee_id,
                         'training_title' => $destinationRecord->destination_name,
                         'start_date' => $destinationRecord->created_at ? $destinationRecord->created_at->format('Y-m-d') : now()->format('Y-m-d'),
-                        'end_date' => $destinationRecord->expired_date ? $destinationRecord->expired_date : null,
+                        'end_date' => null, // Keep end_date separate from expired_date
+                        'expired_date' => $destinationRecord->expired_date,
                         'status' => 'Assigned',
                         'source' => 'destination_assigned',
-                        'assigned_by' => $assignedBy,
+                        'assigned_by' => Auth::id() ?? 1,
+                        'assigned_by_name' => $assignedByName,
                         'assigned_date' => now(),
                         'destination_training_id' => $destinationRecord->id,
                         'needs_response' => true
                     ];
-                    
+
                     Log::info('Creating upcoming training with data:', $upcomingData);
-                    
+
                     // Create new record
                     $newUpcoming = \App\Models\UpcomingTraining::create($upcomingData);
                     Log::info('Successfully created new upcoming training record', ['id' => $newUpcoming->upcoming_id]);
@@ -1301,7 +1296,7 @@ public function requestActivation(Request $request, $id)
             } catch (\Exception $upcomingException) {
                 Log::error('Error creating/updating upcoming training record: ' . $upcomingException->getMessage());
                 Log::error('Stack trace: ' . $upcomingException->getTraceAsString());
-                
+
                 // Don't throw the exception - the training assignment was successful
                 // Just log the error and continue with success response
                 Log::warning('Continuing with success response despite upcoming training record error');
@@ -1340,139 +1335,7 @@ public function requestActivation(Request $request, $id)
         }
     }
 
-    /**
-     * Sync existing destination knowledge training records with competency profiles and gaps
-     * ONLY creates missing entries, prevents duplicates
-     */
-    public function syncExisting()
-    {
-        try {
-            $syncedCount = 0;
-            $skippedCount = 0;
-            $errors = [];
-            
-            // Get all destination knowledge training records
-            $destinationRecords = DestinationKnowledgeTraining::with('employee')->get();
-            
-            if ($destinationRecords->isEmpty()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'No destination knowledge training records found to sync.'
-                ]);
-            }
-            
-            foreach ($destinationRecords as $record) {
-                try {
-                    // Extract competency name (remove common suffixes)
-                    $competencyName = str_replace([' Training', ' Course', ' Program'], '', $record->destination_name);
-                    
-                    // Skip if competency name is empty
-                    if (empty(trim($competencyName))) {
-                        $errors[] = "Empty competency name for destination: {$record->destination_name}";
-                        continue;
-                    }
-                    
-                    // Check if competency exists in library - EXACT match first, then LIKE
-                    $competency = \App\Models\CompetencyLibrary::where('competency_name', $competencyName)->first();
-                    if (!$competency) {
-                        $competency = \App\Models\CompetencyLibrary::where('competency_name', 'LIKE', '%' . $competencyName . '%')->first();
-                    }
-                    
-                    // Only create competency if it doesn't exist at all
-                    if (!$competency) {
-                        $category = $this->categorizeCompetency($competencyName);
-                        $competency = \App\Models\CompetencyLibrary::create([
-                            'competency_name' => $competencyName,
-                            'description' => 'Auto-created from destination knowledge training: ' . $record->destination_name,
-                            'category' => $category
-                        ]);
-                        Log::info("Created new competency: {$competencyName}");
-                    } else {
-                        Log::info("Using existing competency: {$competency->competency_name} for {$record->destination_name}");
-                    }
-                    
-                    // Check if employee competency profile already exists for this specific employee-competency combination
-                    $competencyProfile = \App\Models\EmployeeCompetencyProfile::where('employee_id', $record->employee_id)
-                        ->where('competency_id', $competency->id)
-                        ->first();
-                    
-                    if (!$competencyProfile) {
-                        // Convert progress percentage to proficiency level (1-5 scale)
-                        $proficiencyLevel = max(1, min(5, round(($record->progress / 100) * 5)));
-                        
-                        $competencyProfile = \App\Models\EmployeeCompetencyProfile::create([
-                            'employee_id' => $record->employee_id,
-                            'competency_id' => $competency->id,
-                            'proficiency_level' => $proficiencyLevel,
-                            'assessment_date' => now()
-                        ]);
-                        Log::info("Created competency profile for {$record->employee_id} - {$competency->competency_name}");
-                    } else {
-                        Log::info("Competency profile already exists for {$record->employee_id} - {$competency->competency_name}");
-                        $skippedCount++;
-                    }
-                    
-                    // Check if competency gap already exists for this specific employee-competency combination
-                    $competencyGap = \App\Models\CompetencyGap::where('employee_id', $record->employee_id)
-                        ->where('competency_id', $competency->id)
-                        ->first();
-                    
-                    if (!$competencyGap) {
-                        // Convert progress percentage to current level (1-5 scale)
-                        $currentLevel = max(1, min(5, round(($record->progress / 100) * 5)));
-                        $requiredLevel = 5; // Default required level
-                        
-                        \App\Models\CompetencyGap::create([
-                            'employee_id' => $record->employee_id,
-                            'competency_id' => $competency->id,
-                            'current_level' => $currentLevel,
-                            'required_level' => $requiredLevel,
-                            'gap' => max(0, $requiredLevel - $currentLevel)
-                        ]);
-                        Log::info("Created competency gap for {$record->employee_id} - {$competency->competency_name}");
-                    } else {
-                        Log::info("Competency gap already exists for {$record->employee_id} - {$competency->competency_name}");
-                    }
-                    
-                    $syncedCount++;
-                    
-                } catch (\Exception $recordError) {
-                    $errors[] = "Error syncing record {$record->id}: " . $recordError->getMessage();
-                    Log::error("Error syncing destination record {$record->id}: " . $recordError->getMessage());
-                }
-            }
-            
-            // Log the sync activity
-            ActivityLog::createLog([
-                'action' => 'sync',
-                'module' => self::MODULE_NAME,
-                'description' => "Synced {$syncedCount} destination knowledge training records. Skipped {$skippedCount} existing entries to prevent duplicates.",
-            ]);
-            
-            $message = "Successfully processed {$syncedCount} destination knowledge training records. Skipped {$skippedCount} existing entries to prevent duplicates.";
-            if (!empty($errors)) {
-                $message .= " Errors encountered: " . implode(', ', array_slice($errors, 0, 3));
-                if (count($errors) > 3) {
-                    $message .= " and " . (count($errors) - 3) . " more...";
-                }
-            }
-            
-            return response()->json([
-                'success' => true,
-                'message' => $message,
-                'synced_count' => $syncedCount,
-                'skipped_count' => $skippedCount,
-                'errors' => $errors
-            ]);
-            
-        } catch (\Exception $e) {
-            Log::error('Error in syncExisting: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Error syncing existing records: ' . $e->getMessage()
-            ], 500);
-        }
-    }
+
 
     /**
      * Categorize competency based on name keywords
@@ -1480,9 +1343,9 @@ public function requestActivation(Request $request, $id)
     private function categorizeCompetency($competencyName)
     {
         $name = strtolower($competencyName);
-        
-        if (strpos($name, 'destination') !== false || strpos($name, 'location') !== false || 
-            strpos($name, 'baesa') !== false || strpos($name, 'quezon') !== false || 
+
+        if (strpos($name, 'destination') !== false || strpos($name, 'location') !== false ||
+            strpos($name, 'baesa') !== false || strpos($name, 'quezon') !== false ||
             strpos($name, 'baguio') !== false || strpos($name, 'boracay') !== false ||
             strpos($name, 'cebu') !== false || strpos($name, 'davao') !== false) {
             return 'Destination Knowledge';
@@ -1495,7 +1358,7 @@ public function requestActivation(Request $request, $id)
         } elseif (strpos($name, 'technical') !== false || strpos($name, 'system') !== false) {
             return 'Technical';
         }
-        
+
         return 'General';
     }
 
@@ -1507,30 +1370,526 @@ public function requestActivation(Request $request, $id)
         try {
             // Find the destination master record
             $destinationMaster = \App\Models\DestinationMaster::findOrFail($id);
-            
+
             // Store destination name for logging
             $destinationName = $destinationMaster->destination_name;
-            
+
             // Delete the record
             $destinationMaster->delete();
-            
+
             // Log activity
             ActivityLog::createLog([
                 'action' => 'delete',
                 'module' => 'Destination Master',
                 'description' => "Deleted possible destination: {$destinationName} (ID: {$id})",
             ]);
-            
+
             return response()->json(['success' => true, 'message' => 'Possible destination deleted successfully.']);
-            
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['success' => false, 'message' => 'Possible destination not found.'], 404);
-            
+
         } catch (\Exception $e) {
             Log::error('Error deleting possible destination: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => 'Error deleting possible destination: ' . $e->getMessage()], 500);
         }
     }
 
+    /**
+     * Sync existing upcoming training records with destination training expired dates
+     */
+    private function syncExistingUpcomingTrainingExpiredDates()
+    {
+        try {
+            Log::info('Starting sync of existing upcoming training expired dates');
 
+            $syncedCount = 0;
+
+            // Get all upcoming trainings that are destination assigned but missing expired_date
+            $upcomingTrainings = \App\Models\UpcomingTraining::where('source', 'destination_assigned')
+                ->whereNull('expired_date')
+                ->whereNotNull('destination_training_id')
+                ->get();
+
+            foreach ($upcomingTrainings as $upcoming) {
+                // Find the corresponding destination training record
+                $destinationTraining = DestinationKnowledgeTraining::find($upcoming->destination_training_id);
+
+                if ($destinationTraining && $destinationTraining->expired_date) {
+                    // Update the upcoming training with the expired date
+                    $upcoming->expired_date = $destinationTraining->expired_date;
+                    $upcoming->save();
+
+                    $syncedCount++;
+                    Log::info("Synced expired date for upcoming training ID {$upcoming->upcoming_id}: {$destinationTraining->expired_date}");
+                }
+            }
+
+            Log::info("Completed sync of existing upcoming training expired dates. Synced: {$syncedCount} records");
+
+        } catch (\Exception $e) {
+            Log::error('Error syncing existing upcoming training expired dates: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Fix expiration dates for destination training records
+     */
+    /**
+     * Consolidate destination knowledge training tables - run this once
+     */
+    public function consolidateDestinationTraining()
+    {
+        try {
+            // Drop the old view if it exists
+            DB::statement('DROP VIEW IF EXISTS destination_knowledge_training');
+
+            // Ensure all records have proper training_type and source
+            DB::table('destination_knowledge_trainings')
+                ->whereNull('training_type')
+                ->orWhere('training_type', '')
+                ->update([
+                    'training_type' => 'destination',
+                    'source' => 'destination_knowledge_training'
+                ]);
+
+            // Update training_title from destination_name if missing
+            DB::table('destination_knowledge_trainings')
+                ->whereNull('training_title')
+                ->orWhere('training_title', '')
+                ->update([
+                    'training_title' => DB::raw('destination_name')
+                ]);
+
+            $updated = DB::table('destination_knowledge_trainings')
+                ->where('training_type', 'destination')
+                ->count();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Destination training consolidated successfully - {$updated} records updated to use single table approach"
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error consolidating: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    private function fixExpirationDates()
+    {
+        try {
+            $updated = 0;
+
+            // Get all destination training records without proper expiration dates
+            $records = DestinationKnowledgeTraining::destinationTrainings()
+                ->where(function($query) {
+                    $query->whereNull('expired_date')
+                          ->orWhere('expired_date', '0000-00-00 00:00:00')
+                          ->orWhere('expired_date', '');
+                })
+                ->get();
+
+            foreach ($records as $record) {
+                // Set expiration date to 3 months from creation date
+                $expirationDate = $record->created_at->addMonths(3);
+
+                $record->expired_date = $expirationDate;
+
+                // Ensure the record is properly marked for upcoming if active
+                if ($record->is_active && !$record->admin_approved_for_upcoming) {
+                    $record->admin_approved_for_upcoming = true;
+                }
+
+                $record->save();
+                $updated++;
+            }
+
+            if ($updated > 0) {
+                Log::info("Fixed expiration dates for {$updated} destination training records");
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Error fixing expiration dates: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Create competency profile entry when destination training is created
+     */
+    private function createCompetencyProfileFromDestination($destinationRecord)
+    {
+        try {
+            // Extract competency name from destination name
+            $competencyName = $this->extractCompetencyName($destinationRecord->destination_name);
+
+            // Find or create competency in library
+            $competency = $this->findOrCreateCompetency($competencyName, $destinationRecord->destination_name);
+
+            if ($competency) {
+                // Check if competency profile already exists
+                $existingProfile = EmployeeCompetencyProfile::where('employee_id', $destinationRecord->employee_id)
+                    ->where('competency_id', $competency->id)
+                    ->first();
+
+                if (!$existingProfile) {
+                    // Convert progress to proficiency level (1-5 scale)
+                    $proficiencyLevel = $this->convertProgressToProficiencyLevel($destinationRecord->progress ?? 0);
+
+                    // Create competency profile
+                    EmployeeCompetencyProfile::create([
+                        'employee_id' => $destinationRecord->employee_id,
+                        'competency_id' => $competency->id,
+                        'proficiency_level' => $proficiencyLevel,
+                        'assessment_date' => now(),
+                    ]);
+
+                    Log::info("Created competency profile for {$destinationRecord->employee_id} - {$competency->competency_name} with proficiency level {$proficiencyLevel}");
+
+                    // Also create competency gap if it doesn't exist
+                    $this->createCompetencyGapFromDestination($destinationRecord, $competency);
+                } else {
+                    Log::info("Competency profile already exists for {$destinationRecord->employee_id} - {$competency->competency_name}");
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Error creating competency profile from destination: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Update competency profile entry when destination training is updated
+     */
+    private function updateCompetencyProfileFromDestination($destinationRecord)
+    {
+        try {
+            // Extract competency name from destination name
+            $competencyName = $this->extractCompetencyName($destinationRecord->destination_name);
+
+            // Find competency in library
+            $competency = $this->findCompetencyByName($competencyName);
+
+            if ($competency) {
+                // Find existing competency profile
+                $competencyProfile = EmployeeCompetencyProfile::where('employee_id', $destinationRecord->employee_id)
+                    ->where('competency_id', $competency->id)
+                    ->first();
+
+                if ($competencyProfile) {
+                    // Convert progress to proficiency level (1-5 scale)
+                    $proficiencyLevel = $this->convertProgressToProficiencyLevel($destinationRecord->progress ?? 0);
+
+                    // Update competency profile
+                    $competencyProfile->update([
+                        'proficiency_level' => $proficiencyLevel,
+                        'assessment_date' => now(),
+                    ]);
+
+                    Log::info("Updated competency profile for {$destinationRecord->employee_id} - {$competency->competency_name} to proficiency level {$proficiencyLevel}");
+                } else {
+                    // Create if it doesn't exist
+                    $this->createCompetencyProfileFromDestination($destinationRecord);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Error updating competency profile from destination: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Extract competency name from destination name
+     */
+    private function extractCompetencyName($destinationName)
+    {
+        // Remove common training suffixes
+        $competencyName = str_replace([' Training', ' Course', ' Program'], '', $destinationName);
+
+        // For destination knowledge, format as "Destination Knowledge - [Location]"
+        if ($this->isDestinationKnowledge($destinationName)) {
+            return 'Destination Knowledge - ' . $competencyName;
+        }
+
+        return $competencyName;
+    }
+
+    /**
+     * Check if this is destination knowledge training
+     */
+    private function isDestinationKnowledge($destinationName)
+    {
+        $destinationKeywords = [
+            'BAESA', 'QUEZON', 'BAGUIO', 'BORACAY', 'CEBU', 'DAVAO', 'MANILA',
+            'DESTINATION', 'LOCATION', 'PLACE', 'CITY', 'TERMINAL', 'STATION'
+        ];
+
+        $upperName = strtoupper($destinationName);
+
+        foreach ($destinationKeywords as $keyword) {
+            if (strpos($upperName, $keyword) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Find or create competency in library
+     */
+    private function findOrCreateCompetency($competencyName, $originalDestinationName)
+    {
+        // First try exact match
+        $competency = CompetencyLibrary::where('competency_name', $competencyName)->first();
+
+        if (!$competency) {
+            // Try partial match
+            $competency = CompetencyLibrary::where('competency_name', 'LIKE', '%' . $competencyName . '%')->first();
+        }
+
+        if (!$competency) {
+            // Create new competency
+            $category = $this->categorizeCompetency($competencyName);
+
+            $competency = CompetencyLibrary::create([
+                'competency_name' => $competencyName,
+                'description' => 'Auto-created from destination knowledge training: ' . $originalDestinationName,
+                'category' => $category,
+            ]);
+
+            Log::info("Created new competency: {$competencyName}");
+        }
+
+        return $competency;
+    }
+
+    /**
+     * Find competency by name
+     */
+    private function findCompetencyByName($competencyName)
+    {
+        // First try exact match
+        $competency = CompetencyLibrary::where('competency_name', $competencyName)->first();
+
+        if (!$competency) {
+            // Try partial match
+            $competency = CompetencyLibrary::where('competency_name', 'LIKE', '%' . $competencyName . '%')->first();
+        }
+
+        return $competency;
+    }
+
+    /**
+     * Convert progress percentage to proficiency level (1-5 scale)
+     */
+    private function convertProgressToProficiencyLevel($progress)
+    {
+        if ($progress >= 90) return 5; // Expert
+        if ($progress >= 70) return 4; // Advanced
+        if ($progress >= 50) return 3; // Proficient
+        if ($progress >= 30) return 2; // Developing
+        if ($progress > 0) return 1;   // Beginner
+        return 1; // Default minimum level
+    }
+
+    /**
+     * Create competency gap from destination training
+     */
+    private function createCompetencyGapFromDestination($destinationRecord, $competency)
+    {
+        try {
+            // Check if competency gap already exists
+            $existingGap = CompetencyGap::where('employee_id', $destinationRecord->employee_id)
+                ->where('competency_id', $competency->id)
+                ->first();
+
+            if (!$existingGap) {
+                // Convert progress to current level (1-5 scale)
+                $currentLevel = $this->convertProgressToProficiencyLevel($destinationRecord->progress ?? 0);
+                $requiredLevel = 5; // Default required level
+
+                CompetencyGap::create([
+                    'employee_id' => $destinationRecord->employee_id,
+                    'competency_id' => $competency->id,
+                    'current_level' => $currentLevel,
+                    'required_level' => $requiredLevel,
+                    'gap' => max(0, $requiredLevel - $currentLevel),
+                    'expired_date' => $destinationRecord->expired_date,
+                ]);
+
+                Log::info("Created competency gap for {$destinationRecord->employee_id} - {$competency->competency_name}");
+            }
+        } catch (\Exception $e) {
+            Log::error('Error creating competency gap from destination: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Sync all existing destination knowledge training records with competency profiles
+     */
+    public function syncAllWithCompetencyProfiles()
+    {
+        try {
+            $syncedCount = 0;
+            $createdCount = 0;
+            $errors = [];
+
+            // Get all destination knowledge training records
+            $destinationRecords = DestinationKnowledgeTraining::with('employee')->get();
+
+            if ($destinationRecords->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No destination knowledge training records found to sync.'
+                ]);
+            }
+
+            foreach ($destinationRecords as $record) {
+                try {
+                    // Use the helper methods to create/update competency profiles
+                    $this->createCompetencyProfileFromDestination($record);
+                    $createdCount++;
+                    $syncedCount++;
+
+                } catch (\Exception $recordError) {
+                    $errors[] = "Error syncing record {$record->id}: " . $recordError->getMessage();
+                    Log::error("Error syncing destination record {$record->id}: " . $recordError->getMessage());
+                }
+            }
+
+            // Log the sync activity
+            ActivityLog::createLog([
+                'action' => 'sync_all',
+                'module' => self::MODULE_NAME,
+                'description' => "Synced {$syncedCount} destination knowledge training records with competency profiles. Created/updated {$createdCount} competency profiles.",
+            ]);
+
+            $message = "Successfully processed {$syncedCount} destination knowledge training records. Created/updated {$createdCount} competency profiles.";
+            if (!empty($errors)) {
+                $message .= " Errors encountered: " . implode(', ', array_slice($errors, 0, 3));
+                if (count($errors) > 3) {
+                    $message .= " and " . (count($errors) - 3) . " more...";
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'synced_count' => $syncedCount,
+                'created_count' => $createdCount,
+                'errors' => $errors
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error in syncAllWithCompetencyProfiles: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error syncing all records with competency profiles: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Fix missing columns in destination_knowledge_trainings table
+     */
+    public function fixMissingColumns()
+    {
+        try {
+            $result = DestinationKnowledgeTraining::fixMissingColumns();
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $result['message']
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['message']
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error fixing missing columns: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fixing missing columns: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Export destination knowledge training data to Excel (CSV format)
+     */
+    public function exportExcel()
+    {
+        try {
+            // Get all destination knowledge training records with employee relationships
+            $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('created_at', 'desc')->get();
+
+            // Create CSV content
+            $csv = "ID,Employee Name,Employee ID,Destination,Details,Delivery Mode,Date Created,Expired Date,Status,Progress,Remarks\n";
+            
+            foreach ($destinations as $record) {
+                $employeeName = $record->employee ? ($record->employee->first_name . ' ' . $record->employee->last_name) : 'Unknown Employee';
+                $employeeId = $record->employee ? $record->employee->employee_id : 'N/A';
+                $expiredDate = $record->expired_date ? $record->expired_date->format('Y-m-d') : 'Not Set';
+                $createdDate = $record->created_at ? $record->created_at->format('Y-m-d') : 'N/A';
+                
+                $csv .= '"' . $record->id . '","' . $employeeName . '","' . $employeeId . '","' . 
+                        $record->destination_name . '","' . str_replace('"', '""', $record->details) . '","' . 
+                        $record->delivery_mode . '","' . $createdDate . '","' . $expiredDate . '","' . 
+                        $record->status . '","' . ($record->progress ?? 0) . '%","' . 
+                        str_replace('"', '""', $record->remarks ?? '') . '"' . "\n";
+            }
+
+            // Log activity
+            ActivityLog::createLog([
+                'action' => 'export',
+                'module' => self::MODULE_NAME,
+                'description' => 'Exported destination knowledge training data to Excel (CSV format)',
+            ]);
+
+            return response($csv)
+                ->header('Content-Type', 'text/csv')
+                ->header('Content-Disposition', 'attachment; filename="destination_knowledge_training_' . date('Y-m-d_H-i-s') . '.csv"');
+
+        } catch (\Exception $e) {
+            Log::error('Error exporting destination knowledge training to Excel: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error exporting data: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Export destination knowledge training data to PDF
+     */
+    public function exportPdf()
+    {
+        try {
+            // Get all destination knowledge training records with employee relationships
+            $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('created_at', 'desc')->get();
+
+            // Create a view for PDF generation
+            $data = [
+                'destinations' => $destinations,
+                'title' => 'Destination Knowledge Training Report',
+                'generated_at' => date('Y-m-d H:i:s'),
+                'total_records' => $destinations->count()
+            ];
+
+            // Log activity
+            ActivityLog::createLog([
+                'action' => 'export',
+                'module' => self::MODULE_NAME,
+                'description' => 'Exported destination knowledge training data to PDF',
+            ]);
+
+            // Return a view that will be rendered as PDF-ready HTML
+            return view('exports.destination_knowledge_training_pdf', $data);
+
+        } catch (\Exception $e) {
+            Log::error('Error exporting destination knowledge training to PDF: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error exporting data: ' . $e->getMessage());
+        }
+    }
 }

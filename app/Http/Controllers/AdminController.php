@@ -65,9 +65,12 @@ class AdminController extends Controller
                 // Track login session
                 $this->trackLoginSession($request, $user);
 
+<<<<<<< HEAD
                 // Initialize admin session start time for uptime tracking
                 $request->session()->put('admin_session_start', now());
 
+=======
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                 // Update user's last login info
                 $user->update([
                     'last_login_at' => now(),
@@ -1353,6 +1356,7 @@ class AdminController extends Controller
     private function getSystemUptime()
     {
         try {
+<<<<<<< HEAD
             // Priority 1: Use session-based uptime for admin sessions (most accurate for app uptime)
             if (session()->has('admin_session_start')) {
                 $sessionStart = session('admin_session_start');
@@ -1396,6 +1400,9 @@ class AdminController extends Controller
             }
             
             // Priority 4: Try Windows system uptime (only if reasonable)
+=======
+            // Try Windows system uptime first
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
             if (PHP_OS_FAMILY === 'Windows') {
                 // Method 1: Try systeminfo command
                 $output = shell_exec('systeminfo | findstr "System Boot Time"');
@@ -1407,23 +1414,65 @@ class AdminController extends Controller
                             $bootDateTime = new \DateTime($bootTime);
                             $now = new \DateTime();
                             $diff = $now->diff($bootDateTime);
+<<<<<<< HEAD
                             
                             // Only use system uptime if it's reasonable (less than 30 days)
                             if ($diff->days < 30) {
                                 return $diff->format('%a days, %h hours, %i minutes (system)');
                             }
+=======
+                            return $diff->format('%a days, %h hours, %i minutes');
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                         } catch (\Exception $e) {
                             // Continue to next method
                         }
                     }
                 }
+<<<<<<< HEAD
             }
             
             // Priority 5: Linux/Unix systems (with validation)
+=======
+                
+                // Method 2: Try WMI query
+                $output = shell_exec('wmic os get lastbootuptime /value 2>nul');
+                if ($output && preg_match('/LastBootUpTime=(\d{14})/', $output, $matches)) {
+                    $bootTime = $matches[1];
+                    $year = substr($bootTime, 0, 4);
+                    $month = substr($bootTime, 4, 2);
+                    $day = substr($bootTime, 6, 2);
+                    $hour = substr($bootTime, 8, 2);
+                    $minute = substr($bootTime, 10, 2);
+                    $second = substr($bootTime, 12, 2);
+                    
+                    try {
+                        $bootDateTime = new \DateTime("$year-$month-$day $hour:$minute:$second");
+                        $now = new \DateTime();
+                        $diff = $now->diff($bootDateTime);
+                        return $diff->format('%a days, %h hours, %i minutes');
+                    } catch (\Exception $e) {
+                        // Continue to next method
+                    }
+                }
+                
+                // Method 3: Calculate from PHP process start (approximation)
+                if (function_exists('getmypid')) {
+                    $startTime = filectime(__FILE__); // Approximate using file creation time
+                    $uptime = time() - $startTime;
+                    $days = floor($uptime / 86400);
+                    $hours = floor(($uptime % 86400) / 3600);
+                    $minutes = floor(($uptime % 3600) / 60);
+                    return "{$days} days, {$hours} hours, {$minutes} minutes (approx)";
+                }
+            }
+            
+            // Linux/Unix systems
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
             if (file_exists('/proc/uptime')) {
                 $uptime = file_get_contents('/proc/uptime');
                 $uptime = floatval(explode(' ', $uptime)[0]);
                 $days = floor($uptime / 86400);
+<<<<<<< HEAD
                 
                 // Only use if reasonable
                 if ($days < 30) {
@@ -1436,6 +1485,37 @@ class AdminController extends Controller
             // Final fallback - create new session-based uptime
             session(['admin_session_start' => now()]);
             return "0 days, 0 hours, 0 minutes (initialized)";
+=======
+                $hours = floor(($uptime % 86400) / 3600);
+                $minutes = floor(($uptime % 3600) / 60);
+                return "{$days} days, {$hours} hours, {$minutes} minutes";
+            }
+            
+            // Try uptime command (Linux/macOS)
+            $output = shell_exec('uptime 2>/dev/null');
+            if ($output) {
+                // Parse uptime command output
+                if (preg_match('/up\s+(\d+)\s+days?,\s*(\d+):(\d+)/', $output, $matches)) {
+                    return "{$matches[1]} days, {$matches[2]} hours, {$matches[3]} minutes";
+                } elseif (preg_match('/up\s+(\d+):(\d+)/', $output, $matches)) {
+                    return "0 days, {$matches[1]} hours, {$matches[2]} minutes";
+                }
+            }
+            
+            // Application uptime fallback (time since Laravel app started)
+            $appStartFile = storage_path('framework/cache/app_start_time');
+            if (!file_exists($appStartFile)) {
+                file_put_contents($appStartFile, time());
+            }
+            
+            $appStartTime = intval(file_get_contents($appStartFile));
+            $appUptime = time() - $appStartTime;
+            $days = floor($appUptime / 86400);
+            $hours = floor(($appUptime % 86400) / 3600);
+            $minutes = floor(($appUptime % 3600) / 60);
+            
+            return "{$days} days, {$hours} hours, {$minutes} minutes (app uptime)";
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
             
         } catch (\Exception $e) {
             Log::warning('Failed to get system uptime: ' . $e->getMessage());
@@ -1446,6 +1526,7 @@ class AdminController extends Controller
     }
 
     /**
+<<<<<<< HEAD
      * Reset system uptime counter
      */
     public function resetSystemUptime(Request $request)
@@ -1489,6 +1570,8 @@ class AdminController extends Controller
     }
 
     /**
+=======
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
      * Refresh CSRF token
      */
     public function refreshCSRF(Request $request)

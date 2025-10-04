@@ -1395,6 +1395,7 @@
           console.error('API Error Response:', response.status, errorText);
           console.error('Full response:', response);
           
+<<<<<<< HEAD
           // Check if it's an authentication error
           if (response.status === 401 || response.status === 403) {
             console.log('Authentication error - admin not logged in');
@@ -1449,6 +1450,49 @@
             }
           });
           
+=======
+          // Set all to Error on API error
+          ipElements.forEach(element => {
+            element.className = 'badge bg-danger ip-address';
+            const ipText = element.querySelector('.ip-text');
+            if (ipText) {
+              ipText.textContent = 'Error';
+            }
+          });
+          
+          if (typeof showErrorToast === 'function') {
+            showErrorToast(`Failed to check IP addresses (${response.status}): ${errorText}`);
+          }
+          return;
+        }
+
+        const data = await response.json();
+        console.log('IP address API response:', data);
+
+        if (data.success && data.ip_addresses) {
+          let activeCount = 0;
+          
+          // Update each IP element
+          ipElements.forEach(element => {
+            const employeeId = element.getAttribute('data-employee-id');
+            const ipAddress = data.ip_addresses[employeeId];
+            const ipText = element.querySelector('.ip-text');
+            
+            if (ipAddress && ipAddress !== 'N/A') {
+              element.className = 'badge bg-success ip-address';
+              if (ipText) {
+                ipText.textContent = ipAddress;
+              }
+              activeCount++;
+            } else {
+              element.className = 'badge bg-secondary ip-address';
+              if (ipText) {
+                ipText.textContent = 'N/A';
+              }
+            }
+          });
+          
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
           console.log(`IP addresses updated: ${activeCount} employees with active sessions out of ${employeeIds.length}`);
           
           // Show success toast with count
@@ -1481,7 +1525,11 @@
           element.className = 'badge bg-danger ip-address';
           const ipText = element.querySelector('.ip-text');
           if (ipText) {
+<<<<<<< HEAD
             ipText.textContent = 'Network Error';
+=======
+            ipText.textContent = 'Error';
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
           }
         });
         
@@ -1494,21 +1542,33 @@
     // Initialize IP addresses immediately
     function initializeIPAddresses() {
       const ipElements = document.querySelectorAll('.ip-address');
+<<<<<<< HEAD
       console.log('Initializing IP addresses for', ipElements.length, 'elements');
 
       // Set all to N/A initially
       ipElements.forEach((element, index) => {
+=======
+
+      // Set all to N/A initially
+      ipElements.forEach(element => {
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
         element.className = 'badge bg-secondary ip-address';
         const ipText = element.querySelector('.ip-text');
         if (ipText) {
           ipText.textContent = 'N/A';
         }
+<<<<<<< HEAD
         console.log(`Element ${index}: employee_id = ${element.getAttribute('data-employee-id')}`);
+=======
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
       });
 
       // Then immediately try to get real IP addresses
       setTimeout(() => {
+<<<<<<< HEAD
         console.log('Starting IP address update after 0.5 second delay');
+=======
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
         updateAllIPAddresses();
       }, 500); // Wait 0.5 seconds for page to fully load
     }

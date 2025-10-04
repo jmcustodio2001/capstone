@@ -1381,6 +1381,7 @@ class EmployeeController extends Controller
 
             $ipAddresses = [];
 
+<<<<<<< HEAD
             // Get current admin's IP address
             $adminIP = $request->ip();
             
@@ -1397,6 +1398,8 @@ class EmployeeController extends Controller
                 '118.67.123.45'
             ];
 
+=======
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
             // Method 1: Check active sessions from sessions table
             $activeSessions = \Illuminate\Support\Facades\DB::table('sessions')
                 ->where('last_activity', '>=', \Carbon\Carbon::now()->subMinutes(15)->getTimestamp())
@@ -1417,10 +1420,31 @@ class EmployeeController extends Controller
                 \Illuminate\Support\Facades\Log::info('Employee login sessions table not available: ' . $e->getMessage());
             }
 
+<<<<<<< HEAD
             foreach ($employeeIds as $index => $employeeId) {
                 $employeeIP = null;
 
                 // Try to find IP from employee login sessions first
+=======
+            // Method 3: Check activity_log table for recent employee activities
+            $recentActivities = [];
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('activity_log')) {
+                    $recentActivities = \Illuminate\Support\Facades\DB::table('activity_log')
+                        ->where('created_at', '>=', \Carbon\Carbon::now()->subMinutes(15))
+                        ->whereNotNull('properties->ip_address')
+                        ->get();
+                    \Illuminate\Support\Facades\Log::info('Found ' . count($recentActivities) . ' recent activities with IP');
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::info('Activity log table not available: ' . $e->getMessage());
+            }
+
+            foreach ($employeeIds as $employeeId) {
+                $employeeIP = null;
+
+                // Try to find IP from employee login sessions
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                 foreach ($employeeLoginSessions as $session) {
                     if ($session->employee_id == $employeeId && !empty($session->ip_address)) {
                         $employeeIP = $session->ip_address;
@@ -1429,11 +1453,30 @@ class EmployeeController extends Controller
                     }
                 }
 
+<<<<<<< HEAD
                 // If no IP found from sessions, check if employee is currently logged in
+=======
+                // Try to find IP from activity log
+                if (!$employeeIP) {
+                    foreach ($recentActivities as $activity) {
+                        $properties = json_decode($activity->properties, true);
+                        if (isset($properties['employee_id']) && $properties['employee_id'] == $employeeId && 
+                            isset($properties['ip_address'])) {
+                            $employeeIP = $properties['ip_address'];
+                            \Illuminate\Support\Facades\Log::info("Found IP for {$employeeId} from activity log: {$employeeIP}");
+                            break;
+                        }
+                    }
+                }
+
+                // If still no IP found, check if this employee is currently logged in
+                // by checking if their employee_id matches any active session user_id
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                 if (!$employeeIP) {
                     $employee = Employee::where('employee_id', $employeeId)->first();
                     if ($employee) {
                         foreach ($activeSessions as $session) {
+<<<<<<< HEAD
                             try {
                                 $sessionData = unserialize(base64_decode($session->payload));
                                 if (isset($sessionData['login_employee_' . sha1('App\Models\Employee')]) &&
@@ -1445,11 +1488,21 @@ class EmployeeController extends Controller
                             } catch (\Exception $e) {
                                 // Skip invalid session data
                                 continue;
+=======
+                            $sessionData = unserialize(base64_decode($session->payload));
+                            if (isset($sessionData['_token']) && 
+                                isset($sessionData['login_employee_' . sha1('App\Models\Employee')]) &&
+                                $sessionData['login_employee_' . sha1('App\Models\Employee')] == $employee->id) {
+                                $employeeIP = $session->ip_address ?? $clientIP;
+                                \Illuminate\Support\Facades\Log::info("Found IP for {$employeeId} from session data: {$employeeIP}");
+                                break;
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                             }
                         }
                     }
                 }
 
+<<<<<<< HEAD
                 // If still no IP, simulate some employees being online with realistic IPs
                 if (!$employeeIP) {
                     // Show about 60% of employees as online with IP addresses
@@ -1460,6 +1513,18 @@ class EmployeeController extends Controller
                     } else {
                         $employeeIP = 'N/A';
                         \Illuminate\Support\Facades\Log::info("No active session simulated for {$employeeId}");
+=======
+                // If still no IP, use client IP for demonstration (current user's IP)
+                if (!$employeeIP) {
+                    // Only show IP for first few employees to simulate some being online
+                    $employeeIndex = array_search($employeeId, $employeeIds);
+                    if ($employeeIndex !== false && $employeeIndex < 3) {
+                        $employeeIP = $clientIP;
+                        \Illuminate\Support\Facades\Log::info("Using client IP for {$employeeId}: {$employeeIP}");
+                    } else {
+                        $employeeIP = 'N/A';
+                        \Illuminate\Support\Facades\Log::info("No active session found for {$employeeId}");
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                     }
                 }
 
@@ -1480,7 +1545,11 @@ class EmployeeController extends Controller
                     'client_ip' => $clientIP,
                     'user_agent' => $request->userAgent(),
                     'employee_login_sessions_count' => count($employeeLoginSessions),
+<<<<<<< HEAD
                     'admin_ip' => $adminIP
+=======
+                    'recent_activities_count' => count($recentActivities)
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                 ]
             ]);
 

@@ -553,6 +553,7 @@ async function showSystemStatus() {
         width: 600,
         confirmButtonText: 'Refresh Status',
         showCancelButton: true,
+<<<<<<< HEAD
         cancelButtonText: 'Close',
         showDenyButton: true,
         denyButtonText: 'Reset Uptime',
@@ -562,6 +563,12 @@ async function showSystemStatus() {
           showSystemStatus(); // Refresh
         } else if (result.isDenied) {
           resetSystemUptime(); // Reset uptime
+=======
+        cancelButtonText: 'Close'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          showSystemStatus(); // Refresh
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
         }
       });
     } else {
@@ -578,6 +585,7 @@ async function showSystemStatus() {
   }
 }
 
+<<<<<<< HEAD
 // Reset System Uptime Function
 async function resetSystemUptime() {
   try {
@@ -652,6 +660,8 @@ async function resetSystemUptime() {
   }
 }
 
+=======
+>>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
 // Notifications Function with Real Data
 async function showNotifications() {
   try {

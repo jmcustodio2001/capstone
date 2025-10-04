@@ -86,7 +86,7 @@
       <span class="d-none d-md-inline">Jetlouge Travels</span>
       <span class="d-inline d-md-none">JT Admin</span>
     </a>
-    
+
     <!-- Enhanced Admin Tools Section -->
     <div class="d-flex align-items-center">
       <!-- System Status Indicator -->
@@ -111,7 +111,7 @@
 
       <!-- Admin Tools Dropdown -->
       <div class="dropdown me-2 d-none d-md-block">
-        <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" id="adminToolsDropdown" 
+        <button class="btn btn-outline-light btn-sm dropdown-toggle" type="button" id="adminToolsDropdown"
                 data-bs-toggle="dropdown" aria-expanded="false" title="Admin Tools">
           <i class="bi bi-tools"></i>
           <span class="d-none d-lg-inline ms-1">Tools</span>
@@ -128,10 +128,10 @@
 
       <!-- Admin Profile Dropdown -->
       <div class="dropdown me-2">
-        <button class="btn btn-outline-light btn-sm dropdown-toggle d-flex align-items-center" type="button" 
+        <button class="btn btn-outline-light btn-sm dropdown-toggle d-flex align-items-center" type="button"
                 id="adminProfileDropdown" data-bs-toggle="dropdown" aria-expanded="false">
           @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->profile_picture)
-            <img src="{{ asset('storage/profile_pictures/' . Auth::guard('admin')->user()->profile_picture) }}" 
+            <img src="{{ asset('storage/profile_pictures/' . Auth::guard('admin')->user()->profile_picture) }}"
                  alt="Admin Profile" class="rounded-circle me-2" width="24" height="24" style="object-fit: cover;">
           @else
             <i class="bi bi-person-circle me-1"></i>
@@ -167,7 +167,7 @@
           </li>
         </ul>
       </div>
-      
+
       <button class="sidebar-toggle mobile-toggle d-lg-none" id="menu-btn" title="Open Menu">
         <i class="bi bi-list fs-5"></i>
       </button>
@@ -179,17 +179,17 @@
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing sidebar toggle and dropdowns...');
-    
+
     // Initialize Bootstrap dropdowns with robust error handling
     try {
       let retryCount = 0;
       const maxRetries = 20; // 2 seconds max wait
-      
+
       const initializeDropdowns = () => {
         if (typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
           const dropdownElementList = document.querySelectorAll('.dropdown-toggle');
           let successCount = 0;
-          
+
           dropdownElementList.forEach(function (dropdownToggleEl) {
             try {
               // Check if already initialized
@@ -205,9 +205,9 @@
               console.warn('Failed to initialize dropdown:', dropdownToggleEl.id, e);
             }
           });
-          
+
           console.log(`Bootstrap dropdowns initialized: ${successCount}/${dropdownElementList.length}`);
-          
+
           // Add event listeners for debugging
           dropdownElementList.forEach(function(dropdown) {
             dropdown.addEventListener('show.bs.dropdown', function(e) {
@@ -220,7 +220,7 @@
               console.log('Dropdown hiding:', e.target.id);
             });
           });
-          
+
         } else if (retryCount < maxRetries) {
           retryCount++;
           console.warn(`Bootstrap not available, retrying (${retryCount}/${maxRetries})...`);
@@ -231,7 +231,7 @@
           enableManualDropdowns();
         }
       };
-      
+
       // Fallback manual dropdown functionality
       const enableManualDropdowns = () => {
         console.log('Enabling manual dropdown fallback');
@@ -239,7 +239,7 @@
           toggle.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            
+
             const dropdown = this.nextElementSibling;
             if (dropdown && dropdown.classList.contains('dropdown-menu')) {
               // Close all other dropdowns
@@ -248,14 +248,14 @@
                   menu.classList.remove('show');
                 }
               });
-              
+
               // Toggle current dropdown
               dropdown.classList.toggle('show');
               this.setAttribute('aria-expanded', dropdown.classList.contains('show'));
             }
           });
         });
-        
+
         // Close dropdowns when clicking outside
         document.addEventListener('click', function(e) {
           if (!e.target.closest('.dropdown')) {
@@ -268,14 +268,14 @@
           }
         });
       };
-      
+
       // Start initialization
       initializeDropdowns();
-      
+
     } catch (error) {
       console.error('Error initializing dropdowns:', error);
     }
-    
+
     const menuBtn = document.getElementById('menu-btn');
     const desktopToggle = document.getElementById('desktop-toggle');
     const sidebar = document.getElementById('sidebar');
@@ -315,9 +315,9 @@
         e.preventDefault();
         e.stopPropagation();
         console.log('Desktop toggle clicked');
-        
+
         const isCollapsed = sidebar.classList.contains('collapsed');
-        
+
         if (isCollapsed) {
           sidebar.classList.remove('collapsed');
           sidebar.style.transform = 'translateX(0)';
@@ -327,7 +327,7 @@
           sidebar.style.transform = 'translateX(-100%)';
           mainContent.classList.add('expanded');
         }
-        
+
         localStorage.setItem('sidebarCollapsed', !isCollapsed);
       });
     }
@@ -354,7 +354,7 @@ function testDropdown() {
   const toolsButton = document.getElementById('adminToolsDropdown');
   const profileMenu = document.getElementById('adminProfileMenu');
   const profileButton = document.getElementById('adminProfileDropdown');
-  
+
   console.log('=== DROPDOWN DIAGNOSTIC ===');
   console.log('Elements found:', {
     toolsMenu: !!toolsMenu,
@@ -362,22 +362,22 @@ function testDropdown() {
     profileMenu: !!profileMenu,
     profileButton: !!profileButton
   });
-  
+
   console.log('Bootstrap status:', {
     bootstrap: typeof bootstrap !== 'undefined',
     dropdownClass: typeof bootstrap !== 'undefined' ? !!bootstrap.Dropdown : false
   });
-  
+
   // Test Bootstrap dropdown instances
   if (typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
     const toolsDropdown = bootstrap.Dropdown.getInstance(toolsButton);
     const profileDropdown = bootstrap.Dropdown.getInstance(profileButton);
-    
+
     console.log('Bootstrap instances:', {
       toolsDropdown: !!toolsDropdown,
       profileDropdown: !!profileDropdown
     });
-    
+
     // Test toggle functionality
     if (toolsDropdown) {
       console.log('Testing Tools dropdown...');
@@ -386,7 +386,7 @@ function testDropdown() {
     } else {
       console.warn('Tools dropdown instance not found');
     }
-    
+
     if (profileDropdown) {
       console.log('Testing Profile dropdown...');
       setTimeout(() => {
@@ -399,7 +399,7 @@ function testDropdown() {
   } else {
     console.error('Bootstrap not available - dropdowns may not work properly');
   }
-  
+
   console.log('=== END DIAGNOSTIC ===');
 }
 
@@ -429,7 +429,7 @@ async function getFreshCSRFToken() {
         'X-Requested-With': 'XMLHttpRequest'
       }
     });
-    
+
     if (response.ok) {
       const data = await response.json();
       if (data.csrf_token) {
@@ -454,24 +454,24 @@ async function fetchWithCSRF(url, options = {}) {
     'X-Requested-With': 'XMLHttpRequest',
     'X-CSRF-TOKEN': await getFreshCSRFToken()
   };
-  
+
   // Merge with provided headers
   options.headers = { ...defaultHeaders, ...options.headers };
   options.credentials = options.credentials || 'same-origin';
-  
+
   try {
     let response = await fetch(url, options);
-    
+
     // If we get 419 (CSRF token mismatch), try once more with fresh token
     if (response.status === 419) {
       console.log('CSRF token mismatch, retrying with fresh token...');
-      
+
       // Get fresh token and retry
       const freshToken = await getFreshCSRFToken();
       options.headers['X-CSRF-TOKEN'] = freshToken;
-      
+
       response = await fetch(url, options);
-      
+
       // If still 419, show session expired message
       if (response.status === 419) {
         Swal.fire({
@@ -486,7 +486,7 @@ async function fetchWithCSRF(url, options = {}) {
         throw new Error('CSRF token expired - session invalid');
       }
     }
-    
+
     return response;
   } catch (error) {
     if (!error.message.includes('CSRF token expired')) {
@@ -512,7 +512,7 @@ async function showSystemStatus() {
     });
 
     const data = await response.json();
-    
+
     if (data.success) {
       // Debug information removed as requested
 
@@ -553,7 +553,6 @@ async function showSystemStatus() {
         width: 600,
         confirmButtonText: 'Refresh Status',
         showCancelButton: true,
-<<<<<<< HEAD
         cancelButtonText: 'Close',
         showDenyButton: true,
         denyButtonText: 'Reset Uptime',
@@ -563,12 +562,6 @@ async function showSystemStatus() {
           showSystemStatus(); // Refresh
         } else if (result.isDenied) {
           resetSystemUptime(); // Reset uptime
-=======
-        cancelButtonText: 'Close'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          showSystemStatus(); // Refresh
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
         }
       });
     } else {
@@ -585,7 +578,6 @@ async function showSystemStatus() {
   }
 }
 
-<<<<<<< HEAD
 // Reset System Uptime Function
 async function resetSystemUptime() {
   try {
@@ -627,7 +619,7 @@ async function resetSystemUptime() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         Swal.fire({
           title: 'Uptime Reset!',
@@ -659,9 +651,6 @@ async function resetSystemUptime() {
     });
   }
 }
-
-=======
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
 // Notifications Function with Real Data
 async function showNotifications() {
   try {
@@ -678,10 +667,10 @@ async function showNotifications() {
     });
 
     const data = await response.json();
-    
+
     if (data.success) {
       let notificationsHtml = '';
-      
+
       if (data.notifications && data.notifications.length > 0) {
         data.notifications.forEach(notification => {
           const iconClass = getNotificationIcon(notification.type);
@@ -758,7 +747,7 @@ async function markAllNotificationsRead() {
     });
 
     const data = await response.json();
-    
+
     if (data.success) {
       const notificationBadge = document.getElementById('notification-count');
       if (notificationBadge) {
@@ -810,7 +799,7 @@ async function addEmployeeQuick() {
     });
 
     const verifyData = await verifyResponse.json();
-    
+
     if (!verifyResponse.ok || !(verifyData.success || verifyData.valid)) {
       Swal.fire('Error', verifyData.message || 'Invalid admin password', 'error');
       return;
@@ -860,12 +849,12 @@ async function addEmployeeQuick() {
         const email = document.getElementById('emp-email').value;
         const department = document.getElementById('emp-dept').value;
         const position = document.getElementById('emp-position').value;
-        
+
         if (!empId || !name || !email || !department || !position) {
           Swal.showValidationMessage('Please fill all required fields');
           return false;
         }
-        
+
         return { empId, name, email, department, position };
       }
     });
@@ -896,7 +885,7 @@ async function addEmployeeQuick() {
       });
 
       const createData = await createResponse.json();
-      
+
       if (createData.success) {
         Swal.fire('Success!', 'Employee created successfully', 'success');
       } else {
@@ -956,7 +945,7 @@ async function systemBackup() {
     });
 
     const verifyData = await verifyResponse.json();
-    
+
     if (!verifyResponse.ok || !(verifyData.success || verifyData.valid)) {
       Swal.fire('Error', verifyData.message || 'Invalid admin password', 'error');
       return;
@@ -974,7 +963,7 @@ async function systemBackup() {
     });
 
     const backupData = await backupResponse.json();
-    
+
     if (backupData.success) {
       let timerInterval;
       Swal.fire({
@@ -1064,7 +1053,7 @@ async function clearCache() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         Swal.fire({
           title: 'Cache Cleared!',
@@ -1105,10 +1094,10 @@ async function showUserActivity() {
     });
 
     const data = await response.json();
-    
+
     if (data.success) {
       let activityHtml = '';
-      
+
       if (data.activities && data.activities.length > 0) {
         activityHtml = `
           <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
@@ -1123,7 +1112,7 @@ async function showUserActivity() {
               </thead>
               <tbody>
         `;
-        
+
         data.activities.forEach(activity => {
           const statusBadge = activity.user_type === 'admin' ? 'bg-danger' : 'bg-primary';
           activityHtml += `
@@ -1138,7 +1127,7 @@ async function showUserActivity() {
             </tr>
           `;
         });
-        
+
         activityHtml += `
               </tbody>
             </table>
@@ -1189,15 +1178,15 @@ async function showSystemLogs() {
     });
 
     const data = await response.json();
-    
+
     if (data.success) {
       let logsHtml = '';
-      
+
       if (data.logs && data.logs.length > 0) {
         logsHtml = `
           <div class="text-start" style="font-family: 'Courier New', monospace; font-size: 11px; max-height: 400px; overflow-y: auto; background: #1e1e1e; color: #fff; padding: 15px; border-radius: 5px;">
         `;
-        
+
         data.logs.forEach(log => {
           const levelColor = {
             'ERROR': '#ff6b6b',
@@ -1205,7 +1194,7 @@ async function showSystemLogs() {
             'INFO': '#4ecdc4',
             'DEBUG': '#95a5a6'
           };
-          
+
           logsHtml += `
             <div style="margin-bottom: 5px;">
               <span style="color: #888;">[${log.timestamp}]</span>
@@ -1214,7 +1203,7 @@ async function showSystemLogs() {
             </div>
           `;
         });
-        
+
         logsHtml += `</div>`;
       } else {
         logsHtml = `
@@ -1261,7 +1250,7 @@ async function showDatabaseStatus() {
     });
 
     const data = await response.json();
-    
+
     if (data.success) {
       Swal.fire({
         title: 'Database Status',
@@ -1404,12 +1393,12 @@ function confirmLogout() {
       const form = document.createElement('form');
       form.method = 'POST';
       form.action = '{{ route("admin.logout") }}';
-      
+
       const csrfToken = document.createElement('input');
       csrfToken.type = 'hidden';
       csrfToken.name = '_token';
       csrfToken.value = '{{ csrf_token() }}';
-      
+
       form.appendChild(csrfToken);
       document.body.appendChild(form);
       form.submit();
@@ -1454,7 +1443,7 @@ async function showSecuritySettings() {
     });
 
     const verifyData = await verifyResponse.json();
-    
+
     if (!verifyResponse.ok || !(verifyData.success || verifyData.valid)) {
       Swal.fire('Error', verifyData.message || 'Invalid admin password', 'error');
       return;
@@ -1633,7 +1622,7 @@ async function showSecuritySettings() {
         });
 
         const saveData = await saveResponse.json();
-        
+
         if (saveData.success) {
           Swal.fire({
             title: 'Settings Saved!',
@@ -1691,7 +1680,7 @@ async function updateNotificationCount() {
     });
 
     const data = await response.json();
-    
+
     if (data.success) {
       const badge = document.getElementById('notification-count');
       if (badge) {
@@ -1722,8 +1711,8 @@ const adminProfileData = {
 
 // Update profile functions to use real data
 function showAdminProfile() {
-  const profileImage = adminProfileData.profilePicture 
-    ? `<img src="{{ asset('storage/profile_pictures/') }}/${adminProfileData.profilePicture}" class="rounded-circle" width="80" height="80" style="object-fit: cover;">`
+  const profileImage = adminProfileData.profilePicture
+    ? `<img src="{{ asset('storage/profile_pictures') }}/${adminProfileData.profilePicture}" class="rounded-circle" width="80" height="80" style="object-fit: cover;">`
     : `<i class="bi bi-person-circle" style="font-size: 4rem;"></i>`;
 
   Swal.fire({
@@ -1779,22 +1768,22 @@ async function changePassword() {
       const currentPass = document.getElementById('current-pass').value;
       const newPass = document.getElementById('new-pass').value;
       const confirmPass = document.getElementById('confirm-pass').value;
-      
+
       if (!currentPass || !newPass || !confirmPass) {
         Swal.showValidationMessage('Please fill all fields');
         return false;
       }
-      
+
       if (newPass.length < 8) {
         Swal.showValidationMessage('New password must be at least 8 characters');
         return false;
       }
-      
+
       if (newPass !== confirmPass) {
         Swal.showValidationMessage('New passwords do not match');
         return false;
       }
-      
+
       return { currentPass, newPass };
     }
   });
@@ -1825,7 +1814,7 @@ async function changePassword() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         Swal.fire('Success!', 'Password changed successfully', 'success');
       } else {

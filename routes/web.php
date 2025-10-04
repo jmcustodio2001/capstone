@@ -167,7 +167,6 @@ Route::get('/admin/database-status', [AdminController::class, 'getDatabaseStatus
 Route::post('/admin/maintenance-mode/enable', [AdminController::class, 'enableMaintenanceMode'])->name('admin.maintenance_mode.enable')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/change-password', [AdminController::class, 'changePassword'])->name('admin.change_password')->middleware(['auth:admin', 'admin.auth']);
 Route::get('/admin/refresh-csrf', [AdminController::class, 'refreshCSRF'])->name('admin.refresh_csrf')->middleware(['auth:admin', 'admin.auth']);
-<<<<<<< HEAD
 Route::post('/admin/reset-uptime', [AdminController::class, 'resetSystemUptime'])->name('admin.reset_uptime')->middleware(['auth:admin', 'admin.auth']);
 
 // Test route to manually reset uptime (remove in production)
@@ -179,7 +178,7 @@ Route::get('/admin/test-reset-uptime', function() {
         }
         file_put_contents($appStartFile, time());
         session(['admin_session_start' => now()]);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Uptime reset manually',
@@ -194,8 +193,6 @@ Route::get('/admin/test-reset-uptime', function() {
         ]);
     }
 })->middleware(['auth:admin', 'admin.auth']);
-=======
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
 
 // Cleanup phantom training records
 Route::post('/admin/cleanup-phantom-records', [App\Http\Controllers\EmployeeTrainingDashboardController::class, 'cleanupPhantomRecords'])->name('admin.cleanup_phantom_records')->middleware('auth:admin');
@@ -212,7 +209,7 @@ Route::group(['prefix' => 'employee', 'as' => 'employee.'], function () {
     Route::post('/verify-otp', [EmployeeController::class, 'verifyOTP'])->name('verify_otp');
     Route::post('/resend-otp', [EmployeeController::class, 'resendOTP'])->name('resend_otp');
     Route::post('/logout', [EmployeeController::class, 'logout'])->name('logout');
-    
+
     // Forgot Password Routes
     Route::get('/forgot-password', [EmployeeController::class, 'showForgotPasswordForm'])->name('forgot_password');
     Route::post('/forgot-password/send-code', [EmployeeController::class, 'sendForgotPasswordCode'])->name('forgot_password.send_code');
@@ -450,7 +447,6 @@ Route::get('/admin/destination-knowledge-training/fix-missing-columns', [App\Htt
 Route::get('/admin/destination-knowledge-training', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'index'])->name('admin.destination-knowledge-training.index')->middleware('auth:admin');
 Route::post('/admin/destination-knowledge-training', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'store'])->name('admin.destination-knowledge-training.store')->middleware('auth:admin');
 Route::put('/admin/destination-knowledge-training/{id}', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'update'])->name('admin.destination-knowledge-training.update')->middleware('auth:admin');
-<<<<<<< HEAD
 Route::delete('/admin/destination-knowledge-training/{id}', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'destroy'])->name('admin.destination-knowledge-training.destroy')->middleware('auth:admin');
 
 // Employee CSRF token endpoint
@@ -624,193 +620,6 @@ Route::get('/test-gmail-auth', function() {
     }
 });
 
-=======
-
-// Add missing routes to fix RouteNotFoundException
-Route::post('/admin/destination-knowledge-training/assign-to-upcoming', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'assignToUpcomingTraining'])->name('admin.destination-knowledge-training.assign-to-upcoming')->middleware('auth:admin');
-Route::get('/admin/destination-knowledge-training/export-excel', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'exportExcel'])->name('admin.destination-knowledge-training.export-excel')->middleware('auth:admin');
-Route::get('/admin/destination-knowledge-training/export-pdf', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'exportPdf'])->name('admin.destination-knowledge-training.export-pdf')->middleware('auth:admin');
-
-// Employee CSRF token endpoint
-Route::get('/employee/csrf-token', function() {
-    return response()->json(['token' => csrf_token(), 'csrf_token' => csrf_token()]);
-});
-
-// Test OTP email sending with detailed debugging
-Route::get('/test-otp-email', function() {
-    try {
-        // Find first employee for testing
-        $employee = \App\Models\Employee::first();
-
-        if (!$employee) {
-            return response()->json(['error' => 'No employee found for testing']);
-        }
-
-        // Show current email configuration
-        $emailConfig = [
-            'MAIL_MAILER' => env('MAIL_MAILER'),
-            'MAIL_HOST' => env('MAIL_HOST'),
-            'MAIL_PORT' => env('MAIL_PORT'),
-            'MAIL_USERNAME' => env('MAIL_USERNAME'),
-            'MAIL_PASSWORD_LENGTH' => strlen(env('MAIL_PASSWORD')),
-            'MAIL_ENCRYPTION' => env('MAIL_ENCRYPTION'),
-            'MAIL_FROM_ADDRESS' => env('MAIL_FROM_ADDRESS'),
-            'MAIL_FROM_NAME' => env('MAIL_FROM_NAME')
-        ];
-
-        $otpService = new \App\Services\OTPService();
-        $result = $otpService->sendOTP($employee);
-
-        return response()->json([
-            'employee_email' => $employee->email,
-            'email_config' => $emailConfig,
-            'result' => $result,
-            'timestamp' => now()->toDateTimeString()
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString(),
-            'email_config' => [
-                'MAIL_MAILER' => env('MAIL_MAILER'),
-                'MAIL_HOST' => env('MAIL_HOST'),
-                'MAIL_PORT' => env('MAIL_PORT'),
-                'MAIL_USERNAME' => env('MAIL_USERNAME'),
-                'MAIL_PASSWORD_LENGTH' => strlen(env('MAIL_PASSWORD')),
-                'MAIL_ENCRYPTION' => env('MAIL_ENCRYPTION'),
-                'MAIL_FROM_ADDRESS' => env('MAIL_FROM_ADDRESS'),
-                'MAIL_FROM_NAME' => env('MAIL_FROM_NAME')
-            ]
-        ]);
-    }
-});
-
-// Simple Gmail SMTP connection test
-Route::get('/test-gmail-connection', function() {
-    try {
-        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-
-        // Server settings
-        $mail->isSMTP();
-        $mail->Host = env('MAIL_HOST');
-        $mail->SMTPAuth = true;
-        $mail->Username = env('MAIL_USERNAME');
-        $mail->Password = env('MAIL_PASSWORD');
-        $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
-        $mail->Port = env('MAIL_PORT');
-
-        // SSL options
-        $mail->SMTPOptions = array(
-            'ssl' => array(
-                'verify_peer' => false,
-                'verify_peer_name' => false,
-                'allow_self_signed' => true
-            )
-        );
-
-        // Test connection
-        $mail->smtpConnect();
-        $mail->smtpClose();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Gmail SMTP connection successful!',
-            'config' => [
-                'host' => env('MAIL_HOST'),
-                'port' => env('MAIL_PORT'),
-                'username' => env('MAIL_USERNAME'),
-                'encryption' => 'ssl'
-            ]
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'error' => $e->getMessage(),
-            'config' => [
-                'host' => env('MAIL_HOST'),
-                'port' => env('MAIL_PORT'),
-                'username' => env('MAIL_USERNAME'),
-                'password_length' => strlen(env('MAIL_PASSWORD')),
-                'encryption' => env('MAIL_ENCRYPTION')
-            ]
-        ]);
-    }
-});
-
-// Quick Gmail App Password Test
-Route::get('/test-gmail-auth', function() {
-    try {
-        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-
-        // Server settings for port 587 with TLS
-        $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
-        $mail->SMTPAuth = true;
-        $mail->Username = env('MAIL_USERNAME');
-        $mail->Password = env('MAIL_PASSWORD');
-        $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = 587;
-
-        // Enable debug output
-        $mail->SMTPDebug = 2;
-        $mail->Debugoutput = 'html';
-
-        // Test authentication only
-        $result = $mail->smtpConnect();
-
-        if ($result) {
-            $mail->smtpClose();
-            return response()->json([
-                'success' => true,
-                'message' => 'Gmail authentication successful!',
-                'config' => [
-                    'username' => env('MAIL_USERNAME'),
-                    'host' => 'smtp.gmail.com',
-                    'port' => 587,
-                    'encryption' => 'tls'
-                ]
-            ]);
-        } else {
-            return response()->json([
-                'success' => false,
-                'message' => 'Gmail authentication failed',
-                'config' => [
-                    'username' => env('MAIL_USERNAME'),
-                    'password_length' => strlen(env('MAIL_PASSWORD')),
-                    'host' => 'smtp.gmail.com',
-                    'port' => 587
-                ]
-            ]);
-        }
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'error' => $e->getMessage(),
-            'line' => $e->getLine(),
-            'file' => basename($e->getFile()),
-            'config' => [
-                'username' => env('MAIL_USERNAME'),
-                'password_length' => strlen(env('MAIL_PASSWORD')),
-                'host' => 'smtp.gmail.com',
-                'port' => 587,
-                'encryption' => 'tls'
-            ]
-        ]);
-    }
-});
-
-Route::post('/admin/destination-knowledge-training/sync-competency-profiles', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'syncAllWithCompetencyProfiles'])->name('admin.destination-knowledge-training.sync-competency-profiles')->middleware('auth:admin');
-
-Route::post('/admin/destination-knowledge-training/store-possible', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'storePossibleDestination'])->name('admin.destination-knowledge-training.store-possible')->middleware('auth:admin');
-Route::delete('/admin/destination-knowledge-training/{id}', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'destroy'])->name('admin.destination-knowledge-training.destroy')->middleware('auth:admin');
-Route::delete('/admin/destination-knowledge-training/destroy-possible/{id}', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'destroyPossible'])->name('admin.destination-knowledge-training.destroy-possible')->middleware('auth:admin');
-Route::post('/admin/destination-knowledge-training/{id}/request-activation', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'requestActivation'])->name('admin.destination-knowledge-training.request-activation')->middleware('auth:admin');
-Route::post('/admin/destination-knowledge-training/consolidate', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'consolidateDestinationTraining'])->name('admin.destination-knowledge-training.consolidate')->middleware('auth:admin');
-Route::get('/admin/destination-knowledge-training/fix-missing-columns', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'fixMissingColumns'])->name('admin.destination-knowledge-training.fix-missing-columns')->middleware('auth:admin');
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
 
 // Course Management approval routes
 Route::post('/admin/course-management/{courseId}/approve', [App\Http\Controllers\CourseManagementController::class, 'approveCourseRequest'])->name('admin.course-management.approve')->middleware('auth:admin');
@@ -889,16 +698,12 @@ Route::get('/api/employees/debug-session-data', [EmployeeController::class, 'deb
 Route::get('/admin/debug-online-status', [EmployeeController::class, 'debugOnlineStatus'])->name('admin.debug_online_status')->middleware('auth:admin');
 
 // Employee IP address tracking API routes
-<<<<<<< HEAD
 Route::post('/api/employees/check-ip-addresses', [EmployeeController::class, 'checkIPAddresses'])->name('api.employees.check_ip_addresses')->middleware('auth:admin');
 
 // Test route for IP address API (remove this after testing)
 Route::get('/admin/test-ip-api', function() {
     return view('test-ip-api');
 })->name('admin.test_ip_api')->middleware('auth:admin');
-=======
-Route::post('/api/employees/check-ip-addresses', [EmployeeController::class, 'checkIPAddresses'])->name('api.employees.check_ip_addresses');
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
 Route::get('/admin/training-feedback', [App\Http\Controllers\AdminTrainingFeedbackController::class, 'index'])->name('admin.training_feedback.index')->middleware('auth:admin');
 Route::get('/admin/training-feedback/{id}', [App\Http\Controllers\AdminTrainingFeedbackController::class, 'show'])->name('admin.training_feedback.show')->middleware('auth:admin');
 Route::post('/admin/training-feedback/{id}/review', [App\Http\Controllers\AdminTrainingFeedbackController::class, 'markAsReviewed'])->name('admin.training_feedback.review')->middleware('auth:admin');
@@ -1004,7 +809,7 @@ Route::get('/admin/create-payslips-table', function() {
     try {
         // Execute the payslips table creation script
         $output = shell_exec('cd ' . base_path() . ' && php create_payslips_table_fix.php 2>&1');
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Payslips table created successfully',
@@ -1346,13 +1151,13 @@ Route::get('/debug/customer-service-training/{employeeId}', function($employeeId
     $dashboardRecords = \App\Models\EmployeeTrainingDashboard::with(['employee', 'course'])
         ->where('employee_id', $employeeId)
         ->get();
-    
+
     // Get exam attempts for this employee
     $examAttempts = \App\Models\ExamAttempt::where('employee_id', $employeeId)->get();
-    
+
     // Get courses that might match Communication Skills
     $courses = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Communication%')->get();
-    
+
     return response()->json([
         'employee_id' => $employeeId,
         'dashboard_records' => $dashboardRecords,

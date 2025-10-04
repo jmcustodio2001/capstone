@@ -11,7 +11,6 @@ return new class extends Migration
      */
     public function up(): void
     {
-<<<<<<< HEAD
         if (Schema::hasTable('destination_knowledge_trainings')) {
             Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
                 if (!Schema::hasColumn('destination_knowledge_trainings', 'admin_approved_for_upcoming')) {
@@ -19,13 +18,6 @@ return new class extends Migration
                 }
             });
         }
-=======
-        Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
-            if (!Schema::hasColumn('destination_knowledge_trainings', 'admin_approved_for_upcoming')) {
-                $table->boolean('admin_approved_for_upcoming')->default(false)->after('is_active');
-            }
-        });
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
     }
 
     /**
@@ -33,7 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-<<<<<<< HEAD
         if (Schema::hasTable('destination_knowledge_trainings')) {
             Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
                 if (Schema::hasColumn('destination_knowledge_trainings', 'admin_approved_for_upcoming')) {
@@ -41,12 +32,5 @@ return new class extends Migration
                 }
             });
         }
-=======
-        Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
-            if (Schema::hasColumn('destination_knowledge_trainings', 'admin_approved_for_upcoming')) {
-                $table->dropColumn('admin_approved_for_upcoming');
-            }
-        });
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
     }
 };

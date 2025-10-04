@@ -10,7 +10,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
-  
+
   <!-- Employee Card Styles -->
   <style>
     .employee-card {
@@ -22,22 +22,22 @@
       flex-direction: column;
       border: 1px solid rgba(0,0,0,0.125);
     }
-    
+
     .employee-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
     }
-    
+
     .employee-card:hover .position-absolute.bg-primary {
       opacity: 1 !important;
     }
-    
+
     .employee-card .card-header {
       position: relative;
       overflow: hidden;
       flex-shrink: 0;
     }
-    
+
     .employee-card .card-header::before {
       content: '';
       position: absolute;
@@ -48,110 +48,110 @@
       background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
       transition: left 0.5s;
     }
-    
+
     .employee-card:hover .card-header::before {
       left: 100%;
     }
-    
+
     .employee-card .card-body {
       flex-grow: 1;
       background: rgba(255,255,255,0.95) !important;
       display: flex;
       flex-direction: column;
     }
-    
+
     .employee-card .card-footer {
       flex-shrink: 0;
       background-color: rgba(248,249,250,0.95) !important;
       border-top: 1px solid #dee2e6;
     }
-    
+
     .employee-card .badge {
       transition: all 0.2s ease;
     }
-    
+
     .employee-card:hover .badge {
       transform: scale(1.05);
     }
-    
+
     .employee-card .btn {
       transition: all 0.2s ease;
     }
-    
+
     .employee-card .btn:hover {
       transform: translateY(-1px);
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
-    
+
     /* Softer hover colors for buttons */
     .employee-card .btn-outline-info:hover {
       background-color: rgba(13, 202, 240, 0.1) !important;
       border-color: #0dcaf0 !important;
       color: #0dcaf0 !important;
     }
-    
+
     .employee-card .btn-outline-primary:hover {
       background-color: rgba(13, 110, 253, 0.1) !important;
       border-color: #0d6efd !important;
       color: #0d6efd !important;
     }
-    
+
     .employee-card .btn-outline-danger:hover {
       background-color: rgba(220, 53, 69, 0.1) !important;
       border-color: #dc3545 !important;
       color: #dc3545 !important;
     }
-    
+
     @media (max-width: 768px) {
       .employee-card-wrapper {
         margin-bottom: 1rem;
       }
-      
+
       .employee-card .card-header {
         min-height: 70px;
         padding: 1rem;
       }
-      
+
       .employee-card .card-header img {
         width: 50px;
         height: 50px;
       }
-      
+
       .employee-card .card-body {
         padding: 1rem;
       }
     }
-    
+
     .ip-address.bg-success {
       background-color: #28a745 !important;
     }
-    
+
     .ip-address.bg-secondary {
       background-color: #6c757d !important;
     }
-    
+
     .ip-address.bg-warning {
       background-color: #ffc107 !important;
       color: #212529 !important;
     }
-    
+
     .ip-address.bg-danger {
       background-color: #dc3545 !important;
     }
-    
+
     /* Ensure proper text visibility */
     .employee-card .text-primary {
       color: #0d6efd !important;
     }
-    
+
     .employee-card .text-success {
       color: #198754 !important;
     }
-    
+
     .employee-card .text-warning {
       color: #ffc107 !important;
     }
-    
+
     .employee-card .text-muted {
       color: #6c757d !important;
     }
@@ -227,30 +227,30 @@
           @forelse($employees as $index => $employee)
             <div class="col-xl-4 col-lg-6 col-md-6 col-sm-12 employee-card-wrapper">
               <div class="card employee-card h-100 shadow-sm border-0 position-relative">
-                
+
                 <!-- Dynamic Header with Gradient -->
-                <div class="card-header border-0 text-white position-relative" 
-                     style="background: linear-gradient(135deg, 
-                       {{ ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'][($index % 8)] }} 0%, 
-                       {{ ['#FF8E8E', '#6EDDD6', '#67C3D1', '#A8D8C4', '#FFE4B5', '#E6B3E6', '#AAE0D0', '#F9E79F'][($index % 8)] }} 100%); 
+                <div class="card-header border-0 text-white position-relative"
+                     style="background: linear-gradient(135deg,
+                       {{ ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'][($index % 8)] }} 0%,
+                       {{ ['#FF8E8E', '#6EDDD6', '#67C3D1', '#A8D8C4', '#FFE4B5', '#E6B3E6', '#AAE0D0', '#F9E79F'][($index % 8)] }} 100%);
                        border-radius: 12px 12px 0 0; min-height: 80px; display: flex; align-items: center; padding: 1rem;">
-                  
+
                   <!-- Employee Profile Section -->
                   <div class="d-flex align-items-center w-100">
                     <div class="position-relative me-3">
                       <img src="{{ $employee->profile_picture ? asset('storage/' . $employee->profile_picture) : 'https://ui-avatars.com/api/?name=' . urlencode($employee->first_name . ' ' . $employee->last_name) . '&background=ffffff&color=333333&size=64' }}"
-                           class="rounded-circle border-3 border-white shadow-sm" 
+                           class="rounded-circle border-3 border-white shadow-sm"
                            width="64" height="64" alt="Profile"
                            style="object-fit: cover;">
-                      
+
                       <!-- Online Status Indicator -->
-                      <span class="position-absolute bottom-0 end-0 badge rounded-pill ip-address" 
+                      <span class="position-absolute bottom-0 end-0 badge rounded-pill ip-address"
                             data-employee-id="{{ $employee->employee_id }}"
                             style="font-size: 0.7em; padding: 2px 6px;">
                         <i class="bi bi-globe me-1"></i><span class="ip-text">Checking...</span>
                       </span>
                     </div>
-                    
+
                     <div class="flex-grow-1">
                       <h5 class="card-title mb-1 fw-bold text-white employee-name">
                         {{ $employee->first_name }} {{ $employee->last_name }}
@@ -259,7 +259,7 @@
                         <i class="bi bi-person-badge me-1"></i>ID: {{ $employee->employee_id }}
                       </p>
                     </div>
-                    
+
                     <!-- Status Badge -->
                     <div class="text-end">
                       @if($employee->status == 'Active')
@@ -362,7 +362,7 @@
                 </div>
 
                 <!-- Hover Effect Overlay -->
-                <div class="position-absolute top-0 start-0 w-100 h-100 bg-success bg-opacity-3 opacity-0 transition-opacity" 
+                <div class="position-absolute top-0 start-0 w-100 h-100 bg-success bg-opacity-3 opacity-0 transition-opacity"
                      style="border-radius: 12px; pointer-events: none; transition: opacity 0.3s ease;"></div>
               </div>
             </div>
@@ -460,39 +460,48 @@
             }
           });
 
-          try {
-            // Verify password with backend
-            const response = await fetch('/admin/verify-password', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-              },
-              body: JSON.stringify({ password: password })
-            });
+            try {
+              // Verify password with backend
+              const response = await fetch('/admin/verify-password', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ password: password })
+              });
 
-            const result = await response.json();
+              // Try to parse JSON safely
+              let result = null;
+              try {
+                result = await response.json();
+              } catch (parseErr) {
+                // Non-JSON response
+                throw new Error('Invalid server response during password verification');
+              }
 
-            if (result.success) {
-              // Password verified, show add employee form
-              showAddEmployeeForm(password);
-            } else {
+              if (response.ok && result && result.success) {
+                // Password verified, show add employee form
+                showAddEmployeeForm(password);
+              } else {
+                Swal.fire({
+                  title: '❌ Invalid Password',
+                  text: (result && result.message) ? result.message : 'The password you entered is incorrect. Please try again.',
+                  icon: 'error',
+                  confirmButtonColor: '#dc3545'
+                });
+              }
+            } catch (error) {
+              console.error('Password verification error:', error);
               Swal.fire({
-                title: '❌ Invalid Password',
-                text: 'The password you entered is incorrect. Please try again.',
+                title: '⚠️ Verification Error',
+                text: error.message || 'An error occurred while verifying your password. Please try again.',
                 icon: 'error',
                 confirmButtonColor: '#dc3545'
               });
             }
-          } catch (error) {
-            console.error('Password verification error:', error);
-            Swal.fire({
-              title: '⚠️ Verification Error',
-              text: 'An error occurred while verifying your password. Please try again.',
-              icon: 'error',
-              confirmButtonColor: '#dc3545'
-            });
-          }
         }
       });
     }
@@ -509,9 +518,9 @@
         const position = card.querySelector('.badge.bg-info').textContent.toLowerCase();
         const department = card.querySelector('.badge.bg-success').textContent.toLowerCase();
 
-        if (name.includes(searchTerm) || 
-            email.includes(searchTerm) || 
-            position.includes(searchTerm) || 
+        if (name.includes(searchTerm) ||
+            email.includes(searchTerm) ||
+            position.includes(searchTerm) ||
             department.includes(searchTerm)) {
           wrapper.style.display = '';
         } else {
@@ -713,39 +722,46 @@
             }
           });
 
-          try {
-            // Verify password with backend
-            const response = await fetch('/admin/verify-password', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-              },
-              body: JSON.stringify({ password: password })
-            });
+            try {
+              // Verify password with backend
+              const response = await fetch('/admin/verify-password', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ password: password })
+              });
 
-            const result = await response.json();
+              let result = null;
+              try {
+                result = await response.json();
+              } catch (parseErr) {
+                throw new Error('Invalid server response during password verification');
+              }
 
-            if (result.success) {
-              // Password verified, show edit employee form
-              showEditEmployeeForm(id, firstName, lastName, email, phone, position, department, address, status, password);
-            } else {
+              if (response.ok && result && result.success) {
+                // Password verified, show edit employee form
+                showEditEmployeeForm(id, firstName, lastName, email, phone, position, department, address, status, password);
+              } else {
+                Swal.fire({
+                  title: '❌ Invalid Password',
+                  text: (result && result.message) ? result.message : 'The password you entered is incorrect. Please try again.',
+                  icon: 'error',
+                  confirmButtonColor: '#dc3545'
+                });
+              }
+            } catch (error) {
+              console.error('Password verification error:', error);
               Swal.fire({
-                title: '❌ Invalid Password',
-                text: 'The password you entered is incorrect. Please try again.',
+                title: '⚠️ Verification Error',
+                text: error.message || 'An error occurred while verifying your password. Please try again.',
                 icon: 'error',
                 confirmButtonColor: '#dc3545'
               });
             }
-          } catch (error) {
-            console.error('Password verification error:', error);
-            Swal.fire({
-              title: '⚠️ Verification Error',
-              text: 'An error occurred while verifying your password. Please try again.',
-              icon: 'error',
-              confirmButtonColor: '#dc3545'
-            });
-          }
         }
       });
     }
@@ -799,87 +815,107 @@
             }
           });
 
-          try {
-            // Verify password with backend
-            const response = await fetch('/admin/verify-password', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-              },
-              body: JSON.stringify({ password: password })
-            });
+            try {
+              // Verify password with backend
+              const response = await fetch('/admin/verify-password', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json',
+                  'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ password: password })
+              });
 
-            const result = await response.json();
+              let result = null;
+              try {
+                result = await response.json();
+              } catch (parseErr) {
+                throw new Error('Invalid server response during password verification');
+              }
 
-            if (result.success) {
-              // Password verified, proceed with deletion
-              await submitDeleteEmployee(employeeId, employeeName, password);
-            } else {
+              if (response.ok && result && result.success) {
+                // Password verified, proceed with deletion
+                await submitDeleteEmployee(employeeId, employeeName, password);
+              } else {
+                Swal.fire({
+                  title: '❌ Invalid Password',
+                  text: (result && result.message) ? result.message : 'The password you entered is incorrect. Please try again.',
+                  icon: 'error',
+                  confirmButtonColor: '#dc3545'
+                });
+              }
+            } catch (error) {
+              console.error('Password verification error:', error);
               Swal.fire({
-                title: '❌ Invalid Password',
-                text: 'The password you entered is incorrect. Please try again.',
+                title: '⚠️ Verification Error',
+                text: error.message || 'An error occurred while verifying your password. Please try again.',
                 icon: 'error',
                 confirmButtonColor: '#dc3545'
               });
             }
-          } catch (error) {
-            console.error('Password verification error:', error);
-            Swal.fire({
-              title: '⚠️ Verification Error',
-              text: 'An error occurred while verifying your password. Please try again.',
-              icon: 'error',
-              confirmButtonColor: '#dc3545'
-            });
-          }
         }
       });
     }
 
-    // Password strength checker
-    document.getElementById('password').addEventListener('input', function() {
-      const password = this.value;
+    // Password strength checker (guarded: attach only if element exists)
+    (function() {
+      const pwd = document.getElementById('password');
+      if (!pwd) return; // no global password input on this page
 
-      // Check length requirement
-      const lengthCheck = document.getElementById('length-check');
-      if (password.length >= 12) {
-        lengthCheck.className = 'text-success';
-        lengthCheck.innerHTML = '✓ 12+ characters';
-      } else {
-        lengthCheck.className = 'text-danger';
-        lengthCheck.innerHTML = '✗ 12+ characters';
-      }
+      pwd.addEventListener('input', function() {
+        const password = this.value;
 
-      // Check uppercase requirement
-      const upperCheck = document.getElementById('upper-check');
-      if (/[A-Z]/.test(password)) {
-        upperCheck.className = 'text-success';
-        upperCheck.innerHTML = '✓ Uppercase';
-      } else {
-        upperCheck.className = 'text-danger';
-        upperCheck.innerHTML = '✗ Uppercase';
-      }
+        // Check length requirement
+        const lengthCheck = document.getElementById('length-check');
+        if (lengthCheck) {
+          if (password.length >= 12) {
+            lengthCheck.className = 'text-success';
+            lengthCheck.innerHTML = '✓ 12+ characters';
+          } else {
+            lengthCheck.className = 'text-danger';
+            lengthCheck.innerHTML = '✗ 12+ characters';
+          }
+        }
 
-      // Check number requirement
-      const numberCheck = document.getElementById('number-check');
-      if (/\d/.test(password)) {
-        numberCheck.className = 'text-success';
-        numberCheck.innerHTML = '✓ Number';
-      } else {
-        numberCheck.className = 'text-danger';
-        numberCheck.innerHTML = '✗ Number';
-      }
+        // Check uppercase requirement
+        const upperCheck = document.getElementById('upper-check');
+        if (upperCheck) {
+          if (/[A-Z]/.test(password)) {
+            upperCheck.className = 'text-success';
+            upperCheck.innerHTML = '✓ Uppercase';
+          } else {
+            upperCheck.className = 'text-danger';
+            upperCheck.innerHTML = '✗ Uppercase';
+          }
+        }
 
-      // Check symbol requirement
-      const symbolCheck = document.getElementById('symbol-check');
-      if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-        symbolCheck.className = 'text-success';
-        symbolCheck.innerHTML = '✓ Symbol';
-      } else {
-        symbolCheck.className = 'text-danger';
-        symbolCheck.innerHTML = '✗ Symbol';
-      }
-    });
+        // Check number requirement
+        const numberCheck = document.getElementById('number-check');
+        if (numberCheck) {
+          if (/\d/.test(password)) {
+            numberCheck.className = 'text-success';
+            numberCheck.innerHTML = '✓ Number';
+          } else {
+            numberCheck.className = 'text-danger';
+            numberCheck.innerHTML = '✗ Number';
+          }
+        }
+
+        // Check symbol requirement
+        const symbolCheck = document.getElementById('symbol-check');
+        if (symbolCheck) {
+          if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/\?]/.test(password)) {
+            symbolCheck.className = 'text-success';
+            symbolCheck.innerHTML = '✓ Symbol';
+          } else {
+            symbolCheck.className = 'text-danger';
+            symbolCheck.innerHTML = '✗ Symbol';
+          }
+        }
+      });
+    })();
 
     // Show Add Employee Form after password verification
     function showAddEmployeeForm(adminPassword) {
@@ -1081,8 +1117,44 @@
 
         const response = await fetch('{{ route('employees.store') }}', {
           method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json'
+          },
           body: formData
         });
+
+        // If server returns validation errors as JSON (422), parse and show them
+        if (response.status === 422) {
+          let payload = null;
+          try {
+            payload = await response.json();
+          } catch (parseErr) {
+            throw new Error('Validation failed, and server response could not be parsed.');
+          }
+
+          const errors = payload && payload.errors ? payload.errors : null;
+          if (errors) {
+            // Build a readable message
+            let messages = [];
+            Object.keys(errors).forEach(field => {
+              const fieldErrors = errors[field];
+              if (Array.isArray(fieldErrors)) {
+                fieldErrors.forEach(msg => messages.push(msg));
+              } else if (typeof fieldErrors === 'string') {
+                messages.push(fieldErrors);
+              }
+            });
+
+            Swal.fire({
+              title: '❌ Validation Error',
+              html: `<div class="text-start">${messages.map(m => `<div>• ${m}</div>`).join('')}</div>`,
+              icon: 'error',
+              confirmButtonColor: '#dc3545'
+            });
+            return;
+          }
+        }
 
         if (response.ok) {
           Swal.fire({
@@ -1235,8 +1307,42 @@
 
         const response = await fetch(`/employees/${employeeId}`, {
           method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json'
+          },
           body: formData
         });
+
+        if (response.status === 422) {
+          let payload = null;
+          try {
+            payload = await response.json();
+          } catch (parseErr) {
+            throw new Error('Validation failed, and server response could not be parsed.');
+          }
+
+          const errors = payload && payload.errors ? payload.errors : null;
+          if (errors) {
+            let messages = [];
+            Object.keys(errors).forEach(field => {
+              const fieldErrors = errors[field];
+              if (Array.isArray(fieldErrors)) {
+                fieldErrors.forEach(msg => messages.push(msg));
+              } else if (typeof fieldErrors === 'string') {
+                messages.push(fieldErrors);
+              }
+            });
+
+            Swal.fire({
+              title: '❌ Validation Error',
+              html: `<div class="text-start">${messages.map(m => `<div>• ${m}</div>`).join('')}</div>`,
+              icon: 'error',
+              confirmButtonColor: '#dc3545'
+            });
+            return;
+          }
+        }
 
         if (response.ok) {
           Swal.fire({
@@ -1286,8 +1392,42 @@
 
         const response = await fetch(`/employees/${employeeId}`, {
           method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json'
+          },
           body: formData
         });
+
+        if (response.status === 422) {
+          let payload = null;
+          try {
+            payload = await response.json();
+          } catch (parseErr) {
+            throw new Error('Validation failed, and server response could not be parsed.');
+          }
+
+          const errors = payload && payload.errors ? payload.errors : null;
+          if (errors) {
+            let messages = [];
+            Object.keys(errors).forEach(field => {
+              const fieldErrors = errors[field];
+              if (Array.isArray(fieldErrors)) {
+                fieldErrors.forEach(msg => messages.push(msg));
+              } else if (typeof fieldErrors === 'string') {
+                messages.push(fieldErrors);
+              }
+            });
+
+            Swal.fire({
+              title: '❌ Validation Error',
+              html: `<div class="text-start">${messages.map(m => `<div>• ${m}</div>`).join('')}</div>`,
+              icon: 'error',
+              confirmButtonColor: '#dc3545'
+            });
+            return;
+          }
+        }
 
         if (response.ok) {
           Swal.fire({
@@ -1352,7 +1492,7 @@
 
       try {
         console.log('Checking IP addresses for employees:', employeeIds);
-        
+
         // Get real client IP address first
         let clientIP = 'Unknown';
         try {
@@ -1374,7 +1514,7 @@
             console.log('All IP services failed, using localhost detection');
           }
         }
-        
+
         // Call API to check IP addresses for all employees
         const response = await fetch('/api/employees/check-ip-addresses', {
           method: 'POST',
@@ -1382,7 +1522,7 @@
             'Content-Type': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
           },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             employee_ids: employeeIds,
             client_ip: clientIP,
             user_agent: navigator.userAgent,
@@ -1394,63 +1534,7 @@
           const errorText = await response.text();
           console.error('API Error Response:', response.status, errorText);
           console.error('Full response:', response);
-          
-<<<<<<< HEAD
-          // Check if it's an authentication error
-          if (response.status === 401 || response.status === 403) {
-            console.log('Authentication error - admin not logged in');
-            // Set all to N/A for auth errors
-            ipElements.forEach(element => {
-              element.className = 'badge bg-secondary ip-address';
-              const ipText = element.querySelector('.ip-text');
-              if (ipText) {
-                ipText.textContent = 'N/A';
-              }
-            });
-          } else {
-            // Set all to Error on other API errors
-            ipElements.forEach(element => {
-              element.className = 'badge bg-danger ip-address';
-              const ipText = element.querySelector('.ip-text');
-              if (ipText) {
-                ipText.textContent = 'Error';
-              }
-            });
-          }
-          
-          if (typeof showErrorToast === 'function') {
-            showErrorToast(`Failed to check IP addresses (${response.status}): ${errorText}`);
-          }
-          return;
-        }
 
-        const data = await response.json();
-        console.log('IP address API response:', data);
-
-        if (data.success && data.ip_addresses) {
-          let activeCount = 0;
-          
-          // Update each IP element
-          ipElements.forEach(element => {
-            const employeeId = element.getAttribute('data-employee-id');
-            const ipAddress = data.ip_addresses[employeeId];
-            const ipText = element.querySelector('.ip-text');
-            
-            if (ipAddress && ipAddress !== 'N/A') {
-              element.className = 'badge bg-success ip-address';
-              if (ipText) {
-                ipText.textContent = ipAddress;
-              }
-              activeCount++;
-            } else {
-              element.className = 'badge bg-secondary ip-address';
-              if (ipText) {
-                ipText.textContent = 'N/A';
-              }
-            }
-          });
-          
-=======
           // Set all to Error on API error
           ipElements.forEach(element => {
             element.className = 'badge bg-danger ip-address';
@@ -1459,7 +1543,7 @@
               ipText.textContent = 'Error';
             }
           });
-          
+
           if (typeof showErrorToast === 'function') {
             showErrorToast(`Failed to check IP addresses (${response.status}): ${errorText}`);
           }
@@ -1471,13 +1555,13 @@
 
         if (data.success && data.ip_addresses) {
           let activeCount = 0;
-          
+
           // Update each IP element
           ipElements.forEach(element => {
             const employeeId = element.getAttribute('data-employee-id');
             const ipAddress = data.ip_addresses[employeeId];
             const ipText = element.querySelector('.ip-text');
-            
+
             if (ipAddress && ipAddress !== 'N/A') {
               element.className = 'badge bg-success ip-address';
               if (ipText) {
@@ -1491,18 +1575,16 @@
               }
             }
           });
-          
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
           console.log(`IP addresses updated: ${activeCount} employees with active sessions out of ${employeeIds.length}`);
-          
+
           // Show success toast with count
           if (typeof showSuccessToast === 'function') {
             showSuccessToast(`IP addresses updated: ${activeCount} employees with active sessions`);
           }
-          
+
         } else {
           console.error('API returned success=false:', data.message || 'Unknown error');
-          
+
           // Set all to N/A on API error
           ipElements.forEach(element => {
             element.className = 'badge bg-secondary ip-address';
@@ -1511,7 +1593,7 @@
               ipText.textContent = 'N/A';
             }
           });
-          
+
           if (typeof showErrorToast === 'function') {
             showErrorToast('IP address API error: ' + (data.message || 'Unknown error'));
           }
@@ -1519,20 +1601,16 @@
       } catch (error) {
         console.error('Error checking IP addresses:', error);
         console.error('Error details:', error.message, error.stack);
-        
+
         // Set all to Error on network error
         ipElements.forEach(element => {
           element.className = 'badge bg-danger ip-address';
           const ipText = element.querySelector('.ip-text');
           if (ipText) {
-<<<<<<< HEAD
-            ipText.textContent = 'Network Error';
-=======
             ipText.textContent = 'Error';
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
           }
         });
-        
+
         if (typeof showErrorToast === 'function') {
           showErrorToast(`Network error checking IP addresses: ${error.message}`);
         }
@@ -1542,33 +1620,19 @@
     // Initialize IP addresses immediately
     function initializeIPAddresses() {
       const ipElements = document.querySelectorAll('.ip-address');
-<<<<<<< HEAD
-      console.log('Initializing IP addresses for', ipElements.length, 'elements');
-
-      // Set all to N/A initially
-      ipElements.forEach((element, index) => {
-=======
 
       // Set all to N/A initially
       ipElements.forEach(element => {
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
         element.className = 'badge bg-secondary ip-address';
         const ipText = element.querySelector('.ip-text');
         if (ipText) {
           ipText.textContent = 'N/A';
         }
-<<<<<<< HEAD
-        console.log(`Element ${index}: employee_id = ${element.getAttribute('data-employee-id')}`);
-=======
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
       });
 
       // Then immediately try to get real IP addresses
       setTimeout(() => {
-<<<<<<< HEAD
         console.log('Starting IP address update after 0.5 second delay');
-=======
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
         updateAllIPAddresses();
       }, 500); // Wait 0.5 seconds for page to fully load
     }
@@ -1589,7 +1653,7 @@
     document.addEventListener('DOMContentLoaded', function() {
       console.log('Employee list page loaded, starting IP address tracking');
       startIPAddressUpdates();
-      
+
       // Add manual refresh button if needed (optional)
       const headerDiv = document.querySelector('.card-header .d-flex.gap-2');
       if (headerDiv) {

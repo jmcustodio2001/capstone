@@ -10,6 +10,7 @@ use App\Models\CompetencyFeedbackRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 class CompetencyProfileController extends Controller
@@ -20,14 +21,14 @@ class CompetencyProfileController extends Controller
     public function index()
     {
         $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
-        
+
         if (!$employee) {
             return redirect()->route('employee.dashboard')->with('error', 'Employee profile not found.');
         }
 
         // Get real progress data from multiple sources
         $progressData = $this->calculateRealAverageProgress($employee->employee_id);
-        
+
         $competencyProfiles = EmployeeCompetencyProfile::with(['competency'])
             ->where('employee_id', $employee->employee_id)
             ->orderBy('proficiency_level', 'asc')
@@ -37,10 +38,10 @@ class CompetencyProfileController extends Controller
         $competencyTrackers = $competencyProfiles->map(function($profile) use ($progressData) {
             $proficiencyLevel = (int) $profile->proficiency_level;
             $gapScore = max(0, 5 - $proficiencyLevel);
-            
+
             // Get real progress for this competency from training data
             $realProgress = $this->getRealCompetencyProgress($profile, $progressData['training_progress']);
-            
+
             return [
                 'id' => $profile->id,
                 'employee_id' => $profile->employee_id,
@@ -97,7 +98,7 @@ class CompetencyProfileController extends Controller
     public function show($id)
     {
         $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
-        
+
         $profile = EmployeeCompetencyProfile::with(['competency'])
             ->where('id', $id)
             ->where('employee_id', $employee->employee_id)
@@ -106,11 +107,11 @@ class CompetencyProfileController extends Controller
         // Transform to tracker format
         $proficiencyLevel = (int) $profile->proficiency_level;
         $gapScore = max(0, 5 - $proficiencyLevel);
-        
+
         // Get real progress data for this specific competency
         $progressData = $this->calculateRealAverageProgress($employee->employee_id);
         $realProgress = $this->getRealCompetencyProgress($profile, $progressData['training_progress']);
-        
+
         $competencyTracker = [
             'id' => $profile->id,
             'employee_id' => $profile->employee_id,
@@ -166,7 +167,7 @@ class CompetencyProfileController extends Controller
                 'employee_id' => $request->employee_id,
                 'competency_id' => $request->competency_id
             ]);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Feedback request sent to your manager successfully!',
@@ -178,7 +179,7 @@ class CompetencyProfileController extends Controller
                 'employee_id' => $request->employee_id ?? null,
                 'competency_id' => $request->competency_id ?? null
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send feedback request. Please try again.'
@@ -214,13 +215,13 @@ class CompetencyProfileController extends Controller
             // Update the proficiency level
             $profile->proficiency_level = $request->new_level;
             $profile->assessment_date = now();
-            
+
             // Add notes to feedback if provided
             if ($request->notes) {
-                $profile->feedback = ($profile->feedback ? $profile->feedback . '\n\n' : '') . 
+                $profile->feedback = ($profile->feedback ? $profile->feedback . '\n\n' : '') .
                     '[' . now()->format('Y-m-d H:i') . '] Self-assessment: ' . $request->notes;
             }
-            
+
             $profile->save();
 
             return response()->json([
@@ -241,14 +242,14 @@ class CompetencyProfileController extends Controller
     public function getProgressData(Request $request)
     {
         $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
-        
+
         if (!$employee) {
             return response()->json(['error' => 'Employee not found'], 404);
         }
 
         // Get real progress data from multiple sources
         $progressData = $this->calculateRealAverageProgress($employee->employee_id);
-        
+
         $competencyProfiles = EmployeeCompetencyProfile::with(['competency'])
             ->where('employee_id', $employee->employee_id)
             ->get();
@@ -267,7 +268,7 @@ class CompetencyProfileController extends Controller
                 $proficiencyLevel = (int) $profile->proficiency_level;
                 $gapScore = max(0, 5 - $proficiencyLevel);
                 $realProgress = $this->getRealCompetencyProgress($profile, $progressData['training_progress']);
-                
+
                 return [
                     'id' => $profile->id,
                     'competency_name' => $profile->competency->competency_name,
@@ -291,13 +292,13 @@ class CompetencyProfileController extends Controller
     public function updateProgress(Request $request, $id)
     {
         $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
-        
+
         if (!$employee) {
             return response()->json(['error' => 'Employee not found'], 404);
         }
 
         $profile = EmployeeCompetencyProfile::where('employee_id', $employee->employee_id)->findOrFail($id);
-        
+
         $validated = $request->validate([
             'current_level' => 'required|integer|min:1|max:5',
             'notes' => 'nullable|string|max:1000'
@@ -382,9 +383,9 @@ class CompetencyProfileController extends Controller
             if (!$user) {
                 return response()->json(['success' => false, 'message' => 'User not authenticated'], 401);
             }
-            
+
             $employee = $user->employee ?? Employee::where('email', $user->email)->first();
-            
+
             if (!$employee) {
                 return response()->json(['success' => false, 'message' => 'Employee profile not found for user: ' . $user->email], 404);
             }
@@ -424,7 +425,7 @@ class CompetencyProfileController extends Controller
         } catch (\Exception $e) {
             Log::error('Error starting training: ' . $e->getMessage());
             return response()->json([
-                'success' => false, 
+                'success' => false,
                 'message' => 'Error starting training: ' . $e->getMessage()
             ], 500);
         }
@@ -438,22 +439,40 @@ class CompetencyProfileController extends Controller
         // Get competency profile progress
         $competencyProfiles = EmployeeCompetencyProfile::where('employee_id', $employeeId)->get();
         $competencyProgress = $competencyProfiles->avg('proficiency_level') * 20; // Convert to percentage
-        
+
         // Get training dashboard progress
         $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)->get();
         $trainingProgress = $trainingRecords->avg('progress') ?? 0;
-        
+
         // Get destination knowledge training progress
         $destinationTraining = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)->get();
         $destinationProgress = $destinationTraining->avg('progress') ?? 0;
-        
-        // Get certificate completion data
-        $certificates = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)
-            ->where('status', 'Completed')
-            ->count();
-        $totalCertificates = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)->count();
-        $certificateCompletionRate = $totalCertificates > 0 ? ($certificates / $totalCertificates) * 100 : 0;
-        
+
+        // Get certificate completion data (guard if table missing)
+        $certificates = 0;
+        $totalCertificates = 0;
+        $certificateCompletionRate = 0;
+
+        if (Schema::hasTable('training_record_certificate_tracking')) {
+            try {
+                $certificates = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)
+                    ->where('status', 'Completed')
+                    ->count();
+
+                $totalCertificates = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)->count();
+
+                $certificateCompletionRate = $totalCertificates > 0 ? ($certificates / $totalCertificates) * 100 : 0;
+            } catch (\Exception $e) {
+                // Log and continue with zeros to avoid breaking the competency profile view
+                Log::warning('Failed to query training_record_certificate_tracking table: ' . $e->getMessage());
+                $certificates = 0;
+                $totalCertificates = 0;
+                $certificateCompletionRate = 0;
+            }
+        } else {
+            Log::warning('Table training_record_certificate_tracking does not exist when calculating progress for employee ' . $employeeId);
+        }
+
         // Calculate weighted average (40% competency, 30% training, 20% destination, 10% certificates)
         $overallAverage = (
             ($competencyProgress * 0.4) +
@@ -461,7 +480,7 @@ class CompetencyProfileController extends Controller
             ($destinationProgress * 0.2) +
             ($certificateCompletionRate * 0.1)
         );
-        
+
         return [
             'overall_average' => round($overallAverage, 1),
             'competency_progress' => round($competencyProgress, 1),
@@ -472,7 +491,7 @@ class CompetencyProfileController extends Controller
             'certificate_completion_rate' => round($certificateCompletionRate, 1)
         ];
     }
-    
+
     /**
      * Get real progress for a specific competency
      */
@@ -480,34 +499,34 @@ class CompetencyProfileController extends Controller
     {
         $competencyName = $profile->competency->competency_name;
         $proficiencyProgress = ($profile->proficiency_level / 5) * 100;
-        
+
         // Look for matching training records
         $matchingTraining = $trainingProgress->filter(function($training) use ($competencyName) {
             return stripos($training->course_title, $competencyName) !== false ||
                    stripos($competencyName, $training->course_title) !== false;
         });
-        
+
         if ($matchingTraining->isNotEmpty()) {
             $trainingAvg = $matchingTraining->avg('progress');
-            
+
             // If proficiency level is 5 stars (100%), always return 100%
             if ($profile->proficiency_level >= 5) {
                 return 100.0;
             }
-            
+
             // If proficiency level is 4 stars (80%), use the higher of proficiency or training progress
             if ($profile->proficiency_level >= 4) {
                 return round(max($proficiencyProgress, $trainingAvg), 1);
             }
-            
+
             // For lower levels, use weighted average but ensure it doesn't exceed proficiency level expectation
             $weightedAverage = ($proficiencyProgress * 0.6) + ($trainingAvg * 0.4);
             return round(max($proficiencyProgress, $weightedAverage), 1);
         }
-        
+
         return round($proficiencyProgress, 1);
     }
-    
+
     /**
      * Get progress status from percentage
      */
@@ -523,7 +542,7 @@ class CompetencyProfileController extends Controller
             return 'Needs Improvement';
         }
     }
-    
+
     /**
      * Get competency deadline from competency gap record
      */
@@ -533,20 +552,20 @@ class CompetencyProfileController extends Controller
         $competencyGap = \App\Models\CompetencyGap::where('employee_id', $employeeId)
             ->where('competency_id', $competencyId)
             ->first();
-            
+
         if ($competencyGap && $competencyGap->expired_date) {
             return \Carbon\Carbon::parse($competencyGap->expired_date)->format('Y-m-d');
         }
-        
+
         // Fallback: calculate based on proficiency level if no gap record exists
         $profile = \App\Models\EmployeeCompetencyProfile::where('employee_id', $employeeId)
             ->where('competency_id', $competencyId)
             ->first();
-            
+
         if ($profile) {
             return $this->getCompetencyDeadline($profile);
         }
-        
+
         return null;
     }
 
@@ -556,7 +575,7 @@ class CompetencyProfileController extends Controller
     private function getCompetencyDeadline($profile)
     {
         $proficiencyLevel = $profile->proficiency_level;
-        
+
         // Set deadlines based on competency level
         if ($proficiencyLevel <= 2) {
             // Low proficiency - urgent deadline (30 days)
@@ -568,7 +587,7 @@ class CompetencyProfileController extends Controller
             // Good proficiency - extended deadline (90 days)
             return Carbon::now()->addDays(90)->format('Y-m-d');
         }
-        
+
         // Expert level - no urgent deadline
         return null;
     }
@@ -579,14 +598,14 @@ class CompetencyProfileController extends Controller
     private function getUpcomingDeadlines($employeeId, $competencyTrackers)
     {
         $upcomingDeadlines = collect();
-        
+
         // Get deadlines from competency trackers that have deadlines set
         foreach ($competencyTrackers as $tracker) {
             if (isset($tracker['deadline']) && $tracker['deadline']) {
                 try {
                     $deadlineDate = \Carbon\Carbon::parse($tracker['deadline']);
                     $now = \Carbon\Carbon::now();
-                    
+
                     // Only include future deadlines within next 30 days
                     if ($deadlineDate->isFuture() && $deadlineDate->diffInDays($now) <= 30) {
                         $upcomingDeadlines->push((object)[
@@ -604,7 +623,7 @@ class CompetencyProfileController extends Controller
                 }
             }
         }
-        
+
         // Sort by deadline (earliest first)
         return $upcomingDeadlines->sortBy(function($deadline) {
             return \Carbon\Carbon::parse($deadline->deadline);
@@ -617,7 +636,7 @@ class CompetencyProfileController extends Controller
     private function getDeadlineUrgency($deadlineDate)
     {
         $daysLeft = \Carbon\Carbon::now()->diffInDays($deadlineDate, false);
-        
+
         if ($daysLeft <= 3) {
             return 'urgent';
         } elseif ($daysLeft <= 7) {

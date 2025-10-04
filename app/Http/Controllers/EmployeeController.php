@@ -79,51 +79,81 @@ class EmployeeController extends Controller
 
     public function store(Request $request)
     {
-        // Verify admin password first
-        $adminPasswordValidation = $request->validate([
-            'admin_password' => 'required|string'
-        ]);
+        try {
+            // Verify admin password first (required)
+            $request->validate([
+                'admin_password' => 'required|string'
+            ]);
 
-        // Check if the provided password matches the authenticated admin's password
-        $admin = Auth::guard('admin')->user(); // Get the authenticated admin user
-        if (!$admin) {
-            return back()->withErrors(['admin_password' => 'You must be logged in as an admin to perform this action.'])->withInput();
+            // Check admin authentication
+            $admin = Auth::guard('admin')->user();
+            if (!$admin) {
+                $message = 'You must be logged in as an admin to perform this action.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 401);
+                }
+                return back()->withErrors(['admin_password' => $message])->withInput();
+            }
+
+            if (!Hash::check($request->input('admin_password'), $admin->password)) {
+                $message = 'The password you entered is incorrect. Please try again.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+                return back()->withErrors(['admin_password' => $message])->withInput();
+            }
+
+            // Strong validation including password strength
+            $validated = $request->validate([
+                'employee_id' => 'required|string|unique:employees,employee_id',
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'email' => 'required|email|unique:employees,email',
+                // enforce 12+ characters with uppercase, number and symbol
+                'password' => ['required', 'string', 'min:12', 'regex:/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/'],
+                'phone_number' => 'nullable|string|max:20',
+                'address' => 'nullable|string|max:255',
+                'hire_date' => 'nullable|date',
+                'department_id' => 'nullable|integer',
+                'position' => 'nullable|string|max:255',
+                'status' => 'required|in:Active,Inactive',
+                'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            ], [
+                'password.regex' => 'Password must contain at least one uppercase letter, one number, and one special character.'
+            ]);
+
+            // Handle profile picture upload if present
+            if ($request->hasFile('profile_picture')) {
+                $validated['profile_picture'] = $request->file('profile_picture')->store('profile_pictures', 'public');
+            }
+
+            // Hash password
+            $validated['password'] = Hash::make($validated['password']);
+
+            $employee = Employee::create($validated);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Employee created successfully',
+                    'employee' => $employee
+                ], 201);
+            }
+
+            return redirect()->route('employee.list')->with('success', 'Employee created successfully!');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            // Return validation errors as JSON when requested
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            }
+            return back()->withErrors($e->errors())->withInput();
+        } catch (\Exception $e) {
+            Log::error('Employee creation error: ' . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'message' => 'Failed to create employee: ' . $e->getMessage()], 500);
+            }
+            return back()->with('error', 'Failed to create employee: ' . $e->getMessage())->withInput();
         }
-
-        if (!Hash::check($adminPasswordValidation['admin_password'], $admin->password)) {
-            return back()->withErrors(['admin_password' => 'The password you entered is incorrect. Please try again.'])->withInput();
-        }
-
-        $data = $request->validate([
-            'employee_id' => 'required|string|unique:employees,employee_id',
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:employees,email',
-            'password' => 'nullable|string|min:6',
-            'phone_number' => 'nullable|string|max:20',
-            'address' => 'nullable|string|max:255',
-            'hire_date' => 'nullable|date',
-            'department_id' => 'nullable|integer',
-            'position' => 'nullable|string|max:255',
-            'status' => 'required|in:Active,Inactive',
-            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
-        ]);
-
-        // Handle profile picture upload
-        if ($request->hasFile('profile_picture')) {
-            $data['profile_picture'] = $request->file('profile_picture')->store('profile_pictures', 'public');
-        }
-
-        // Hash the provided password or use default password
-        if (isset($data['password'])) {
-            $data['password'] = Hash::make($data['password']);
-        } else {
-            $data['password'] = Hash::make('password123');
-        }
-
-        Employee::create($data);
-
-        return redirect()->route('employee.list')->with('success', 'Employee created successfully!');
     }
 
     public function show($id)
@@ -191,11 +221,11 @@ class EmployeeController extends Controller
 
         $email = $request->email;
         $ipAddress = $request->ip();
-        
+
         // Check if account is locked out
         $lockoutKey = 'employee_lockout_' . $ipAddress . '_' . md5($email);
         $attemptsKey = 'employee_attempts_' . $ipAddress . '_' . md5($email);
-        
+
         if ($request->session()->has($lockoutKey)) {
             $lockoutTime = $request->session()->get($lockoutKey);
             if (Carbon::now()->lt($lockoutTime)) {
@@ -222,7 +252,7 @@ class EmployeeController extends Controller
         if (!Hash::check($request->password, $employee->password)) {
             return $this->handleFailedLoginAttempt($request, $email, 'The password you entered is incorrect.');
         }
-        
+
         // Password is correct, clear any failed attempts
         $request->session()->forget([$lockoutKey, $attemptsKey]);
 
@@ -303,29 +333,29 @@ class EmployeeController extends Controller
         $ipAddress = $request->ip();
         $attemptsKey = 'employee_attempts_' . $ipAddress . '_' . md5($email);
         $lockoutKey = 'employee_lockout_' . $ipAddress . '_' . md5($email);
-        
+
         $attempts = $request->session()->get($attemptsKey, 0) + 1;
         $request->session()->put($attemptsKey, $attempts);
-        
+
         Log::warning('Employee login attempt failed', [
             'email' => $email,
             'ip_address' => $ipAddress,
             'attempts' => $attempts,
             'message' => $message
         ]);
-        
+
         if ($attempts >= 3) {
             // Lock account for 15 minutes
             $lockoutTime = Carbon::now()->addMinutes(15);
             $request->session()->put($lockoutKey, $lockoutTime);
             $request->session()->forget($attemptsKey);
-            
+
             Log::warning('Employee account locked due to failed attempts', [
                 'email' => $email,
                 'ip_address' => $ipAddress,
                 'lockout_until' => $lockoutTime->toDateTimeString()
             ]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Account temporarily locked due to too many failed attempts. Please try again in 15 minutes.',
@@ -333,7 +363,7 @@ class EmployeeController extends Controller
                 'lockout_remaining' => 15
             ], 423);
         }
-        
+
         $remainingAttempts = 3 - $attempts;
         return response()->json([
             'success' => false,
@@ -385,7 +415,7 @@ class EmployeeController extends Controller
 
                 // Clear OTP session data and any failed attempts
                 $request->session()->forget(['otp_employee_id', 'login_remember']);
-                
+
                 // Clear any lockout/attempts for this user
                 $ipAddress = $request->ip();
                 $email = $employee->email;
@@ -693,10 +723,10 @@ class EmployeeController extends Controller
                 foreach ($activeSessions as $session) {
                     try {
                         $payload = base64_decode($session->payload);
-                        
+
                         // Try to unserialize the session payload first
                         $unserialized = @unserialize($payload);
-                        
+
                         if (is_array($unserialized)) {
                             // Check for employee_id directly in session data
                             if (isset($unserialized['employee_id']) && $unserialized['employee_id'] == $employeeId) {
@@ -704,14 +734,14 @@ class EmployeeController extends Controller
                                 \Illuminate\Support\Facades\Log::info("Employee {$employeeId} found online via employee_id in session");
                                 break;
                             }
-                            
+
                             // Check for Laravel auth guard session data
                             if (isset($unserialized['login_employee_' . $employeeId]) && $unserialized['login_employee_' . $employeeId] === true) {
                                 $isOnline = true;
                                 \Illuminate\Support\Facades\Log::info("Employee {$employeeId} found online via employee guard login");
                                 break;
                             }
-                            
+
                             // Check if there's a guard session with employee data
                             foreach ($unserialized as $key => $value) {
                                 if (strpos($key, 'login_employee_') === 0 && $value === true) {
@@ -724,7 +754,7 @@ class EmployeeController extends Controller
                                 }
                             }
                         }
-                        
+
                         // Fallback: Check payload as string for various patterns
                         if (!$isOnline) {
                             $patterns = [
@@ -741,7 +771,7 @@ class EmployeeController extends Controller
                                 // Guard patterns
                                 '"guard":"employee"'
                             ];
-                            
+
                             foreach ($patterns as $pattern) {
                                 if (strpos($payload, $pattern) !== false) {
                                     // If we find employee guard, verify it's the right employee
@@ -760,7 +790,7 @@ class EmployeeController extends Controller
                                 }
                             }
                         }
-                        
+
                     } catch (\Exception $e) {
                         \Illuminate\Support\Facades\Log::debug("Session parsing error for employee {$employeeId}: " . $e->getMessage());
                         continue;
@@ -1000,17 +1030,17 @@ class EmployeeController extends Controller
     {
         try {
             Log::info("Fetching employee profile for ID: " . $employeeId);
-            
+
             // Debug: Check if any employees exist
             $totalEmployees = Employee::count();
             Log::info("Total employees in database: " . $totalEmployees);
-            
+
             // Debug: Get all employee IDs
             $allEmployeeIds = Employee::pluck('employee_id')->toArray();
             Log::info("All employee IDs: " . implode(', ', $allEmployeeIds));
-            
+
             $employee = Employee::where('employee_id', $employeeId)->first();
-            
+
             if (!$employee) {
                 Log::warning("Employee not found with ID: " . $employeeId);
                 return response()->json([
@@ -1022,7 +1052,7 @@ class EmployeeController extends Controller
                     ]
                 ], 404);
             }
-            
+
             Log::info("Employee found: " . $employee->first_name . ' ' . $employee->last_name);
 
             // Get training statistics
@@ -1148,7 +1178,7 @@ class EmployeeController extends Controller
             if ($result['success']) {
                 // Generate a temporary token for password reset
                 $resetToken = bin2hex(random_bytes(32));
-                
+
                 // Store reset token in session with expiration
                 session([
                     'password_reset_token' => $resetToken,
@@ -1300,7 +1330,7 @@ class EmployeeController extends Controller
             // Clear reset session data
             session()->forget([
                 'password_reset_token',
-                'password_reset_email', 
+                'password_reset_email',
                 'password_reset_expires',
                 'forgot_password_email'
             ]);
@@ -1367,7 +1397,7 @@ class EmployeeController extends Controller
         try {
             \Illuminate\Support\Facades\Log::info('IP Address Check API called');
             \Illuminate\Support\Facades\Log::info('Request data: ' . json_encode($request->all()));
-            
+
             $employeeIds = $request->input('employee_ids', []);
             $clientIP = $request->input('client_ip', $request->ip());
 
@@ -1381,25 +1411,23 @@ class EmployeeController extends Controller
 
             $ipAddresses = [];
 
-<<<<<<< HEAD
-            // Get current admin's IP address
+            // Get current admin's IP address and client IP
             $adminIP = $request->ip();
-            
-            // Generate some realistic IP addresses for demonstration
+            $clientIP = $request->input('client_ip', $request->ip());
+
+            // Optional sample IPs to use for simulated responses
             $sampleIPs = [
                 '192.168.1.101',
-                '192.168.1.102', 
+                '192.168.1.102',
                 '192.168.1.103',
                 '10.0.0.45',
                 '10.0.0.67',
                 '172.16.0.23',
-                $adminIP, // Current admin's IP
+                $adminIP,
                 '203.124.45.67',
                 '118.67.123.45'
             ];
 
-=======
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
             // Method 1: Check active sessions from sessions table
             $activeSessions = \Illuminate\Support\Facades\DB::table('sessions')
                 ->where('last_activity', '>=', \Carbon\Carbon::now()->subMinutes(15)->getTimestamp())
@@ -1420,12 +1448,6 @@ class EmployeeController extends Controller
                 \Illuminate\Support\Facades\Log::info('Employee login sessions table not available: ' . $e->getMessage());
             }
 
-<<<<<<< HEAD
-            foreach ($employeeIds as $index => $employeeId) {
-                $employeeIP = null;
-
-                // Try to find IP from employee login sessions first
-=======
             // Method 3: Check activity_log table for recent employee activities
             $recentActivities = [];
             try {
@@ -1440,11 +1462,10 @@ class EmployeeController extends Controller
                 \Illuminate\Support\Facades\Log::info('Activity log table not available: ' . $e->getMessage());
             }
 
-            foreach ($employeeIds as $employeeId) {
+            foreach ($employeeIds as $index => $employeeId) {
                 $employeeIP = null;
 
-                // Try to find IP from employee login sessions
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
+                // Try to find IP from employee login sessions first
                 foreach ($employeeLoginSessions as $session) {
                     if ($session->employee_id == $employeeId && !empty($session->ip_address)) {
                         $employeeIP = $session->ip_address;
@@ -1453,14 +1474,11 @@ class EmployeeController extends Controller
                     }
                 }
 
-<<<<<<< HEAD
-                // If no IP found from sessions, check if employee is currently logged in
-=======
                 // Try to find IP from activity log
                 if (!$employeeIP) {
                     foreach ($recentActivities as $activity) {
                         $properties = json_decode($activity->properties, true);
-                        if (isset($properties['employee_id']) && $properties['employee_id'] == $employeeId && 
+                        if (isset($properties['employee_id']) && $properties['employee_id'] == $employeeId &&
                             isset($properties['ip_address'])) {
                             $employeeIP = $properties['ip_address'];
                             \Illuminate\Support\Facades\Log::info("Found IP for {$employeeId} from activity log: {$employeeIP}");
@@ -1469,62 +1487,36 @@ class EmployeeController extends Controller
                     }
                 }
 
-                // If still no IP found, check if this employee is currently logged in
-                // by checking if their employee_id matches any active session user_id
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
+                // If no IP found yet, check if employee is currently logged in by examining sessions
                 if (!$employeeIP) {
                     $employee = Employee::where('employee_id', $employeeId)->first();
                     if ($employee) {
                         foreach ($activeSessions as $session) {
-<<<<<<< HEAD
                             try {
-                                $sessionData = unserialize(base64_decode($session->payload));
-                                if (isset($sessionData['login_employee_' . sha1('App\Models\Employee')]) &&
-                                    $sessionData['login_employee_' . sha1('App\Models\Employee')] == $employee->id) {
-                                    $employeeIP = $session->ip_address ?? $sampleIPs[$index % count($sampleIPs)];
+                                $sessionData = @unserialize(base64_decode($session->payload));
+                                if ($sessionData && isset($sessionData['login_employee_' . sha1('App\\Models\\Employee')]) &&
+                                    $sessionData['login_employee_' . sha1('App\\Models\\Employee')] == $employee->id) {
+                                    $employeeIP = $session->ip_address ?? $clientIP;
                                     \Illuminate\Support\Facades\Log::info("Found IP for {$employeeId} from session data: {$employeeIP}");
                                     break;
                                 }
                             } catch (\Exception $e) {
                                 // Skip invalid session data
                                 continue;
-=======
-                            $sessionData = unserialize(base64_decode($session->payload));
-                            if (isset($sessionData['_token']) && 
-                                isset($sessionData['login_employee_' . sha1('App\Models\Employee')]) &&
-                                $sessionData['login_employee_' . sha1('App\Models\Employee')] == $employee->id) {
-                                $employeeIP = $session->ip_address ?? $clientIP;
-                                \Illuminate\Support\Facades\Log::info("Found IP for {$employeeId} from session data: {$employeeIP}");
-                                break;
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                             }
                         }
                     }
                 }
 
-<<<<<<< HEAD
-                // If still no IP, simulate some employees being online with realistic IPs
+                // If still no IP, use client IP for first few employees or simulate using sample IPs
                 if (!$employeeIP) {
-                    // Show about 60% of employees as online with IP addresses
-                    $random = mt_rand(1, 100);
-                    if ($random <= 60) {
-                        $employeeIP = $sampleIPs[$index % count($sampleIPs)];
-                        \Illuminate\Support\Facades\Log::info("Simulated IP for {$employeeId}: {$employeeIP}");
-                    } else {
-                        $employeeIP = 'N/A';
-                        \Illuminate\Support\Facades\Log::info("No active session simulated for {$employeeId}");
-=======
-                // If still no IP, use client IP for demonstration (current user's IP)
-                if (!$employeeIP) {
-                    // Only show IP for first few employees to simulate some being online
-                    $employeeIndex = array_search($employeeId, $employeeIds);
-                    if ($employeeIndex !== false && $employeeIndex < 3) {
+                    if ($index < 3) {
                         $employeeIP = $clientIP;
                         \Illuminate\Support\Facades\Log::info("Using client IP for {$employeeId}: {$employeeIP}");
                     } else {
-                        $employeeIP = 'N/A';
-                        \Illuminate\Support\Facades\Log::info("No active session found for {$employeeId}");
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
+                        // Simulate some employees being online with sample IPs
+                        $employeeIP = $sampleIPs[$index % count($sampleIPs)];
+                        \Illuminate\Support\Facades\Log::info("Simulated IP for {$employeeId}: {$employeeIP}");
                     }
                 }
 
@@ -1545,11 +1537,8 @@ class EmployeeController extends Controller
                     'client_ip' => $clientIP,
                     'user_agent' => $request->userAgent(),
                     'employee_login_sessions_count' => count($employeeLoginSessions),
-<<<<<<< HEAD
+                    'recent_activities_count' => count($recentActivities),
                     'admin_ip' => $adminIP
-=======
-                    'recent_activities_count' => count($recentActivities)
->>>>>>> a39bf2063dbd394f0eecd017160b7fa1336107bb
                 ]
             ]);
 

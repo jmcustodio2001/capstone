@@ -965,6 +965,12 @@ Route::get('/admin/debug-storage-setup', function() {
     }
 })->middleware('auth:admin');
 
+// Public storage file link helper
+// Example: /storage-file/certificates/yourfile.pdf or /storage-file/profile_picture/john.jpg
+Route::get('/storage-file/{folder}/{path}', [App\Http\Controllers\StorageLinkController::class, 'show'])
+    ->where('path', '.*')
+    ->name('storage.file');
+
 // Exam routes
 Route::get('/employee/exam/start/{courseId}', [ExamController::class, 'startExam'])->name('employee.exam.start')->middleware('auth:employee');
 Route::get('/employee/exam/take/{attemptId}', [ExamController::class, 'take'])->name('employee.exam.take')->middleware('auth:employee');

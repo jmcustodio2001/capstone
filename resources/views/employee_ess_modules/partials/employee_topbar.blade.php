@@ -311,18 +311,18 @@ input:checked + .dark-mode-slider:before {
               : asset('images/default-avatar.png');
           @endphp
           <img src="{{ $profilePicture }}"
-               alt="{{ $user ? $user->name : 'Profile' }}"
+               alt="{{ $user ? ($user->first_name . ' ' . $user->last_name) : 'Profile' }}"
                class="rounded-circle"
                style="width: 24px; height: 24px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2);">
           <div class="d-flex flex-column align-items-start d-none d-lg-block">
-            <span class="small" style="line-height: 1;">{{ $user ? $user->name : 'User' }}</span>
+            <span class="small" style="line-height: 1;">{{ $user ? ($user->first_name . ' ' . $user->last_name) : 'User' }}</span>
             <span class="small text-light-50" style="line-height: 1;">{{ $user ? $user->employee_id : 'Employee' }}</span>
           </div>
           <i class="bi bi-chevron-down d-none d-lg-inline"></i>
           <i class="bi bi-person d-inline d-lg-none"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end shadow-lg">
-          <li><h6 class="dropdown-header">{{ $user ? $user->name : 'User Profile' }}</h6></li>
+          <li><h6 class="dropdown-header">{{ $user ? ($user->first_name . ' ' . $user->last_name) : 'User Profile' }}</h6></li>
           <li>
             <a class="dropdown-item" href="#" onclick="showProfile(event)">
               <i class="bi bi-person-circle me-2"></i> View Profile
@@ -655,25 +655,41 @@ function showSettings(event) {
 
 function showProfile(event) {
   event.preventDefault();
+  
+  @php
+    // Helper function to get department name
+    $departmentNames = [
+      '1' => 'Human Resources',
+      '2' => 'Information Technology', 
+      '3' => 'Finance',
+      '4' => 'Marketing',
+      '5' => 'Operations',
+      '6' => 'Customer Service'
+    ];
+    $departmentName = isset($user->department_id) && isset($departmentNames[$user->department_id]) 
+      ? $departmentNames[$user->department_id] 
+      : 'Not Assigned';
+  @endphp
+  
   Swal.fire({
     title: '👤 Employee Profile',
     html: `
       <div class="text-start">
         <div class="text-center mb-3">
           <img src="{{ $profilePicture }}" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover;">
-          <h5 class="mt-2">{{ $user ? $user->name : 'User' }}</h5>
+          <h5 class="mt-2">{{ $user ? ($user->first_name . ' ' . $user->last_name) : 'User' }}</h5>
           <p class="text-muted">{{ $user ? $user->employee_id : 'Employee ID' }}</p>
         </div>
         <hr>
         <div class="row g-2">
           <div class="col-6"><strong>Department:</strong></div>
-          <div class="col-6">{{ $user->department ?? 'N/A' }}</div>
+          <div class="col-6">{{ $departmentName }}</div>
           <div class="col-6"><strong>Position:</strong></div>
-          <div class="col-6">{{ $user->position ?? 'N/A' }}</div>
+          <div class="col-6">{{ $user->position ?? 'Not Assigned' }}</div>
           <div class="col-6"><strong>Email:</strong></div>
           <div class="col-6">{{ $user->email ?? 'N/A' }}</div>
           <div class="col-6"><strong>Phone:</strong></div>
-          <div class="col-6">{{ $user->phone ?? 'N/A' }}</div>
+          <div class="col-6">{{ $user->phone_number ?? 'Not Provided' }}</div>
         </div>
       </div>
     `,
@@ -736,7 +752,7 @@ function showHelp(event) {
         <div class="text-center">
           <p><strong>Need more help?</strong></p>
           <p>Contact HR: <a href="mailto:hr@company.com">hr@company.com</a></p>
-          <p>Phone: +63 123 456 7890</p>
+          <p>Phone: +63 985 982 6398 </p>
         </div>
       </div>
     `,

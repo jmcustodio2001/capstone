@@ -207,6 +207,42 @@
       border: 1px solid rgba(142, 68, 173, 0.3);
     }
 
+    /* Time column background colors */
+    .time-in-cell {
+      background-color: rgba(76, 201, 240, 0.15) !important;
+      border-left: 4px solid #4cc9f0;
+      font-weight: 600;
+      color: #0077be;
+    }
+
+    .time-out-cell {
+      background-color: rgba(247, 37, 133, 0.15) !important;
+      border-left: 4px solid #f72585;
+      font-weight: 600;
+      color: #d63384;
+    }
+
+    .break-start-cell {
+      background-color: rgba(255, 193, 7, 0.15) !important;
+      border-left: 4px solid #ffc107;
+      font-weight: 500;
+      color: #b8860b;
+    }
+
+    .break-end-cell {
+      background-color: rgba(40, 167, 69, 0.15) !important;
+      border-left: 4px solid #28a745;
+      font-weight: 500;
+      color: #155724;
+    }
+
+    .hours-cell {
+      background-color: rgba(108, 117, 125, 0.12) !important;
+      border-left: 4px solid #6c757d;
+      font-weight: 700;
+      color: #495057;
+    }
+
     @media (max-width: 768px) {
       #current-time {
         font-size: 2.5rem;
@@ -458,65 +494,58 @@ document.addEventListener('DOMContentLoaded', function() {
           <table class="table table-hover align-middle" id="attendance-table">
             <thead class="table-light">
               <tr>
-                <th class="fw-bold">Date</th>
-                <th class="fw-bold">Time In</th>
-                <th class="fw-bold">Time Out</th>
-                <th class="fw-bold">Hours Worked</th>
-                <th class="fw-bold">Status</th>
+                @php
+                  $columns = \App\Models\AttendanceTimeLog::getTableColumns();
+                  $visibleColumns = \App\Models\AttendanceTimeLog::getVisibleColumns();
+                @endphp
+                @foreach($visibleColumns as $column)
+                  @if(isset($columns[$column]))
+                    <th class="fw-bold">{{ $columns[$column]['label'] }}</th>
+                  @endif
+                @endforeach
               </tr>
             </thead>
             <tbody>
               @forelse($attendance_logs as $log)
                 <tr>
-                  <td>{{ \Carbon\Carbon::parse($log->log_date)->format('M d, Y') }}</td>
-                  <td>
-                    @if($log->time_in)
+                  @foreach($visibleColumns as $column)
+                    @if(isset($columns[$column]))
                       @php
-                        try {
-                          $timeIn = \Carbon\Carbon::parse($log->time_in);
-                          echo $timeIn->format('g:i A');
-                        } catch (Exception $e) {
-                          echo $log->time_in;
+                        $cellClass = '';
+                        switch($column) {
+                          case 'time_in':
+                            $cellClass = 'time-in-cell';
+                            break;
+                          case 'time_out':
+                            $cellClass = 'time-out-cell';
+                            break;
+                          case 'break_start_time':
+                            $cellClass = 'break-start-cell';
+                            break;
+                          case 'break_end_time':
+                            $cellClass = 'break-end-cell';
+                            break;
+                          case 'total_hours':
+                          case 'overtime_hours':
+                            $cellClass = 'hours-cell';
+                            break;
                         }
                       @endphp
-                    @else
-                      --:--
+                      <td class="{{ $cellClass }}">
+                        @if($columns[$column]['type'] === 'badge')
+                          <span class="{{ $log->getStatusBadgeClass() }}">
+                            {{ $log->getFormattedValue($column) }}
+                          </span>
+                        @else
+                          {{ $log->getFormattedValue($column) }}
+                        @endif
+                      </td>
                     @endif
-                  </td>
-                  <td>
-                    @if($log->time_out)
-                      @php
-                        try {
-                          $timeOut = \Carbon\Carbon::parse($log->time_out);
-                          echo $timeOut->format('g:i A');
-                        } catch (Exception $e) {
-                          echo $log->time_out;
-                        }
-                      @endphp
-                    @else
-                      --:--
-                    @endif
-                  </td>
-                  <td>
-                    @if($log->hours_worked)
-                      @php
-                        $hours = floor($log->hours_worked);
-                        $minutes = round(($log->hours_worked - $hours) * 60);
-                        echo "{$hours}h {$minutes}m";
-                      @endphp
-                    @else
-                      0h 0m
-                    @endif
-                  </td>
-                  <td>
-                    <span class="badge badge-simulation status-{{ strtolower(str_replace(' ', '-', $log->status)) }}">
-                      {{ $log->status ?? 'N/A' }}
-                    </span>
-                  </td>
+                  @endforeach
                 </tr>
               @empty
                 <tr>
-                  <td colspan="5" class="text-center text-muted py-4">
+                  <td colspan="{{ count($visibleColumns) }}" class="text-center text-muted py-4">
                     <i class="bi bi-info-circle me-2"></i>No attendance logs found.
                   </td>
                 </tr>
@@ -526,21 +555,25 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
 
         <!-- Pagination -->
-        <div class="pagination-container">
-          <nav aria-label="Attendance pagination">
-            <ul class="pagination">
-              <li class="page-item disabled">
-                <a class="page-link" href="#" tabindex="-1">Previous</a>
-              </li>
-              <li class="page-item active"><a class="page-link" href="#">1</a></li>
-              <li class="page-item"><a class="page-link" href="#">2</a></li>
-              <li class="page-item"><a class="page-link" href="#">3</a></li>
-              <li class="page-item">
-                <a class="page-link" href="#">Next</a>
-              </li>
-            </ul>
-          </nav>
-        </div>
+        @if(isset($attendance_logs) && method_exists($attendance_logs, 'links'))
+          <div class="pagination-container">
+            {{ $attendance_logs->links() }}
+          </div>
+        @else
+          <div class="pagination-container">
+            <nav aria-label="Attendance pagination">
+              <ul class="pagination">
+                <li class="page-item disabled">
+                  <a class="page-link" href="#" tabindex="-1">Previous</a>
+                </li>
+                <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                <li class="page-item">
+                  <a class="page-link" href="#">Next</a>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        @endif
       </div>
     </div>
   </main>
@@ -748,16 +781,19 @@ document.addEventListener('DOMContentLoaded', function() {
       const statusFilter = document.getElementById('status-filter').value;
 
       const rows = document.querySelectorAll('#attendance-table tbody tr');
+      const visibleColumns = @json(\App\Models\AttendanceTimeLog::getVisibleColumns());
+      const dateColumnIndex = visibleColumns.indexOf('log_date');
+      const statusColumnIndex = visibleColumns.indexOf('status');
 
       rows.forEach(row => {
         // Skip the "No attendance logs found" row
-        if (row.cells.length < 5) {
+        if (row.cells.length < visibleColumns.length) {
           return;
         }
 
         let showRow = true;
-        const dateCell = row.cells[0] ? row.cells[0].textContent.trim() : '';
-        const statusBadge = row.cells[4] ? row.cells[4].querySelector('.badge') : null;
+        const dateCell = dateColumnIndex >= 0 && row.cells[dateColumnIndex] ? row.cells[dateColumnIndex].textContent.trim() : '';
+        const statusBadge = statusColumnIndex >= 0 && row.cells[statusColumnIndex] ? row.cells[statusColumnIndex].querySelector('.badge') : null;
         const statusCell = statusBadge ? statusBadge.textContent.trim() : '';
 
         // Apply month filter
@@ -799,10 +835,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to show/hide "No records found" message
     function updateNoRecordsMessage() {
       const rows = document.querySelectorAll('#attendance-table tbody tr');
+      const visibleColumns = @json(\App\Models\AttendanceTimeLog::getVisibleColumns());
+      const columnCount = visibleColumns.length;
       let visibleRows = 0;
 
       rows.forEach(row => {
-        if (row.style.display !== 'none' && row.cells.length >= 5) {
+        if (row.style.display !== 'none' && row.cells.length >= columnCount) {
           visibleRows++;
         }
       });
@@ -813,7 +851,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (visibleRows === 0) {
         // Remove existing "No attendance logs found" row if it exists
-        const existingNoDataRow = tbody.querySelector('tr td[colspan="5"]');
+        const existingNoDataRow = tbody.querySelector(`tr td[colspan="${columnCount}"]`);
         if (existingNoDataRow) {
           existingNoDataRow.parentElement.style.display = 'none';
         }
@@ -822,7 +860,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const noMatchRow = document.createElement('tr');
           noMatchRow.className = 'no-match-message';
           noMatchRow.innerHTML = `
-            <td colspan="5" class="text-center text-muted py-4">
+            <td colspan="${columnCount}" class="text-center text-muted py-4">
               <i class="bi bi-search me-2"></i>No matching attendance records found. Try adjusting your filters.
             </td>
           `;
@@ -835,7 +873,7 @@ document.addEventListener('DOMContentLoaded', function() {
           noMatchMessage.style.display = 'none';
         }
         // Show original "No attendance logs found" row if no data exists
-        const existingNoDataRow = tbody.querySelector('tr td[colspan="5"]');
+        const existingNoDataRow = tbody.querySelector(`tr td[colspan="${columnCount}"]`);
         if (existingNoDataRow && visibleRows === 0) {
           existingNoDataRow.parentElement.style.display = '';
         }
@@ -1006,27 +1044,24 @@ document.addEventListener('DOMContentLoaded', function() {
         const rowData = [];
 
         cells.forEach((cell, cellIndex) => {
-          // Skip the Actions column (last column)
-          if (cellIndex < cells.length - 1) {
-            let cellText = '';
+          let cellText = '';
 
-            // Special handling for Status column (check if it contains a badge)
-            if (cell.querySelector('.badge')) {
-              cellText = cell.querySelector('.badge').textContent.trim();
-            } else {
-              cellText = cell.textContent.trim();
-            }
-
-            // Clean up any extra whitespace or special characters
-            cellText = cellText.replace(/\s+/g, ' ').trim();
-
-            // Escape commas and quotes in CSV
-            if (cellText.includes(',') || cellText.includes('"') || cellText.includes('\n')) {
-              cellText = '"' + cellText.replace(/"/g, '""') + '"';
-            }
-
-            rowData.push(cellText);
+          // Special handling for Status column (check if it contains a badge)
+          if (cell.querySelector('.badge')) {
+            cellText = cell.querySelector('.badge').textContent.trim();
+          } else {
+            cellText = cell.textContent.trim();
           }
+
+          // Clean up any extra whitespace or special characters
+          cellText = cellText.replace(/\s+/g, ' ').trim();
+
+          // Escape commas and quotes in CSV
+          if (cellText.includes(',') || cellText.includes('"') || cellText.includes('\n')) {
+            cellText = '"' + cellText.replace(/"/g, '""') + '"';
+          }
+
+          rowData.push(cellText);
         });
 
         // Only add non-empty rows
@@ -1084,30 +1119,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Clone the table and add it to print content
       const table = document.getElementById('attendance-table').cloneNode(true);
+      const visibleColumns = @json(\App\Models\AttendanceTimeLog::getVisibleColumns());
+      const statusColumnIndex = visibleColumns.indexOf('status');
 
-      // Remove the Actions column from the cloned table
-      const headerRow = table.querySelector('thead tr');
+      // Fix Status column in all rows - extract text from badge
       const bodyRows = table.querySelectorAll('tbody tr');
-
-      // Remove last header cell (Actions)
-      if (headerRow && headerRow.cells.length > 0) {
-        headerRow.deleteCell(-1);
-      }
-
-      // Remove last cell from each body row (Actions) and fix Status column
       bodyRows.forEach(row => {
-        if (row.cells.length > 0) {
-          // Fix Status column (second to last cell) - extract text from badge
-          const statusCell = row.cells[row.cells.length - 2];
+        if (row.cells.length > 0 && statusColumnIndex >= 0) {
+          const statusCell = row.cells[statusColumnIndex];
           if (statusCell && statusCell.querySelector('.badge')) {
             const statusText = statusCell.querySelector('.badge').textContent.trim();
             statusCell.innerHTML = statusText;
             statusCell.style.fontWeight = 'bold';
             statusCell.style.textAlign = 'center';
           }
-
-          // Remove Actions column (last cell)
-          row.deleteCell(-1);
         }
       });
 

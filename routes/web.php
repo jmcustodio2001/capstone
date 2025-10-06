@@ -788,6 +788,9 @@ Route::post('/employee/leave-applications', [App\Http\Controllers\LeaveApplicati
 Route::get('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'show'])->name('employee.leave_applications.show')->middleware('auth:employee');
 Route::put('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'update'])->name('employee.leave_applications.update')->middleware('auth:employee');
 Route::delete('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'cancel'])->name('employee.leave_applications.cancel')->middleware('auth:employee');
+
+// Admin Routes for Leave Management
+Route::put('/admin/leave-applications/{id}/status', [App\Http\Controllers\LeaveApplicationController::class, 'adminUpdateStatus'])->name('admin.leave_applications.update_status')->middleware(['auth:admin', 'admin.auth']);
 Route::get('/employee/attendance-logs', [App\Http\Controllers\AttendanceTimeLogController::class, 'index'])->name('employee.attendance_logs.index')->middleware('auth:employee');
 Route::post('/employee/attendance/time-in', [App\Http\Controllers\AttendanceTimeLogController::class, 'timeIn'])->name('employee.attendance.time_in')->middleware('auth:employee');
 Route::post('/employee/attendance/time-out', [App\Http\Controllers\AttendanceTimeLogController::class, 'timeOut'])->name('employee.attendance.time_out')->middleware('auth:employee');
@@ -1178,3 +1181,34 @@ Route::get('/debug/customer-service-training/{employeeId}', function($employeeId
         ]
     ]);
 });
+
+// API Routes for Leave Management Integration
+Route::prefix('api/v1/leave')->group(function () {
+    // Submit leave request via API
+    Route::post('/submit', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'submitLeaveRequest'])
+        ->name('api.leave.submit');
+    
+    // Get leave application status
+    Route::get('/status/{leaveId}', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'getLeaveStatus'])
+        ->name('api.leave.status');
+    
+    // Update leave status (approve/reject) - Admin only
+    Route::put('/status/{leaveId}', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'updateLeaveStatus'])
+        ->name('api.leave.update_status');
+    
+    // Get employee leave balance
+    Route::get('/balance/{employeeId}', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'getLeaveBalance'])
+        ->name('api.leave.balance');
+    
+    // Get employee leave history
+    Route::get('/history/{employeeId}', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'getLeaveHistory'])
+        ->name('api.leave.history');
+    
+    // Test HR3 connection
+    Route::post('/test-hr3-connection', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'testHR3Connection'])
+        ->name('api.leave.test_hr3');
+});
+
+// Webhook endpoint for external systems to receive leave status updates
+Route::post('/api/v1/leave/webhook/status-update', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'webhookStatusUpdate'])
+    ->name('api.leave.webhook.status_update');

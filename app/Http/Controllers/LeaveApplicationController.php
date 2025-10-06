@@ -248,6 +248,129 @@ class LeaveApplicationController extends Controller
         return redirect()->back()->with('success', 'Leave application cancelled successfully!');
     }
 
+    /**
+     * Admin method to approve/reject leave applications
+     */
+    public function adminUpdateStatus(Request $request, $id)
+    {
+        try {
+            $request->validate([
+                'status' => 'required|in:Approved,Rejected',
+                'approved_by' => 'required|string|max:255',
+                'remarks' => 'nullable|string|max:1000'
+            ]);
+
+            $leaveApplication = LeaveApplication::findOrFail($id);
+
+            if ($leaveApplication->status !== 'Pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Leave application has already been processed',
+                    'current_status' => $leaveApplication->status
+                ], 400);
+            }
+
+            // If approving, check if employee still has sufficient balance
+            if ($request->status === 'Approved') {
+                $leaveBalances = $this->calculateLeaveBalances(
+                    $leaveApplication->employee_id, 
+                    $leaveApplication->id
+                );
+                $requestedType = $leaveApplication->leave_type;
+                $requestedDays = $leaveApplication->days_requested ?? $leaveApplication->leave_days;
+                
+                if ($requestedDays > $leaveBalances[$requestedType]['available']) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Cannot approve: Insufficient leave balance. Available: {$leaveBalances[$requestedType]['available']} days",
+                        'available_balance' => $leaveBalances[$requestedType]['available'],
+                        'requested_days' => $requestedDays
+                    ], 400);
+                }
+            }
+
+            // Update leave application
+            $leaveApplication->update([
+                'status' => $request->status,
+                'approved_by' => $request->approved_by,
+                'approved_date' => Carbon::now(),
+                'remarks' => $request->remarks
+            ]);
+
+            // Log activity
+            ActivityLog::create([
+                'employee_id' => $leaveApplication->employee_id,
+                'module' => 'Leave Management',
+                'action' => 'Leave Application ' . $request->status,
+                'description' => "{$request->status}: Leave application {$leaveApplication->leave_id} by {$request->approved_by}. Remarks: " . ($request->remarks ?? 'None'),
+                'timestamp' => Carbon::now()
+            ]);
+
+            // Calculate new balance after approval
+            $newBalance = null;
+            if ($request->status === 'Approved') {
+                $leaveBalances = $this->calculateLeaveBalances($leaveApplication->employee_id);
+                $newBalance = $leaveBalances[$leaveApplication->leave_type]['available'];
+                
+                // Trigger webhook notification if configured
+                $this->triggerWebhookNotification($leaveApplication, $request->status);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Leave application {$request->status} successfully",
+                'data' => [
+                    'leave_id' => $leaveApplication->leave_id,
+                    'status' => $request->status,
+                    'approved_by' => $request->approved_by,
+                    'approved_date' => $leaveApplication->approved_date->toISOString(),
+                    'remarks' => $request->remarks,
+                    'new_balance' => $newBalance
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Leave status update error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating leave status'
+            ], 500);
+        }
+    }
+
+    /**
+     * Trigger webhook notification for external systems
+     */
+    private function triggerWebhookNotification($leaveApplication, $status)
+    {
+        try {
+            // In a real implementation, you'd retrieve webhook URLs from a database
+            // For now, we'll just log the notification
+            $webhookData = [
+                'leave_id' => $leaveApplication->leave_id,
+                'employee_id' => $leaveApplication->employee_id,
+                'status' => $status,
+                'leave_type' => $leaveApplication->leave_type,
+                'days_requested' => $leaveApplication->days_requested ?? $leaveApplication->leave_days,
+                'start_date' => $leaveApplication->start_date,
+                'end_date' => $leaveApplication->end_date,
+                'approved_by' => $leaveApplication->approved_by,
+                'approved_date' => $leaveApplication->approved_date->toISOString(),
+                'timestamp' => Carbon::now()->toISOString()
+            ];
+
+            Log::info('Leave status webhook notification triggered', $webhookData);
+
+            // Here you would make HTTP requests to registered webhook URLs
+            // Example:
+            // Http::post($webhookUrl, $webhookData);
+
+        } catch (\Exception $e) {
+            Log::error('Webhook notification error: ' . $e->getMessage());
+        }
+    }
+
     private function calculateLeaveBalances($employeeId, $excludeApplicationId = null)
     {
         // Default annual leave allocations

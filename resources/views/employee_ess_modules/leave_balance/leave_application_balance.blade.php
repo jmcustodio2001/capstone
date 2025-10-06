@@ -1983,6 +1983,169 @@ document.addEventListener('DOMContentLoaded', function() {
   const today = new Date();
   const formattedToday = today.toISOString().split('T')[0];
   document.getElementById('start_date').setAttribute('min', formattedToday);
+
+  // API Integration Functions
+  window.LeaveAPI = {
+    // Check leave status via API
+    checkLeaveStatus: function(leaveId) {
+      const apiKey = 'hr2ess_api_key_2025'; // In production, get this securely
+      
+      fetch(`/api/v1/leave/status/${leaveId}?api_key=${apiKey}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire({
+              title: 'Leave Status',
+              html: `
+                <div class="text-start">
+                  <p><strong>Leave ID:</strong> ${data.data.leave_id}</p>
+                  <p><strong>Status:</strong> <span class="badge status-${data.data.status.toLowerCase()}">${data.data.status}</span></p>
+                  <p><strong>Employee:</strong> ${data.data.employee_name}</p>
+                  <p><strong>Leave Type:</strong> ${data.data.leave_type}</p>
+                  <p><strong>Days:</strong> ${data.data.days_requested}</p>
+                  <p><strong>Period:</strong> ${data.data.start_date} to ${data.data.end_date}</p>
+                  <p><strong>Submitted:</strong> ${new Date(data.data.submitted_at).toLocaleString()}</p>
+                  ${data.data.approved_by ? `<p><strong>Approved By:</strong> ${data.data.approved_by}</p>` : ''}
+                  ${data.data.approved_date ? `<p><strong>Approved Date:</strong> ${new Date(data.data.approved_date).toLocaleString()}</p>` : ''}
+                  ${data.data.remarks ? `<p><strong>Remarks:</strong> ${data.data.remarks}</p>` : ''}
+                </div>
+              `,
+              icon: 'info',
+              confirmButtonColor: '#4361ee'
+            });
+          } else {
+            Swal.fire('Error', data.message, 'error');
+          }
+        })
+        .catch(error => {
+          console.error('API Error:', error);
+          Swal.fire('Error', 'Failed to fetch leave status', 'error');
+        });
+    },
+
+    // Get employee leave balance via API
+    getLeaveBalance: function(employeeId) {
+      const apiKey = 'hr2ess_api_key_2025'; // In production, get this securely
+      
+      fetch(`/api/v1/leave/balance/${employeeId}?api_key=${apiKey}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            const balances = data.data.leave_balances;
+            let balanceHtml = '<div class="text-start">';
+            
+            Object.keys(balances).forEach(type => {
+              const balance = balances[type];
+              balanceHtml += `
+                <div class="mb-3">
+                  <h6>${type} Leave</h6>
+                  <div class="progress mb-1" style="height: 20px;">
+                    <div class="progress-bar" style="width: ${balance.percentage}%">${balance.available}/${balance.total}</div>
+                  </div>
+                  <small class="text-muted">Used: ${balance.used} | Available: ${balance.available}</small>
+                </div>
+              `;
+            });
+            
+            balanceHtml += '</div>';
+            
+            Swal.fire({
+              title: `Leave Balance - ${data.data.employee_name}`,
+              html: balanceHtml,
+              icon: 'info',
+              confirmButtonColor: '#4361ee',
+              width: 600
+            });
+          } else {
+            Swal.fire('Error', data.message, 'error');
+          }
+        })
+        .catch(error => {
+          console.error('API Error:', error);
+          Swal.fire('Error', 'Failed to fetch leave balance', 'error');
+        });
+    },
+
+    // Submit leave request via API (alternative method)
+    submitViaAPI: function(formData) {
+      const apiKey = 'hr2ess_api_key_2025'; // In production, get this securely
+      
+      const requestData = {
+        employee_id: '{{ Auth::guard("employee")->user()->employee_id ?? "EMP001" }}',
+        leave_type: formData.get('leave_type'),
+        leave_days: parseInt(formData.get('leave_days')),
+        start_date: formData.get('start_date'),
+        end_date: formData.get('end_date'),
+        reason: formData.get('reason'),
+        contact_info: formData.get('contact_info'),
+        api_key: apiKey
+      };
+
+      return fetch('/api/v1/leave/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          Swal.fire({
+            title: 'Success!',
+            html: `
+              <div class="text-start">
+                <p>Leave application submitted successfully via API!</p>
+                <p><strong>Leave ID:</strong> ${data.data.leave_id}</p>
+                <p><strong>Status:</strong> ${data.data.status}</p>
+                <p><strong>Remaining Balance:</strong> ${data.data.remaining_balance} days</p>
+              </div>
+            `,
+            icon: 'success',
+            confirmButtonColor: '#4361ee'
+          }).then(() => {
+            window.location.reload();
+          });
+        } else {
+          throw new Error(data.message);
+        }
+      });
+    }
+  };
+
+  // Add API status check buttons to existing leave records
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add API check buttons to leave records table
+    const leaveRows = document.querySelectorAll('#leave-table tbody tr');
+    leaveRows.forEach(row => {
+      const leaveIdCell = row.cells[0];
+      if (leaveIdCell && leaveIdCell.textContent.trim() !== '') {
+        const leaveId = leaveIdCell.textContent.trim();
+        
+        // Add API status check button
+        const actionsCell = row.cells[row.cells.length - 1];
+        if (actionsCell) {
+          const apiButton = document.createElement('button');
+          apiButton.className = 'btn btn-sm btn-info me-1';
+          apiButton.innerHTML = '<i class="bi bi-cloud-check"></i> API Status';
+          apiButton.onclick = () => LeaveAPI.checkLeaveStatus(leaveId);
+          
+          actionsCell.appendChild(apiButton);
+        }
+      }
+    });
+
+    // Add API balance check button to header
+    const headerActions = document.querySelector('.card-header .btn-apply-leave').parentNode;
+    if (headerActions) {
+      const balanceButton = document.createElement('button');
+      balanceButton.className = 'btn btn-outline-info me-2';
+      balanceButton.innerHTML = '<i class="bi bi-cloud-download"></i> API Balance';
+      balanceButton.onclick = () => LeaveAPI.getLeaveBalance('{{ Auth::guard("employee")->user()->employee_id ?? "EMP001" }}');
+      
+      headerActions.insertBefore(balanceButton, headerActions.firstChild);
+    }
+  });
 </script>
 </body>
 </html>

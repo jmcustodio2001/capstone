@@ -29,7 +29,6 @@ class AttendanceTimeLogController extends Controller
                     $table->time('time_out')->nullable();
                     $table->decimal('hours_worked', 5, 2)->nullable();
                     $table->string('status', 50)->nullable();
-                    $table->text('remarks')->nullable();
                     $table->timestamps();
                     
                     $table->index(['employee_id', 'log_date']);
@@ -595,5 +594,20 @@ class AttendanceTimeLogController extends Controller
         }
         
         return $workingDays;
+    }
+    
+    /**
+     * Get location from IP address (simplified version)
+     */
+    private function getLocationFromIP($ipAddress)
+    {
+        // For localhost/development, return default location
+        if ($ipAddress === '127.0.0.1' || $ipAddress === '::1' || strpos($ipAddress, '192.168.') === 0) {
+            return 'Office - Local Network';
+        }
+        
+        // For production, you could integrate with a geolocation service
+        // For now, return a generic location
+        return 'Office Location';
     }
 }

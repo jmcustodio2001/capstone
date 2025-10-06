@@ -10,17 +10,14 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
   <style>
-    /* Card hover effects */
-    .training-request-card, .course-card {
-      transition: all 0.3s ease !important;
-      border: 1px solid #e9ecef !important;
+    /* Table row hover effects */
+    .training-request-table tbody tr:hover,
+    .course-table tbody tr:hover {
+      background-color: #f8f9fa !important;
+      transform: scale(1.01);
+      transition: all 0.2s ease;
     }
     
-    .training-request-card:hover, .course-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
-      border-color: #007bff !important;
-    }
     
     /* Button group styling */
     .btn-group .btn {
@@ -37,9 +34,13 @@
       opacity: 0.3;
     }
     
-    /* Course card book icon */
-    .course-card .bi-book-fill {
-      opacity: 0.8;
+    /* Course status badges */
+    .status-active {
+      background-color: #28a745 !important;
+    }
+    
+    .status-inactive {
+      background-color: #6c757d !important;
     }
   </style>
 </head>
@@ -283,10 +284,35 @@
       <div class="card-body">
         @forelse($trainingRequests as $request)
           @if($loop->first)
-            <div class="row g-4">
+            <div class="table-responsive">
+              <table class="table table-hover training-request-table">
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-hash me-1"></i>Request ID
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-person me-1"></i>Employee
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-mortarboard me-1"></i>Training Title
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-chat-quote me-1"></i>Reason
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-calendar-event me-1"></i>Requested Date
+                    </th>
+                    <th scope="col" class="fw-bold text-center">
+                      <i class="bi bi-flag me-1"></i>Status
+                    </th>
+                    <th scope="col" class="fw-bold text-center">
+                      <i class="bi bi-tools me-1"></i>Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
           @endif
-              <div class="col-lg-6 col-xl-4">
-                <div class="card h-100 shadow-sm border-0 training-request-card" style="transition: all 0.3s ease;">
                   @php
                     $firstName = $request->employee->first_name ?? 'Unknown';
                     $lastName = $request->employee->last_name ?? 'Employee';
@@ -311,86 +337,46 @@
                                        "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
                     }
                   @endphp
-                  
-                  <!-- Card Header with Employee Info -->
-                  <div class="card-header text-white border-0 py-3" style="background-color: #{{ $bgColor }};">
-                    <div class="d-flex align-items-center">
-                      <img src="{{ $profilePicUrl }}"
-                           alt="{{ $firstName }} {{ $lastName }}"
-                           class="rounded-circle me-3"
-                           style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);">
-                      <div class="flex-grow-1">
-                        <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
-                        <small class="text-dark fw-bold">Request #{{ $request->request_id }}</small>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div class="card-body">
-                    <!-- Course Requested -->
-                    <div class="mb-3 p-3 bg-light rounded-3 border-start border-primary border-4">
-                      <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-mortarboard-fill text-primary me-2" style="font-size: 1.2rem;"></i>
-                        <h6 class="card-title fw-bold text-dark mb-0">{{ $request->training_title }}</h6>
-                      </div>
-                      @if($request->course)
-                        <small class="text-muted">
-                          <i class="bi bi-tag me-1"></i>Course ID: {{ $request->course->course_id }}
-                        </small>
-                      @endif
-                    </div>
-
-                    <!-- Employee ID -->
-                    <div class="mb-3 p-2 bg-info bg-opacity-10 rounded-2">
+                  <tr>
+                    <td class="fw-semibold text-primary">{{ $request->request_id }}</td>
+                    <td>
                       <div class="d-flex align-items-center">
-                        <i class="bi bi-person-badge text-info me-2"></i>
+                        <img src="{{ $profilePicUrl }}"
+                             alt="{{ $firstName }} {{ $lastName }}"
+                             class="rounded-circle me-2"
+                             style="width: 32px; height: 32px; object-fit: cover;">
                         <div>
-                          <small class="text-muted d-block">Employee ID</small>
-                          <span class="fw-semibold text-dark">{{ $request->employee_id }}</span>
+                          <div class="fw-semibold">{{ $firstName }} {{ $lastName }}</div>
+                          <small class="text-muted">{{ $request->employee_id }}</small>
                         </div>
                       </div>
-                    </div>
-
-                    <!-- Reason -->
-                    <div class="mb-3 p-3 bg-warning bg-opacity-10 rounded-2 border-start border-warning border-3">
-                      <div class="d-flex align-items-start">
-                        <i class="bi bi-chat-quote text-warning me-2 mt-1"></i>
-                        <div class="flex-grow-1">
-                          <small class="text-muted d-block mb-1">
-                            <i class="bi bi-question-circle me-1"></i>Reason
-                          </small>
-                          <p class="mb-0 text-dark" style="min-height: 40px; font-style: italic;">
-                            "{{ Str::limit($request->reason, 80) }}"
-                          </p>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-mortarboard-fill text-primary me-2"></i>
+                        <div>
+                          <span class="fw-semibold">{{ $request->training_title }}</span>
+                          @if($request->course)
+                            <br><small class="text-muted">Course ID: {{ $request->course->course_id }}</small>
+                          @endif
                         </div>
                       </div>
-                    </div>
-
-                    <!-- Status and Date -->
-                    <div class="row mb-3">
-                      <div class="col-6">
-                        <div class="p-2 bg-light rounded-2 text-center">
-                          <small class="text-muted d-block mb-1">
-                            <i class="bi bi-flag me-1"></i>Status
-                          </small>
-                          <span class="badge {{ $request->status == 'Approved' ? 'bg-success' : ($request->status == 'Rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
-                            <i class="bi {{ $request->status == 'Approved' ? 'bi-check-circle' : ($request->status == 'Rejected' ? 'bi-x-circle' : 'bi-clock') }} me-1"></i>
-                            {{ $request->status }}
-                          </span>
-                        </div>
-                      </div>
-                      <div class="col-6">
-                        <div class="p-2 bg-light rounded-2 text-center">
-                          <small class="text-muted d-block mb-1">
-                            <i class="bi bi-calendar-event me-1"></i>Requested Date
-                          </small>
-                          <small class="fw-semibold text-dark">{{ date('M d, Y', strtotime($request->requested_date)) }}</small>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="d-grid gap-2">
+                    </td>
+                    <td>
+                      <span class="text-muted" title="{{ $request->reason }}">
+                        {{ Str::limit($request->reason, 50) }}
+                      </span>
+                    </td>
+                    <td>
+                      <small class="text-dark">{{ date('M d, Y', strtotime($request->requested_date)) }}</small>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge {{ $request->status == 'Approved' ? 'bg-success' : ($request->status == 'Rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
+                        <i class="bi {{ $request->status == 'Approved' ? 'bi-check-circle' : ($request->status == 'Rejected' ? 'bi-x-circle' : 'bi-clock') }} me-1"></i>
+                        {{ $request->status }}
+                      </span>
+                    </td>
+                    <td class="text-center">
                       @if($request->status == 'Pending')
                         <div class="btn-group" role="group">
                           <button class="btn btn-success btn-sm" onclick="approveRequest({{ $request->request_id }})" title="Approve Request">
@@ -400,22 +386,16 @@
                             <i class="bi bi-x-circle"></i>
                           </button>
                         </div>
-                        <div class="mt-1">
-                          <small class="text-muted">
-                            <i class="bi bi-check-circle me-1"></i>Approve &nbsp;&nbsp;
-                            <i class="bi bi-x-circle me-1"></i>Reject
-                          </small>
-                        </div>
                       @else
-                        <button class="btn btn-outline-primary btn-sm w-100" onclick="viewRequestDetails('{{ $request->request_id }}', '{{ addslashes($request->employee->first_name ?? 'Unknown') }} {{ addslashes($request->employee->last_name ?? 'Employee') }}', '{{ $request->employee_id }}', '{{ addslashes($request->training_title) }}', '{{ addslashes($request->reason ?? 'N/A') }}', '{{ $request->status }}', '{{ date('M d, Y', strtotime($request->requested_date)) }}')">
-                          <i class="bi bi-eye me-1"></i> View Details
+                        <button class="btn btn-outline-primary btn-sm" onclick="viewRequestDetails('{{ $request->request_id }}', '{{ addslashes($request->employee->first_name ?? 'Unknown') }} {{ addslashes($request->employee->last_name ?? 'Employee') }}', '{{ $request->employee_id }}', '{{ addslashes($request->training_title) }}', '{{ addslashes($request->reason ?? 'N/A') }}', '{{ $request->status }}', '{{ date('M d, Y', strtotime($request->requested_date)) }}')" title="View Details">
+                          <i class="bi bi-eye"></i>
                         </button>
                       @endif
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    </td>
+                  </tr>
           @if($loop->last)
+                </tbody>
+              </table>
             </div>
           @endif
         @empty
@@ -441,79 +421,61 @@
       <div class="card-body">
         @forelse($courses as $course)
           @if($loop->first)
-            <div class="row g-4">
+            <div class="table-responsive">
+              <table class="table table-hover course-table">
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-hash me-1"></i>Course ID
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-book me-1"></i>Course Title
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-file-text me-1"></i>Description
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-calendar-plus me-1"></i>Start Date
+                    </th>
+                    <th scope="col" class="fw-bold">
+                      <i class="bi bi-calendar-check me-1"></i>Created
+                    </th>
+                    <th scope="col" class="fw-bold text-center">
+                      <i class="bi bi-gear me-1"></i>Status
+                    </th>
+                    <th scope="col" class="fw-bold text-center">
+                      <i class="bi bi-tools me-1"></i>Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
           @endif
-              <div class="col-lg-6 col-xl-4">
-                <div class="card h-100 shadow-sm border-0 course-card" style="transition: all 0.3s ease;">
-                  @php
-                    // Generate course color based on course ID
-                    $courseColors = ['4ECDC4', '45B7D1', 'FFA726', 'AB47BC', 'EF5350', '66BB6A', 'FFCA28', '26A69A', 'FF7043', '7E57C2'];
-                    $courseIndex = abs(crc32($course->course_id)) % count($courseColors);
-                    $courseColor = $courseColors[$courseIndex];
-                  @endphp
-                  
-                  <!-- Card Header with Course Info -->
-                  <div class="card-header text-white border-0 py-3" style="background-color: #{{ $courseColor }};">
-                    <div class="d-flex align-items-center">
-                      <div class="me-3">
-                        <i class="bi bi-book-fill" style="font-size: 2rem;"></i>
+                  <tr>
+                    <td class="fw-semibold text-primary">{{ $course->course_id }}</td>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-book-fill text-primary me-2"></i>
+                        <span class="fw-semibold">{{ $course->course_title }}</span>
                       </div>
-                      <div class="flex-grow-1">
-                        <h6 class="mb-0 fw-bold">{{ $course->course_title }}</h6>
-                        <small class="text-dark fw-bold">Course ID: {{ $course->course_id }}</small>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div class="card-body">
-                    <!-- Description -->
-                    <div class="mb-3 p-3 bg-light rounded-3 border-start border-info border-4">
-                      <div class="d-flex align-items-start">
-                        <i class="bi bi-file-text text-info me-2 mt-1"></i>
-                        <div class="flex-grow-1">
-                          <small class="text-muted d-block mb-1">
-                            <i class="bi bi-info-circle me-1"></i>Description
-                          </small>
-                          <p class="mb-0 text-dark" style="min-height: 60px; font-style: italic;">
-                            "{{ Str::limit($course->description, 100) }}"
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Dates Section -->
-                    <div class="row mb-3">
-                      <div class="col-6">
-                        <div class="p-2 bg-success bg-opacity-10 rounded-2 text-center">
-                          <small class="text-muted d-block mb-1">
-                            <i class="bi bi-calendar-plus text-success me-1"></i>Start Date
-                          </small>
-                          <small class="fw-semibold text-dark">{{ date('M d, Y', strtotime($course->start_date)) }}</small>
-                        </div>
-                      </div>
-                      <div class="col-6">
-                        <div class="p-2 bg-secondary bg-opacity-10 rounded-2 text-center">
-                          <small class="text-muted d-block mb-1">
-                            <i class="bi bi-calendar-check text-secondary me-1"></i>Created
-                          </small>
-                          <small class="fw-semibold text-dark">{{ date('M d, Y', strtotime($course->created_at)) }}</small>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Status -->
-                    <div class="mb-3 p-3 {{ $course->status == 'Active' ? 'bg-success' : 'bg-secondary' }} bg-opacity-10 rounded-2 text-center">
-                      <small class="text-muted d-block mb-2">
-                        <i class="bi bi-gear me-1"></i>Course Status
-                      </small>
-                      <span class="badge {{ $course->status == 'Active' ? 'bg-success' : 'bg-secondary' }} fs-6">
+                    </td>
+                    <td>
+                      <span class="text-muted" title="{{ $course->description }}">
+                        {{ Str::limit($course->description, 60) }}
+                      </span>
+                    </td>
+                    <td>
+                      <small class="text-dark">{{ date('M d, Y', strtotime($course->start_date)) }}</small>
+                    </td>
+                    <td>
+                      <small class="text-muted">{{ date('M d, Y', strtotime($course->created_at)) }}</small>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge {{ $course->status == 'Active' ? 'status-active' : 'status-inactive' }}">
                         <i class="bi {{ $course->status == 'Active' ? 'bi-check-circle' : 'bi-pause-circle' }} me-1"></i>
                         {{ $course->status }}
                       </span>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="d-grid gap-2">
+                    </td>
+                    <td class="text-center">
                       <div class="btn-group" role="group">
                         <button class="btn btn-outline-info btn-sm" onclick="viewCourseDetails('{{ $course->course_id }}', '{{ addslashes($course->course_title) }}', '{{ addslashes($course->description) }}', '{{ $course->start_date }}', '{{ $course->status }}', '{{ $course->created_at->format('M d, Y H:i') }}')" title="View Details">
                           <i class="bi bi-eye"></i>
@@ -525,11 +487,11 @@
                           <i class="bi bi-trash"></i>
                         </button>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    </td>
+                  </tr>
           @if($loop->last)
+                </tbody>
+              </table>
             </div>
           @endif
         @empty

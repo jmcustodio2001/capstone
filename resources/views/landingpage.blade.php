@@ -119,7 +119,7 @@
                         <p class="testimonial-text">"Amazing experience in Boracay! The beach resort was perfect and the island hopping tour was unforgettable. Jetlouge Travels made everything seamless."</p>
                         <div class="testimonial-author">
                             <div class="author-info">
-                                <h4 class="author-name">Sarah Johnson</h4>
+                                <h4 class="author-name">Marian Rivera</h4>
                                 <span class="author-location">Boracay Beach Paradise</span>
                             </div>
                         </div>
@@ -192,9 +192,6 @@
                         <li><a href="#home">Home</a></li>
                         <li><a href="#about">About Us</a></li>
                         <li><a href="#contact">Contact</a></li>
-                        <li><a href="customer-portal/">Customer Portal</a></li>
-                        <li><a href="https://adminpage-core1.jetlougetravels-ph.com" target="_blank">Admin Dashboard</a></li>
-                        <li><a href="travel-agent-portal/">Travel Agent Dashboard</a></li>
                     </ul>
                 </div>
 
@@ -223,10 +220,6 @@
                         <div class="contact-item">
                             <i class="fas fa-map-marker-alt"></i>
                             <span>Manila, Philippines</span>
-                        </div>
-                        <div class="contact-item">
-                            <i class="fas fa-briefcase"></i>
-                            <a href="https://careers-hr1.jetlougetravels-ph.com/" target="_blank" style="color: inherit; text-decoration: none;">Join Our Team - Careers</a>
                         </div>
                     </div>
                 </div>

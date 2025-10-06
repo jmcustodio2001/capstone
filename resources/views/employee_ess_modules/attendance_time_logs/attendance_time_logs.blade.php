@@ -458,19 +458,16 @@ document.addEventListener('DOMContentLoaded', function() {
           <table class="table table-hover align-middle" id="attendance-table">
             <thead class="table-light">
               <tr>
-                <th class="fw-bold">ID</th>
                 <th class="fw-bold">Date</th>
                 <th class="fw-bold">Time In</th>
                 <th class="fw-bold">Time Out</th>
                 <th class="fw-bold">Hours Worked</th>
                 <th class="fw-bold">Status</th>
-                <th class="fw-bold">Actions</th>
               </tr>
             </thead>
             <tbody>
               @forelse($attendance_logs as $log)
                 <tr>
-                  <td>{{ $log->id }}</td>
                   <td>{{ \Carbon\Carbon::parse($log->log_date)->format('M d, Y') }}</td>
                   <td>
                     @if($log->time_in)
@@ -479,14 +476,7 @@ document.addEventListener('DOMContentLoaded', function() {
                           $timeIn = \Carbon\Carbon::parse($log->time_in);
                           echo $timeIn->format('g:i A');
                         } catch (Exception $e) {
-                          // Try to extract time from datetime string
-                          if (strpos($log->time_in, ' ') !== false) {
-                            $timePart = explode(' ', $log->time_in)[1];
-                            $timeIn = \Carbon\Carbon::createFromFormat('H:i:s', $timePart);
-                            echo $timeIn->format('g:i A');
-                          } else {
-                            echo $log->time_in;
-                          }
+                          echo $log->time_in;
                         }
                       @endphp
                     @else
@@ -500,14 +490,7 @@ document.addEventListener('DOMContentLoaded', function() {
                           $timeOut = \Carbon\Carbon::parse($log->time_out);
                           echo $timeOut->format('g:i A');
                         } catch (Exception $e) {
-                          // Try to extract time from datetime string
-                          if (strpos($log->time_out, ' ') !== false) {
-                            $timePart = explode(' ', $log->time_out)[1];
-                            $timeOut = \Carbon\Carbon::createFromFormat('H:i:s', $timePart);
-                            echo $timeOut->format('g:i A');
-                          } else {
-                            echo $log->time_out;
-                          }
+                          echo $log->time_out;
                         }
                       @endphp
                     @else
@@ -527,34 +510,13 @@ document.addEventListener('DOMContentLoaded', function() {
                   </td>
                   <td>
                     <span class="badge badge-simulation status-{{ strtolower(str_replace(' ', '-', $log->status)) }}">
-                      {{ $log->status }}
+                      {{ $log->status ?? 'N/A' }}
                     </span>
-                  </td>
-                  <td>
-                    <div class="dropdown">
-                      <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
-                              data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-three-dots"></i>
-                      </button>
-                      <ul class="dropdown-menu">
-                        <li>
-                          <a class="dropdown-item" href="#" onclick="viewAttendanceDetails({{ $log->id }})">
-                            <i class="bi bi-eye me-2"></i>View Details
-                          </a>
-                        </li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                          <a class="dropdown-item" href="#" onclick="requestCorrection({{ $log->id }})">
-                            <i class="bi bi-exclamation-triangle me-2"></i>Request Correction
-                          </a>
-                        </li>
-                      </ul>
-                    </div>
                   </td>
                 </tr>
               @empty
                 <tr>
-                  <td colspan="7" class="text-center text-muted py-4">
+                  <td colspan="5" class="text-center text-muted py-4">
                     <i class="bi bi-info-circle me-2"></i>No attendance logs found.
                   </td>
                 </tr>
@@ -789,13 +751,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
       rows.forEach(row => {
         // Skip the "No attendance logs found" row
-        if (row.cells.length < 6) {
+        if (row.cells.length < 5) {
           return;
         }
 
         let showRow = true;
-        const dateCell = row.cells[1] ? row.cells[1].textContent.trim() : '';
-        const statusBadge = row.cells[5] ? row.cells[5].querySelector('.badge') : null;
+        const dateCell = row.cells[0] ? row.cells[0].textContent.trim() : '';
+        const statusBadge = row.cells[4] ? row.cells[4].querySelector('.badge') : null;
         const statusCell = statusBadge ? statusBadge.textContent.trim() : '';
 
         // Apply month filter
@@ -840,7 +802,7 @@ document.addEventListener('DOMContentLoaded', function() {
       let visibleRows = 0;
 
       rows.forEach(row => {
-        if (row.style.display !== 'none' && row.cells.length >= 6) {
+        if (row.style.display !== 'none' && row.cells.length >= 5) {
           visibleRows++;
         }
       });
@@ -851,7 +813,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (visibleRows === 0) {
         // Remove existing "No attendance logs found" row if it exists
-        const existingNoDataRow = tbody.querySelector('tr td[colspan="7"]');
+        const existingNoDataRow = tbody.querySelector('tr td[colspan="5"]');
         if (existingNoDataRow) {
           existingNoDataRow.parentElement.style.display = 'none';
         }
@@ -860,7 +822,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const noMatchRow = document.createElement('tr');
           noMatchRow.className = 'no-match-message';
           noMatchRow.innerHTML = `
-            <td colspan="7" class="text-center text-muted py-4">
+            <td colspan="5" class="text-center text-muted py-4">
               <i class="bi bi-search me-2"></i>No matching attendance records found. Try adjusting your filters.
             </td>
           `;
@@ -873,7 +835,7 @@ document.addEventListener('DOMContentLoaded', function() {
           noMatchMessage.style.display = 'none';
         }
         // Show original "No attendance logs found" row if no data exists
-        const existingNoDataRow = tbody.querySelector('tr td[colspan="7"]');
+        const existingNoDataRow = tbody.querySelector('tr td[colspan="5"]');
         if (existingNoDataRow && visibleRows === 0) {
           existingNoDataRow.parentElement.style.display = '';
         }

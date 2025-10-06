@@ -60,6 +60,33 @@
       background-color: rgba(67, 97, 238, 0.05);
     }
 
+    /* Enhanced table styling for more columns */
+    .table th, .table td {
+      white-space: nowrap;
+      font-size: 0.875rem;
+      padding: 0.5rem;
+    }
+
+    .table th {
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    /* Specific column widths */
+    .table th:nth-child(1), .table td:nth-child(1) { width: 60px; } /* ID */
+    .table th:nth-child(2), .table td:nth-child(2) { width: 100px; } /* Employee ID */
+    .table th:nth-child(3), .table td:nth-child(3) { width: 120px; } /* Claim Type */
+    .table th:nth-child(4), .table td:nth-child(4) { width: 100px; } /* Amount */
+    .table th:nth-child(5), .table td:nth-child(5) { width: 100px; } /* Claim Date */
+    .table th:nth-child(6), .table td:nth-child(6) { width: 200px; white-space: normal; } /* Description */
+    .table th:nth-child(7), .table td:nth-child(7) { width: 150px; } /* Receipt Path */
+    .table th:nth-child(8), .table td:nth-child(8) { width: 80px; } /* Status */
+    .table th:nth-child(9), .table td:nth-child(9) { width: 120px; } /* Approved By */
+    .table th:nth-child(10), .table td:nth-child(10) { width: 100px; } /* Approved At */
+    .table th:nth-child(11), .table td:nth-child(11) { width: 150px; white-space: normal; } /* Admin Notes */
+    .table th:nth-child(12), .table td:nth-child(12) { width: 100px; } /* Created At */
+    .table th:nth-child(13), .table td:nth-child(13) { width: 100px; } /* Updated At */
+
     .status-pending {
       background-color: rgba(255,193,7,0.15);
       color: #856404;
@@ -445,58 +472,45 @@ document.addEventListener('DOMContentLoaded', function() {
         <table class="table table-hover align-middle" id="claim-table">
           <thead class="table-light">
             <tr>
-              <th>Claim ID</th>
-              <th>Date Filed</th>
-              <th>Type</th>
+              <th>ID</th>
+              <th>Employee ID</th>
+              <th>Claim Type ID</th>
               <th>Amount</th>
+              <th>Claim Date</th>
+              <th>Description</th>
+              <th>Receipt Path</th>
               <th>Status</th>
-              <th>Remarks</th>
-              <th>Actions</th>
+              <th>Approved By</th>
+              <th>Approved At</th>
+              <th>Admin Notes</th>
+              <th>Created At</th>
+              <th>Updated At</th>
             </tr>
           </thead>
           <tbody>
             @forelse($claims as $claim)
               <tr>
-                <td>{{ $claim->claim_id }}</td>
-                <td>{{ \Carbon\Carbon::parse($claim->created_at)->format('M d, Y') }}</td>
-                <td>
-  <span class="claim-type-border claim-type-{{ Str::slug($claim->claim_type, '-') }}">
-    {{ $claim->claim_type }}
-  </span>
-</td>
+                <td>{{ $claim->id }}</td>
+                <td>{{ $claim->employee_id }}</td>
+                <td>{{ $claim->claim_type }}</td>
                 <td>₱{{ number_format($claim->amount, 2) }}</td>
+                <td>{{ \Carbon\Carbon::parse($claim->claim_date)->format('M d, Y') }}</td>
+                <td>{{ Str::limit($claim->description, 50) }}</td>
+                <td>{{ $claim->receipt_file ?? '---' }}</td>
                 <td>
                   <span class="badge badge-simulation status-{{ strtolower($claim->status) }}">
                     {{ $claim->status }}
                   </span>
                 </td>
+                <td>{{ $claim->approver ? $claim->approver->name : '---' }}</td>
+                <td>{{ $claim->approved_date ? \Carbon\Carbon::parse($claim->approved_date)->format('M d, Y') : '---' }}</td>
                 <td>{{ $claim->remarks ?? '---' }}</td>
-                <td>
-                  <div class="d-flex gap-2 flex-wrap action-btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-info" onclick="viewClaimDetails({{ $claim->id }})" title="View Details">
-                      <i class="bi bi-eye"></i>View
-                    </button>
-                    @if($claim->canBeEdited())
-                      <button class="btn btn-sm btn-outline-primary" onclick="editClaimWithConfirmation({{ $claim->id }})" title="Edit">
-                        <i class="bi bi-pencil"></i>Edit
-                      </button>
-                    @endif
-                    @if($claim->receipt_file)
-                      <a href="{{ route('employee.claim_reimbursements.download_receipt', $claim->id) }}" class="btn btn-sm btn-outline-success" title="Download Receipt">
-                        <i class="bi bi-download"></i>Download
-                      </a>
-                    @endif
-                    @if($claim->canBeCancelled())
-                      <button class="btn btn-sm btn-outline-danger" onclick="cancelClaimWithConfirmation({{ $claim->id }})" title="Cancel">
-                        <i class="bi bi-x-circle"></i>Cancel
-                      </button>
-                    @endif
-                  </div>
-                </td>
+                <td>{{ \Carbon\Carbon::parse($claim->created_at)->format('M d, Y') }}</td>
+                <td>{{ \Carbon\Carbon::parse($claim->updated_at)->format('M d, Y') }}</td>
               </tr>
             @empty
               <tr>
-                <td colspan="7" class="text-center text-muted py-4">
+                <td colspan="13" class="text-center text-muted py-4">
                   <i class="bi bi-info-circle me-2"></i>No claims found.
                 </td>
               </tr>

@@ -31,6 +31,7 @@ class ClaimReimbursementController extends Controller
         }
 
         $claims = ClaimReimbursement::where('employee_id', $employee->employee_id)
+            ->with(['approver'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 

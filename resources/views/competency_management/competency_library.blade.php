@@ -71,8 +71,8 @@
     }
     
     .table th {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%);
+      color: #2c5282;
       border: none;
       font-weight: 600;
       font-size: 0.875rem;
@@ -126,8 +126,8 @@
     }
     
     .row-number {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%);
+      color: #2c5282;
       font-weight: 700;
       font-size: 0.8rem;
       padding: 0.3rem 0.6rem;
@@ -142,6 +142,172 @@
     .progress-percentage {
       font-weight: 700;
       font-size: 0.9rem;
+    }
+
+    /* Modern Modal Styling */
+    .modal-content {
+      border: none;
+      border-radius: 20px;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+      overflow: hidden;
+    }
+
+    .modal-header {
+      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%);
+      color: #2c5282;
+      border: none;
+      padding: 2rem 2rem 1rem;
+      position: relative;
+    }
+
+    .modal-header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .modal-title {
+      font-weight: 700;
+      font-size: 1.5rem;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .modal-icon {
+      width: 40px;
+      height: 40px;
+      background: rgba(44, 82, 130, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+    }
+
+    .btn-close {
+      background: rgba(44,82,130,0.2) !important;
+      border-radius: 50% !important;
+      width: 40px !important;
+      height: 40px !important;
+      opacity: 1 !important;
+      border: none !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transition: all 0.3s ease !important;
+      position: relative !important;
+    }
+
+    .btn-close:hover {
+      background: rgba(44,82,130,0.3) !important;
+      transform: scale(1.1) !important;
+    }
+
+    .btn-close:focus {
+      box-shadow: 0 0 0 3px rgba(44,82,130,0.3) !important;
+    }
+
+    .btn-close::before {
+      content: '×' !important;
+      font-size: 24px !important;
+      font-weight: bold !important;
+      color: #2c5282 !important;
+      line-height: 1 !important;
+    }
+
+    .modal-body {
+      padding: 2rem;
+      background: #fafafa;
+    }
+
+    .form-floating {
+      margin-bottom: 1.5rem;
+    }
+
+    .form-floating > .form-control {
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem 0.75rem;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      background: white;
+    }
+
+    .form-floating > .form-control:focus {
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .form-floating > label {
+      color: #a0aec0;
+      font-weight: 500;
+    }
+
+    .form-select {
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem 0.75rem;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+      background: white;
+    }
+
+    .form-select:focus {
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .modal-footer {
+      background: white;
+      border: none;
+      padding: 1.5rem 2rem 2rem;
+      gap: 1rem;
+    }
+
+    .btn-modern {
+      padding: 0.75rem 2rem;
+      border-radius: 12px;
+      font-weight: 600;
+      border: none;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-modern::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.5s;
+    }
+
+    .btn-modern:hover::before {
+      left: 100%;
+    }
+
+    .btn-primary.btn-modern {
+      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%);
+      color: #2c5282;
+    }
+
+    .btn-secondary.btn-modern {
+      background: #e2e8f0;
+      color: #4a5568;
+    }
+
+    .btn-modern:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
     }
   </style>
 </head>
@@ -366,21 +532,26 @@
       <form method="POST" action="{{ route('admin.competency_library.store') }}">
         @csrf
         <div class="modal-content">
-          <div class="card-header modal-header">
-            <h5 class="modal-title">Add New Competency</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <div class="modal-icon">
+                <i class="bi bi-plus-circle-fill"></i>
+              </div>
+              Add New Competency
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" title="Close"></button>
           </div>
           <div class="modal-body">
-            <div class="mb-3">
-              <label for="add-competency-name" class="form-label">Competency Name*</label>
-              <input id="add-competency-name" type="text" name="competency_name" class="form-control" required>
+            <div class="form-floating">
+              <input id="add-competency-name" type="text" name="competency_name" class="form-control" placeholder="Competency Name" required>
+              <label for="add-competency-name">Competency Name*</label>
+            </div>
+            <div class="form-floating">
+              <textarea id="add-description" name="description" class="form-control" placeholder="Description" style="height: 100px"></textarea>
+              <label for="add-description">Description</label>
             </div>
             <div class="mb-3">
-              <label for="add-description" class="form-label">Description</label>
-              <textarea id="add-description" name="description" class="form-control" rows="3"></textarea>
-            </div>
-            <div class="mb-3">
-              <label for="add-category" class="form-label">Category*</label>
+              <label for="add-category" class="form-label fw-semibold text-muted mb-2">Category*</label>
               <select id="add-category" name="category" class="form-select" required>
                 <option value="">Select Category</option>
                 <option value="Technical">Technical</option>
@@ -391,14 +562,14 @@
                 <option value="Functional">Functional</option>
               </select>
             </div>
-            <div class="mb-3">
-              <label for="add-rate" class="form-label">Proficiency Level*</label>
-              <input id="add-rate" type="number" name="rate" class="form-control" min="1" max="5" required>
+            <div class="form-floating">
+              <input id="add-rate" type="number" name="rate" class="form-control" placeholder="Proficiency Level" min="1" max="5" required>
+              <label for="add-rate">Proficiency Level*</label>
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">
+            <button type="button" class="btn btn-secondary btn-modern" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary btn-modern">
               <i class="bi bi-save me-1"></i> Save Competency
             </button>
           </div>
@@ -414,21 +585,26 @@
         @csrf
         @method('PUT')
         <div class="modal-content">
-          <div class="card-header modal-header">
-            <h5 class="modal-title">Edit Competency</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <div class="modal-header">
+            <h5 class="modal-title">
+              <div class="modal-icon">
+                <i class="bi bi-pencil-square"></i>
+              </div>
+              Edit Competency
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" title="Close"></button>
           </div>
           <div class="modal-body">
-            <div class="mb-3">
-              <label for="edit-competency-name" class="form-label">Competency Name*</label>
-              <input id="edit-competency-name" type="text" name="competency_name" class="form-control" required>
+            <div class="form-floating">
+              <input id="edit-competency-name" type="text" name="competency_name" class="form-control" placeholder="Competency Name" required>
+              <label for="edit-competency-name">Competency Name*</label>
+            </div>
+            <div class="form-floating">
+              <textarea id="edit-description" name="description" class="form-control" placeholder="Description" style="height: 100px"></textarea>
+              <label for="edit-description">Description</label>
             </div>
             <div class="mb-3">
-              <label for="edit-description" class="form-label">Description</label>
-              <textarea id="edit-description" name="description" class="form-control" rows="3"></textarea>
-            </div>
-            <div class="mb-3">
-              <label for="edit-category" class="form-label">Category*</label>
+              <label for="edit-category" class="form-label fw-semibold text-muted mb-2">Category*</label>
               <select id="edit-category" name="category" class="form-select" required>
                 <option value="">Select Category</option>
                 <option value="Technical">Technical</option>
@@ -439,14 +615,14 @@
                 <option value="Functional">Functional</option>
               </select>
             </div>
-            <div class="mb-3">
-              <label for="edit-rate" class="form-label">Proficiency Level*</label>
-              <input id="edit-rate" type="number" name="rate" class="form-control" min="1" max="5" required>
+            <div class="form-floating">
+              <input id="edit-rate" type="number" name="rate" class="form-control" placeholder="Proficiency Level" min="1" max="5" required>
+              <label for="edit-rate">Proficiency Level*</label>
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary" id="updateCompetencyBtn">
+            <button type="button" class="btn btn-secondary btn-modern" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary btn-modern" id="updateCompetencyBtn">
               <i class="bi bi-arrow-repeat me-1"></i> Update Competency
             </button>
             <button type="button" class="btn btn-success" id="testDirectSubmit" style="display:none;">

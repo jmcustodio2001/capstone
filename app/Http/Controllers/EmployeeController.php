@@ -225,20 +225,27 @@ class EmployeeController extends Controller
         // Check if account is locked out
         $lockoutKey = 'employee_lockout_' . $ipAddress . '_' . md5($email);
         $attemptsKey = 'employee_attempts_' . $ipAddress . '_' . md5($email);
+        $lockoutCountKey = 'employee_lockout_count_' . $ipAddress . '_' . md5($email);
 
         if ($request->session()->has($lockoutKey)) {
             $lockoutTime = $request->session()->get($lockoutKey);
             if (Carbon::now()->lt($lockoutTime)) {
                 $remainingMinutes = Carbon::now()->diffInMinutes($lockoutTime, false);
+                $remainingSeconds = Carbon::now()->diffInSeconds($lockoutTime, false);
+                $lockoutCount = $request->session()->get($lockoutCountKey, 1);
+                
                 return response()->json([
                     'success' => false,
                     'message' => "Account temporarily locked due to too many failed attempts. Please try again in {$remainingMinutes} minutes.",
                     'step' => 'lockout',
-                    'lockout_remaining' => $remainingMinutes
+                    'lockout_remaining' => $remainingMinutes,
+                    'lockout_remaining_seconds' => $remainingSeconds,
+                    'lockout_count' => $lockoutCount
                 ], 423);
             } else {
-                // Lockout expired, clear it
+                // Lockout expired, clear attempts but keep lockout count for progressive increase
                 $request->session()->forget([$lockoutKey, $attemptsKey]);
+                // Note: We keep lockoutCountKey to maintain progressive lockout behavior
             }
         }
 
@@ -253,8 +260,8 @@ class EmployeeController extends Controller
             return $this->handleFailedLoginAttempt($request, $email, 'The password you entered is incorrect.');
         }
 
-        // Password is correct, clear any failed attempts
-        $request->session()->forget([$lockoutKey, $attemptsKey]);
+        // Password is correct, clear any failed attempts and lockout data
+        $request->session()->forget([$lockoutKey, $attemptsKey, $lockoutCountKey]);
 
         // Password is correct, now send OTP
         try {
@@ -333,6 +340,7 @@ class EmployeeController extends Controller
         $ipAddress = $request->ip();
         $attemptsKey = 'employee_attempts_' . $ipAddress . '_' . md5($email);
         $lockoutKey = 'employee_lockout_' . $ipAddress . '_' . md5($email);
+        $lockoutCountKey = 'employee_lockout_count_' . $ipAddress . '_' . md5($email);
 
         $attempts = $request->session()->get($attemptsKey, 0) + 1;
         $request->session()->put($attemptsKey, $attempts);
@@ -345,22 +353,32 @@ class EmployeeController extends Controller
         ]);
 
         if ($attempts >= 3) {
-            // Lock account for 15 minutes
-            $lockoutTime = Carbon::now()->addMinutes(15);
+            // Progressive lockout: 3 min, 6 min, 12 min, 24 min, etc.
+            $lockoutCount = $request->session()->get($lockoutCountKey, 0) + 1;
+            $lockoutMinutes = 3 * pow(2, $lockoutCount - 1); // 3, 6, 12, 24, 48, 96...
+            
+            // Cap at maximum 96 minutes (1.6 hours)
+            $lockoutMinutes = min($lockoutMinutes, 96);
+            
+            $lockoutTime = Carbon::now()->addMinutes($lockoutMinutes);
             $request->session()->put($lockoutKey, $lockoutTime);
+            $request->session()->put($lockoutCountKey, $lockoutCount);
             $request->session()->forget($attemptsKey);
 
             Log::warning('Employee account locked due to failed attempts', [
                 'email' => $email,
                 'ip_address' => $ipAddress,
+                'lockout_count' => $lockoutCount,
+                'lockout_minutes' => $lockoutMinutes,
                 'lockout_until' => $lockoutTime->toDateTimeString()
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Account temporarily locked due to too many failed attempts. Please try again in 15 minutes.',
+                'message' => "Account temporarily locked due to too many failed attempts. Please try again in {$lockoutMinutes} minutes.",
                 'step' => 'lockout',
-                'lockout_remaining' => 15
+                'lockout_remaining' => $lockoutMinutes,
+                'lockout_count' => $lockoutCount
             ], 423);
         }
 
@@ -421,7 +439,8 @@ class EmployeeController extends Controller
                 $email = $employee->email;
                 $attemptsKey = 'employee_attempts_' . $ipAddress . '_' . md5($email);
                 $lockoutKey = 'employee_lockout_' . $ipAddress . '_' . md5($email);
-                $request->session()->forget([$attemptsKey, $lockoutKey]);
+                $lockoutCountKey = 'employee_lockout_count_' . $ipAddress . '_' . md5($email);
+                $request->session()->forget([$attemptsKey, $lockoutKey, $lockoutCountKey]);
 
                 Log::info('Employee login completed with OTP', [
                     'employee_id' => $employee->employee_id,

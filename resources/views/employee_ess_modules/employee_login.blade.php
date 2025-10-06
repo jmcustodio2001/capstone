@@ -384,6 +384,89 @@
 
       // Server-side attempt tracking - no client-side variables needed
 
+      // Lockout timer functionality
+      let lockoutTimer;
+      
+      function showLockoutTimer(remainingSeconds, lockoutCount) {
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = remainingSeconds % 60;
+        
+        // Clear any existing timer
+        if (lockoutTimer) {
+          clearInterval(lockoutTimer);
+        }
+        
+        // Show initial lockout message
+        Swal.fire({
+          icon: 'error',
+          title: 'Account Temporarily Locked',
+          html: `
+            <div style="text-align: center;">
+              <p>Account temporarily locked due to too many failed attempts.</p>
+              <p><strong>Lockout #${lockoutCount}</strong></p>
+              <div style="font-size: 2rem; font-weight: bold; color: #dc3545; margin: 20px 0;">
+                <span id="lockout-timer">${minutes}:${seconds.toString().padStart(2, '0')}</span>
+              </div>
+              <p>Please try again when the timer reaches zero.</p>
+              <small style="color: #6c757d;">Progressive lockout: Each lockout doubles the wait time.</small>
+            </div>
+          `,
+          confirmButtonColor: '#667eea',
+          width: '500px',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          didOpen: () => {
+            startLockoutCountdown(remainingSeconds);
+          },
+          willClose: () => {
+            if (lockoutTimer) {
+              clearInterval(lockoutTimer);
+            }
+          }
+        });
+      }
+      
+      function startLockoutCountdown(totalSeconds) {
+        let timeLeft = totalSeconds;
+        const timerElement = document.getElementById('lockout-timer');
+        
+        lockoutTimer = setInterval(() => {
+          timeLeft--;
+          
+          const minutes = Math.floor(timeLeft / 60);
+          const seconds = timeLeft % 60;
+          
+          if (timerElement) {
+            timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            // Change color based on time remaining
+            if (timeLeft <= 30) {
+              timerElement.style.color = '#dc3545'; // Red
+              timerElement.classList.add('timer-warning');
+            } else if (timeLeft <= 60) {
+              timerElement.style.color = '#fd7e14'; // Orange
+            } else {
+              timerElement.style.color = '#6f42c1'; // Purple
+            }
+          }
+          
+          if (timeLeft <= 0) {
+            clearInterval(lockoutTimer);
+            Swal.close();
+            
+            // Show message that they can try again
+            Swal.fire({
+              icon: 'info',
+              title: 'Lockout Expired',
+              text: 'You can now try logging in again. Please be careful with your credentials.',
+              confirmButtonColor: '#667eea',
+              timer: 3000
+            });
+          }
+        }, 1000);
+      }
+
       // Login form submission
       loginForm.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -447,13 +530,7 @@
           } else {
             // Handle server-side error responses
             if (data.step === 'lockout') {
-              Swal.fire({
-                icon: 'error',
-                title: 'Account Temporarily Locked',
-                text: data.message,
-                confirmButtonColor: '#667eea',
-                width: '500px'
-              });
+              showLockoutTimer(data.lockout_remaining_seconds || (data.lockout_remaining * 60), data.lockout_count || 1);
             } else {
               // Show error message (server already includes remaining attempts)
               let errorText = data.message || 'An unknown error occurred.';

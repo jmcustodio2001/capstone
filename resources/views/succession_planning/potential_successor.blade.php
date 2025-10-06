@@ -228,7 +228,7 @@
               <div id="suggestionsContainer">
                 <div class="text-center py-4">
                   <i class="bi bi-robot display-4 text-primary mb-3"></i>
-                  <h5 class="text-primary">AI-Powered Successor Intelligence</h5>
+                  <h5 class="text-primary">LEADGEN - AI</h5>
                   <p class="text-muted">Select a target role to see advanced AI analysis with competency matching, performance prediction, and risk assessment.</p>
                   <div class="row mt-4">
                     <div class="col-md-4">

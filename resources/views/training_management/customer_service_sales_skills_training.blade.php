@@ -155,6 +155,23 @@
         gap: 8px !important;
       }
     }
+
+    /* Custom table header styling */
+    .custom-table-header {
+      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%) !important;
+      color: #2c5282 !important;
+    }
+
+    .custom-table-header th {
+      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%) !important;
+      color: #2c5282 !important;
+      font-weight: 600 !important;
+      font-size: 0.875rem !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.5px !important;
+      padding: 1rem 0.75rem !important;
+      border: none !important;
+    }
   </style>
 </head>
 <body style="background-color: #f8f9fa !important;">
@@ -252,117 +269,100 @@
             $displayCurrentLevel = $gap->current_level > 5 ? 5 : ($gap->current_level < 1 ? round($gap->current_level * 20) : $gap->current_level);
             $displayGap = max(0, $displayRequiredLevel - $displayCurrentLevel);
             
-            // Dynamic header color based on gap severity
-            $headerClass = 'bg-primary';
+            // Dynamic row color based on gap severity
+            $rowClass = '';
             if ($displayGap >= 4) {
-                $headerClass = 'bg-danger';
+                $rowClass = 'table-danger';
             } elseif ($displayGap >= 3) {
-                $headerClass = 'bg-warning';
+                $rowClass = 'table-warning';
             } elseif ($displayGap >= 2) {
-                $headerClass = 'bg-info';
+                $rowClass = 'table-info';
             }
           @endphp
           
-          <div class="col-12 mb-4">
-            <div class="card h-100 shadow-sm border-0 training-gap-card" style="transition: all 0.3s ease;">
-              <!-- Dynamic Header with Employee Info -->
-              <div class="card-header {{ $headerClass }} text-white rounded-top" style="border-radius: 12px 12px 0 0 !important;">
-                <div class="d-flex align-items-center">
-                  <img src="{{ $profilePicUrl }}" 
-                       alt="{{ $firstName }} {{ $lastName }}" 
-                       class="rounded-circle me-3" 
-                       style="width: 50px; height: 50px; object-fit: cover; border: 3px solid rgba(255,255,255,0.3);">
-                  <div class="flex-grow-1">
-                    <h5 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h5>
-                    <small class="opacity-75">ID: {{ $gap->employee->employee_id }} • Gap Level: {{ $displayGap }}</small>
-                  </div>
-                  <div class="text-end">
-                    <span class="badge bg-light text-dark fs-6 px-3 py-2">Training Needed</span>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Card Body with Competency Details -->
-              <div class="card-body p-4">
-                <div class="row g-4">
-                  <!-- Competency Information -->
-                  <div class="col-md-6">
-                    <div class="d-flex align-items-start mb-3 p-3 bg-light rounded">
-                      <i class="bi bi-award text-primary fs-3 me-3 mt-1"></i>
-                      <div class="flex-grow-1">
-                        <h6 class="mb-2 fw-bold text-primary fs-5">Competency Required</h6>
-                        <p class="mb-0 fs-6 fw-semibold">{{ $gap->competency->competency_name }}</p>
-                        <small class="text-muted">Core skill needed for role</small>
+          @if($loop->first)
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="custom-table-header">
+                <tr class="custom-table-header">
+                  <th scope="col" style="width: 15%;">Employee</th>
+                  <th scope="col" style="width: 20%;">Competency Required</th>
+                  <th scope="col" style="width: 20%;">Recommended Training</th>
+                  <th scope="col" style="width: 10%;">Required Level</th>
+                  <th scope="col" style="width: 10%;">Current Level</th>
+                  <th scope="col" style="width: 10%;">Gap</th>
+                  <th scope="col" style="width: 15%;">Progress</th>
+                </tr>
+              </thead>
+              <tbody>
+          @endif
+          
+                <tr class="{{ $rowClass }}">
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <img src="{{ $profilePicUrl }}" 
+                           alt="{{ $firstName }} {{ $lastName }}" 
+                           class="rounded-circle me-2" 
+                           style="width: 40px; height: 40px; object-fit: cover;">
+                      <div>
+                        <div class="fw-semibold">{{ $firstName }} {{ $lastName }}</div>
+                        <small class="text-muted">ID: {{ $gap->employee->employee_id }}</small>
                       </div>
                     </div>
-                  </div>
-                  
-                  <!-- Recommended Training -->
-                  <div class="col-md-6">
-                    <div class="d-flex align-items-start mb-3 p-3 bg-light rounded">
-                      <i class="bi bi-book text-success fs-3 me-3 mt-1"></i>
-                      <div class="flex-grow-1">
-                        <h6 class="mb-2 fw-bold text-success fs-5">Recommended Training</h6>
-                        <p class="mb-0 fs-6 fw-semibold">
-                          @if($gap->recommended_training && isset($gap->recommended_training->course_title))
-                            {{ $gap->recommended_training->course_title }}
-                          @else
-                            <span class="text-muted">No training assigned</span>
-                          @endif
-                        </p>
-                        <small class="text-muted">Suggested course to close gap</small>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <i class="bi bi-award text-primary me-2"></i>
+                      <div>
+                        <div class="fw-semibold">{{ $gap->competency->competency_name }}</div>
+                        <small class="text-muted">Core skill needed</small>
                       </div>
                     </div>
-                  </div>
-                </div>
-                
-                <!-- Progress Levels -->
-                <div class="row g-4 mt-2">
-                  <div class="col-md-4">
-                    <div class="text-center p-4 bg-info bg-opacity-10 border border-info border-opacity-25 rounded">
-                      <i class="bi bi-target text-info fs-3 mb-2"></i>
-                      <div class="fs-1 fw-bold text-info">{{ $displayRequiredLevel }}</div>
-                      <div class="fw-semibold text-info">Required Level</div>
-                      <small class="text-muted">Target proficiency</small>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <i class="bi bi-book text-success me-2"></i>
+                      <div>
+                        @if($gap->recommended_training && isset($gap->recommended_training->course_title))
+                          <div class="fw-semibold">{{ $gap->recommended_training->course_title }}</div>
+                          <small class="text-muted">Suggested course</small>
+                        @else
+                          <span class="text-muted">No training assigned</span>
+                        @endif
+                      </div>
                     </div>
-                  </div>
-                  <div class="col-md-4">
-                    <div class="text-center p-4 bg-warning bg-opacity-10 border border-warning border-opacity-25 rounded">
-                      <i class="bi bi-person-check text-warning fs-3 mb-2"></i>
-                      <div class="fs-1 fw-bold text-warning">{{ $displayCurrentLevel }}</div>
-                      <div class="fw-semibold text-warning">Current Level</div>
-                      <small class="text-muted">Present skill level</small>
+                  </td>
+                  <td class="text-center">
+                    <span class="badge bg-info fs-6 px-3 py-2">{{ $displayRequiredLevel }}</span>
+                  </td>
+                  <td class="text-center">
+                    <span class="badge bg-warning fs-6 px-3 py-2">{{ $displayCurrentLevel }}</span>
+                  </td>
+                  <td class="text-center">
+                    <span class="badge bg-danger fs-6 px-3 py-2">{{ $displayGap }}</span>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                        <div class="progress-bar progress-bar-striped" 
+                             role="progressbar" 
+                             style="width: {{ min(($displayCurrentLevel / $displayRequiredLevel) * 100, 100) }}%; background: linear-gradient(45deg, #007bff, #0056b3);" 
+                             aria-valuenow="{{ ($displayCurrentLevel / $displayRequiredLevel) * 100 }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                      </div>
+                      <small class="text-muted">{{ round(($displayCurrentLevel / $displayRequiredLevel) * 100) }}%</small>
                     </div>
-                  </div>
-                  <div class="col-md-4">
-                    <div class="text-center p-4 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded">
-                      <i class="bi bi-exclamation-triangle text-danger fs-3 mb-2"></i>
-                      <div class="fs-1 fw-bold text-danger">{{ $displayGap }}</div>
-                      <div class="fw-semibold text-danger">Gap to Close</div>
-                      <small class="text-muted">Training needed</small>
-                    </div>
-                  </div>
-                </div>
-                
-                <!-- Visual Progress Bar -->
-                <div class="mt-4">
-                  <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-semibold">Skill Progress</span>
-                    <span class="text-muted">{{ round(($displayCurrentLevel / $displayRequiredLevel) * 100) }}%</span>
-                  </div>
-                  <div class="progress" style="height: 12px; border-radius: 10px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                         role="progressbar" 
-                         style="width: {{ min(($displayCurrentLevel / $displayRequiredLevel) * 100, 100) }}%; background: linear-gradient(45deg, #007bff, #0056b3);" 
-                         aria-valuenow="{{ ($displayCurrentLevel / $displayRequiredLevel) * 100 }}" 
-                         aria-valuemin="0" 
-                         aria-valuemax="100">
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+                  </td>
+                </tr>
+          
+          @if($loop->last)
+              </tbody>
+            </table>
           </div>
+          @endif
+          
         @empty
           <div class="text-center py-5">
             <i class="bi bi-check-circle text-success" style="font-size: 4rem;"></i>
@@ -600,6 +600,22 @@
                 $commSkillsCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Communication Skills%')->first();
                 if ($commSkillsCourse) {
                     $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $commSkillsCourse->course_id);
+                }
+            }
+            
+            // Strategy 4: Check EmployeeCompetencyProfile table when no exam/training progress found
+            if ($combinedProgress == 0) {
+                $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
+                if ($trainingTitle) {
+                    $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
+                        $q->where('competency_name', $trainingTitle)
+                          ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+                    })->where('employee_id', $record->employee_id)->first();
+                    
+                    if ($competencyProfile && $competencyProfile->proficiency_level) {
+                        // Convert competency proficiency levels (1-5 scale) to percentages (0-100%)
+                        $combinedProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+                    }
                 }
             }
             
@@ -993,6 +1009,22 @@
           $commSkillsCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Communication Skills%')->first();
           if ($commSkillsCourse) {
               $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $commSkillsCourse->course_id);
+          }
+      }
+      
+      // Strategy 4: Check EmployeeCompetencyProfile table when no exam/training progress found
+      if ($combinedProgress == 0) {
+          $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
+          if ($trainingTitle) {
+              $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
+                  $q->where('competency_name', $trainingTitle)
+                    ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+              })->where('employee_id', $record->employee_id)->first();
+              
+              if ($competencyProfile && $competencyProfile->proficiency_level) {
+                  // Convert competency proficiency levels (1-5 scale) to percentages (0-100%)
+                  $combinedProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+              }
           }
       }
       

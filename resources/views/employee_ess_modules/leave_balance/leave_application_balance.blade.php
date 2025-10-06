@@ -609,53 +609,45 @@ document.addEventListener('DOMContentLoaded', function() {
         <table class="table table-hover align-middle" id="leave-table">
           <thead class="table-light">
             <tr>
-              <th class="fw-bold">Leave ID</th>
-              <th class="fw-bold">Leave Type</th>
-              <th class="fw-bold">Leave Days</th>
+              <th class="fw-bold">ID</th>
+              <th class="fw-bold">Employee ID</th>
+              <th class="fw-bold">Leave Type ID</th>
               <th class="fw-bold">Start Date</th>
               <th class="fw-bold">End Date</th>
+              <th class="fw-bold">Days Requested</th>
+              <th class="fw-bold">Reason</th>
               <th class="fw-bold">Status</th>
-              <th class="fw-bold">Applied Date</th>
-              <th class="fw-bold text-center">Actions</th>
+              <th class="fw-bold">Approved By</th>
+              <th class="fw-bold">Approved At</th>
+              <th class="fw-bold">Admin Notes</th>
+              <th class="fw-bold">Created At</th>
+              <th class="fw-bold">Updated At</th>
             </tr>
           </thead>
           <tbody>
             @forelse($leave_records as $leave)
               <tr>
-                <td>{{ $leave->leave_id }}</td>
-                <td>
-                  <span class="badge leave-type-{{ strtolower($leave->leave_type) }} badge-simulation">
-                    {{ $leave->leave_type }}
-                  </span>
-                </td>
-                <td>{{ $leave->leave_days }}</td>
+                <td>{{ $leave->id }}</td>
+                <td>{{ $leave->employee_id }}</td>
+                <td>{{ $leave->leave_type_id ?? $leave->leave_type }}</td>
                 <td>{{ $leave->start_date }}</td>
                 <td>{{ $leave->end_date }}</td>
+                <td>{{ $leave->days_requested ?? $leave->leave_days }}</td>
+                <td>{{ strlen($leave->reason ?? 'N/A') > 50 ? substr($leave->reason ?? 'N/A', 0, 50) . '...' : ($leave->reason ?? 'N/A') }}</td>
                 <td>
                   <span class="badge status-{{ strtolower($leave->status) }} badge-simulation">
                     {{ $leave->status }}
                   </span>
                 </td>
-                <td>{{ $leave->applied_date }}</td>
-                <td class="text-center action-buttons">
-                  <button class="btn btn-sm btn-info text-white action-btn view-leave" data-id="{{ $leave->id }}" data-leave-id="{{ $leave->leave_id }}">
-                    <i class="bi bi-eye"></i>
-                  </button>
-                  @if($leave->status === 'Pending')
-                    <button class="btn btn-sm btn-warning action-btn edit-leave" data-id="{{ $leave->id }}" data-leave-id="{{ $leave->leave_id }}">
-                      <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-danger action-btn cancel-leave" data-id="{{ $leave->id }}" data-leave-id="{{ $leave->leave_id }}">
-                      <i class="bi bi-x-circle"></i>
-                    </button>
-                  @else
-                    <span class="text-muted small">{{ ucfirst(strtolower($leave->status)) }}</span>
-                  @endif
-                </td>
+                <td>{{ $leave->approved_by ?? 'N/A' }}</td>
+                <td>{{ $leave->approved_at ?? 'N/A' }}</td>
+                <td>{{ strlen($leave->admin_notes ?? 'N/A') > 30 ? substr($leave->admin_notes ?? 'N/A', 0, 30) . '...' : ($leave->admin_notes ?? 'N/A') }}</td>
+                <td>{{ $leave->created_at }}</td>
+                <td>{{ $leave->updated_at }}</td>
               </tr>
             @empty
               <tr>
-                <td colspan="8" class="text-center text-muted py-4">
+                <td colspan="13" class="text-center text-muted py-4">
                   <i class="bi bi-info-circle me-2"></i>No leave records found.
                 </td>
               </tr>

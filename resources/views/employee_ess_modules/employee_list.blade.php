@@ -102,6 +102,12 @@
       color: #dc3545 !important;
     }
 
+    .employee-card .btn-outline-success:hover {
+      background-color: rgba(25, 135, 84, 0.1) !important;
+      border-color: #198754 !important;
+      color: #198754 !important;
+    }
+
     @media (max-width: 768px) {
       .employee-card-wrapper {
         margin-bottom: 1rem;
@@ -259,23 +265,6 @@
                         <i class="bi bi-person-badge me-1"></i>ID: {{ $employee['employee_id'] ?? 'N/A' }}
                       </p>
                     </div>
-
-                    <!-- Status Badge -->
-                    <div class="text-end">
-                      @if(($employee['status'] ?? '') == 'Active')
-                        <span class="badge bg-success bg-opacity-90 text-white">
-                          <i class="bi bi-check-circle me-1"></i>Active
-                        </span>
-                      @elseif(($employee['status'] ?? '') == 'Inactive')
-                        <span class="badge bg-secondary bg-opacity-90 text-white">
-                          <i class="bi bi-pause-circle me-1"></i>Inactive
-                        </span>
-                      @else
-                        <span class="badge bg-warning bg-opacity-90 text-dark">
-                          <i class="bi bi-exclamation-circle me-1"></i>{{ $employee['status'] ?? 'Unknown' }}
-                        </span>
-                      @endif
-                    </div>
                   </div>
                 </div>
 
@@ -293,7 +282,7 @@
                       </div>
                       <div class="d-flex align-items-center">
                         <i class="bi bi-telephone me-2 text-primary"></i>
-                        <span>{{ $employee['phone_number'] ?? 'N/A' }}</span>
+                        <span>{{ $employee['phone'] ?? 'N/A' }}</span>
                       </div>
                     </div>
                   </div>
@@ -305,7 +294,7 @@
                     </h6>
                     <div class="d-flex flex-wrap gap-2">
                       <span class="badge bg-info bg-opacity-10 text-info border border-info">
-                        <i class="bi bi-person-workspace me-1"></i>{{ $employee['position'] ?? 'N/A' }}
+                        <i class="bi bi-person-workspace me-1"></i>{{ $employee['role'] ?? 'N/A' }}
                       </span>
                       <span class="badge bg-success bg-opacity-10 text-success border border-success">
                         <i class="bi bi-building me-1"></i>
@@ -344,19 +333,14 @@
                 <div class="card-footer bg-light border-0 p-3">
                   <div class="d-flex justify-content-center gap-2">
                     <button class="btn btn-outline-info btn-sm flex-fill"
-                            onclick="viewEmployeeDetails('{{ $employee['employee_id'] ?? '' }}', '{{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}', '{{ $employee['email'] ?? '' }}', '{{ $employee['phone_number'] ?? '' }}', '{{ $employee['position'] ?? '' }}', '{{ $employee['department_id'] ?? '' }}', '{{ $employee['address'] ?? '' }}', '{{ $employee['status'] ?? '' }}', '{{ isset($employee['hire_date']) && $employee['hire_date'] ? \Carbon\Carbon::parse($employee['hire_date'])->format('M d, Y') : 'N/A' }}')"
+                            onclick="viewEmployeeDetails('{{ $employee['employee_id'] ?? '' }}', '{{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}', '{{ $employee['email'] ?? '' }}', '{{ $employee['phone'] ?? '' }}', '{{ $employee['role'] ?? '' }}', '{{ $employee['department_id'] ?? '' }}', '{{ $employee['address'] ?? '' }}', '{{ isset($employee['hire_date']) && $employee['hire_date'] ? \Carbon\Carbon::parse($employee['hire_date'])->format('M d, Y') : 'N/A' }}')"
                             title="View Details" data-bs-toggle="tooltip">
                       <i class="bi bi-eye me-1"></i>View
                     </button>
-                    <button class="btn btn-outline-primary btn-sm flex-fill"
-                            onclick="editEmployeeWithConfirmation('{{ $employee['employee_id'] ?? '' }}', '{{ $employee['first_name'] ?? '' }}', '{{ $employee['last_name'] ?? '' }}', '{{ $employee['email'] ?? '' }}', '{{ $employee['phone_number'] ?? '' }}', '{{ $employee['position'] ?? '' }}', '{{ $employee['department_id'] ?? '' }}', '{{ $employee['address'] ?? '' }}', '{{ $employee['status'] ?? '' }}')"
-                            title="Edit Employee" data-bs-toggle="tooltip">
-                      <i class="bi bi-pencil me-1"></i>Edit
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm flex-fill"
-                            onclick="deleteEmployeeWithConfirmation('{{ $employee['employee_id'] ?? '' }}', '{{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}')"
-                            title="Delete Employee" data-bs-toggle="tooltip">
-                      <i class="bi bi-trash me-1"></i>Delete
+                    <button class="btn btn-outline-success btn-sm flex-fill"
+                            onclick="saveEmployeeToDatabase({{ json_encode($employee) }})"
+                            title="Save to Local Database" data-bs-toggle="tooltip">
+                      <i class="bi bi-database-add me-1"></i>Save
                     </button>
                   </div>
                 </div>
@@ -627,7 +611,7 @@
     @endif
 
     // View Employee Details
-    function viewEmployeeDetails(id, name, email, phone, position, department, address, status, hireDate) {
+    function viewEmployeeDetails(id, name, email, phone, position, department, address, hireDate) {
       const departmentName = getDepartmentName(department);
 
       Swal.fire({
@@ -638,10 +622,6 @@
               <div class="col-md-6">
                 <strong>Employee ID:</strong><br>
                 <span class="text-muted">${id}</span>
-              </div>
-              <div class="col-md-6">
-                <strong>Status:</strong><br>
-                <span class="badge bg-${status === 'Active' ? 'success' : 'secondary'}">${status}</span>
               </div>
               <div class="col-md-6">
                 <strong>Email:</strong><br>
@@ -1076,7 +1056,7 @@
           }
 
           // Add optional fields
-          ['phone_number', 'position', 'department_id', 'address', 'hire_date'].forEach(field => {
+          ['phone', 'position', 'department_id', 'address', 'hire_date'].forEach(field => {
             const value = formData.get(field);
             if (value && value.trim()) {
               data[field] = value.trim();
@@ -1203,7 +1183,7 @@
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Phone Number</label>
-                <input type="text" name="phone_number" class="form-control" value="${phone || ''}">
+                <input type="text" name="phone" class="form-control" value="${phone || ''}">
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Position</label>
@@ -1265,7 +1245,7 @@
           }
 
           // Add optional fields
-          ['phone_number', 'position', 'department_id', 'address'].forEach(field => {
+          ['phone', 'position', 'department_id', 'address'].forEach(field => {
             const value = formData.get(field);
             if (value && value.trim()) {
               data[field] = value.trim();
@@ -1665,6 +1645,203 @@
         headerDiv.insertBefore(refreshButton, headerDiv.firstChild);
       }
     });
+
+    // Save individual employee to database
+    function saveEmployeeToDatabase(employeeData) {
+      Swal.fire({
+        title: '💾 Save Employee to Database',
+        html: `
+          <div class="text-start mb-3">
+            <p class="mb-2"><i class="bi bi-person-check text-success"></i> <strong>Save Employee</strong></p>
+            <p class="text-muted small mb-3">You are about to save <strong>${employeeData.first_name || ''} ${employeeData.last_name || ''}</strong> to your local database. This will create a new employee record if it doesn't exist, or update the existing one.</p>
+            <div class="alert alert-info small">
+              <i class="bi bi-info-circle"></i> Admin password verification required for security.
+            </div>
+          </div>
+          <input type="password" id="save-admin-password" class="swal2-input" placeholder="Enter your admin password" style="margin: 0;">
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Verify & Save',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#198754',
+        cancelButtonColor: '#6c757d',
+        preConfirm: () => {
+          const password = document.getElementById('save-admin-password').value;
+          if (!password) {
+            Swal.showValidationMessage('Please enter your password');
+            return false;
+          }
+          if (password.length < 3) {
+            Swal.showValidationMessage('Password must be at least 3 characters');
+            return false;
+          }
+          return password;
+        },
+        allowOutsideClick: false
+      }).then(async (result) => {
+        if (result.isConfirmed) {
+          const password = result.value;
+
+          // Show loading
+          Swal.fire({
+            title: 'Verifying Password...',
+            html: 'Please wait while we verify your credentials.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            willOpen: () => {
+              Swal.showLoading();
+            }
+          });
+
+          try {
+            // Verify password with backend
+            const response = await fetch('/admin/verify-password', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+              },
+              body: JSON.stringify({ password: password })
+            });
+
+            let result = null;
+            try {
+              result = await response.json();
+            } catch (parseErr) {
+              throw new Error('Invalid server response during password verification');
+            }
+
+            if (response.ok && result && result.success) {
+              // Password verified, proceed with saving
+              await submitSaveEmployee(employeeData, password);
+            } else {
+              Swal.fire({
+                title: '❌ Invalid Password',
+                text: (result && result.message) ? result.message : 'The password you entered is incorrect. Please try again.',
+                icon: 'error',
+                confirmButtonColor: '#dc3545'
+              });
+            }
+          } catch (error) {
+            console.error('Password verification error:', error);
+            Swal.fire({
+              title: '⚠️ Verification Error',
+              text: error.message || 'An error occurred while verifying your password. Please try again.',
+              icon: 'error',
+              confirmButtonColor: '#dc3545'
+            });
+          }
+        }
+      });
+    }
+
+    // Submit individual employee save
+    async function submitSaveEmployee(employeeData, adminPassword) {
+      // Show loading
+      Swal.fire({
+        title: 'Saving Employee...',
+        html: `Please wait while we save ${employeeData.first_name || ''} ${employeeData.last_name || ''} to the database.`,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        willOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      try {
+        const formData = new FormData();
+        
+        // Map the employee data to the expected format
+        // Use 'id' field as employee_id if employee_id is not available
+        const employeeId = employeeData.employee_id || employeeData.id || '';
+        console.log('Employee data for save:', employeeData);
+        console.log('Mapped employee_id:', employeeId);
+        
+        if (!employeeId) {
+          throw new Error('No valid employee ID found in employee data');
+        }
+        
+        formData.append('employee_id', employeeId);
+        formData.append('first_name', employeeData.first_name || '');
+        formData.append('last_name', employeeData.last_name || '');
+        formData.append('email', employeeData.email || '');
+        formData.append('phone_number', employeeData.phone || '');
+        formData.append('position', employeeData.role || '');
+        formData.append('department_id', employeeData.department_id || '');
+        formData.append('address', employeeData.address || '');
+        formData.append('hire_date', employeeData.date_hired || employeeData.hire_date || '');
+        formData.append('password', 'DefaultPassword123!'); // Default password for API employees
+        formData.append('admin_password', adminPassword);
+        formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+
+        const response = await fetch('/admin/employees/save-individual', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'Accept': 'application/json'
+          },
+          body: formData
+        });
+
+        if (response.status === 422) {
+          let payload = null;
+          try {
+            payload = await response.json();
+          } catch (parseErr) {
+            throw new Error('Validation failed, and server response could not be parsed.');
+          }
+
+          const errors = payload && payload.errors ? payload.errors : null;
+          if (errors) {
+            let messages = [];
+            Object.keys(errors).forEach(field => {
+              const fieldErrors = errors[field];
+              if (Array.isArray(fieldErrors)) {
+                fieldErrors.forEach(msg => messages.push(msg));
+              } else if (typeof fieldErrors === 'string') {
+                messages.push(fieldErrors);
+              }
+            });
+
+            Swal.fire({
+              title: '❌ Validation Error',
+              html: `<div class="text-start">${messages.map(m => `<div>• ${m}</div>`).join('')}</div>`,
+              icon: 'error',
+              confirmButtonColor: '#dc3545'
+            });
+            return;
+          }
+        }
+
+        if (response.ok) {
+          const result = await response.json();
+          Swal.fire({
+            title: '✅ Success!',
+            text: result.message || 'Employee has been saved to the database successfully.',
+            icon: 'success',
+            timer: 3000,
+            timerProgressBar: true,
+            showConfirmButton: false
+          });
+        } else {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+      } catch (error) {
+        console.error('Employee save error:', error);
+        Swal.fire({
+          title: '❌ Save Failed',
+          text: 'An error occurred while saving the employee. Please try again.',
+          icon: 'error',
+          confirmButtonColor: '#dc3545'
+        });
+      }
+    }
 
     // Show success message if any
     @if(session('success'))

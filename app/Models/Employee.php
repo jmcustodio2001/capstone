@@ -23,7 +23,6 @@ class Employee extends Authenticatable
         'hire_date',
         'department_id',
         'position',
-        'status',
         'password',
         'profile_picture',
         'remember_token',

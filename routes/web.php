@@ -687,9 +687,11 @@ Route::post('/admin/employee-request-forms/fix-status-case', [App\Http\Controlle
 Route::put('/admin/requests/{id}', [App\Http\Controllers\EmployeeRequestFormController::class, 'update'])->name('admin.requests.update')->middleware('auth:admin');
 Route::get('/admin/employee-list', [EmployeeController::class, 'index'])->name('employee.list')->middleware('auth:admin');
 Route::post('/admin/employees', [EmployeeController::class, 'store'])->name('employees.store')->middleware('auth:admin');
+Route::post('/admin/employees/save-individual', [EmployeeController::class, 'saveIndividualEmployee'])->name('employees.save_individual')->middleware('auth:admin');
 Route::get('/employees/{id}', [EmployeeController::class, 'show'])->name('employees.show')->middleware('auth:admin');
 Route::put('/employees/{id}', [EmployeeController::class, 'update'])->name('employees.update')->middleware('auth:admin');
 Route::delete('/employees/{id}', [EmployeeController::class, 'destroy'])->name('employees.destroy')->middleware('auth:admin');
+
 
 // Employee online status API routes
 Route::post('/api/employees/check-online-status', [EmployeeController::class, 'checkOnlineStatus'])->name('api.employees.check_online_status')->middleware('auth:admin');

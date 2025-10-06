@@ -22,7 +22,14 @@ class EmployeeController extends Controller
         $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees'); // Project A's endpoint
 
         $employees = $response->successful() ? $response->json() : [];
-        
+
+        // Normalize date field for each employee
+        foreach ($employees as &$employee) {
+            if (isset($employee['date_hired'])) {
+                $employee['hire_date'] = date('Y-m-d', strtotime($employee['date_hired']));
+            }
+        }
+
         // Generate next employee ID for the add form
         $nextEmployeeId = $this->generateNextEmployeeId();
 
@@ -117,12 +124,11 @@ class EmployeeController extends Controller
                 'email' => 'required|email|unique:employees,email',
                 // enforce 12+ characters with uppercase, number and symbol
                 'password' => ['required', 'string', 'min:12', 'regex:/^(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/'],
-                'phone_number' => 'nullable|string|max:20',
+                'phone' => 'nullable|string|max:20',
                 'address' => 'nullable|string|max:255',
                 'hire_date' => 'nullable|date',
                 'department_id' => 'nullable|integer',
                 'position' => 'nullable|string|max:255',
-                'status' => 'required|in:Active,Inactive',
                 'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
             ], [
                 'password.regex' => 'Password must contain at least one uppercase letter, one number, and one special character.'
@@ -176,11 +182,10 @@ class EmployeeController extends Controller
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
             'email' => 'required|email|unique:employees,email,' . $employee->employee_id . ',employee_id',
-            'phone_number' => 'nullable|string|max:20',
+            'phone' => 'nullable|string|max:20',
             'address' => 'nullable|string|max:255',
             'department_id' => 'nullable|integer',
             'position' => 'nullable|string|max:255',
-            'status' => 'required|in:Active,Inactive',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
@@ -239,7 +244,7 @@ class EmployeeController extends Controller
                 $remainingMinutes = Carbon::now()->diffInMinutes($lockoutTime, false);
                 $remainingSeconds = Carbon::now()->diffInSeconds($lockoutTime, false);
                 $lockoutCount = $request->session()->get($lockoutCountKey, 1);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => "Account temporarily locked due to too many failed attempts. Please try again in {$remainingMinutes} minutes.",
@@ -362,10 +367,10 @@ class EmployeeController extends Controller
             // Progressive lockout: 3 min, 6 min, 12 min, 24 min, etc.
             $lockoutCount = $request->session()->get($lockoutCountKey, 0) + 1;
             $lockoutMinutes = 3 * pow(2, $lockoutCount - 1); // 3, 6, 12, 24, 48, 96...
-            
+
             // Cap at maximum 96 minutes (1.6 hours)
             $lockoutMinutes = min($lockoutMinutes, 96);
-            
+
             $lockoutTime = Carbon::now()->addMinutes($lockoutMinutes);
             $request->session()->put($lockoutKey, $lockoutTime);
             $request->session()->put($lockoutCountKey, $lockoutCount);
@@ -1094,11 +1099,10 @@ class EmployeeController extends Controller
                 'first_name' => $employee->first_name,
                 'last_name' => $employee->last_name,
                 'email' => $employee->email,
-                'phone' => $employee->phone_number,
+                'phone' => $employee->phone,
                 'department' => $employee->department_id,
                 'position' => $employee->position,
                 'hire_date' => $employee->hire_date,
-                'status' => $employee->status,
                 'profile_picture' => $employee->profile_picture,
                 'photo' => $employee->profile_picture, // Alternative field name
                 'training_stats' => $trainingStats
@@ -1576,4 +1580,149 @@ class EmployeeController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Save individual employee from API data to local database
+     */
+    public function saveIndividualEmployee(Request $request)
+    {
+        try {
+            // Verify admin password first (required)
+            $request->validate([
+                'admin_password' => 'required|string'
+            ]);
+
+            // Check admin authentication
+            $admin = Auth::guard('admin')->user();
+            if (!$admin) {
+                $message = 'You must be logged in as an admin to perform this action.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 401);
+                }
+                return back()->withErrors(['admin_password' => $message])->withInput();
+            }
+
+            if (!Hash::check($request->input('admin_password'), $admin->password)) {
+                $message = 'The password you entered is incorrect. Please try again.';
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+                return back()->withErrors(['admin_password' => $message])->withInput();
+            }
+
+            // Log incoming employee data for debugging
+            Log::info('Individual employee save request data', [
+                'employee_id' => $request->input('employee_id'),
+                'email' => $request->input('email'),
+                'first_name' => $request->input('first_name'),
+                'last_name' => $request->input('last_name'),
+                'admin_id' => $admin->id
+            ]);
+
+            // Validate employee data
+            $validated = $request->validate([
+                'employee_id' => 'required|string',
+                'first_name' => 'required|string|max:255',
+                'last_name' => 'required|string|max:255',
+                'email' => 'required|email',
+                'phone_number' => 'nullable|string|max:20',
+                'address' => 'nullable|string|max:255',
+                'hire_date' => 'nullable|date',
+                'department_id' => 'nullable|integer',
+                'position' => 'nullable|string|max:255',
+                'password' => 'required|string|min:8'
+            ]);
+
+            // Check if employee already exists
+            $existingEmployee = Employee::where('employee_id', $validated['employee_id'])
+                                      ->orWhere('email', $validated['email'])
+                                      ->first();
+
+            if ($existingEmployee) {
+                // Update existing employee (preserve sensitive data)
+                $updateData = [
+                    'first_name' => $validated['first_name'],
+                    'last_name' => $validated['last_name'],
+                    'phone_number' => $validated['phone_number'],
+                    'address' => $validated['address'],
+                    'department_id' => $validated['department_id'],
+                    'position' => $validated['position']
+                ];
+
+                // Only update hire_date if provided and not already set
+                if (!empty($validated['hire_date']) && !$existingEmployee->hire_date) {
+                    $updateData['hire_date'] = $validated['hire_date'];
+                }
+
+                // Only update email if it's different and not already taken by another employee
+                if ($validated['email'] !== $existingEmployee->email) {
+                    $emailExists = Employee::where('email', $validated['email'])
+                                          ->where('employee_id', '!=', $validated['employee_id'])
+                                          ->exists();
+                    if (!$emailExists) {
+                        $updateData['email'] = $validated['email'];
+                    }
+                }
+
+                $existingEmployee->update($updateData);
+
+                Log::info('Individual employee updated successfully', [
+                    'employee_id' => $validated['employee_id'],
+                    'admin_id' => $admin->id,
+                    'updated_fields' => array_keys($updateData)
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Employee information updated successfully.',
+                    'action' => 'updated',
+                    'employee' => $existingEmployee->fresh()
+                ]);
+            } else {
+                // Create new employee
+                $validated['password'] = Hash::make($validated['password']);
+                
+                $employee = Employee::create($validated);
+
+                Log::info('Individual employee created successfully', [
+                    'employee_id' => $validated['employee_id'],
+                    'admin_id' => $admin->id,
+                    'email' => $validated['email']
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Employee created successfully.',
+                    'action' => 'created',
+                    'employee' => $employee
+                ]);
+            }
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('Individual employee save validation failed', [
+                'errors' => $e->errors(),
+                'admin_id' => Auth::guard('admin')->id()
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'errors' => $e->errors()], 422);
+            }
+            return back()->withErrors($e->errors())->withInput();
+        } catch (\Exception $e) {
+            Log::error('Individual employee save error: ' . $e->getMessage(), [
+                'admin_id' => Auth::guard('admin')->id(),
+                'employee_data' => $request->only(['employee_id', 'first_name', 'last_name', 'email'])
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false, 
+                    'message' => 'Failed to save employee: ' . $e->getMessage()
+                ], 500);
+            }
+            return back()->with('error', 'Failed to save employee: ' . $e->getMessage())->withInput();
+        }
+    }
+
+
 }

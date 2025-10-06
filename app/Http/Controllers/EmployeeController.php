@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Http;
 
 class EmployeeController extends Controller
 {
@@ -18,8 +19,13 @@ class EmployeeController extends Controller
     // List all employees with all columns
     public function index()
     {
-        $employees = Employee::all();
+        $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees'); // Project A's endpoint
+
+        $employees = $response->successful() ? $response->json() : [];
+        
+        // Generate next employee ID for the add form
         $nextEmployeeId = $this->generateNextEmployeeId();
+
         return view('employee_ess_modules.employee_list', compact('employees', 'nextEmployeeId'));
     }
 

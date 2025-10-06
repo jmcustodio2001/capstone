@@ -238,14 +238,14 @@
                   <!-- Employee Profile Section -->
                   <div class="d-flex align-items-center w-100">
                     <div class="position-relative me-3">
-                      <img src="{{ $employee->profile_picture ? asset('storage/' . $employee->profile_picture) : 'https://ui-avatars.com/api/?name=' . urlencode($employee->first_name . ' ' . $employee->last_name) . '&background=ffffff&color=333333&size=64' }}"
+                      <img src="{{ isset($employee['profile_picture']) && $employee['profile_picture'] ? asset('storage/' . $employee['profile_picture']) : 'https://ui-avatars.com/api/?name=' . urlencode(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')) . '&background=ffffff&color=333333&size=64' }}"
                            class="rounded-circle border-3 border-white shadow-sm"
                            width="64" height="64" alt="Profile"
                            style="object-fit: cover;">
 
                       <!-- Online Status Indicator -->
                       <span class="position-absolute bottom-0 end-0 badge rounded-pill ip-address"
-                            data-employee-id="{{ $employee->employee_id }}"
+                            data-employee-id="{{ $employee['employee_id'] ?? '' }}"
                             style="font-size: 0.7em; padding: 2px 6px;">
                         <i class="bi bi-globe me-1"></i><span class="ip-text">Checking...</span>
                       </span>
@@ -253,26 +253,26 @@
 
                     <div class="flex-grow-1">
                       <h5 class="card-title mb-1 fw-bold text-white employee-name">
-                        {{ $employee->first_name }} {{ $employee->last_name }}
+                        {{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}
                       </h5>
                       <p class="card-text mb-0 text-white-50">
-                        <i class="bi bi-person-badge me-1"></i>ID: {{ $employee->employee_id }}
+                        <i class="bi bi-person-badge me-1"></i>ID: {{ $employee['employee_id'] ?? 'N/A' }}
                       </p>
                     </div>
 
                     <!-- Status Badge -->
                     <div class="text-end">
-                      @if($employee->status == 'Active')
+                      @if(($employee['status'] ?? '') == 'Active')
                         <span class="badge bg-success bg-opacity-90 text-white">
                           <i class="bi bi-check-circle me-1"></i>Active
                         </span>
-                      @elseif($employee->status == 'Inactive')
+                      @elseif(($employee['status'] ?? '') == 'Inactive')
                         <span class="badge bg-secondary bg-opacity-90 text-white">
                           <i class="bi bi-pause-circle me-1"></i>Inactive
                         </span>
                       @else
                         <span class="badge bg-warning bg-opacity-90 text-dark">
-                          <i class="bi bi-exclamation-circle me-1"></i>{{ $employee->status }}
+                          <i class="bi bi-exclamation-circle me-1"></i>{{ $employee['status'] ?? 'Unknown' }}
                         </span>
                       @endif
                     </div>
@@ -289,11 +289,11 @@
                     <div class="small text-muted">
                       <div class="d-flex align-items-center mb-1">
                         <i class="bi bi-envelope me-2 text-primary"></i>
-                        <span class="text-truncate">{{ $employee->email }}</span>
+                        <span class="text-truncate">{{ $employee['email'] ?? 'N/A' }}</span>
                       </div>
                       <div class="d-flex align-items-center">
                         <i class="bi bi-telephone me-2 text-primary"></i>
-                        <span>{{ $employee->phone_number ?? 'N/A' }}</span>
+                        <span>{{ $employee['phone_number'] ?? 'N/A' }}</span>
                       </div>
                     </div>
                   </div>
@@ -305,18 +305,18 @@
                     </h6>
                     <div class="d-flex flex-wrap gap-2">
                       <span class="badge bg-info bg-opacity-10 text-info border border-info">
-                        <i class="bi bi-person-workspace me-1"></i>{{ $employee->position ?? 'N/A' }}
+                        <i class="bi bi-person-workspace me-1"></i>{{ $employee['position'] ?? 'N/A' }}
                       </span>
                       <span class="badge bg-success bg-opacity-10 text-success border border-success">
                         <i class="bi bi-building me-1"></i>
-                        @switch($employee->department_id)
+                        @switch($employee['department_id'] ?? null)
                           @case(1) Human Resources @break
                           @case(2) Information Technology @break
                           @case(3) Finance @break
                           @case(4) Marketing @break
                           @case(5) Operations @break
                           @case(6) Customer Service @break
-                          @default {{ $employee->department_id ?? 'Not Assigned' }}
+                          @default {{ $employee['department_id'] ?? 'Not Assigned' }}
                         @endswitch
                       </span>
                     </div>
@@ -330,11 +330,11 @@
                     <div class="small text-muted">
                       <div class="d-flex align-items-center mb-1">
                         <i class="bi bi-geo-alt me-2 text-warning"></i>
-                        <span class="text-truncate">{{ $employee->address ?? 'N/A' }}</span>
+                        <span class="text-truncate">{{ $employee['address'] ?? 'N/A' }}</span>
                       </div>
                       <div class="d-flex align-items-center">
                         <i class="bi bi-calendar-event me-2 text-warning"></i>
-                        <span>Hired: {{ \Carbon\Carbon::parse($employee->hire_date)->format('M d, Y') }}</span>
+                        <span>Hired: {{ isset($employee['hire_date']) && $employee['hire_date'] ? \Carbon\Carbon::parse($employee['hire_date'])->format('M d, Y') : 'N/A' }}</span>
                       </div>
                     </div>
                   </div>
@@ -344,17 +344,17 @@
                 <div class="card-footer bg-light border-0 p-3">
                   <div class="d-flex justify-content-center gap-2">
                     <button class="btn btn-outline-info btn-sm flex-fill"
-                            onclick="viewEmployeeDetails('{{ $employee->employee_id }}', '{{ $employee->first_name }} {{ $employee->last_name }}', '{{ $employee->email }}', '{{ $employee->phone_number }}', '{{ $employee->position }}', '{{ $employee->department_id }}', '{{ $employee->address }}', '{{ $employee->status }}', '{{ \Carbon\Carbon::parse($employee->hire_date)->format('M d, Y') }}')"
+                            onclick="viewEmployeeDetails('{{ $employee['employee_id'] ?? '' }}', '{{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}', '{{ $employee['email'] ?? '' }}', '{{ $employee['phone_number'] ?? '' }}', '{{ $employee['position'] ?? '' }}', '{{ $employee['department_id'] ?? '' }}', '{{ $employee['address'] ?? '' }}', '{{ $employee['status'] ?? '' }}', '{{ isset($employee['hire_date']) && $employee['hire_date'] ? \Carbon\Carbon::parse($employee['hire_date'])->format('M d, Y') : 'N/A' }}')"
                             title="View Details" data-bs-toggle="tooltip">
                       <i class="bi bi-eye me-1"></i>View
                     </button>
                     <button class="btn btn-outline-primary btn-sm flex-fill"
-                            onclick="editEmployeeWithConfirmation('{{ $employee->employee_id }}', '{{ $employee->first_name }}', '{{ $employee->last_name }}', '{{ $employee->email }}', '{{ $employee->phone_number }}', '{{ $employee->position }}', '{{ $employee->department_id }}', '{{ $employee->address }}', '{{ $employee->status }}')"
+                            onclick="editEmployeeWithConfirmation('{{ $employee['employee_id'] ?? '' }}', '{{ $employee['first_name'] ?? '' }}', '{{ $employee['last_name'] ?? '' }}', '{{ $employee['email'] ?? '' }}', '{{ $employee['phone_number'] ?? '' }}', '{{ $employee['position'] ?? '' }}', '{{ $employee['department_id'] ?? '' }}', '{{ $employee['address'] ?? '' }}', '{{ $employee['status'] ?? '' }}')"
                             title="Edit Employee" data-bs-toggle="tooltip">
                       <i class="bi bi-pencil me-1"></i>Edit
                     </button>
                     <button class="btn btn-outline-danger btn-sm flex-fill"
-                            onclick="deleteEmployeeWithConfirmation('{{ $employee->employee_id }}', '{{ $employee->first_name }} {{ $employee->last_name }}')"
+                            onclick="deleteEmployeeWithConfirmation('{{ $employee['employee_id'] ?? '' }}', '{{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}')"
                             title="Delete Employee" data-bs-toggle="tooltip">
                       <i class="bi bi-trash me-1"></i>Delete
                     </button>

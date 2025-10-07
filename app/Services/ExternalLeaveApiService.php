@@ -9,7 +9,7 @@ use Carbon\Carbon;
 class ExternalLeaveApiService
 {
     private $baseUrl = 'https://hr3.jetlougetravels-ph.com';
-    private $endpoint = '/api/leave-requests/receive';
+    private $endpoint = '/api/receive';
     
     /**
      * Send leave request data to external HR3 system

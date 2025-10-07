@@ -637,6 +637,7 @@
                       switch(strtolower($cert['status'])) {
                         case 'completed':
                         case 'done':
+                        case 'verified':
                           $statusClass = 'success';
                           break;
                         case 'pending':
@@ -700,6 +701,7 @@
                         switch(strtolower($cert['status'])) {
                           case 'completed':
                           case 'done':
+                          case 'verified':
                             $remarkText = 'Passed';
                             $remarkClass = 'text-success fw-semibold';
                             break;

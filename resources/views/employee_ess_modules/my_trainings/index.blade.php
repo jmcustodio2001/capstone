@@ -111,7 +111,7 @@
     <div class="col-md-2">
       <div class="card text-center border-0 shadow-sm">
         <div class="card-body py-3">
-          <h5 class="text-primary mb-1">{{ $upcoming->count() }}</h5>
+                    <h5 class="text-primary mb-1">{{ collect($upcoming)->filter(function($item) { $upcomingId = is_array($item) ? ($item['upcoming_id'] ?? '') : ($item->upcoming_id ?? ''); return !str_starts_with((string)$upcomingId, 'TR'); })->count() }}</h5>
           <small class="text-muted">Upcoming</small>
         </div>
       </div>

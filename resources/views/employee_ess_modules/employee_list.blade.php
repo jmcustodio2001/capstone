@@ -128,22 +128,7 @@
       }
     }
 
-    .ip-address.bg-success {
-      background-color: #28a745 !important;
-    }
 
-    .ip-address.bg-secondary {
-      background-color: #6c757d !important;
-    }
-
-    .ip-address.bg-warning {
-      background-color: #ffc107 !important;
-      color: #212529 !important;
-    }
-
-    .ip-address.bg-danger {
-      background-color: #dc3545 !important;
-    }
 
     /* Ensure proper text visibility */
     .employee-card .text-primary {
@@ -249,21 +234,14 @@
                            width="64" height="64" alt="Profile"
                            style="object-fit: cover;">
 
-                      <!-- Online Status Indicator -->
-                      <span class="position-absolute bottom-0 end-0 badge rounded-pill ip-address"
-                            data-employee-id="{{ $employee['employee_id'] ?? '' }}"
-                            style="font-size: 0.7em; padding: 2px 6px;">
-                        <i class="bi bi-globe me-1"></i><span class="ip-text">Checking...</span>
-                      </span>
+
                     </div>
 
                     <div class="flex-grow-1">
                       <h5 class="card-title mb-1 fw-bold text-white employee-name">
                         {{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}
                       </h5>
-                      <p class="card-text mb-0 text-white-50">
-                        <i class="bi bi-person-badge me-1"></i>ID: {{ $employee['employee_id'] ?? 'N/A' }}
-                      </p>
+                      <input type="hidden" value="{{ $employee['employee_id'] ?? 'N/A' }}">
                     </div>
                   </div>
                 </div>
@@ -339,7 +317,7 @@
                     </button>
                     <button class="btn btn-outline-success btn-sm flex-fill"
                             onclick="saveEmployeeToDatabase({{ json_encode($employee) }})"
-                            title="Save to Local Database" data-bs-toggle="tooltip">
+                            title="Save to My Database" data-bs-toggle="tooltip">
                       <i class="bi bi-database-add me-1"></i>Save
                     </button>
                   </div>
@@ -1435,216 +1413,7 @@
       }
     }
 
-    // Enhanced IP address tracking for employees
-    async function updateAllIPAddresses() {
-      const ipElements = document.querySelectorAll('.ip-address');
 
-      // Show "Checking..." status briefly
-      ipElements.forEach(element => {
-        element.className = 'badge bg-warning ip-address';
-        const ipText = element.querySelector('.ip-text');
-        if (ipText) {
-          ipText.textContent = 'Checking...';
-        }
-      });
-
-      // Collect all employee IDs
-      const employeeIds = [];
-      ipElements.forEach(element => {
-        const employeeId = element.getAttribute('data-employee-id');
-        if (employeeId) {
-          employeeIds.push(employeeId);
-        }
-      });
-
-      if (employeeIds.length === 0) {
-        console.log('No employee IDs found for IP address check');
-        // Set all to N/A if no IDs found
-        ipElements.forEach(element => {
-          element.className = 'badge bg-secondary ip-address';
-          const ipText = element.querySelector('.ip-text');
-          if (ipText) {
-            ipText.textContent = 'N/A';
-          }
-        });
-        return;
-      }
-
-      try {
-        console.log('Checking IP addresses for employees:', employeeIds);
-
-        // Get real client IP address first
-        let clientIP = 'Unknown';
-        try {
-          const ipResponse = await fetch('https://api.ipify.org?format=json');
-          if (ipResponse.ok) {
-            const ipData = await ipResponse.json();
-            clientIP = ipData.ip;
-          }
-        } catch (ipError) {
-          console.log('Could not get external IP, using fallback');
-          // Try alternative IP service
-          try {
-            const altResponse = await fetch('https://httpbin.org/ip');
-            if (altResponse.ok) {
-              const altData = await altResponse.json();
-              clientIP = altData.origin;
-            }
-          } catch (altError) {
-            console.log('All IP services failed, using localhost detection');
-          }
-        }
-
-        // Call API to check IP addresses for all employees
-        const response = await fetch('/api/employees/check-ip-addresses', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-          },
-          body: JSON.stringify({
-            employee_ids: employeeIds,
-            client_ip: clientIP,
-            user_agent: navigator.userAgent,
-            timestamp: new Date().toISOString()
-          })
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('API Error Response:', response.status, errorText);
-          console.error('Full response:', response);
-
-          // Set all to Error on API error
-          ipElements.forEach(element => {
-            element.className = 'badge bg-danger ip-address';
-            const ipText = element.querySelector('.ip-text');
-            if (ipText) {
-              ipText.textContent = 'Error';
-            }
-          });
-
-          if (typeof showErrorToast === 'function') {
-            showErrorToast(`Failed to check IP addresses (${response.status}): ${errorText}`);
-          }
-          return;
-        }
-
-        const data = await response.json();
-        console.log('IP address API response:', data);
-
-        if (data.success && data.ip_addresses) {
-          let activeCount = 0;
-
-          // Update each IP element
-          ipElements.forEach(element => {
-            const employeeId = element.getAttribute('data-employee-id');
-            const ipAddress = data.ip_addresses[employeeId];
-            const ipText = element.querySelector('.ip-text');
-
-            if (ipAddress && ipAddress !== 'N/A') {
-              element.className = 'badge bg-success ip-address';
-              if (ipText) {
-                ipText.textContent = ipAddress;
-              }
-              activeCount++;
-            } else {
-              element.className = 'badge bg-secondary ip-address';
-              if (ipText) {
-                ipText.textContent = 'N/A';
-              }
-            }
-          });
-          console.log(`IP addresses updated: ${activeCount} employees with active sessions out of ${employeeIds.length}`);
-
-          // Show success toast with count
-          if (typeof showSuccessToast === 'function') {
-            showSuccessToast(`IP addresses updated: ${activeCount} employees with active sessions`);
-          }
-
-        } else {
-          console.error('API returned success=false:', data.message || 'Unknown error');
-
-          // Set all to N/A on API error
-          ipElements.forEach(element => {
-            element.className = 'badge bg-secondary ip-address';
-            const ipText = element.querySelector('.ip-text');
-            if (ipText) {
-              ipText.textContent = 'N/A';
-            }
-          });
-
-          if (typeof showErrorToast === 'function') {
-            showErrorToast('IP address API error: ' + (data.message || 'Unknown error'));
-          }
-        }
-      } catch (error) {
-        console.error('Error checking IP addresses:', error);
-        console.error('Error details:', error.message, error.stack);
-
-        // Set all to Error on network error
-        ipElements.forEach(element => {
-          element.className = 'badge bg-danger ip-address';
-          const ipText = element.querySelector('.ip-text');
-          if (ipText) {
-            ipText.textContent = 'Error';
-          }
-        });
-
-        if (typeof showErrorToast === 'function') {
-          showErrorToast(`Network error checking IP addresses: ${error.message}`);
-        }
-      }
-    }
-
-    // Initialize IP addresses immediately
-    function initializeIPAddresses() {
-      const ipElements = document.querySelectorAll('.ip-address');
-
-      // Set all to N/A initially
-      ipElements.forEach(element => {
-        element.className = 'badge bg-secondary ip-address';
-        const ipText = element.querySelector('.ip-text');
-        if (ipText) {
-          ipText.textContent = 'N/A';
-        }
-      });
-
-      // Then immediately try to get real IP addresses
-      setTimeout(() => {
-        console.log('Starting IP address update after 0.5 second delay');
-        updateAllIPAddresses();
-      }, 500); // Wait 0.5 seconds for page to fully load
-    }
-
-    // Update IP addresses every 30 seconds for better responsiveness
-    function startIPAddressUpdates() {
-      initializeIPAddresses(); // Set N/A initially, then check
-      setInterval(updateAllIPAddresses, 30000); // Update every 30 seconds
-    }
-
-    // Manual refresh button functionality
-    function refreshIPAddresses() {
-      console.log('Manual refresh of IP addresses requested');
-      updateAllIPAddresses();
-    }
-
-    // Set IP addresses immediately and start periodic updates
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('Employee list page loaded, starting IP address tracking');
-      startIPAddressUpdates();
-
-      // Add manual refresh button if needed (optional)
-      const headerDiv = document.querySelector('.card-header .d-flex.gap-2');
-      if (headerDiv) {
-        const refreshButton = document.createElement('button');
-        refreshButton.className = 'btn btn-outline-secondary btn-sm';
-        refreshButton.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Refresh IP';
-        refreshButton.onclick = refreshIPAddresses;
-        refreshButton.title = 'Manually refresh IP addresses';
-        headerDiv.insertBefore(refreshButton, headerDiv.firstChild);
-      }
-    });
 
     // Save individual employee to database
     function saveEmployeeToDatabase(employeeData) {
@@ -1755,17 +1524,17 @@
 
       try {
         const formData = new FormData();
-        
+
         // Map the employee data to the expected format
         // Use 'id' field as employee_id if employee_id is not available
         const employeeId = employeeData.employee_id || employeeData.id || '';
         console.log('Employee data for save:', employeeData);
         console.log('Mapped employee_id:', employeeId);
-        
+
         if (!employeeId) {
           throw new Error('No valid employee ID found in employee data');
         }
-        
+
         formData.append('employee_id', employeeId);
         formData.append('first_name', employeeData.first_name || '');
         formData.append('last_name', employeeData.last_name || '');

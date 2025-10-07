@@ -31,22 +31,15 @@
         <tbody>
           @php
             $uniqueUpcoming = collect($upcoming)
+              ->filter(function($item) {
+                $upcomingId = is_array($item) ? ($item['upcoming_id'] ?? '') : ($item->upcoming_id ?? '');
+                return !str_starts_with((string)$upcomingId, 'TR');
+              })
               ->groupBy(function($item) {
                 $source = is_array($item) ? ($item['source'] ?? null) : ($item->source ?? null);
                 $employeeId = is_array($item) ? ($item['employee_id'] ?? null) : ($item->employee_id ?? null);
                 $trainingTitle = is_array($item) ? ($item['training_title'] ?? '') : ($item->training_title ?? '');
-                
-                if ($source === 'destination_assigned') {
-                  return 'dest_' . $employeeId . '_' . strtolower(trim($trainingTitle));
-                }
-                
-                $courseId = is_array($item) ? ($item['course_id'] ?? null) : ($item->course_id ?? null);
-                if ($courseId) {
-                  return 'course_' . $courseId . '_' . $employeeId;
-                }
-                
-                $upcomingId = is_array($item) ? ($item['upcoming_id'] ?? '') : ($item->upcoming_id ?? '');
-                return 'upcoming_' . $upcomingId;
+                return $trainingTitle . '_' . $employeeId;
               })
               ->map(function($group) {
                 return $group->first();
@@ -68,7 +61,11 @@
                 @php
                   $upcomingId = is_array($u) ? ($u['upcoming_id'] ?? '') : ($u->upcoming_id ?? '');
                 @endphp
-                {{ $upcomingId }}
+                @if(is_numeric($upcomingId))
+                  {{ $upcomingId }}
+                @else
+                  {{-- Hide non-numeric training IDs to prevent duplicate display --}}
+                @endif
               </td>
               <td>
                 @php
@@ -121,52 +118,52 @@
                 @php
                   $finalExpiredDate = null; // Initialize as null to force competency gap lookup
                   $sourceValue = is_array($u) ? ($u['source'] ?? null) : ($u->source ?? null);
-                  
+
                   // For competency gap trainings, always get expiration date from competency gap table first
                   if ($sourceValue === 'competency_assigned' || $sourceValue === 'competency_gap' || $sourceValue === 'admin_assigned') {
                     $employeeId = is_array($u) ? ($u['employee_id'] ?? null) : ($u->employee_id ?? null);
                     $trainingTitle = is_array($u) ? ($u['training_title'] ?? '') : ($u->training_title ?? '');
-                    
+
                     if ($employeeId && $trainingTitle) {
                       // Enhanced matching logic for competency gaps
                       $competencyGaps = \App\Models\CompetencyGap::with('competency')
                         ->where('employee_id', $employeeId)
                         ->where('assigned_to_training', true)
                         ->get();
-                      
+
                       $matchedGap = null;
-                      
+
                       foreach ($competencyGaps as $gap) {
                         if ($gap->competency) {
                           $competencyName = $gap->competency->competency_name;
-                          
+
                           // Try multiple matching strategies
                           $cleanTrainingTitle = strtolower(trim(str_replace([' Training', ' Course', ' Program', ' Skills'], '', $trainingTitle)));
                           $cleanCompetencyName = strtolower(trim($competencyName));
-                          
+
                           // Strategy 1: Exact match after cleaning
                           if ($cleanTrainingTitle === $cleanCompetencyName) {
                             $matchedGap = $gap;
                             break;
                           }
-                          
+
                           // Strategy 2: Check if competency name is contained in training title
                           if (str_contains($cleanTrainingTitle, $cleanCompetencyName)) {
                             $matchedGap = $gap;
                             break;
                           }
-                          
+
                           // Strategy 3: Check if training title is contained in competency name
                           if (str_contains($cleanCompetencyName, $cleanTrainingTitle)) {
                             $matchedGap = $gap;
                             break;
                           }
-                          
+
                           // Strategy 4: Word-by-word matching (at least 50% match)
                           $trainingWords = explode(' ', $cleanTrainingTitle);
                           $competencyWords = explode(' ', $cleanCompetencyName);
                           $matchCount = 0;
-                          
+
                           foreach ($trainingWords as $word) {
                             if (strlen($word) > 2) { // Skip short words
                               foreach ($competencyWords as $compWord) {
@@ -177,14 +174,14 @@
                               }
                             }
                           }
-                          
+
                           if ($matchCount > 0 && ($matchCount / max(count($trainingWords), count($competencyWords))) >= 0.5) {
                             $matchedGap = $gap;
                             break;
                           }
                         }
                       }
-                      
+
                       if ($matchedGap && $matchedGap->expired_date) {
                         $finalExpiredDate = $matchedGap->expired_date;
                         // Debug: Log the matched gap details
@@ -212,7 +209,7 @@
                       }
                     }
                   }
-                  
+
                   // If no competency gap date found, use the original expired_date from the record
                   if (!$finalExpiredDate) {
                     $finalExpiredDate = is_array($u) ? ($u['expired_date'] ?? null) : ($u->expired_date ?? null);
@@ -397,100 +394,19 @@
               </td>
               <td>
                 @php
-                  $assignedByName = is_array($u) ? ($u['assigned_by_name'] ?? $u['assigned_by'] ?? null) : ($u->assigned_by_name ?? $u->assigned_by ?? null);
+                  $assignedByName = null;
                   $assignedDate = is_array($u) ? ($u['assigned_date'] ?? null) : ($u->assigned_date ?? null);
-                  $sourceValue = is_array($u) ? ($u['source'] ?? null) : ($u->source ?? null);
-
-                  // Debug logging for competency assignments
-                  if ($sourceValue === 'competency_assigned' || $sourceValue === 'competency_gap') {
-                    \Log::info('Competency Assignment Debug', [
-                      'source' => $sourceValue,
-                      'assigned_by_name' => $assignedByName,
-                      'assigned_by' => is_array($u) ? ($u['assigned_by'] ?? null) : ($u->assigned_by ?? null),
-                      'training_title' => is_array($u) ? ($u['training_title'] ?? null) : ($u->training_title ?? null)
-                    ]);
-                  }
-
-                  // Only clean up system assignments, not actual admin names
-                  if ($assignedByName && str_contains($assignedByName, '(competency_auto_assigned')) {
-                    $assignedByName = 'System Auto-Assign';
-                  }
-                  
-                  // If it's showing "Competency System" or "System Admin" for competency assignments, try to fix it
-                  if (($sourceValue === 'competency_assigned' || $sourceValue === 'competency_gap') && 
-                      ($assignedByName === 'Competency System' || $assignedByName === 'System Admin' || empty($assignedByName))) {
-                    
-                    // Try to get the actual admin name from the assigned_by ID
-                    $assignedById = is_array($u) ? ($u['assigned_by'] ?? null) : ($u->assigned_by ?? null);
-                    $fixedName = null;
-                    
-                    if ($assignedById && is_numeric($assignedById)) {
-                      $adminUser = \App\Models\User::find($assignedById);
-                      if ($adminUser && !empty($adminUser->name)) {
-                        $fixedName = $adminUser->name;
-                      }
-                    }
-                    
-                    // If no admin found by ID, try to get from upcoming training record
-                    if (!$fixedName) {
-                      $employeeId = is_array($u) ? ($u['employee_id'] ?? null) : ($u->employee_id ?? null);
-                      $trainingTitle = is_array($u) ? ($u['training_title'] ?? null) : ($u->training_title ?? null);
-                      
-                      if ($employeeId && $trainingTitle) {
-                        $upcomingTraining = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
-                          ->where('training_title', $trainingTitle)
-                          ->where('source', 'competency_gap')
-                          ->first();
-                        
-                        if ($upcomingTraining && $upcomingTraining->assigned_by && is_numeric($upcomingTraining->assigned_by)) {
-                          $adminUser = \App\Models\User::find($upcomingTraining->assigned_by);
-                          if ($adminUser && !empty($adminUser->name)) {
-                            $fixedName = $adminUser->name;
-                          }
-                        }
-                      }
-                    }
-                    
-                    // If still no name found, try to get from competency gap record
-                    if (!$fixedName && $employeeId) {
-                      $competencyGap = \App\Models\CompetencyGap::where('employee_id', $employeeId)
-                        ->where('assigned_to_training', true)
-                        ->whereHas('competency', function($query) use ($trainingTitle) {
-                          if ($trainingTitle) {
-                            $query->where('competency_name', 'LIKE', '%' . $trainingTitle . '%')
-                                  ->orWhere('competency_name', 'LIKE', '%' . str_replace(' Training', '', $trainingTitle) . '%');
-                          }
-                        })
-                        ->first();
-                      
-                      if ($competencyGap && $competencyGap->assigned_by) {
-                        if (is_numeric($competencyGap->assigned_by)) {
-                          $adminUser = \App\Models\User::find($competencyGap->assigned_by);
-                          if ($adminUser && !empty($adminUser->name)) {
-                            $fixedName = $adminUser->name;
-                          }
-                        } else {
-                          $fixedName = $competencyGap->assigned_by;
-                        }
-                      }
-                    }
-                    
-                    // Use the fixed name if found
-                    if ($fixedName) {
-                      $assignedByName = $fixedName;
+                  $assignedById = is_array($u) ? ($u['assigned_by'] ?? null) : ($u->assigned_by ?? null);
+                  if ($assignedById && is_numeric($assignedById)) {
+                    $adminUser = \App\Models\User::find($assignedById);
+                    if ($adminUser && !empty($adminUser->name)) {
+                      $assignedByName = $adminUser->name;
                     }
                   }
                 @endphp
-                @if($assignedByName && $assignedByName !== 'System Auto-Assign')
+                @if(!empty($assignedByName))
                   <div class="d-flex flex-column">
                     <span class="fw-bold text-primary">{{ $assignedByName }}</span>
-                    @if($assignedDate)
-                      <small class="text-muted">{{ \Carbon\Carbon::parse($assignedDate)->format('M d, Y') }}</small>
-                    @endif
-                  </div>
-                @elseif($assignedByName === 'System Auto-Assign')
-                  <div class="d-flex flex-column">
-                    <span class="fw-bold text-secondary">{{ $assignedByName }}</span>
                     @if($assignedDate)
                       <small class="text-muted">{{ \Carbon\Carbon::parse($assignedDate)->format('M d, Y') }}</small>
                     @endif
@@ -507,25 +423,25 @@
                   $startDateCheck = is_array($u) ? ($u['start_date'] ?? null) : ($u->start_date ?? null);
                   $endDateCheck = is_array($u) ? ($u['end_date'] ?? null) : ($u->end_date ?? null);
                   $statusCheck = is_array($u) ? ($u['status'] ?? null) : ($u->status ?? '');
-                  
+
                   // Use assigned_by_name first, fallback to assigned_by for display
                   $assignedByCheck = is_array($u) ? ($u['assigned_by_name'] ?? $u['assigned_by'] ?? null) : ($u->assigned_by_name ?? $u->assigned_by ?? null);
-                  
+
                   $assignedDateCheck = is_array($u) ? ($u['assigned_date'] ?? null) : ($u->assigned_date ?? null);
                   $courseIdCheck = is_array($u) ? ($u['course_id'] ?? null) : ($u->course_id ?? null);
                   $destinationTrainingId = is_array($u) ? ($u['destination_training_id'] ?? null) : ($u->destination_training_id ?? null);
                   $needsResponse = is_array($u) ? ($u['needs_response'] ?? false) : ($u->needs_response ?? false);
                 @endphp
-                
+
                 @if($sourceCheck === 'destination_assigned' && $needsResponse)
                   {{-- Show Accept/Decline buttons for destination training that needs response --}}
                   <div class="d-flex gap-1 justify-content-center">
-                    <button class="btn btn-success btn-sm" 
+                    <button class="btn btn-success btn-sm"
                             onclick="acceptDestinationTrainingWithConfirmation('{{ $destinationTrainingId }}', '{{ $trainingTitleCheck }}', this)"
                             title="Accept this destination training">
                       <i class="fas fa-check me-1"></i>Accept
                     </button>
-                    <button class="btn btn-danger btn-sm" 
+                    <button class="btn btn-danger btn-sm"
                             onclick="declineDestinationTrainingWithConfirmation('{{ $destinationTrainingId }}', '{{ $trainingTitleCheck }}', this)"
                             title="Decline this destination training">
                       <i class="fas fa-times me-1"></i>Decline
@@ -534,13 +450,13 @@
                 @else
                   {{-- Show View Details button for other trainings --}}
                   <div class="d-flex gap-1 justify-content-center">
-                    <button class="btn btn-info btn-sm" 
+                    <button class="btn btn-info btn-sm"
                             onclick="viewTrainingDetailsWithSweetAlert('{{ $upcomingIdCheck }}', '{{ $trainingTitleCheck }}', '{{ $startDateCheck }}', '{{ $endDateCheck }}', '{{ $statusCheck }}', '{{ $sourceCheck }}', '{{ $assignedByCheck }}', '{{ $assignedDateCheck }}', {{ $currentProgress }})"
                             title="View Training Details (Progress: {{ $currentProgress }}%)">
                       <i class="fas fa-eye me-1"></i>View Details ({{ $currentProgress }}%)
                     </button>
                     @if($sourceCheck === 'competency_gap' || $sourceCheck === 'competency_assigned')
-                      <button class="btn btn-warning btn-sm" 
+                      <button class="btn btn-warning btn-sm"
                               onclick="requestTrainingExtensionWithConfirmation('{{ $upcomingIdCheck }}', '{{ $trainingTitleCheck }}')"
                               title="Request Extension">
                         <i class="fas fa-clock me-1"></i>Extend
@@ -745,7 +661,7 @@ document.getElementById('confirmDeclineBtn')?.addEventListener('click', function
 // Enhanced process function with SweetAlert notifications
 function processDestinationTrainingResponse(trainingId, action, reason, btn, trainingTitle) {
   const endpoint = action === 'accept' ? '/employee/destination-training/accept' : '/employee/destination-training/decline';
-  
+
   // Show loading SweetAlert
   Swal.fire({
     title: `${action === 'accept' ? 'Accepting' : 'Declining'} Training...`,
@@ -764,13 +680,13 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
       popup: 'swal2-popup-large'
     }
   });
-  
+
   const buttons = document.querySelectorAll(`[onclick*="${trainingId}"]`);
   buttons.forEach(btn => {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
   });
-  
+
   const payload = {
     training_id: trainingId,
     _token: document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -778,7 +694,7 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
   if (action === 'decline' && reason) {
     payload.reason = reason;
   }
-  
+
   fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -837,7 +753,7 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
           },
           buttonsStyling: false
         });
-        
+
         // Update the UI
         const row = document.querySelector(`[onclick*="${trainingId}"]`).closest('tr');
         const statusCell = row.querySelector('td:nth-child(5)');
@@ -866,7 +782,7 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
           },
           buttonsStyling: false
         });
-        
+
         // Update the UI
         const row = document.querySelector(`[onclick*="${trainingId}"]`).closest('tr');
         row.style.opacity = '0.5';
@@ -874,7 +790,7 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
         const actionCell = row.querySelector('td:nth-child(8)');
         statusCell.innerHTML = '<span class="badge bg-secondary">Declined</span>';
         actionCell.innerHTML = '<span class="badge bg-secondary">Declined</span>';
-        
+
         setTimeout(() => {
           row.remove();
         }, 2000);
@@ -901,7 +817,7 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
         },
         buttonsStyling: false
       });
-      
+
       // Reset buttons
       buttons.forEach(btn => {
         btn.disabled = false;
@@ -915,7 +831,7 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
   })
   .catch(error => {
     console.error('Error:', error);
-    
+
     // Show network error
     Swal.fire({
       title: 'Network Error',
@@ -937,7 +853,7 @@ function processDestinationTrainingResponse(trainingId, action, reason, btn, tra
       },
       buttonsStyling: false
     });
-    
+
     // Reset buttons
     buttons.forEach(btn => {
       btn.disabled = false;
@@ -1068,7 +984,7 @@ function showTrainingDetailsError(message) {
 }
 
 function getStatusBadgeClass(status) {
-  switch(status?.toLowerCase()) { 
+  switch(status?.toLowerCase()) {
     case 'completed': return 'bg-success';
     case 'in-progress': return 'bg-warning';
     case 'active': return 'bg-success';
@@ -1107,23 +1023,23 @@ function viewTrainingDetailsWithSweetAlert(trainingId, trainingTitle, startDate,
       progress: progress,
       progressType: typeof progress
     });
-    
+
     // Convert progress to number if it's a string
     let numericProgress = parseInt(progress) || 0;
     console.log('Converted progress to numeric:', numericProgress);
-    
+
     // Get actual progress from the page data
     let actualProgress = getActualTrainingProgress(trainingId, trainingTitle, numericProgress, source);
     let progressSource = actualProgress.source;
-    
+
     console.log('Final progress data:', actualProgress);
     console.log('=== END DEBUG ===');
-    
+
     // Display the training details with accurate progress
     displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDate, status, source, assignedBy, assignedDate, actualProgress.progress, progressSource);
   } catch (error) {
     console.error('Error in viewTrainingDetailsWithSweetAlert:', error);
-    
+
     // Fallback to basic modal display instead of error
     displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDate, status, source, assignedBy, assignedDate, progress || 0);
   }
@@ -1133,12 +1049,12 @@ function viewTrainingDetailsWithSweetAlert(trainingId, trainingTitle, startDate,
 function displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDate, status, source, assignedBy, assignedDate, progress) {
   const modal = new bootstrap.Modal(document.getElementById('trainingDetailsModal'));
   const contentDiv = document.getElementById('trainingDetailsContent');
-  
+
   if (!contentDiv) {
     console.error('Training details content div not found');
     return;
   }
-  
+
   // Format dates safely
   const formatDateSafe = (dateString) => {
     if (!dateString || dateString === '-' || dateString === 'null' || dateString === 'undefined') {
@@ -1158,29 +1074,29 @@ function displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDa
       return dateString || 'Not specified';
     }
   };
-  
+
   // Format source badge
   const formatSourceBadge = (sourceValue) => {
     switch(sourceValue) {
-      case 'admin_assigned': 
+      case 'admin_assigned':
         return '<span class="badge bg-danger text-white"><i class="fas fa-user-shield me-1"></i>Admin Assigned</span>';
-      case 'competency_assigned': 
-      case 'competency_gap': 
+      case 'competency_assigned':
+      case 'competency_gap':
         return '<span class="badge bg-warning text-dark"><i class="fas fa-chart-line me-1"></i>Competency Gap</span>';
-      case 'destination_assigned': 
+      case 'destination_assigned':
         return '<span class="badge bg-info text-white"><i class="fas fa-map-marker-alt me-1"></i>Destination Training</span>';
-      case 'auto_assigned': 
+      case 'auto_assigned':
         return '<span class="badge bg-success text-white"><i class="fas fa-robot me-1"></i>Auto Assigned</span>';
-      default: 
+      default:
         return `<span class="badge bg-secondary text-white"><i class="fas fa-question me-1"></i>${sourceValue ? sourceValue.replace('_', ' ').toUpperCase() : 'UNKNOWN'}</span>`;
     }
   };
-  
+
   // Determine status styling
   let statusBadgeColor = 'bg-secondary';
   let progressColor = 'bg-secondary';
   const progressValue = parseInt(progress) || 0;
-  
+
   if (progressValue >= 100 || status === 'Completed') {
     statusBadgeColor = 'bg-success';
     progressColor = 'bg-success';
@@ -1191,7 +1107,7 @@ function displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDa
     statusBadgeColor = 'bg-info';
     progressColor = 'bg-info';
   }
-  
+
   // Build content HTML
   const content = `
     <div class="container-fluid">
@@ -1261,7 +1177,7 @@ function displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDa
       </div>
     </div>
   `;
-  
+
   contentDiv.innerHTML = content;
   modal.show();
 }
@@ -1270,38 +1186,38 @@ function displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDa
 function getActualTrainingProgress(trainingId, trainingTitle, initialProgress, source) {
   let bestProgress = parseInt(initialProgress) || 0;
   let progressSource = 'Initial Parameter';
-  
+
   console.log('Looking for training:', trainingTitle, 'with initial progress:', initialProgress);
-  
+
   // If we already have a valid progress from the initial parameter, use it
   if (bestProgress > 0) {
     progressSource = 'Training Data';
     console.log('Using initial progress:', bestProgress);
   }
-  
+
   // Try to find the training row in the current page for additional verification
   const allRows = document.querySelectorAll('tbody tr');
   console.log('Found', allRows.length, 'rows to search');
-  
+
   for (const row of allRows) {
     // Check if this row matches our training
     const titleCell = row.querySelector('td:nth-child(2)');
     const progressCell = row.querySelector('.progress-bar');
     const statusCell = row.querySelector('td:nth-child(5)'); // Status is column 5
     const progressText = row.querySelector('small:contains("% complete")');
-    
+
     if (titleCell) {
       const rowTitle = titleCell.textContent.trim().split('\n')[0].trim(); // Get first line only
       console.log('Checking row title:', rowTitle, 'against:', trainingTitle.trim());
-      
+
       if (rowTitle === trainingTitle.trim() || rowTitle.includes(trainingTitle.trim())) {
         console.log('Found matching row!');
-        
+
         // Extract progress from progress bar
         if (progressCell) {
           const progressWidth = progressCell.style.width || progressCell.getAttribute('aria-valuenow');
           console.log('Progress width found:', progressWidth);
-          
+
           if (progressWidth) {
             const extractedProgress = parseInt(progressWidth.replace('%', ''));
             if (!isNaN(extractedProgress) && extractedProgress > bestProgress) {
@@ -1311,7 +1227,7 @@ function getActualTrainingProgress(trainingId, trainingTitle, initialProgress, s
             }
           }
         }
-        
+
         // Check for progress text in the title cell
         const progressTextInCell = titleCell.textContent.match(/(\d+)% complete/);
         if (progressTextInCell) {
@@ -1322,12 +1238,12 @@ function getActualTrainingProgress(trainingId, trainingTitle, initialProgress, s
             console.log('Updated progress to:', bestProgress, 'from progress text');
           }
         }
-        
+
         // Check status for completion indicators
         if (statusCell) {
           const statusText = statusCell.textContent.trim().toLowerCase();
           console.log('Status text:', statusText);
-          
+
           if (statusText.includes('completed') || statusText.includes('100%')) {
             bestProgress = 100;
             progressSource = 'Status Indicator';
@@ -1342,12 +1258,12 @@ function getActualTrainingProgress(trainingId, trainingTitle, initialProgress, s
       }
     }
   }
-  
+
   // Check for destination training specific progress
   if (source === 'destination_assigned') {
     console.log('Checking destination training progress');
     const destinationRows = document.querySelectorAll('.destination-training-row, [data-training-title]');
-    
+
     for (const row of destinationRows) {
       const titleElement = row.querySelector('[data-training-title]') || row;
       if (titleElement && titleElement.getAttribute('data-training-title') === trainingTitle) {
@@ -1364,7 +1280,7 @@ function getActualTrainingProgress(trainingId, trainingTitle, initialProgress, s
       }
     }
   }
-  
+
   // Additional fallback: check for any progress indicators in onclick attributes
   const clickableElements = document.querySelectorAll('[onclick*="viewTrainingDetailsWithSweetAlert"]');
   for (const element of clickableElements) {
@@ -1383,9 +1299,9 @@ function getActualTrainingProgress(trainingId, trainingTitle, initialProgress, s
       break;
     }
   }
-  
+
   console.log('Final progress:', bestProgress, 'from source:', progressSource);
-  
+
   return {
     progress: bestProgress,
     source: progressSource
@@ -1395,7 +1311,7 @@ function getActualTrainingProgress(trainingId, trainingTitle, initialProgress, s
 // Display the actual training details modal
 function displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDate, status, source, assignedBy, assignedDate, progress, progressSource) {
   console.log('displayTrainingDetailsModal called with progress:', progress, 'from source:', progressSource);
-  
+
   try {
     // Check if SweetAlert is available, otherwise fall back to basic modal
     if (typeof Swal === 'undefined') {
@@ -1403,7 +1319,7 @@ function displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDa
       displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDate, status, source, assignedBy, assignedDate, progress);
       return;
     }
-    
+
     // Format dates
     const formatDate = (dateString) => {
       if (!dateString || dateString === '-' || dateString === 'null') return 'Not specified';
@@ -1418,33 +1334,33 @@ function displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDa
         return dateString;
       }
     };
-  
+
   // Format source display with enhanced badges
   const formatSource = (sourceValue) => {
     switch(sourceValue) {
-      case 'admin_assigned': 
+      case 'admin_assigned':
         return '<span class="badge bg-danger text-white" style="border: 2px solid #dc3545; font-size: 0.9rem;"><i class="fas fa-user-shield me-1"></i>Admin Assigned</span>';
-      case 'competency_assigned': 
-      case 'competency_gap': 
+      case 'competency_assigned':
+      case 'competency_gap':
         return '<span class="badge bg-warning text-dark" style="border: 2px solid #ffc107; font-size: 0.9rem;"><i class="fas fa-chart-line me-1"></i>Competency Gap</span>';
-      case 'destination_assigned': 
+      case 'destination_assigned':
         return '<span class="badge bg-info text-white" style="border: 2px solid #0dcaf0; font-size: 0.9rem;"><i class="fas fa-map-marker-alt me-1"></i>Destination Training</span>';
-      case 'auto_assigned': 
+      case 'auto_assigned':
         return '<span class="badge bg-success text-white" style="border: 2px solid #198754; font-size: 0.9rem;"><i class="fas fa-robot me-1"></i>Auto Assigned</span>';
-      default: 
+      default:
         return `<span class="badge bg-secondary text-white" style="border: 2px solid #6c757d; font-size: 0.9rem;"><i class="fas fa-question me-1"></i>${sourceValue ? sourceValue.replace('_', ' ').toUpperCase() : 'UNKNOWN'}</span>`;
     }
   };
-  
+
   // Enhanced progress and status determination with accurate data
   let displayProgress = parseInt(progress) || 0;
   let actualStatus = status || 'Not Started';
   let progressColor = 'bg-secondary';
   let statusIcon = 'fas fa-clock';
   let statusBadgeColor = 'bg-secondary';
-  
+
   console.log('Modal display - Raw progress:', progress, 'Parsed progress:', displayProgress, 'Status:', actualStatus);
-  
+
   // If progress is still 0, try to get it from the current page
   if (displayProgress === 0) {
     // Look for the training in the current table to get progress
@@ -1462,7 +1378,7 @@ function displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDa
             break;
           }
         }
-        
+
         // Check for progress text
         const progressText = titleCell.textContent.match(/(\d+)% complete/);
         if (progressText) {
@@ -1473,7 +1389,7 @@ function displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDa
       }
     }
   }
-  
+
   // Determine status and styling based on actual progress
   if (actualStatus === 'Completed to Assign' || actualStatus === 'Completed' || actualStatus.toLowerCase().includes('completed')) {
     displayProgress = Math.max(displayProgress, 100); // Ensure completed shows 100%
@@ -1512,9 +1428,9 @@ function displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDa
       actualStatus = 'Not Started';
     }
   }
-  
+
   console.log('Final display progress:', displayProgress, 'Status:', actualStatus);
-  
+
   Swal.fire({
     title: '<i class="fas fa-info-circle text-primary me-2"></i>Training Details',
     html: `
@@ -1599,7 +1515,7 @@ function displayTrainingDetailsModal(trainingId, trainingTitle, startDate, endDa
   });
   } catch (error) {
     console.error('Error in displayTrainingDetailsModal:', error);
-    
+
     // Fallback to basic modal display instead of error message
     displayBasicTrainingDetails(trainingId, trainingTitle, startDate, endDate, status, source, assignedBy, assignedDate, progress);
   }
@@ -1613,7 +1529,7 @@ function requestTrainingExtensionWithConfirmation(trainingId, trainingTitle) {
       <div class="text-start">
         <p><strong>Training:</strong> ${trainingTitle}</p>
         <p class="text-muted mb-3">Request additional time to complete this training:</p>
-        
+
         <div class="mb-3">
           <label class="form-label fw-bold">Extension Period:</label>
           <select id="extensionPeriod" class="form-select">
@@ -1623,12 +1539,12 @@ function requestTrainingExtensionWithConfirmation(trainingId, trainingTitle) {
             <option value="60">60 days</option>
           </select>
         </div>
-        
+
         <div class="mb-3">
           <label class="form-label fw-bold">Reason for Extension:</label>
           <textarea id="extensionReason" class="form-control" rows="3" placeholder="Please explain why you need additional time..."></textarea>
         </div>
-        
+
         <div class="alert alert-info">
           <i class="fas fa-info-circle me-2"></i>
           <strong>Note:</strong> Extension requests are subject to approval by your supervisor or training administrator.
@@ -1650,12 +1566,12 @@ function requestTrainingExtensionWithConfirmation(trainingId, trainingTitle) {
     preConfirm: () => {
       const period = document.getElementById('extensionPeriod').value;
       const reason = document.getElementById('extensionReason').value.trim();
-      
+
       if (!reason) {
         Swal.showValidationMessage('Please provide a reason for the extension request');
         return false;
       }
-      
+
       return { period: period, reason: reason };
     }
   }).then((result) => {
@@ -1682,7 +1598,7 @@ function submitTrainingExtensionRequest(trainingId, trainingTitle, period, reaso
     allowEscapeKey: false,
     showConfirmButton: false
   });
-  
+
   // Simulate API call (replace with actual endpoint)
   fetch('/employee/training/request-extension', {
     method: 'POST',
@@ -2212,20 +2128,20 @@ document.getElementById('editUpcomingModal')?.addEventListener('show.bs.modal', 
         popup: 'swal2-toast-custom'
       }
     });
-    
+
     const iconMap = {
       'success': 'success',
       'error': 'error',
       'warning': 'warning',
       'info': 'info'
     };
-    
+
     Toast.fire({
       icon: iconMap[type] || 'info',
       title: message
     });
   }
-  
+
   // Backward compatibility function
   function showToast(type, message) {
     showSweetAlertToast(type, message);
@@ -2238,7 +2154,7 @@ document.getElementById('editUpcomingModal')?.addEventListener('show.bs.modal', 
     const originalHtml = button.innerHTML;
     button.disabled = true;
     button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    
+
     // Make API call
     fetch('/employee/competency-training/respond', {
       method: 'POST',
@@ -2255,12 +2171,12 @@ document.getElementById('editUpcomingModal')?.addEventListener('show.bs.modal', 
     .then(data => {
       if (data.success) {
         showToast('success', data.message || `Training ${action}ed successfully`);
-        
+
         // Update the row to show new status
         const row = button.closest('tr');
         const statusCell = row.querySelector('td:nth-child(5) .badge');
         const actionsCell = row.querySelector('td:nth-child(8)');
-        
+
         if (action === 'accept') {
           statusCell.className = 'badge bg-success text-white';
           statusCell.textContent = 'Accepted';
@@ -2443,10 +2359,10 @@ document.getElementById('editUpcomingModal')?.addEventListener('show.bs.modal', 
   // Handle training details modal
   document.addEventListener('DOMContentLoaded', function() {
     const trainingDetailsModal = document.getElementById('trainingDetailsModal');
-    
+
     trainingDetailsModal.addEventListener('show.bs.modal', function(event) {
       const button = event.relatedTarget;
-      
+
       // Get data from button attributes
       const trainingTitle = button.getAttribute('data-training-title') || '-';
       const startDate = button.getAttribute('data-start-date') || '-';
@@ -2456,7 +2372,7 @@ document.getElementById('editUpcomingModal')?.addEventListener('show.bs.modal', 
       const assignedBy = button.getAttribute('data-assigned-by') || '-';
       const assignedDate = button.getAttribute('data-assigned-date') || '-';
       const progress = parseInt(button.getAttribute('data-progress')) || 0;
-      
+
       // Populate modal fields
 
     });
@@ -2494,41 +2410,41 @@ style.textContent = `
     width: 90% !important;
     max-width: 800px !important;
   }
-  
+
   .swal2-toast-custom {
     font-size: 14px !important;
   }
-  
+
   .swal2-html-container {
     overflow: visible !important;
   }
-  
+
   .swal2-popup .progress {
     background-color: #e9ecef;
   }
-  
+
   .swal2-popup .badge {
     font-size: 0.8rem;
   }
-  
+
   .swal2-popup .alert {
     margin-bottom: 0;
   }
-  
+
   .swal2-popup .form-control {
     border: 1px solid #ced4da;
     border-radius: 0.375rem;
   }
-  
+
   .swal2-popup .form-select {
     border: 1px solid #ced4da;
     border-radius: 0.375rem;
   }
-  
+
   .swal2-popup .card {
     box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
   }
-  
+
   .swal2-popup .text-start {
     text-align: left !important;
   }

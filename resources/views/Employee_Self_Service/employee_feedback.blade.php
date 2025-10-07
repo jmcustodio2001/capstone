@@ -11,54 +11,54 @@
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
   <!-- SweetAlert2 -->
   <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.min.css" rel="stylesheet">
-  
+
   <!-- Custom CSS for Employee Profile Pictures -->
   <style>
     .employee-avatar {
       transition: all 0.3s ease;
       cursor: pointer;
     }
-    
+
     .employee-avatar:hover {
       transform: scale(1.1);
       box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
     }
-    
+
     .position-relative:hover .employee-avatar {
       filter: brightness(1.1);
     }
-    
+
     .avatar-sm, .avatar-lg {
       transition: all 0.3s ease;
     }
-    
+
     .avatar-sm:hover, .avatar-lg:hover {
       transform: scale(1.05);
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
-    
+
     /* Profile picture loading animation */
     .employee-avatar {
       background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
       background-size: 200% 100%;
       animation: loading 1.5s infinite;
     }
-    
+
     @keyframes loading {
       0% { background-position: 200% 0; }
       100% { background-position: -200% 0; }
     }
-    
+
     .employee-avatar[src] {
       animation: none;
       background: none;
     }
-    
+
     /* Status indicator styling */
     .position-absolute .badge {
       box-shadow: 0 0 0 2px white;
     }
-    
+
     /* Tooltip styling for profile pictures */
     .tooltip-inner {
       background-color: rgba(0, 0, 0, 0.9);
@@ -254,17 +254,17 @@
                           $profilePicture = $employee->profile_picture ?? null;
                           $employeeName = ($employee->first_name ?? 'Unknown') . ' ' . ($employee->last_name ?? 'User');
                           $initials = substr($employee->first_name ?? 'U', 0, 1) . substr($employee->last_name ?? 'U', 0, 1);
-                          
+
                           // Handle profile picture - check if it's base64 encoded data or filename
                           $hasProfilePicture = false;
                           $profilePicturePath = '';
-                          
+
                           if ($profilePicture) {
                               // Check if it's base64 encoded data (starts with data:image)
                               if (strpos($profilePicture, 'data:image') === 0) {
                                   $hasProfilePicture = true;
                                   $profilePicturePath = $profilePicture; // Use base64 data directly
-                              } 
+                              }
                               // Check if it's a very long string (likely encoded filename)
                               elseif (strlen($profilePicture) > 50) {
                                   // Try to decode if it looks like base64
@@ -276,7 +276,7 @@
                                       // It's probably an encoded filename, try to extract extension
                                       $actualFilename = $employee->employee_id . '.jpg'; // Default fallback
                                   }
-                                  
+
                                   // Check multiple possible paths with the actual filename
                                   $possiblePaths = [
                                       'storage/employee_photos/' . $actualFilename,
@@ -287,7 +287,7 @@
                                       'assets/employee_photos/' . $employee->employee_id . '.jpg',
                                       'assets/employee_photos/' . $employee->employee_id . '.png'
                                   ];
-                                  
+
                                   foreach ($possiblePaths as $path) {
                                       if (file_exists(public_path($path))) {
                                           $hasProfilePicture = true;
@@ -303,7 +303,7 @@
                                       'assets/employee_photos/' . $profilePicture,
                                       'uploads/employee_photos/' . $profilePicture
                                   ];
-                                  
+
                                   foreach ($possiblePaths as $path) {
                                       if (file_exists(public_path($path))) {
                                           $hasProfilePicture = true;
@@ -313,7 +313,7 @@
                                   }
                               }
                           }
-                          
+
                           // If still no profile picture found, try common employee ID based filenames
                           if (!$hasProfilePicture && $employee->employee_id) {
                               $commonFilenames = [
@@ -323,14 +323,14 @@
                                   strtolower($employee->employee_id) . '.jpg',
                                   strtolower($employee->employee_id) . '.png'
                               ];
-                              
+
                               foreach ($commonFilenames as $filename) {
                                   $possiblePaths = [
                                       'storage/employee_photos/' . $filename,
                                       'assets/employee_photos/' . $filename,
                                       'uploads/employee_photos/' . $filename
                                   ];
-                                  
+
                                   foreach ($possiblePaths as $path) {
                                       if (file_exists(public_path($path))) {
                                           $hasProfilePicture = true;
@@ -341,39 +341,39 @@
                               }
                           }
                         @endphp
-                        
+
                         @if($hasProfilePicture)
-                          <img src="{{ $profilePicturePath }}" 
-                               alt="{{ $employeeName }}" 
+                          <img src="{{ $profilePicturePath }}"
+                               alt="{{ $employeeName }}"
                                class="rounded-circle employee-avatar"
                                style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #007bff;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $employeeName }}"
                                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                          <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                          <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
                                style="width: 40px; height: 40px; display: none; border: 2px solid #007bff;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $employeeName }}">
                             <span class="text-primary fw-bold">{{ $initials }}</span>
                           </div>
                         @else
                           <!-- Debug info for missing profile picture -->
-                          <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                          <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
                                style="width: 40px; height: 40px; border: 2px solid #007bff;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $employeeName }} (No photo found - ID: {{ $employee->employee_id ?? 'N/A' }})">
                             <span class="text-primary fw-bold">{{ $initials }}</span>
                           </div>
                         @endif
-                        
+
                         <!-- Online status indicator -->
                         <div class="position-absolute bottom-0 end-0">
-                          <span class="badge bg-success rounded-pill" style="width: 12px; height: 12px; padding: 0;" 
-                                data-bs-toggle="tooltip" 
-                                data-bs-placement="top" 
+                          <span class="badge bg-success rounded-pill" style="width: 12px; height: 12px; padding: 0;"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="top"
                                 title="Active Employee"></span>
                         </div>
                       </div>
@@ -445,7 +445,7 @@
                 </tr>
               @empty
               @endforelse
-              
+
               <!-- Competency Feedback Requests -->
               @forelse($competencyRequests ?? [] as $request)
                 <tr class="table-info">
@@ -459,70 +459,70 @@
                           $compEmployeeName = ($compEmployee->first_name ?? 'Unknown') . ' ' . ($compEmployee->last_name ?? 'User');
                           $compInitials = substr($compEmployee->first_name ?? 'U', 0, 1) . substr($compEmployee->last_name ?? 'U', 0, 1);
                         @endphp
-                        
+
                         @if($compProfilePicture && file_exists(public_path('storage/employee_photos/' . $compProfilePicture)))
-                          <img src="{{ asset('storage/employee_photos/' . $compProfilePicture) }}" 
-                               alt="{{ $compEmployeeName }}" 
+                          <img src="{{ asset('storage/employee_photos/' . $compProfilePicture) }}"
+                               alt="{{ $compEmployeeName }}"
                                class="rounded-circle employee-avatar"
                                style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}"
                                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
                                style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}">
                             <span class="text-info fw-bold">{{ $compInitials }}</span>
                           </div>
                         @elseif($compProfilePicture && file_exists(public_path('assets/employee_photos/' . $compProfilePicture)))
-                          <img src="{{ asset('assets/employee_photos/' . $compProfilePicture) }}" 
-                               alt="{{ $compEmployeeName }}" 
+                          <img src="{{ asset('assets/employee_photos/' . $compProfilePicture) }}"
+                               alt="{{ $compEmployeeName }}"
                                class="rounded-circle employee-avatar"
                                style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}"
                                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
                                style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}">
                             <span class="text-info fw-bold">{{ $compInitials }}</span>
                           </div>
                         @elseif($compProfilePicture && file_exists(public_path('uploads/employee_photos/' . $compProfilePicture)))
-                          <img src="{{ asset('uploads/employee_photos/' . $compProfilePicture) }}" 
-                               alt="{{ $compEmployeeName }}" 
+                          <img src="{{ asset('uploads/employee_photos/' . $compProfilePicture) }}"
+                               alt="{{ $compEmployeeName }}"
                                class="rounded-circle employee-avatar"
                                style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}"
                                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
                                style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}">
                             <span class="text-info fw-bold">{{ $compInitials }}</span>
                           </div>
                         @else
-                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center" 
+                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
                                style="width: 40px; height: 40px; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip" 
-                               data-bs-placement="top" 
+                               data-bs-toggle="tooltip"
+                               data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}">
                             <span class="text-info fw-bold">{{ $compInitials }}</span>
                           </div>
                         @endif
-                        
+
                         <!-- Competency request indicator -->
                         <div class="position-absolute bottom-0 end-0">
-                          <span class="badge bg-info rounded-pill" style="width: 12px; height: 12px; padding: 0;" 
-                                data-bs-toggle="tooltip" 
-                                data-bs-placement="top" 
+                          <span class="badge bg-info rounded-pill" style="width: 12px; height: 12px; padding: 0;"
+                                data-bs-toggle="tooltip"
+                                data-bs-placement="top"
                                 title="Competency Request"></span>
                         </div>
                       </div>
@@ -786,10 +786,10 @@
     function viewFeedbackDetails(feedbackId) {
       console.log('Setting currentFeedbackId to:', feedbackId);
       currentFeedbackId = feedbackId;
-      
+
       // Show loading state
       document.getElementById('viewFeedbackContent').innerHTML = '<div class="text-center"><i class="bi bi-hourglass-split"></i> Loading feedback details...</div>';
-      
+
       fetch(`/admin/training-feedback/${feedbackId}`)
         .then(response => {
           if (!response.ok) {
@@ -808,7 +808,7 @@
                   <tr><td><strong>Employee ID:</strong></td><td>${data.employee?.employee_id || 'N/A'}</td></tr>
                   <tr><td><strong>Department:</strong></td><td>${data.employee?.department || 'N/A'}</td></tr>
                 </table>
-                
+
                 <h6 class="fw-bold text-primary mt-4">Training Information</h6>
                 <table class="table table-borderless">
                   <tr><td><strong>Training:</strong></td><td>${data.training_title}</td></tr>
@@ -816,7 +816,7 @@
                   <tr><td><strong>Completed:</strong></td><td>${data.training_completion_date || 'N/A'}</td></tr>
                   <tr><td><strong>Submitted:</strong></td><td>${new Date(data.submitted_at).toLocaleDateString()}</td></tr>
                 </table>
-                
+
                 <h6 class="fw-bold text-primary mt-4">Ratings</h6>
                 <table class="table table-borderless">
                   <tr><td><strong>Overall:</strong></td><td>${'★'.repeat(data.overall_rating)}${'☆'.repeat(5-data.overall_rating)} (${data.overall_rating}/5)</td></tr>
@@ -849,7 +849,7 @@
                   <strong>Additional comments:</strong>
                   <p class="text-muted border-start border-3 border-secondary ps-3">${data.comments || 'No response provided'}</p>
                 </div>
-                
+
                 ${data.admin_response ? `
                   <h6 class="fw-bold text-success mt-4">Admin Response</h6>
                   <div class="alert alert-success">
@@ -1121,13 +1121,13 @@
       const training = document.getElementById('trainingFilter').value;
       const rating = document.getElementById('ratingFilter').value;
       const dateRange = document.getElementById('dateFilter').value;
-      
+
       const params = new URLSearchParams();
       if (employee) params.append('employee', employee);
       if (training) params.append('training', training);
       if (rating) params.append('rating', rating);
       if (dateRange) params.append('date_range', dateRange);
-      
+
       window.location.href = `${window.location.pathname}?${params.toString()}`;
     }
 
@@ -1267,7 +1267,7 @@
 
         // Trigger download
         const exportUrl = `/admin/training-feedback/export?${params.toString()}`;
-        
+
         // Create hidden link and trigger download
         const link = document.createElement('a');
         link.href = exportUrl;
@@ -1366,7 +1366,7 @@
 
         if (response.ok) {
           const data = await response.json();
-          
+
           // Update analytics cards
           if (data.analytics) {
             document.getElementById('totalFeedback').textContent = data.analytics.totalFeedback || 0;
@@ -1448,7 +1448,7 @@
                   <tr><td><strong>Employee ID:</strong></td><td>${data.employee?.employee_id || 'N/A'}</td></tr>
                   <tr><td><strong>Department:</strong></td><td>${data.employee?.department || 'N/A'}</td></tr>
                 </table>
-                
+
                 <h6 class="fw-bold text-primary mt-4">Competency Information</h6>
                 <table class="table table-borderless">
                   <tr><td><strong>Competency:</strong></td><td>${data.competency?.competency_name || 'Unknown'}</td></tr>
@@ -1470,7 +1470,7 @@
                   <strong>Requested:</strong> ${new Date(data.created_at).toLocaleDateString()}
                 </div>
                 ${data.responded_at ? `<div class="mb-3"><strong>Responded:</strong> ${new Date(data.responded_at).toLocaleDateString()}</div>` : ''}
-                
+
                 ${data.manager_response ? `
                   <h6 class="fw-bold text-success mt-4">Manager Response</h6>
                   <div class="alert alert-success">
@@ -1482,7 +1482,7 @@
             </div>
           `;
           document.getElementById('viewFeedbackContent').innerHTML = content;
-          
+
           // Show modal
           const modal = new bootstrap.Modal(document.getElementById('viewFeedbackModal'));
           modal.show();
@@ -1711,7 +1711,7 @@
     // Employee Profile Tracking Function
     async function viewEmployeeProfile(employeeId) {
       console.log('viewEmployeeProfile called with ID:', employeeId);
-      
+
       if (!employeeId || employeeId === 'N/A') {
         await Swal.fire({
           title: 'Profile Not Available',
@@ -1748,7 +1748,7 @@
         // Fetch employee profile data
         const apiUrl = `/admin/employee-profile/${employeeId}`;
         console.log('Fetching from URL:', apiUrl);
-        
+
         const response = await fetch(apiUrl, {
           method: 'GET',
           headers: {
@@ -1764,7 +1764,7 @@
         if (response.ok) {
           const employee = await response.json();
           console.log('Employee data received:', employee);
-          
+
           await Swal.fire({
             title: 'Employee Profile',
             html: `
@@ -1772,9 +1772,9 @@
                 <div class="row">
                   <div class="col-md-4 text-center">
                     ${employee.profile_picture || employee.photo ? `
-                      <img src="/storage/employee_photos/${employee.profile_picture || employee.photo}" 
-                           alt="${employee.first_name || 'Unknown'} ${employee.last_name || 'User'}" 
-                           class="rounded-circle mx-auto mb-3" 
+                      <img src="/storage/employee_photos/${employee.profile_picture || employee.photo}"
+                           alt="${employee.first_name || 'Unknown'} ${employee.last_name || 'User'}"
+                           class="rounded-circle mx-auto mb-3"
                            style="width: 80px; height: 80px; object-fit: cover; border: 3px solid #007bff;"
                            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                       <div class="avatar-lg bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 80px; height: 80px; display: none; border: 3px solid #007bff;">
@@ -1799,7 +1799,7 @@
                       <tr><td><strong>Hire Date:</strong></td><td>${employee.hire_date ? new Date(employee.hire_date).toLocaleDateString() : 'Not available'}</td></tr>
                       <tr><td><strong>Status:</strong></td><td><span class="badge bg-${employee.status === 'Active' ? 'success' : 'secondary'}">${employee.status || 'Unknown'}</span></td></tr>
                     </table>
-                    
+
                     ${employee.training_stats ? `
                       <h6 class="fw-bold text-success mt-4 mb-3">Training Statistics</h6>
                       <div class="row text-center">
@@ -1852,7 +1852,7 @@
 
       } catch (error) {
         console.error('Error loading employee profile:', error);
-        
+
         // Show detailed error information
         await Swal.fire({
           title: 'Profile Not Found',
@@ -1891,13 +1891,13 @@
       const training = document.getElementById('trainingFilter').value;
       const rating = document.getElementById('ratingFilter').value;
       const dateRange = document.getElementById('dateFilter').value;
-      
+
       const params = new URLSearchParams();
       if (employee) params.append('employee', employee);
       if (training) params.append('training', training);
       if (rating) params.append('rating', rating);
       if (dateRange) params.append('date_range', dateRange);
-      
+
       window.location.href = `${window.location.pathname}?${params.toString()}`;
     }
 

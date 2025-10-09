@@ -514,13 +514,8 @@ class ClaimReimbursementApiController extends Controller
      */
     private function validateApiKey($apiKey)
     {
-        $validApiKeys = [
-            'hr2ess_api_key_2025',
-            'claim_reimbursement_api_v1',
-            env('CLAIM_API_KEY', 'default_api_key')
-        ];
-
-        return in_array($apiKey, $validApiKeys);
+        $validApiKey = env('CLAIM_API_KEY');
+        return $validApiKey && $apiKey === $validApiKey;
     }
 
     /**
@@ -528,12 +523,7 @@ class ClaimReimbursementApiController extends Controller
      */
     private function validateAdminApiKey($apiKey)
     {
-        $validAdminApiKeys = [
-            'hr2ess_admin_api_key_2025',
-            'claim_admin_api_v1',
-            env('CLAIM_ADMIN_API_KEY', 'default_admin_api_key')
-        ];
-
-        return in_array($apiKey, $validAdminApiKeys);
+        $validAdminApiKey = env('CLAIM_ADMIN_API_KEY');
+        return $validAdminApiKey && $apiKey === $validAdminApiKey;
     }
 }

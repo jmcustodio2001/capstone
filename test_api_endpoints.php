@@ -14,15 +14,24 @@
 // Configuration
 $baseUrl = 'http://localhost:8000'; // Change to your domain
 $apiKeys = [
-    'leave' => 'hr2ess_api_key_2025',
-    'attendance' => 'hr2ess_api_key_2025', 
-    'claims' => 'hr2ess_api_key_2025',
-    'admin' => 'hr2ess_admin_api_key_2025'
+    'leave' => 'hr2ess_leave_9KmN3vXwR8qL2pYtE5sA7uC1fH6jBgD4',
+    'attendance' => 'hr2ess_attendance_M5nR8qL2pY6tE9sA3vX7uC1fH4jBgD0z', 
+    'claims' => 'hr2ess_claim_L5nR8qY6tE9sA3vX7uC1fH4jBgD0zM2p',
+    'leave_admin' => 'hr2ess_leave_admin_W7zQ9mP2kL5nR8vX3tY6uA1sD4fG7jB0',
+    'attendance_admin' => 'hr2ess_attendance_admin_P2kL5nR8qY6tE9sA3vX7uC1fH4jBgD0z',
+    'claims_admin' => 'hr2ess_claim_admin_R8qY6tE9sA3vX7uC1fH4jBgD0zM2pL5n'
 ];
 
 $testEmployeeId = 'EMP001'; // Change to existing employee ID
 
 echo "=== HR2ESS API Testing Script ===\n\n";
+
+// Debug: Show API keys being used
+echo "=== API KEYS BEING USED ===\n";
+echo "Leave API Key: " . $apiKeys['leave'] . "\n";
+echo "Attendance API Key: " . $apiKeys['attendance'] . "\n";
+echo "Claims API Key: " . $apiKeys['claims'] . "\n";
+echo str_repeat('=', 50) . "\n\n";
 
 /**
  * Make HTTP request

@@ -598,34 +598,21 @@ class LeaveApplicationApiController extends Controller
     }
 
     /**
-     * Validate API key (implement your own logic)
+     * Validate API key
      */
     private function validateApiKey($apiKey)
     {
-        // Implement your API key validation logic here
-        // For now, using a simple check - replace with proper implementation
-        $validApiKeys = [
-            'hr2ess_api_key_2025',
-            'leave_management_api_v1',
-            env('LEAVE_API_KEY', 'default_api_key')
-        ];
-
-        return in_array($apiKey, $validApiKeys);
+        $validApiKey = env('LEAVE_API_KEY');
+        return $validApiKey && $apiKey === $validApiKey;
     }
 
     /**
-     * Validate admin API key (implement your own logic)
+     * Validate admin API key
      */
     private function validateAdminApiKey($apiKey)
     {
-        // Implement your admin API key validation logic here
-        $validAdminApiKeys = [
-            'hr2ess_admin_api_key_2025',
-            'leave_admin_api_v1',
-            env('LEAVE_ADMIN_API_KEY', 'default_admin_api_key')
-        ];
-
-        return in_array($apiKey, $validAdminApiKeys);
+        $validAdminApiKey = env('LEAVE_ADMIN_API_KEY');
+        return $validAdminApiKey && $apiKey === $validAdminApiKey;
     }
 
     /**

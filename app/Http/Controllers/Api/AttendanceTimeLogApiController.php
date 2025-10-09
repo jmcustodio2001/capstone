@@ -420,13 +420,8 @@ class AttendanceTimeLogApiController extends Controller
      */
     private function validateApiKey($apiKey)
     {
-        $validApiKeys = [
-            'hr2ess_api_key_2025',
-            'attendance_management_api_v1',
-            env('ATTENDANCE_API_KEY', 'default_api_key')
-        ];
-
-        return in_array($apiKey, $validApiKeys);
+        $validApiKey = env('ATTENDANCE_API_KEY');
+        return $validApiKey && $apiKey === $validApiKey;
     }
 
     /**
@@ -434,12 +429,7 @@ class AttendanceTimeLogApiController extends Controller
      */
     private function validateAdminApiKey($apiKey)
     {
-        $validAdminApiKeys = [
-            'hr2ess_admin_api_key_2025',
-            'attendance_admin_api_v1',
-            env('ATTENDANCE_ADMIN_API_KEY', 'default_admin_api_key')
-        ];
-
-        return in_array($apiKey, $validAdminApiKeys);
+        $validAdminApiKey = env('ATTENDANCE_ADMIN_API_KEY');
+        return $validAdminApiKey && $apiKey === $validAdminApiKey;
     }
 }

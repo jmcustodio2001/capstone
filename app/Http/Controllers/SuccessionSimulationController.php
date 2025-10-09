@@ -113,20 +113,7 @@ class SuccessionSimulationController extends Controller
             Log::error('Error fetching EmployeeTraining: ' . $e->getMessage());
         }
         
-        // If no certificates found, create some sample ones for testing
-        if ($certificates->isEmpty() && $employees->count() > 0) {
-            Log::info('No certificates found, creating sample data');
-            
-            foreach ($employees as $index => $employee) {
-                $certificates->push([
-                    'employee_name' => $employee->first_name . ' ' . $employee->last_name,
-                    'course_title' => 'Sample Training Course ' . ($index + 1),
-                    'certificate_number' => 'SAMPLE-' . ($index + 1),
-                    'completion_date' => Carbon::now()->subDays($index * 10),
-                    'display_text' => $employee->first_name . ' ' . $employee->last_name . ' - Sample Training Course ' . ($index + 1) . ' (SAMPLE-' . ($index + 1) . ')'
-                ]);
-            }
-        }
+        // No sample data generation - only show real certificates
         
         Log::info('Total certificates found: ' . $certificates->count());
         

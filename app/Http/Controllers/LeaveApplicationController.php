@@ -381,11 +381,15 @@ class LeaveApplicationController extends Controller
         ];
 
         $balances = [];
+        
+        // Get current year for annual reset functionality
+        $currentYear = Carbon::now()->year;
 
         foreach ($allocations as $type => $total) {
             $query = LeaveApplication::where('employee_id', $employeeId)
                 ->where('leave_type', $type)
-                ->whereIn('status', ['Approved', 'Pending']);
+                ->whereIn('status', ['Approved', 'Pending'])
+                ->whereYear('start_date', $currentYear); // Only count leave days used in current year
 
             if ($excludeApplicationId) {
                 $query->where('id', '!=', $excludeApplicationId);
@@ -398,7 +402,48 @@ class LeaveApplicationController extends Controller
                 'total' => $total,
                 'used' => $used,
                 'available' => $available,
-                'percentage' => $total > 0 ? round(($available / $total) * 100) : 0
+                'percentage' => $total > 0 ? round(($available / $total) * 100) : 0,
+                'reset_year' => $currentYear // Track which year this balance is for
+            ];
+        }
+
+        return $balances;
+    }
+
+    /**
+     * Calculate leave balances for a specific year
+     * Useful for historical reporting and year-end summaries
+     */
+    private function calculateLeaveBalancesForYear($employeeId, $year, $excludeApplicationId = null)
+    {
+        // Default annual leave allocations
+        $allocations = [
+            'Vacation' => 15,
+            'Sick' => 10,
+            'Emergency' => 5
+        ];
+
+        $balances = [];
+
+        foreach ($allocations as $type => $total) {
+            $query = LeaveApplication::where('employee_id', $employeeId)
+                ->where('leave_type', $type)
+                ->whereIn('status', ['Approved', 'Pending'])
+                ->whereYear('start_date', $year); // Count leave days used in specified year
+
+            if ($excludeApplicationId) {
+                $query->where('id', '!=', $excludeApplicationId);
+            }
+
+            $used = $query->sum('days_requested');
+            $available = max(0, $total - $used);
+
+            $balances[$type] = [
+                'total' => $total,
+                'used' => $used,
+                'available' => $available,
+                'percentage' => $total > 0 ? round(($available / $total) * 100) : 0,
+                'year' => $year
             ];
         }
 

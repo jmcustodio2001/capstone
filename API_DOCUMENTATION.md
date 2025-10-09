@@ -1,8 +1,10 @@
-# Leave Management API Documentation
+# HR2ESS API Documentation
 
 ## Overview
 
-This API provides comprehensive leave management functionality including:
+This comprehensive API provides HR management functionality for three core modules:
+
+### 1. Leave Management
 - Submit leave requests
 - Check leave application status
 - Approve/reject leave applications (Admin)
@@ -11,9 +13,25 @@ This API provides comprehensive leave management functionality including:
 - Webhook notifications for status updates
 - **HR3 Integration**: Automatic forwarding of leave data to `hr3.jetlougetravels-ph.com`
 
-## Base URL
+### 2. Attendance Time Logs
+- Retrieve employee attendance logs
+- Create new attendance entries
+- Update attendance records (Admin)
+- Generate attendance summaries
+- Filter by date ranges and status
+
+### 3. Claim Reimbursement
+- Submit reimbursement claims
+- Track claim status
+- Approve/reject/process claims (Admin)
+- Upload receipt files
+- Generate claim summaries
+
+## Base URLs
 ```
-https://your-domain.com/api/v1/leave
+Leave Management:     https://your-domain.com/api/v1/leave
+Attendance Logs:      https://your-domain.com/api/v1/attendance  
+Claim Reimbursement:  https://your-domain.com/api/v1/claims
 ```
 
 ## Authentication
@@ -26,12 +44,25 @@ All API endpoints require authentication via API keys:
 ### API Keys Configuration
 Add these to your `.env` file:
 ```env
-LEAVE_API_KEY=your_api_key_here
-LEAVE_ADMIN_API_KEY=your_admin_api_key_here
+# Leave Management API Keys
+LEAVE_API_KEY=your_leave_api_key_here
+LEAVE_ADMIN_API_KEY=your_leave_admin_api_key_here
 LEAVE_WEBHOOK_SECRET=your_webhook_secret_here
+
+# Attendance Management API Keys  
+ATTENDANCE_API_KEY=your_attendance_api_key_here
+ATTENDANCE_ADMIN_API_KEY=your_attendance_admin_api_key_here
+
+# Claim Reimbursement API Keys
+CLAIM_API_KEY=your_claim_api_key_here
+CLAIM_ADMIN_API_KEY=your_claim_admin_api_key_here
 ```
 
 ## Endpoints
+
+---
+
+# LEAVE MANAGEMENT API
 
 ### 1. Submit Leave Request
 
@@ -573,6 +604,445 @@ curl -X GET "https://your-domain.com/api/v1/leave/balance/EMP001?api_key=your_ap
 3. **Input Validation**: All inputs are validated server-side
 4. **Logging**: All API calls are logged for audit purposes
 5. **Error Handling**: Sensitive information is not exposed in error messages
+
+---
+
+# ATTENDANCE TIME LOGS API
+
+## Base URL: `/api/v1/attendance`
+
+### 1. Get Attendance Logs
+
+**GET** `/logs/{employeeId}?api_key=your_api_key_here&start_date=2025-01-01&end_date=2025-01-31&status=Present&limit=50`
+
+Get attendance logs for an employee with optional filtering.
+
+#### Parameters
+- `employeeId` (string): Employee ID
+- `api_key` (query parameter, required): Valid API key
+- `start_date` (string, optional): Start date filter (YYYY-MM-DD)
+- `end_date` (string, optional): End date filter (YYYY-MM-DD)
+- `status` (string, optional): Status filter ("Present", "Absent", "Late", "Early Departure", "Overtime")
+- `limit` (integer, optional): Number of records (1-100, default: 50)
+
+#### Response
+```json
+{
+    "success": true,
+    "data": {
+        "employee_id": "EMP001",
+        "employee_name": "John Doe",
+        "attendance_logs": [
+            {
+                "id": 123,
+                "employee_id": "EMP001",
+                "log_date": "2025-01-15",
+                "time_in": "08:00:00",
+                "time_out": "17:00:00",
+                "break_start_time": "12:00:00",
+                "break_end_time": "13:00:00",
+                "total_hours": 8.0,
+                "overtime_hours": 0.0,
+                "hours_worked": 8.0,
+                "status": "Present",
+                "location": "Main Office",
+                "ip_address": "192.168.1.100",
+                "notes": "Regular workday",
+                "created_at": "2025-01-15T08:00:00.000000Z",
+                "updated_at": "2025-01-15T17:00:00.000000Z"
+            }
+        ],
+        "total_records": 1,
+        "limit_applied": 50,
+        "filters_applied": {
+            "start_date": "2025-01-01",
+            "end_date": "2025-01-31",
+            "status": "Present"
+        }
+    }
+}
+```
+
+### 2. Create Attendance Log
+
+**POST** `/logs`
+
+Create a new attendance log entry.
+
+#### Request Body
+```json
+{
+    "employee_id": "EMP001",
+    "log_date": "2025-01-15",
+    "time_in": "08:00:00",
+    "time_out": "17:00:00",
+    "break_start_time": "12:00:00",
+    "break_end_time": "13:00:00",
+    "total_hours": 8.0,
+    "overtime_hours": 0.0,
+    "status": "Present",
+    "location": "Main Office",
+    "ip_address": "192.168.1.100",
+    "notes": "Regular workday",
+    "api_key": "your_api_key_here"
+}
+```
+
+#### Parameters
+- `employee_id` (string, required): Employee ID
+- `log_date` (date, required): Log date (YYYY-MM-DD)
+- `time_in` (time, optional): Clock in time (HH:MM:SS)
+- `time_out` (time, optional): Clock out time (HH:MM:SS)
+- `break_start_time` (time, optional): Break start time (HH:MM:SS)
+- `break_end_time` (time, optional): Break end time (HH:MM:SS)
+- `total_hours` (decimal, optional): Total hours worked
+- `overtime_hours` (decimal, optional): Overtime hours
+- `status` (string, required): Status ("Present", "Absent", "Late", "Early Departure", "Overtime")
+- `location` (string, optional): Work location
+- `ip_address` (string, optional): IP address
+- `notes` (string, optional): Additional notes
+- `api_key` (string, required): Valid API key
+
+#### Response
+```json
+{
+    "success": true,
+    "message": "Attendance log created successfully",
+    "data": {
+        "id": 123,
+        "employee_id": "EMP001",
+        "log_date": "2025-01-15",
+        "time_in": "08:00:00",
+        "time_out": "17:00:00",
+        "total_hours": 8.0,
+        "status": "Present",
+        "created_at": "2025-01-15T08:00:00.000000Z"
+    }
+}
+```
+
+### 3. Update Attendance Log (Admin Only)
+
+**PUT** `/logs/{logId}`
+
+Update an existing attendance log entry.
+
+#### Request Body
+```json
+{
+    "time_in": "08:30:00",
+    "time_out": "17:30:00",
+    "status": "Late",
+    "notes": "Traffic delay",
+    "admin_api_key": "your_admin_api_key_here"
+}
+```
+
+### 4. Get Attendance Summary
+
+**GET** `/summary/{employeeId}?api_key=your_api_key_here&start_date=2025-01-01&end_date=2025-01-31`
+
+Get attendance summary statistics for an employee.
+
+#### Response
+```json
+{
+    "success": true,
+    "data": {
+        "employee_id": "EMP001",
+        "employee_name": "John Doe",
+        "period": {
+            "start_date": "2025-01-01",
+            "end_date": "2025-01-31"
+        },
+        "summary": {
+            "total_days": 22,
+            "present_days": 20,
+            "absent_days": 1,
+            "late_days": 1,
+            "early_departure_days": 0,
+            "overtime_days": 3,
+            "total_hours_worked": 176.0,
+            "total_overtime_hours": 12.0,
+            "average_hours_per_day": 8.0
+        },
+        "generated_at": "2025-01-31T23:59:59.000000Z"
+    }
+}
+```
+
+---
+
+# CLAIM REIMBURSEMENT API
+
+## Base URL: `/api/v1/claims`
+
+### 1. Get Claim Reimbursements
+
+**GET** `/employee/{employeeId}?api_key=your_api_key_here&status=Pending&claim_type=Travel&start_date=2025-01-01&end_date=2025-01-31&limit=50`
+
+Get claim reimbursements for an employee with optional filtering.
+
+#### Parameters
+- `employeeId` (string): Employee ID
+- `api_key` (query parameter, required): Valid API key
+- `status` (string, optional): Status filter ("Pending", "Approved", "Rejected", "Processed")
+- `claim_type` (string, optional): Claim type filter
+- `start_date` (string, optional): Start date filter (YYYY-MM-DD)
+- `end_date` (string, optional): End date filter (YYYY-MM-DD)
+- `limit` (integer, optional): Number of records (1-100, default: 50)
+
+#### Response
+```json
+{
+    "success": true,
+    "data": {
+        "employee_id": "EMP001",
+        "employee_name": "John Doe",
+        "claims": [
+            {
+                "id": 123,
+                "claim_id": "CR20250001",
+                "employee_id": "EMP001",
+                "claim_type": "Travel Expense",
+                "description": "Business trip to Manila",
+                "amount": 5000.00,
+                "formatted_amount": "₱5,000.00",
+                "claim_date": "2025-01-15",
+                "status": "Pending",
+                "approved_by": null,
+                "approved_date": null,
+                "rejected_reason": null,
+                "processed_date": null,
+                "payment_method": null,
+                "reference_number": null,
+                "remarks": null,
+                "receipt_file": "receipt_1642234567_invoice.pdf",
+                "has_receipt": true,
+                "can_be_edited": true,
+                "can_be_cancelled": true,
+                "created_at": "2025-01-15T10:30:00.000000Z",
+                "updated_at": "2025-01-15T10:30:00.000000Z"
+            }
+        ],
+        "total_records": 1,
+        "limit_applied": 50,
+        "filters_applied": {
+            "status": "Pending",
+            "claim_type": "Travel",
+            "start_date": "2025-01-01",
+            "end_date": "2025-01-31"
+        }
+    }
+}
+```
+
+### 2. Create Claim Reimbursement
+
+**POST** `/submit`
+
+Create a new claim reimbursement with optional file upload.
+
+#### Request Body (multipart/form-data)
+```
+employee_id: EMP001
+claim_type: Travel Expense
+description: Business trip to Manila
+amount: 5000.00
+claim_date: 2025-01-15
+receipt_file: [FILE] (optional)
+payment_method: Bank Transfer
+remarks: Urgent processing needed
+api_key: your_api_key_here
+```
+
+#### Parameters
+- `employee_id` (string, required): Employee ID
+- `claim_type` (string, required): Type of claim
+- `description` (string, required): Claim description (max 1000 chars)
+- `amount` (decimal, required): Claim amount (0.01-999999.99)
+- `claim_date` (date, required): Claim date (YYYY-MM-DD, today or earlier)
+- `receipt_file` (file, optional): Receipt file (PDF, JPG, PNG, DOC, DOCX, max 5MB)
+- `payment_method` (string, optional): Preferred payment method
+- `remarks` (string, optional): Additional remarks
+- `api_key` (string, required): Valid API key
+
+#### Response
+```json
+{
+    "success": true,
+    "message": "Claim reimbursement created successfully",
+    "data": {
+        "id": 123,
+        "claim_id": "CR20250001",
+        "employee_id": "EMP001",
+        "claim_type": "Travel Expense",
+        "description": "Business trip to Manila",
+        "amount": 5000.00,
+        "formatted_amount": "₱5,000.00",
+        "claim_date": "2025-01-15",
+        "status": "Pending",
+        "has_receipt": true,
+        "created_at": "2025-01-15T10:30:00.000000Z"
+    }
+}
+```
+
+### 3. Update Claim Status (Admin Only)
+
+**PUT** `/status/{claimId}`
+
+Update the status of a claim reimbursement (approve, reject, or process).
+
+#### Request Body
+```json
+{
+    "status": "Approved",
+    "approved_by": "Finance Manager",
+    "rejected_reason": null,
+    "payment_method": "Bank Transfer",
+    "reference_number": "TXN123456789",
+    "remarks": "Approved for processing",
+    "admin_api_key": "your_admin_api_key_here"
+}
+```
+
+#### Parameters
+- `status` (string, required): "Approved", "Rejected", or "Processed"
+- `approved_by` (string, required): Name of approver
+- `rejected_reason` (string, optional): Reason for rejection (required if status is "Rejected")
+- `payment_method` (string, optional): Payment method (for "Processed" status)
+- `reference_number` (string, optional): Payment reference number (for "Processed" status)
+- `remarks` (string, optional): Additional remarks
+- `admin_api_key` (string, required): Valid admin API key
+
+### 4. Get Claim Details
+
+**GET** `/details/{claimId}?api_key=your_api_key_here`
+
+Get detailed information about a specific claim.
+
+#### Response
+```json
+{
+    "success": true,
+    "data": {
+        "id": 123,
+        "claim_id": "CR20250001",
+        "employee_id": "EMP001",
+        "employee_name": "John Doe",
+        "claim_type": "Travel Expense",
+        "description": "Business trip to Manila",
+        "amount": 5000.00,
+        "formatted_amount": "₱5,000.00",
+        "claim_date": "2025-01-15",
+        "status": "Approved",
+        "approved_by": "Finance Manager",
+        "approved_date": "2025-01-16T14:30:00.000000Z",
+        "rejected_reason": null,
+        "processed_date": null,
+        "payment_method": "Bank Transfer",
+        "reference_number": null,
+        "remarks": "Approved for processing",
+        "receipt_file": "receipt_1642234567_invoice.pdf",
+        "has_receipt": true,
+        "receipt_url": "/storage/receipts/receipt_1642234567_invoice.pdf",
+        "can_be_edited": false,
+        "can_be_cancelled": true,
+        "created_at": "2025-01-15T10:30:00.000000Z",
+        "updated_at": "2025-01-16T14:30:00.000000Z"
+    }
+}
+```
+
+### 5. Get Claim Summary
+
+**GET** `/summary/{employeeId}?api_key=your_api_key_here&start_date=2025-01-01&end_date=2025-12-31`
+
+Get claim reimbursement summary statistics for an employee.
+
+#### Response
+```json
+{
+    "success": true,
+    "data": {
+        "employee_id": "EMP001",
+        "employee_name": "John Doe",
+        "period": {
+            "start_date": "2025-01-01",
+            "end_date": "2025-12-31"
+        },
+        "summary": {
+            "total_claims": 15,
+            "pending_claims": 2,
+            "approved_claims": 10,
+            "rejected_claims": 1,
+            "processed_claims": 2,
+            "total_amount_claimed": 75000.00,
+            "total_amount_approved": 65000.00,
+            "total_amount_processed": 15000.00,
+            "average_claim_amount": 5000.00,
+            "formatted_total_claimed": "₱75,000.00",
+            "formatted_total_approved": "₱65,000.00",
+            "formatted_total_processed": "₱15,000.00",
+            "formatted_average_amount": "₱5,000.00"
+        },
+        "generated_at": "2025-01-31T23:59:59.000000Z"
+    }
+}
+```
+
+---
+
+## Usage Examples
+
+### Attendance API Examples
+
+#### Create Attendance Log
+```bash
+curl -X POST https://your-domain.com/api/v1/attendance/logs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "employee_id": "EMP001",
+    "log_date": "2025-01-15",
+    "time_in": "08:00:00",
+    "time_out": "17:00:00",
+    "status": "Present",
+    "location": "Main Office",
+    "api_key": "your_api_key_here"
+  }'
+```
+
+#### Get Attendance Logs
+```bash
+curl -X GET "https://your-domain.com/api/v1/attendance/logs/EMP001?api_key=your_api_key_here&start_date=2025-01-01&end_date=2025-01-31"
+```
+
+### Claims API Examples
+
+#### Submit Claim with Receipt
+```bash
+curl -X POST https://your-domain.com/api/v1/claims/submit \
+  -F "employee_id=EMP001" \
+  -F "claim_type=Travel Expense" \
+  -F "description=Business trip to Manila" \
+  -F "amount=5000.00" \
+  -F "claim_date=2025-01-15" \
+  -F "receipt_file=@receipt.pdf" \
+  -F "api_key=your_api_key_here"
+```
+
+#### Approve Claim (Admin)
+```bash
+curl -X PUT https://your-domain.com/api/v1/claims/status/CR20250001 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "Approved",
+    "approved_by": "Finance Manager",
+    "remarks": "Approved for processing",
+    "admin_api_key": "your_admin_api_key_here"
+  }'
+```
 
 ## Support
 

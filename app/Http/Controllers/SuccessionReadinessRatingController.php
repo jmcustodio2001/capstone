@@ -181,69 +181,136 @@ class SuccessionReadinessRatingController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'employee_id' => 'required|exists:employees,employee_id',
-            'readiness_level' => 'required|string|in:Ready Now,Ready Soon,Needs Development',
-            'assessment_date' => 'required|date',
-        ]);
-        
-        // Convert readiness level to score
-        $readinessScore = match($request->readiness_level) {
-            'Ready Now' => 90,
-            'Ready Soon' => 75,
-            'Needs Development' => 50,
-            default => 50
-        };
-        
-        $rating = SuccessionReadinessRating::create([
-            'employee_id' => $request->employee_id,
-            'readiness_score' => $readinessScore,
-            'readiness_level' => $request->readiness_level,
-            'assessment_date' => $request->assessment_date,
-        ]);
-        
-        // Log activity
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'create',
-            'module' => 'Succession Readiness Rating',
-            'description' => 'Added readiness rating (ID: ' . $rating->id . ')',
-        ]);
-        return redirect()->route('succession_readiness_ratings.index')->with('success', 'Readiness rating added successfully.');
+        try {
+            $request->validate([
+                'employee_id' => 'required|exists:employees,employee_id',
+                'readiness_level' => 'required|string|in:Ready Now,Ready Soon,Needs Development',
+                'assessment_date' => 'required|date',
+            ]);
+            
+            // Convert readiness level to score
+            $readinessScore = match($request->readiness_level) {
+                'Ready Now' => 90,
+                'Ready Soon' => 75,
+                'Needs Development' => 50,
+                default => 50
+            };
+            
+            $rating = SuccessionReadinessRating::create([
+                'employee_id' => $request->employee_id,
+                'readiness_score' => $readinessScore,
+                'readiness_level' => $request->readiness_level,
+                'assessment_date' => $request->assessment_date,
+            ]);
+            
+            // Log activity
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'create',
+                'module' => 'Succession Readiness Rating',
+                'description' => 'Added readiness rating (ID: ' . $rating->id . ')',
+            ]);
+
+            // Check if this is an AJAX request
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Succession readiness rating added successfully.',
+                    'rating' => $rating
+                ]);
+            }
+            
+            return redirect()->route('succession_readiness_ratings.index')->with('success', 'Readiness rating added successfully.');
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error storing succession readiness rating: ' . $e->getMessage());
+            
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while saving the rating. Please try again.'
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'An error occurred while saving the rating. Please try again.');
+        }
     }
 
     public function update(Request $request, $id)
     {
-        $rating = SuccessionReadinessRating::findOrFail($id);
-        $request->validate([
-            'employee_id' => 'required|exists:employees,employee_id',
-            'readiness_level' => 'required|string|in:Ready Now,Ready Soon,Needs Development',
-            'assessment_date' => 'required|date',
-        ]);
-        
-        // Convert readiness level to score
-        $readinessScore = match($request->readiness_level) {
-            'Ready Now' => 90,
-            'Ready Soon' => 75,
-            'Needs Development' => 50,
-            default => 50
-        };
-        
-        $rating->update([
-            'employee_id' => $request->employee_id,
-            'readiness_score' => $readinessScore,
-            'readiness_level' => $request->readiness_level,
-            'assessment_date' => $request->assessment_date,
-        ]);
-        
-        // Log activity
-        ActivityLog::create([
-            'user_id' => Auth::id(),
-            'action' => 'update',
-            'module' => 'Succession Readiness Rating',
-            'description' => 'Updated readiness rating (ID: ' . $rating->id . ')',
-        ]);
-        return redirect()->route('succession_readiness_ratings.index')->with('success', 'Readiness rating updated successfully.');
+        try {
+            $rating = SuccessionReadinessRating::findOrFail($id);
+            
+            $request->validate([
+                'employee_id' => 'required|exists:employees,employee_id',
+                'readiness_level' => 'required|string|in:Ready Now,Ready Soon,Needs Development',
+                'assessment_date' => 'required|date',
+            ]);
+            
+            // Convert readiness level to score
+            $readinessScore = match($request->readiness_level) {
+                'Ready Now' => 90,
+                'Ready Soon' => 75,
+                'Needs Development' => 50,
+                default => 50
+            };
+            
+            $rating->update([
+                'employee_id' => $request->employee_id,
+                'readiness_score' => $readinessScore,
+                'readiness_level' => $request->readiness_level,
+                'assessment_date' => $request->assessment_date,
+            ]);
+            
+            // Log activity
+            ActivityLog::create([
+                'user_id' => Auth::id(),
+                'action' => 'update',
+                'module' => 'Succession Readiness Rating',
+                'description' => 'Updated readiness rating (ID: ' . $rating->id . ')',
+            ]);
+
+            // Check if this is an AJAX request
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Succession readiness rating updated successfully.',
+                    'rating' => $rating
+                ]);
+            }
+            
+            return redirect()->route('succession_readiness_ratings.index')->with('success', 'Readiness rating updated successfully.');
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed.',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Error updating succession readiness rating: ' . $e->getMessage());
+            
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'An error occurred while updating the rating. Please try again.'
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'An error occurred while updating the rating. Please try again.');
+        }
     }
 
     public function destroy($id)

@@ -338,6 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   @endif
 
+
   <!-- Profile Summary -->
   <div class="card-header profile-summary">
     <div class="profile-header">
@@ -384,8 +385,8 @@ document.addEventListener('DOMContentLoaded', function() {
           </span>
           <span class="badge bg-light text-dark">
             <i class="bi bi-telephone me-1"></i>
-            @if($employee)
-              {{ $employee->phone_number ?? 'No Phone' }}
+            @if($employee && !empty(trim($employee->phone_number ?? '')))
+              {{ trim($employee->phone_number) }}
             @else
               No Phone
             @endif
@@ -656,7 +657,7 @@ document.addEventListener('DOMContentLoaded', function() {
               <option value="first_name">First Name</option>
               <option value="last_name">Last Name</option>
               <option value="email">Email Address</option>
-              <option value="phone">Phone Number</option>
+              <option value="phone_number">Phone Number</option>
               <option value="address">Address</option>
               <option value="profile_picture">Profile Picture</option>
               <option value="emergency_contact_name">Emergency Contact Name</option>
@@ -714,7 +715,7 @@ document.addEventListener('DOMContentLoaded', function() {
               <option value="first_name">First Name</option>
               <option value="last_name">Last Name</option>
               <option value="email">Email Address</option>
-              <option value="phone">Phone Number</option>
+              <option value="phone_number">Phone Number</option>
               <option value="address">Address</option>
               <option value="profile_picture">Profile Picture</option>
               <option value="emergency_contact_name">Emergency Contact Name</option>

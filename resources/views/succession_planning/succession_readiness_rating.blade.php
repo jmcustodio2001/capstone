@@ -108,9 +108,9 @@
       <div class="card-body">
         <form method="POST"
           @if(isset($editMode) && isset($rating))
-            action="{{ route('succession_readiness_ratings.update', $rating->id) }}"
+            action="/admin/succession-readiness-ratings/{{ $rating->id }}"
           @else
-            action="{{ route('succession_readiness_ratings.store') }}"
+            action="/admin/succession-readiness-ratings"
           @endif
           class="mb-4">
           @csrf
@@ -473,6 +473,10 @@
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
           }
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server returned non-JSON response');
+          }
           return response.json();
         })
         .then(competencyData => {
@@ -490,8 +494,10 @@
           resultsContainer.innerHTML = `
             <div class="alert alert-warning">
               <i class="bi bi-exclamation-triangle me-2"></i>
-              <strong>API Error: ${error.message}</strong><br>
-              Please check the console for more details.
+              <strong>Competency Data API Error</strong><br>
+              <strong>Error:</strong> ${error.message}<br>
+              <strong>Endpoint:</strong> /succession_readiness_ratings/competency-data/${employeeId}<br>
+              <strong>Employee ID:</strong> ${employeeId}
               <div class="mt-3">
                 <button class="btn btn-sm btn-outline-primary" onclick="analyzeEmployeeReadiness()">
                   <i class="bi bi-arrow-clockwise me-1"></i>Retry
@@ -702,7 +708,16 @@
       const reasoningElement = document.getElementById(`reasoning-${ratingId}`);
       
       fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server returned non-JSON response');
+          }
+          return response.json();
+        })
         .then(data => {
           const reasoning = generateSimpleReasoning(data, readinessLevel);
           reasoningElement.innerHTML = reasoning;
@@ -798,6 +813,10 @@
           console.log('Response status:', response.status);
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server returned non-JSON response');
           }
           return response.json();
         })
@@ -1035,7 +1054,16 @@
       // Calculate real readiness scores for all employees
       Promise.all(employeeIds.map(employeeId => 
         fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
-          .then(response => response.json())
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              throw new Error('Server returned non-JSON response');
+            }
+            return response.json();
+          })
           .then(data => {
             // Use the same calculation logic as individual analysis
             let overallReadiness;
@@ -1354,7 +1382,16 @@
       // Fetch real data for all employees to generate insights
       Promise.all(employeeIds.map(employeeId => 
         fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
-          .then(response => response.json())
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              throw new Error('Server returned non-JSON response');
+            }
+            return response.json();
+          })
           .catch(error => {
             console.error(`Error fetching data for employee ${employeeId}:`, error);
             return null;
@@ -1824,6 +1861,22 @@
       });
     }
 
+    // Toggle password visibility
+    function togglePasswordVisibility() {
+      const passwordInput = document.getElementById('admin-password');
+      const toggleIcon = document.getElementById('password-toggle-icon');
+      
+      if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        toggleIcon.className = 'bi bi-eye-slash';
+        toggleIcon.parentElement.innerHTML = '<i class="bi bi-eye-slash" id="password-toggle-icon"></i> Hide Password';
+      } else {
+        passwordInput.type = 'password';
+        toggleIcon.className = 'bi bi-eye';
+        toggleIcon.parentElement.innerHTML = '<i class="bi bi-eye" id="password-toggle-icon"></i> Show Password';
+      }
+    }
+
     // Password verification function
     async function verifyAdminPassword() {
       const { value: password } = await Swal.fire({
@@ -1838,7 +1891,15 @@
             <div class="mb-3">
               <label class="form-label fw-bold">Enter Admin Password:</label>
               <input type="password" id="admin-password" class="form-control" placeholder="Enter your admin password" minlength="6">
-              <div class="form-text">Minimum 6 characters required</div>
+              <div class="form-text">
+                Minimum 6 characters required<br>
+                <small class="text-info">💡 Hint: Same password you use to login to admin dashboard</small>
+              </div>
+              <div class="mt-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePasswordVisibility()">
+                  <i class="bi bi-eye" id="password-toggle-icon"></i> Show Password
+                </button>
+              </div>
             </div>
           </div>
         `,
@@ -1877,6 +1938,15 @@
         });
 
         try {
+          console.log('Attempting password verification...');
+          console.log('Password length:', password.length);
+          console.log('Password (first 3 chars):', password.substring(0, 3) + '***');
+          console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+          
+          // Trim whitespace from password
+          const trimmedPassword = password.trim();
+          console.log('Trimmed password length:', trimmedPassword.length);
+          
           const response = await fetch('/admin/verify-password', {
             method: 'POST',
             headers: {
@@ -1884,10 +1954,30 @@
               'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
               'X-Requested-With': 'XMLHttpRequest'
             },
-            body: JSON.stringify({ password: password })
+            body: JSON.stringify({ password: trimmedPassword })
           });
 
+          console.log('Response status:', response.status);
+          console.log('Response headers:', response.headers);
+          console.log('Content-Type:', response.headers.get('content-type'));
+
+          if (!response.ok) {
+            // Try to get the actual response text for debugging
+            const responseText = await response.text();
+            console.log('Error response body:', responseText);
+            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText.substring(0, 200)}`);
+          }
+
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            // Get the actual response to see what we're receiving
+            const responseText = await response.text();
+            console.log('Non-JSON response body:', responseText);
+            throw new Error(`Server returned non-JSON response. Content-Type: ${contentType}. Response: ${responseText.substring(0, 200)}`);
+          }
+
           const data = await response.json();
+          console.log('Password verification response:', data);
           
           if (data.success || data.valid) {
             Swal.close();
@@ -1905,8 +1995,14 @@
         } catch (error) {
           console.error('Password verification error:', error);
           Swal.fire({
-            title: 'Network Error',
-            text: 'Unable to verify password. Please check your connection and try again.',
+            title: 'Password Verification Error',
+            html: `
+              <div class="text-start">
+                <p><strong>Error:</strong> ${error.message}</p>
+                <p><strong>Endpoint:</strong> /admin/verify-password</p>
+                <p class="small text-muted">Please check the console for more details.</p>
+              </div>
+            `,
             icon: 'error',
             confirmButtonText: 'OK',
             confirmButtonColor: '#dc3545'
@@ -1923,12 +2019,36 @@
       if (!isVerified) return;
 
       const form = document.querySelector('form');
-      const formData = new FormData(form);
       
-      // Validate form data
-      const employeeId = formData.get('employee_id');
-      const readinessLevel = formData.get('readiness_level');
-      const assessmentDate = formData.get('assessment_date');
+      // Force correct form action if it's wrong
+      if (form.action.includes('/admin/logout')) {
+        console.log('WARNING: Form action was pointing to logout, fixing it...');
+        form.action = '/admin/succession-readiness-ratings';
+      }
+      
+      console.log('Form action URL:', form.action);
+      console.log('Form method:', form.method);
+      
+      // Get form values directly from form elements
+      const employeeSelect = document.querySelector('select[name="employee_id"]');
+      const readinessSelect = document.querySelector('select[name="readiness_level"]');
+      const assessmentInput = document.querySelector('input[name="assessment_date"]');
+      
+      const employeeId = employeeSelect ? employeeSelect.value : '';
+      const readinessLevel = readinessSelect ? readinessSelect.value : '';
+      const assessmentDate = assessmentInput ? assessmentInput.value : '';
+
+      console.log('Form validation values:', { employeeId, readinessLevel, assessmentDate });
+      console.log('Form elements found:', { 
+        employeeSelect: !!employeeSelect, 
+        readinessSelect: !!readinessSelect, 
+        assessmentInput: !!assessmentInput 
+      });
+      
+      // Debug actual form element values
+      if (employeeSelect) console.log('Employee select value:', employeeSelect.value, 'Selected text:', employeeSelect.options[employeeSelect.selectedIndex]?.text);
+      if (readinessSelect) console.log('Readiness select value:', readinessSelect.value, 'Selected text:', readinessSelect.options[readinessSelect.selectedIndex]?.text);
+      if (assessmentInput) console.log('Assessment input value:', assessmentInput.value);
 
       if (!employeeId || !readinessLevel || !assessmentDate) {
         Swal.fire({
@@ -1942,7 +2062,6 @@
       }
 
       // Get employee name for confirmation
-      const employeeSelect = document.querySelector('select[name="employee_id"]');
       const employeeName = employeeSelect.options[employeeSelect.selectedIndex].text;
 
       const result = await Swal.fire({
@@ -1991,13 +2110,88 @@
           }
         });
 
-        // Submit form
+        // Submit form via AJAX
         try {
-          form.submit();
+          // Create FormData manually to ensure correct field names
+          const formData = new FormData();
+          
+          // Add CSRF token
+          formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+          
+          // Add form fields manually
+          formData.append('employee_id', employeeId);
+          formData.append('readiness_level', readinessLevel);
+          formData.append('assessment_date', assessmentDate);
+          
+          // Debug FormData contents
+          console.log('Manual FormData contents:');
+          for (let [key, value] of formData.entries()) {
+            console.log(`${key}: ${value}`);
+          }
+          
+          const response = await fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            // For 422 validation errors, try to get the detailed error response
+            if (response.status === 422) {
+              try {
+                const responseText = await response.text();
+                console.log('422 Raw response:', responseText);
+                
+                // Try to parse as JSON
+                const errorData = JSON.parse(responseText);
+                console.log('Validation errors:', errorData);
+                const errorMessages = errorData.errors ? Object.values(errorData.errors).flat().join(', ') : errorData.message;
+                throw new Error(`Validation Error: ${errorMessages}`);
+              } catch (parseError) {
+                console.log('Failed to parse 422 response as JSON:', parseError);
+                throw new Error(`HTTP 422: Validation failed - Response could not be parsed`);
+              }
+            }
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server returned non-JSON response');
+          }
+
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+            Swal.fire({
+              title: 'Success!',
+              text: result.message || 'Succession readiness rating added successfully.',
+              icon: 'success',
+              confirmButtonText: 'OK',
+              confirmButtonColor: '#198754'
+            }).then(() => {
+              // Reload page to show new data
+              window.location.reload();
+            });
+          } else {
+            throw new Error(result.message || 'Failed to add rating');
+          }
         } catch (error) {
+          console.error('Form submission error:', error);
           Swal.fire({
-            title: 'Error',
-            text: 'Failed to add rating. Please try again.',
+            title: 'Form Submission Error',
+            html: `
+              <div class="text-start">
+                <p><strong>Error:</strong> ${error.message}</p>
+                <p><strong>Action:</strong> Add Rating</p>
+                <p><strong>Endpoint:</strong> ${form.action}</p>
+                <p class="small text-muted">Please check the console for more details.</p>
+              </div>
+            `,
             icon: 'error',
             confirmButtonText: 'OK',
             confirmButtonColor: '#dc3545'
@@ -2047,11 +2241,55 @@
         });
 
         try {
-          form.submit();
+          const formData = new FormData(form);
+          
+          const response = await fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server returned non-JSON response');
+          }
+
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+            Swal.fire({
+              title: 'Success!',
+              text: result.message || 'Succession readiness rating updated successfully.',
+              icon: 'success',
+              confirmButtonText: 'OK',
+              confirmButtonColor: '#198754'
+            }).then(() => {
+              // Reload page to show updated data
+              window.location.reload();
+            });
+          } else {
+            throw new Error(result.message || 'Failed to update rating');
+          }
         } catch (error) {
+          console.error('Update submission error:', error);
           Swal.fire({
-            title: 'Error',
-            text: 'Failed to update rating. Please try again.',
+            title: 'Update Submission Error',
+            html: `
+              <div class="text-start">
+                <p><strong>Error:</strong> ${error.message}</p>
+                <p><strong>Action:</strong> Update Rating</p>
+                <p><strong>Endpoint:</strong> ${form.action}</p>
+                <p class="small text-muted">Please check the console for more details.</p>
+              </div>
+            `,
             icon: 'error',
             confirmButtonText: 'OK',
             confirmButtonColor: '#dc3545'

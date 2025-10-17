@@ -159,69 +159,69 @@
         <div class="row g-4 mb-4">
           <!-- Primary Statistics -->
           <div class="col-xl-3 col-lg-4 col-md-6">
-            <div class="card dashboard-card shadow-sm border-0 h-100" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-              <div class="card-body p-4 text-white">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-primary text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <h2 class="fw-bold mb-1" style="font-size: 2.5rem;">{{ isset($totalEmployees) ? number_format($totalEmployees) : 'N/A' }}</h2>
-                    <p class="mb-0 opacity-75">Total Employees</p>
-                    <small class="opacity-50">Active workforce</small>
+                    <h6 class="mb-0 text-dark">Total Employees</h6>
+                    <small class="opacity-75 text-dark">Active workforce</small>
                   </div>
-                  <div class="stat-icon bg-white text-primary" style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                    <i class="bi bi-people" style="font-size: 32px; color: #667eea;"></i>
-                  </div>
+                  <i class="bi bi-people text-dark" style="font-size: 24px;"></i>
                 </div>
+              </div>
+              <div class="card-body">
+                <h2 class="fw-bold mb-0 text-dark" style="font-size: 2.5rem;">{{ isset($totalEmployees) ? number_format($totalEmployees) : '0' }}</h2>
               </div>
             </div>
           </div>
 
           <div class="col-xl-3 col-lg-4 col-md-6">
-            <div class="card dashboard-card shadow-sm border-0 h-100" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-              <div class="card-body p-4 text-white">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-info text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <h2 class="fw-bold mb-1" style="font-size: 2.5rem;">{{ isset($activeCourses) ? $activeCourses : 'N/A' }}</h2>
-                    <p class="mb-0 opacity-75">Active Courses</p>
-                    <small class="opacity-50">Available training</small>
+                    <h6 class="mb-0 text-dark">Active Courses</h6>
+                    <small class="opacity-75 text-dark">Available training</small>
                   </div>
-                  <div class="stat-icon bg-white text-primary" style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                    <i class="bi bi-book" style="font-size: 32px; color: #f093fb;"></i>
-                  </div>
+                  <i class="bi bi-book text-dark" style="font-size: 24px;"></i>
                 </div>
+              </div>
+              <div class="card-body">
+                <h2 class="fw-bold mb-0 text-dark" style="font-size: 2.5rem;">{{ isset($activeCourses) ? $activeCourses : '0' }}</h2>
               </div>
             </div>
           </div>
 
           <div class="col-xl-3 col-lg-4 col-md-6">
-            <div class="card dashboard-card shadow-sm border-0 h-100" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-              <div class="card-body p-4 text-white">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-success text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <h2 class="fw-bold mb-1" style="font-size: 2.5rem;">{{ isset($trainingSessions) ? $trainingSessions : 'N/A' }}</h2>
-                    <p class="mb-0 opacity-75">Training Sessions</p>
-                    <small class="opacity-50">Ongoing sessions</small>
+                    <h6 class="mb-0 text-dark">Training Sessions</h6>
+                    <small class="opacity-75 text-dark">Ongoing sessions</small>
                   </div>
-                  <div class="stat-icon bg-white text-primary" style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                    <i class="bi bi-easel" style="font-size: 32px; color: #4facfe;"></i>
-                  </div>
+                  <i class="bi bi-easel text-dark" style="font-size: 24px;"></i>
                 </div>
+              </div>
+              <div class="card-body">
+                <h2 class="fw-bold mb-0 text-dark" style="font-size: 2.5rem;">{{ isset($trainingSessions) ? $trainingSessions : '0' }}</h2>
               </div>
             </div>
           </div>
 
           <div class="col-xl-3 col-lg-4 col-md-6">
-            <div class="card dashboard-card shadow-sm border-0 h-100" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
-              <div class="card-body p-4 text-white">
+            <div class="card shadow-sm border-0 h-100">
+              <div class="card-header bg-warning text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
-                    <h2 class="fw-bold mb-1" style="font-size: 2.5rem;">{{ isset($completedTrainings) ? $completedTrainings : '0' }}</h2>
-                    <p class="mb-0 opacity-75">Completed Trainings</p>
-                    <small class="opacity-50">Total completions</small>
+                    <h6 class="mb-0 text-dark">Completed Trainings</h6>
+                    <small class="opacity-75 text-dark">Total completions</small>
                   </div>
-                  <div class="stat-icon bg-white text-primary" style="width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                    <i class="bi bi-check-circle" style="font-size: 32px; color: #fa709a;"></i>
-                  </div>
+                  <i class="bi bi-check-circle text-dark" style="font-size: 24px;"></i>
                 </div>
+              </div>
+              <div class="card-body">
+                <h2 class="fw-bold mb-0 text-dark" style="font-size: 2.5rem;">{{ isset($completedTrainings) ? $completedTrainings : '0' }}</h2>
               </div>
             </div>
           </div>
@@ -233,15 +233,12 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon bg-danger bg-opacity-10 text-danger me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px;">
+                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-diagram-3" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
-                    <h3 class="fw-bold mb-1" style="font-size: 2rem;">{{ isset($successionPlans) ? $successionPlans : '0' }}</h3>
+                    <h3 class="fw-bold mb-1 text-dark" style="font-size: 2rem;">{{ isset($successionPlans) ? $successionPlans : '0' }}</h3>
                     <p class="text-muted mb-0">Succession Plans</p>
-                    <div class="progress mt-2" style="height: 4px; border-radius: 6px; background-color: #f8f9fa;">
-                      <div class="progress-bar" style="width: 65%; background: linear-gradient(90deg, #dc3545, #e74c3c); border-radius: 6px;"></div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -252,15 +249,12 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon bg-warning bg-opacity-10 text-warning me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px;">
+                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-trophy" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
-                    <h3 class="fw-bold mb-1" style="font-size: 2rem;">{{ isset($competencies) ? $competencies : '0' }}</h3>
+                    <h3 class="fw-bold mb-1 text-dark" style="font-size: 2rem;">{{ isset($competencies) ? $competencies : '0' }}</h3>
                     <p class="text-muted mb-0">Competencies</p>
-                    <div class="progress mt-2" style="height: 4px; border-radius: 6px; background-color: #f8f9fa;">
-                      <div class="progress-bar" style="width: 80%; background: linear-gradient(90deg, #ffc107, #ffb300); border-radius: 6px;"></div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -271,15 +265,12 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon bg-info bg-opacity-10 text-info me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px;">
+                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-clock-history" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
-                    <h3 class="fw-bold mb-1" style="font-size: 2rem;">{{ isset($attendanceLogs) ? $attendanceLogs : '0' }}</h3>
+                    <h3 class="fw-bold mb-1 text-dark" style="font-size: 2rem;">{{ isset($attendanceLogs) ? $attendanceLogs : '0' }}</h3>
                     <p class="text-muted mb-0">Attendance Logs</p>
-                    <div class="progress mt-2" style="height: 4px; border-radius: 6px; background-color: #f8f9fa;">
-                      <div class="progress-bar" style="width: 45%; background: linear-gradient(90deg, #17a2b8, #20c997); border-radius: 6px;"></div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -290,15 +281,12 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon bg-secondary bg-opacity-10 text-secondary me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px;">
+                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-clipboard-check" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
-                    <h3 class="fw-bold mb-1" style="font-size: 2rem;">{{ isset($trainingRequestsCount) ? $trainingRequestsCount : '0' }}</h3>
+                    <h3 class="fw-bold mb-1 text-dark" style="font-size: 2rem;">{{ isset($trainingRequestsCount) ? $trainingRequestsCount : '0' }}</h3>
                     <p class="text-muted mb-0">Training Requests</p>
-                    <div class="progress mt-2" style="height: 4px; border-radius: 6px; background-color: #f8f9fa;">
-                      <div class="progress-bar" style="width: 70%; background: linear-gradient(90deg, #6c757d, #495057); border-radius: 6px;"></div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -312,7 +300,7 @@
             <div class="card performance-card shadow-sm border-0 h-100">
               <div class="card-header bg-transparent border-bottom-0 pb-0">
                 <h5 class="card-title mb-0 d-flex align-items-center">
-                  <i class="bi bi-graph-up text-success me-2"></i>
+                  <i class="bi bi-graph-up text-dark me-2"></i>
                   Training Performance
                 </h5>
               </div>
@@ -327,13 +315,13 @@
                           $completionRate = $totalPossibleCompletions > 0 ? min(round(($completedTrainings / $totalPossibleCompletions) * 100), 100) : 0;
                         }
                       @endphp
-                      <h4 class="fw-bold text-success mb-1">{{ $completionRate }}%</h4>
+                      <h4 class="fw-bold text-dark mb-1">{{ $completionRate }}%</h4>
                       <small class="text-muted">Completion Rate</small>
                     </div>
                   </div>
                   <div class="col-6">
                     <div class="text-center p-3 bg-light rounded">
-                      <h4 class="fw-bold text-primary mb-1">{{ isset($activeCourses) ? $activeCourses : '0' }}</h4>
+                      <h4 class="fw-bold text-dark mb-1">{{ isset($activeCourses) ? $activeCourses : '0' }}</h4>
                       <small class="text-muted">Active Courses</small>
                     </div>
                   </div>
@@ -355,7 +343,7 @@
             <div class="card performance-card shadow-sm border-0 h-100">
               <div class="card-header bg-transparent border-bottom-0 pb-0">
                 <h5 class="card-title mb-0 d-flex align-items-center">
-                  <i class="bi bi-people-fill text-info me-2"></i>
+                  <i class="bi bi-people-fill text-dark me-2"></i>
                   Employee Engagement
                 </h5>
               </div>
@@ -363,13 +351,13 @@
                 <div class="row g-3">
                   <div class="col-6">
                     <div class="text-center p-3 bg-light rounded">
-                      <h4 class="fw-bold text-info mb-1">{{ isset($trainingRequestsCount) ? $trainingRequestsCount : '0' }}</h4>
+                      <h4 class="fw-bold text-dark mb-1">{{ isset($trainingRequestsCount) ? $trainingRequestsCount : '0' }}</h4>
                       <small class="text-muted">Requests</small>
                     </div>
                   </div>
                   <div class="col-6">
                     <div class="text-center p-3 bg-light rounded">
-                      <h4 class="fw-bold text-warning mb-1">{{ isset($competencies) ? $competencies : '0' }}</h4>
+                      <h4 class="fw-bold text-dark mb-1">{{ isset($competencies) ? $competencies : '0' }}</h4>
                       <small class="text-muted">Skills Tracked</small>
                     </div>
                   </div>

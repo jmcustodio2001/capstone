@@ -51,6 +51,8 @@
               $source = is_array($item) ? ($item['source'] ?? null) : ($item->source ?? null);
               return $source === 'admin_assigned' || $source === 'competency_gap' || $source === 'competency_assigned';
             });
+            
+            $sequentialId = 1; // Start sequential numbering from 1
           @endphp
           @forelse($uniqueUpcoming as $u)
             @php
@@ -58,14 +60,7 @@
             @endphp
             <tr>
               <td>
-                @php
-                  $upcomingId = is_array($u) ? ($u['upcoming_id'] ?? '') : ($u->upcoming_id ?? '');
-                @endphp
-                @if(is_numeric($upcomingId))
-                  {{ $upcomingId }}
-                @else
-                  {{-- Hide non-numeric training IDs to prevent duplicate display --}}
-                @endif
+                {{ $sequentialId++ }}
               </td>
               <td>
                 @php

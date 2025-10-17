@@ -9,8 +9,11 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use App\Models\User;
 use App\Models\AdminLoginSession;
+use App\Services\OTPService;
 
 class AdminController extends Controller
 {
@@ -23,30 +26,55 @@ class AdminController extends Controller
     }
 
     /**
-     * Handle admin login
+     * Handle admin login with CAPTCHA and 2FA
      */
     public function login(Request $request)
     {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string|min:6',
+            'g-recaptcha-response' => 'required',
         ]);
 
+        // Verify CAPTCHA
+        if (!$this->verifyCaptcha($request->input('g-recaptcha-response'))) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'CAPTCHA verification failed. Please try again.',
+                    'step' => 'captcha_failed'
+                ], 422);
+            }
+            return back()->withErrors(['g-recaptcha-response' => 'CAPTCHA verification failed. Please try again.']);
+        }
+
         // Check if account is locked due to too many failed attempts
-        $lockoutKey = 'admin_lockout_' . $request->ip();
-        $attemptsKey = 'admin_attempts_' . $request->ip();
+        $lockoutKey = 'admin_lockout_count_' . hash('sha256', $request->ip() . $request->email);
+        $lockoutTimeKey = 'admin_lockout_time_' . hash('sha256', $request->ip() . $request->email);
         
-        if ($request->session()->has($lockoutKey)) {
-            $lockoutTime = \Carbon\Carbon::parse($request->session()->get($lockoutKey));
+        if ($request->session()->has($lockoutTimeKey)) {
+            $lockoutTime = \Carbon\Carbon::parse($request->session()->get($lockoutTimeKey));
             if (now()->lt($lockoutTime)) {
-                $remainingMinutes = now()->diffInMinutes($lockoutTime, false);
-                $remainingMinutes = max(1, ceil($remainingMinutes));
+                $lockoutCount = $request->session()->get($lockoutKey, 1);
+                $remainingSeconds = now()->diffInSeconds($lockoutTime, false);
+                
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Account temporarily locked due to too many failed attempts.',
+                        'step' => 'lockout',
+                        'lockout_remaining_seconds' => $remainingSeconds,
+                        'lockout_count' => $lockoutCount
+                    ], 429);
+                }
+                
+                $remainingMinutes = max(1, ceil($remainingSeconds / 60));
                 return back()->withErrors([
                     'email' => "Account is temporarily locked. Please try again after {$remainingMinutes} minutes.",
                 ])->with('lockout', "{$remainingMinutes} minutes");
             } else {
-                // Lockout period expired, reset attempts
-                $request->session()->forget([$lockoutKey, $attemptsKey]);
+                // Lockout period expired, reset attempts but keep count for progressive lockout
+                $request->session()->forget($lockoutTimeKey);
             }
         }
 
@@ -58,28 +86,44 @@ class AdminController extends Controller
 
             // Check if user has admin role (case-insensitive)
             if (strcasecmp($user->role, 'admin') === 0) {
-                // Successful login - reset attempts counter
-                $request->session()->forget([$lockoutKey, $attemptsKey]);
-                $request->session()->regenerate();
-
-                // Track login session
-                $this->trackLoginSession($request, $user);
-
-                // Initialize admin session start time for uptime tracking
-                $request->session()->put('admin_session_start', now());
-
-                // Update user's last login info
-                $user->update([
-                    'last_login_at' => now(),
-                    'last_login_ip' => $request->ip(),
-                    'last_user_agent' => $request->userAgent(),
-                ]);
-
-                return redirect()->route('admin.dashboard');
+                // Successful login - reset lockout counters
+                $request->session()->forget([$lockoutKey, $lockoutTimeKey]);
+                
+                // Generate and send OTP
+                $otp = $this->generateOTP();
+                $request->session()->put('admin_otp', $otp);
+                $request->session()->put('admin_otp_expires', now()->addMinutes(10));
+                $request->session()->put('admin_pending_user_id', $user->id);
+                
+                // Send OTP email
+                $this->sendOTPEmail($user, $otp);
+                
+                // Logout the user temporarily until OTP is verified
+                Auth::guard('admin')->logout();
+                
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => true,
+                        'step' => 'otp_required',
+                        'message' => 'Verification code sent to your email address.',
+                        // Remove OTP from response for security - only log it
+                    ]);
+                }
+                
+                return redirect()->route('admin.login')->with('otp_required', true);
             } else {
                 Auth::guard('admin')->logout();
                 // This is also a failed attempt (wrong role)
                 $this->handleFailedLoginAttempt($request, 'You do not have admin privileges.');
+                
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'You do not have admin privileges.',
+                        'step' => 'invalid_role'
+                    ], 403);
+                }
+                
                 return back()->withErrors([
                     'email' => 'You do not have admin privileges.',
                 ]);
@@ -89,34 +133,296 @@ class AdminController extends Controller
         // Failed login - increment attempts counter
         $this->handleFailedLoginAttempt($request, 'The provided credentials do not match our records.');
         
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The provided credentials do not match our records.',
+                'step' => 'invalid_credentials'
+            ], 401);
+        }
+        
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',
         ]);
     }
 
     /**
-     * Handle failed login attempt and implement lockout mechanism
+     * Handle failed login attempt and implement progressive lockout mechanism
      */
     private function handleFailedLoginAttempt(Request $request, string $errorMessage)
     {
-        $attemptsKey = 'admin_attempts_' . $request->ip();
-        $lockoutKey = 'admin_lockout_' . $request->ip();
+        $lockoutKey = 'admin_lockout_count_' . hash('sha256', $request->ip() . $request->email);
+        $lockoutTimeKey = 'admin_lockout_time_' . hash('sha256', $request->ip() . $request->email);
         
-        $attempts = $request->session()->get($attemptsKey, 0) + 1;
-        $request->session()->put($attemptsKey, $attempts);
+        // Get current lockout count (starts at 0, increments on each lockout)
+        $lockoutCount = $request->session()->get($lockoutKey, 0);
         
-        if ($attempts >= 3) {
-            // Lock account for 15 minutes
-            $lockoutTime = now()->addMinutes(15);
-            $request->session()->put($lockoutKey, $lockoutTime->toDateTimeString());
-            $request->session()->forget($attemptsKey);
-            
-            $request->session()->flash('lockout', '15 minutes');
-        } else {
-            // Show remaining attempts
-            $remaining = 3 - $attempts;
-            $request->session()->flash('attempts', $attempts);
+        // Increment lockout count for next time
+        $lockoutCount++;
+        $request->session()->put($lockoutKey, $lockoutCount);
+        
+        // Progressive lockout: 3min → 6min → 12min → 24min → 48min → 96min (capped)
+        $lockoutMinutes = min(3 * pow(2, $lockoutCount - 1), 96);
+        $lockoutTime = now()->addMinutes($lockoutMinutes);
+        $request->session()->put($lockoutTimeKey, $lockoutTime->toDateTimeString());
+        
+        Log::warning("Admin login attempt failed for {$request->email} from {$request->ip()}. Lockout #{$lockoutCount} for {$lockoutMinutes} minutes.");
+    }
+
+    /**
+     * Verify Google reCAPTCHA
+     */
+    private function verifyCaptcha($captchaResponse)
+    {
+        if (empty($captchaResponse)) {
+            return false;
         }
+
+        $secretKey = config('services.recaptcha.secret_key');
+        
+        if (empty($secretKey)) {
+            Log::error('RECAPTCHA_SECRET_KEY not configured in environment');
+            return false;
+        }
+        
+        try {
+            $response = Http::asForm()->post('https://www.google.com/recaptcha/api/siteverify', [
+                'secret' => $secretKey,
+                'response' => $captchaResponse,
+                'remoteip' => request()->ip()
+            ]);
+
+            $result = $response->json();
+            
+            if (!isset($result['success'])) {
+                Log::error('Invalid CAPTCHA response format', ['response' => $result]);
+                return false;
+            }
+            
+            if (!$result['success'] && isset($result['error-codes'])) {
+                Log::error('CAPTCHA verification failed', ['errors' => $result['error-codes']]);
+            }
+            
+            return $result['success'] === true;
+        } catch (\Exception $e) {
+            Log::error('CAPTCHA verification failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Generate 6-digit OTP
+     */
+    private function generateOTP()
+    {
+        return sprintf('%06d', mt_rand(100000, 999999));
+    }
+
+    /**
+     * Send OTP via email using the EXACT same method as employee login
+     */
+    private function sendOTPEmail($user, $otp)
+    {
+        try {
+            Log::info("=== ADMIN OTP EMAIL DEBUG START ===");
+            Log::info("Attempting to send admin OTP email to: {$user->email}");
+            Log::info("Using EXACT same method as employee login");
+            
+            // Create a fake Employee object with admin data to use the working employee OTP method
+            $fakeEmployee = new \App\Models\Employee();
+            $fakeEmployee->email = $user->email;
+            $fakeEmployee->first_name = $user->name ?? 'Admin';
+            $fakeEmployee->last_name = '';
+            $fakeEmployee->employee_id = 'ADMIN_' . $user->id;
+            
+            // Set OTP data (required by employee OTP method)
+            $fakeEmployee->otp_code = $otp;
+            $fakeEmployee->otp_expires_at = now()->addMinutes(10);
+            $fakeEmployee->otp_attempts = 0;
+            $fakeEmployee->last_otp_sent_at = now();
+            $fakeEmployee->otp_verified = false;
+            
+            Log::info("Created fake employee object for admin: " . json_encode([
+                'email' => $fakeEmployee->email,
+                'first_name' => $fakeEmployee->first_name,
+                'employee_id' => $fakeEmployee->employee_id
+            ]));
+            
+            // Use the EXACT same OTPService method that works for employees
+            $otpService = new OTPService();
+            
+            // Call the private sendOTPEmail method using reflection (same as employee)
+            $reflection = new \ReflectionClass($otpService);
+            $method = $reflection->getMethod('sendOTPEmail');
+            $method->setAccessible(true);
+            
+            $result = $method->invoke($otpService, $fakeEmployee, $otp);
+            
+            Log::info("Employee OTP method result: " . ($result ? 'SUCCESS' : 'FAILED'));
+            
+            if ($result) {
+                Log::info("✅ Admin OTP email sent successfully using employee method to {$user->email}: {$otp}");
+                Log::info("=== ADMIN OTP EMAIL DEBUG END (SUCCESS) ===");
+                return true;
+            } else {
+                Log::error("❌ Failed to send admin OTP using employee method");
+                Log::info("Email failed, OTP for {$user->email}: {$otp}");
+                Log::info("=== ADMIN OTP EMAIL DEBUG END (FAILED) ===");
+                return false;
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('❌ Exception in admin OTP email sending: ' . $e->getMessage());
+            Log::error('Exception details: ' . $e->getTraceAsString());
+            
+            // Fallback: log the OTP if email fails
+            Log::info("Email failed due to exception, OTP for {$user->email}: {$otp}");
+            Log::info("=== ADMIN OTP EMAIL DEBUG END (EXCEPTION) ===");
+            return false;
+        }
+    }
+
+    /**
+     * Verify OTP for admin login
+     */
+    public function verifyOTP(Request $request)
+    {
+        $request->validate([
+            'otp_code' => 'required|string|size:6'
+        ]);
+
+        $sessionOTP = $request->session()->get('admin_otp');
+        $otpExpires = $request->session()->get('admin_otp_expires');
+        $pendingUserId = $request->session()->get('admin_pending_user_id');
+
+        if (!$sessionOTP || !$otpExpires || !$pendingUserId) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP session expired. Please login again.',
+                    'step' => 'otp_expired'
+                ], 422);
+            }
+            return redirect()->route('admin.login')->withErrors(['otp_code' => 'OTP session expired. Please login again.']);
+        }
+
+        if (now()->gt(\Carbon\Carbon::parse($otpExpires))) {
+            // Clear expired OTP session
+            $request->session()->forget(['admin_otp', 'admin_otp_expires', 'admin_pending_user_id']);
+            
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'OTP has expired. Please login again.',
+                    'step' => 'otp_expired'
+                ], 422);
+            }
+            return redirect()->route('admin.login')->withErrors(['otp_code' => 'OTP has expired. Please login again.']);
+        }
+
+        if ($request->otp_code !== $sessionOTP) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid verification code. Please try again.',
+                    'step' => 'otp_invalid'
+                ], 422);
+            }
+            return back()->withErrors(['otp_code' => 'Invalid verification code. Please try again.']);
+        }
+
+        // OTP is valid, complete the login process
+        $user = User::find($pendingUserId);
+        if (!$user) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found. Please login again.',
+                    'step' => 'user_not_found'
+                ], 422);
+            }
+            return redirect()->route('admin.login')->withErrors(['otp_code' => 'User not found. Please login again.']);
+        }
+
+        // Login the user
+        Auth::guard('admin')->login($user);
+        $request->session()->regenerate();
+
+        // Clear OTP session data
+        $request->session()->forget(['admin_otp', 'admin_otp_expires', 'admin_pending_user_id']);
+
+        // Track login session
+        $this->trackLoginSession($request, $user);
+
+        // Initialize admin session start time for uptime tracking
+        $request->session()->put('admin_session_start', now());
+
+        // Update user's last login info
+        $user->update([
+            'last_login_at' => now(),
+            'last_login_ip' => $request->ip(),
+            'last_user_agent' => $request->userAgent(),
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'step' => 'login_complete',
+                'message' => 'Login successful! Redirecting to dashboard...',
+                'redirect_url' => route('admin.dashboard')
+            ]);
+        }
+
+        return redirect()->route('admin.dashboard');
+    }
+
+    /**
+     * Resend OTP for admin login
+     */
+    public function resendOTP(Request $request)
+    {
+        $pendingUserId = $request->session()->get('admin_pending_user_id');
+
+        if (!$pendingUserId) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No pending OTP session. Please login again.',
+                    'step' => 'no_session'
+                ], 422);
+            }
+            return redirect()->route('admin.login');
+        }
+
+        $user = User::find($pendingUserId);
+        if (!$user) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not found. Please login again.',
+                    'step' => 'user_not_found'
+                ], 422);
+            }
+            return redirect()->route('admin.login');
+        }
+
+        // Generate new OTP
+        $otp = $this->generateOTP();
+        $request->session()->put('admin_otp', $otp);
+        $request->session()->put('admin_otp_expires', now()->addMinutes(10));
+
+        // Send new OTP
+        $this->sendOTPEmail($user, $otp);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'New verification code sent to your email.',
+                // OTP is only logged for security - not exposed in response
+            ]);
+        }
+
+        return back()->with('success', 'New verification code sent to your email.');
     }
 
     /**
@@ -558,6 +864,35 @@ class AdminController extends Controller
                 ];
             }
 
+            // Get recent training requests
+            $recentTrainingRequests = \App\Models\TrainingRequest::where('status', 'Pending')
+                ->where('created_at', '>=', now()->subDays(7))
+                ->with('employee')
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get();
+                
+            foreach ($recentTrainingRequests as $request) {
+                $employeeName = 'Employee';
+                if ($request->employee) {
+                    $employeeName = $request->employee->first_name . ' ' . $request->employee->last_name;
+                } else {
+                    // Fallback: try to get employee by employee_id
+                    $employee = \App\Models\Employee::where('employee_id', $request->employee_id)->first();
+                    if ($employee) {
+                        $employeeName = $employee->first_name . ' ' . $employee->last_name;
+                    }
+                }
+                
+                $notifications[] = [
+                    'type' => 'training_request',
+                    'title' => 'New Training Request',
+                    'message' => $employeeName . ' requested training: ' . $request->training_title,
+                    'time_ago' => $request->created_at->diffForHumans(),
+                    'action_url' => '/admin/employee-trainings-dashboard'
+                ];
+            }
+
             // Get recent training completions
             $recentCompletions = \App\Models\EmployeeTrainingDashboard::where('progress', '>=', 100)
                 ->where('updated_at', '>=', now()->subDays(3))
@@ -606,7 +941,8 @@ class AdminController extends Controller
             $count += \App\Models\Employee::where('created_at', '>=', now()->subDays(7))->count();
             $count += \App\Models\EmployeeTrainingDashboard::where('progress', '>=', 100)
                 ->where('updated_at', '>=', now()->subDays(3))->count();
-            $count += \App\Models\TrainingRequest::where('status', 'pending')->count();
+            $count += \App\Models\TrainingRequest::where('status', 'Pending')
+                ->where('created_at', '>=', now()->subDays(7))->count();
 
             return response()->json([
                 'success' => true,

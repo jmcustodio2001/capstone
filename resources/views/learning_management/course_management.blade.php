@@ -10,13 +10,6 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
   <style>
-    /* Table row hover effects */
-    .training-request-table tbody tr:hover,
-    .course-table tbody tr:hover {
-      background-color: #f8f9fa !important;
-      transform: scale(1.01);
-      transition: all 0.2s ease;
-    }
     
     
     /* Button group styling */
@@ -285,7 +278,7 @@
         @forelse($trainingRequests as $request)
           @if($loop->first)
             <div class="table-responsive">
-              <table class="table table-hover training-request-table">
+              <table class="table training-request-table">
                 <thead class="table-light">
                   <tr>
                     <th scope="col" class="fw-bold">
@@ -412,51 +405,42 @@
 
     <!-- Table Section -->
     <div class="card shadow-sm border-0 mt-4">
-      <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card-header">
         <h4 class="fw-bold mb-0">Course List</h4>
-        <button class="btn btn-primary btn-sm d-flex align-items-center" onclick="addCourseWithConfirmation()">
-          <i class="bi bi-plus-lg me-1"></i> Add Course
-        </button>
       </div>
       <div class="card-body">
         @forelse($courses as $course)
           @if($loop->first)
             <div class="table-responsive">
-              <table class="table table-hover course-table">
+              <table class="table course-table">
                 <thead class="table-light">
                   <tr>
                     <th scope="col" class="fw-bold">
-                      <i class="bi bi-hash me-1"></i>Course ID
+                       ID
                     </th>
                     <th scope="col" class="fw-bold">
-                      <i class="bi bi-book me-1"></i>Course Title
+                      Course Title
                     </th>
                     <th scope="col" class="fw-bold">
-                      <i class="bi bi-file-text me-1"></i>Description
+                      Description
                     </th>
                     <th scope="col" class="fw-bold">
-                      <i class="bi bi-calendar-plus me-1"></i>Start Date
+                      Start Date
                     </th>
                     <th scope="col" class="fw-bold">
-                      <i class="bi bi-calendar-check me-1"></i>Created
+                      Created
                     </th>
                     <th scope="col" class="fw-bold text-center">
-                      <i class="bi bi-gear me-1"></i>Status
-                    </th>
-                    <th scope="col" class="fw-bold text-center">
-                      <i class="bi bi-tools me-1"></i>Actions
+                      Status
                     </th>
                   </tr>
                 </thead>
                 <tbody>
           @endif
                   <tr>
-                    <td class="fw-semibold text-primary">{{ $course->course_id }}</td>
+                    <td class="fw-semibold text">{{ $course->course_id }}</td>
                     <td>
-                      <div class="d-flex align-items-center">
-                        <i class="bi bi-book-fill text-primary me-2"></i>
-                        <span class="fw-semibold">{{ $course->course_title }}</span>
-                      </div>
+                      <span class="fw-semibold">{{ $course->course_title }}</span>
                     </td>
                     <td>
                       <span class="text-muted" title="{{ $course->description }}">
@@ -475,19 +459,6 @@
                         {{ $course->status }}
                       </span>
                     </td>
-                    <td class="text-center">
-                      <div class="btn-group" role="group">
-                        <button class="btn btn-outline-info btn-sm" onclick="viewCourseDetails('{{ $course->course_id }}', '{{ addslashes($course->course_title) }}', '{{ addslashes($course->description) }}', '{{ $course->start_date }}', '{{ $course->status }}', '{{ $course->created_at->format('M d, Y H:i') }}')" title="View Details">
-                          <i class="bi bi-eye"></i>
-                        </button>
-                        <button class="btn btn-outline-primary btn-sm" onclick="editCourseWithConfirmation('{{ $course->course_id }}', '{{ addslashes($course->course_title) }}', '{{ addslashes($course->description) }}', '{{ $course->start_date }}', '{{ $course->status }}')" title="Edit Course">
-                          <i class="bi bi-pencil"></i>
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="deleteCourseWithConfirmation('{{ $course->course_id }}', '{{ addslashes($course->course_title) }}')" title="Delete Course">
-                          <i class="bi bi-trash"></i>
-                        </button>
-                      </div>
-                    </td>
                   </tr>
           @if($loop->last)
                 </tbody>
@@ -497,13 +468,10 @@
         @empty
           <div class="text-center py-5">
             <div class="mb-3">
-              <i class="bi bi-book display-1 text-muted"></i>
+              <i class="bi bi-arrow-repeat display-1 text-muted"></i>
             </div>
             <h5 class="text-muted mb-2">No Courses Found</h5>
-            <p class="text-muted mb-3">Get started by adding your first course.</p>
-            <button class="btn btn-primary" onclick="addCourseWithConfirmation()">
-              <i class="bi bi-plus-lg me-1"></i> Add Your First Course
-            </button>
+            <p class="text-muted mb-3">Courses will automatically appear here when competencies are added to the Competency Library.</p>
           </div>
         @endforelse
 
@@ -524,6 +492,97 @@
               </li>
             </ul>
           </nav>
+        </div>
+        @endif
+      </div>
+    </div>
+
+    <!-- Accredited Travel Training Centers Section -->
+    <div class="card shadow-sm border-0 mt-4">
+      <div class="card-header">
+        <h4 class="fw-bold mb-0">Accredited Training Centers</h4>
+      </div>
+      <div class="card-body">
+        @forelse($destinationMasters as $destination)
+          @if($loop->first)
+            <div class="table-responsive">
+              <table class="table">
+                <thead class="table-light">
+                  <tr>
+                    <th scope="col" class="fw-bold">ID</th>
+                    <th scope="col" class="fw-bold">Destination / Training Title</th>
+                    <th scope="col" class="fw-bold">Duration</th>
+                    <th scope="col" class="fw-bold">Details</th>
+                    <th scope="col" class="fw-bold">Objectives</th>
+                    <th scope="col" class="fw-bold">Delivery Mode</th>
+                  </tr>
+                </thead>
+                <tbody>
+          @endif
+                  <tr>
+                    <td class="fw-semibold text-dark">{{ $loop->iteration }}</td>
+                    <td>
+                      <span class="fw-semibold">{{ $destination->destination_name }}</span>
+                    </td>
+                    <td>
+                      <span class="text-muted">{{ $destination->duration }}</span>
+                    </td>
+                    <td>
+                      <div style="max-width: 300px;">
+                        <small class="text-dark">{{ Str::limit($destination->details, 100) }}</small>
+                      </div>
+                    </td>
+                    <td>
+                      <div style="max-width: 300px;">
+                        <small class="text-dark">{{ Str::limit($destination->objectives, 100) }}</small>
+                      </div>
+                    </td>
+                    <td>
+                      @switch($destination->delivery_mode)
+                        @case('On-Site Training')
+                          <span style="color: #000;">🏢 On-Site Training</span>
+                          @break
+                        @case('Blended Learning')
+                          <span style="color: #000;">🔄 Blended Learning</span>
+                          @break
+                        @case('Workshop')
+                          <span style="color: #000;">🎯 Workshop</span>
+                          @break
+                        @case('Seminar')
+                          <span style="color: #000;">📚 Seminar</span>
+                          @break
+                        @case('Field Training')
+                          <span style="color: #000;">🏃 Field Training</span>
+                          @break
+                        @case('Table Training')
+                          <span style="color: #000;">📋 Table Training</span>
+                          @break
+                        @default
+                          <span style="color: #000;">{{ $destination->delivery_mode }}</span>
+                      @endswitch
+                    </td>
+                  </tr>
+          @if($loop->last)
+                </tbody>
+              </table>
+            </div>
+          @endif
+        @empty
+          <div class="text-center py-5">
+            <div class="mb-3">
+              <i class="bi bi-geo-alt display-1 text-muted"></i>
+            </div>
+            <h5 class="text-muted mb-2">No Destination Knowledge Training Found</h5>
+            <p class="text-muted mb-3">Destination knowledge training records will appear here when employees are assigned destination-specific training.</p>
+          </div>
+        @endforelse
+
+        <!-- Pagination for Destination Masters -->
+        @if($destinationMasters->count() > 0)
+        <div class="d-flex justify-content-between align-items-center mt-4">
+          <div class="text-muted small">
+            Showing <span class="fw-semibold">{{ $destinationMasters->count() }}</span> possible destination{{ $destinationMasters->count() != 1 ? 's' : '' }}
+          </div>
         </div>
         @endif
       </div>

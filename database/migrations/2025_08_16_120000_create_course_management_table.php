@@ -11,6 +11,8 @@ return new class extends Migration
             $table->bigIncrements('course_id');
             $table->string('course_title');
             $table->text('description')->nullable();
+            $table->string('category')->nullable();
+            $table->string('instructor')->nullable();
             $table->date('start_date')->nullable();
             $table->date('end_date')->nullable();
             $table->string('status')->default('Active');

@@ -15,6 +15,8 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <!-- Login Page Styles -->
   <link rel="stylesheet" href="{{ asset('assets/css/admin_login-style.css') }}">
+  <!-- Google reCAPTCHA -->
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
   <!-- OTP Specific Styles -->
   <style>
@@ -151,6 +153,11 @@
             <label class="form-check-label" for="rememberMe">
               <i class="bi bi-person-check me-1"></i>Remember me
             </label>
+          </div>
+
+          <!-- Google reCAPTCHA -->
+          <div class="mb-3 d-flex justify-content-center">
+            <div class="g-recaptcha" data-sitekey="{{ env('RECAPTCHA_SITE_KEY') }}" id="recaptcha-widget"></div>
           </div>
 
           <button type="submit" class="btn btn-login mb-3" id="loginButton">
@@ -467,9 +474,36 @@
         }, 1000);
       }
 
+      // CAPTCHA validation function
+      function validateCaptcha() {
+        const captchaResponse = grecaptcha.getResponse();
+        if (!captchaResponse) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'CAPTCHA Required',
+            text: 'Please complete the CAPTCHA verification before proceeding.',
+            confirmButtonColor: '#667eea'
+          });
+          return false;
+        }
+        return true;
+      }
+
+      // Reset CAPTCHA function
+      function resetCaptcha() {
+        if (typeof grecaptcha !== 'undefined') {
+          grecaptcha.reset();
+        }
+      }
+
       // Login form submission
       loginForm.addEventListener('submit', async function(e) {
         e.preventDefault();
+
+        // Validate CAPTCHA first
+        if (!validateCaptcha()) {
+          return;
+        }
 
         const submitButton = loginButton;
         const originalText = submitButton.innerHTML;
@@ -491,6 +525,10 @@
           if (!formData.has('_token')) {
             formData.append('_token', csrfToken);
           }
+          
+          // Add CAPTCHA response
+          const captchaResponse = grecaptcha.getResponse();
+          formData.append('g-recaptcha-response', captchaResponse);
 
           const response = await fetch('{{ route("employee.login.submit") }}', {
             method: 'POST',
@@ -532,6 +570,9 @@
             if (data.step === 'lockout') {
               showLockoutTimer(data.lockout_remaining_seconds || (data.lockout_remaining * 60), data.lockout_count || 1);
             } else {
+              // Reset CAPTCHA on error
+              resetCaptcha();
+              
               // Show error message (server already includes remaining attempts)
               let errorText = data.message || 'An unknown error occurred.';
               if (data.debug_info) {
@@ -549,6 +590,9 @@
           }
         } catch (error) {
           console.error('Login error:', error);
+          // Reset CAPTCHA on connection error
+          resetCaptcha();
+          
           Swal.fire({
             icon: 'error',
             title: 'Connection Error',
@@ -749,6 +793,8 @@
           confirmButtonColor: '#667eea'
         }).then((result) => {
           if (result.isConfirmed) {
+            // Reset CAPTCHA when going back to login
+            resetCaptcha();
             showLoginForm();
           }
         });

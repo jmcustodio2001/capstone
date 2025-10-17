@@ -1,22 +1,160 @@
 <div class="simulation-card card mb-4">
   <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
     <div>
-      <h4 class="fw-bold mb-0">Requested Trainings</h4>
+      <h4 class="fw-bold mb-2">
+        Training Requests
+      </h4>
       @php
-        $totalRequests = collect($trainingRequests)->unique('request_id')->count();
+        // Initialize variables with proper counting
+        $trainingRequests = isset($trainingRequests) ? collect($trainingRequests) : collect();
+        $upcomingTrainings = isset($upcomingTrainings) ? collect($upcomingTrainings) : collect();
+        $autoCreatedCount = 0;
+        $existingCount = $trainingRequests->where('is_auto', false)->count();
+        $totalRequests = 0;
+
+        // Combine existing requests with upcoming trainings
+        foreach ($upcomingTrainings as $upcoming) {
+            // Check if request doesn't exist by both title and course_id
+            $exists = $trainingRequests->contains(function ($request) use ($upcoming) {
+                return ($request->training_title === $upcoming->training_title) ||
+                       (isset($request->course_id) && isset($upcoming->course_id) && $request->course_id === $upcoming->course_id);
+            });
+
+            // Also check if database record already exists to prevent duplicates
+            $dbExists = \App\Models\TrainingRequest::where('employee_id', Auth::user()->employee_id)
+                ->where('training_title', $upcoming->training_title ?? '')
+                ->exists();
+
+            // Check if this training was recently unassigned from competency gaps
+            $wasRecentlyUnassigned = false;
+            if (isset($upcoming->source) && in_array($upcoming->source, ['competency_gap', 'competency_assigned', 'admin_assigned'])) {
+                // Check if there's a competency gap that was recently unassigned for this training
+                $competencyGap = \App\Models\CompetencyGap::with('competency')
+                    ->where('employee_id', Auth::user()->employee_id)
+                    ->where('assigned_to_training', false) // Recently unassigned
+                    ->whereHas('competency', function($query) use ($upcoming) {
+                        $trainingTitle = $upcoming->training_title ?? '';
+                        $cleanTitle = str_replace([' Training', ' Course', ' Program', ' Skills'], '', $trainingTitle);
+                        $query->where('competency_name', 'LIKE', '%' . $cleanTitle . '%')
+                              ->orWhere('competency_name', $trainingTitle)
+                              ->orWhere('competency_name', $cleanTitle);
+                    })
+                    ->where('updated_at', '>', now()->subMinutes(5)) // Updated in last 5 minutes
+                    ->exists();
+                
+                $wasRecentlyUnassigned = $competencyGap;
+            }
+
+            if (!$exists && !$dbExists && !$wasRecentlyUnassigned) {
+                // Auto-create actual database records for seamless flow
+                try {
+                    // Create the training request in database
+                    $dbRequest = \App\Models\TrainingRequest::create([
+                        'employee_id' => Auth::user()->employee_id,
+                        'course_id' => $upcoming->course_id ?? null,
+                        'training_title' => $upcoming->training_title ?? '',
+                        'reason' => 'Automatically enrolled from upcoming trainings',
+                        'status' => 'Approved',
+                        'requested_date' => now()->format('Y-m-d')
+                    ]);
+
+                    // Create corresponding progress record
+                    \App\Models\TrainingProgress::create([
+                        'employee_id' => Auth::user()->employee_id,
+                        'course_id' => $upcoming->course_id ?? null,
+                        'training_title' => $upcoming->training_title ?? '',
+                        'progress' => 0,
+                        'status' => 'Not Started',
+                        'source' => 'auto_approved_request',
+                        'request_id' => $dbRequest->request_id,
+                        'last_accessed' => now()
+                    ]);
+
+                    // Create notification record
+                    \App\Models\TrainingNotification::create([
+                        'employee_id' => Auth::user()->employee_id,
+                        'message' => "You have been automatically enrolled in '{$upcoming->training_title}' training.",
+                        'sent_at' => now()
+                    ]);
+
+                    $newRequest = (object)[
+                        'request_id' => $dbRequest->request_id,
+                        'training_title' => $upcoming->training_title ?? '',
+                        'course_id' => $upcoming->course_id ?? null,
+                        'reason' => 'Automatically enrolled from upcoming trainings',
+                        'status' => 'Approved',
+                        'requested_date' => now()->format('Y-m-d'),
+                        'current_level' => $upcoming->current_level ?? 0,
+                        'is_auto' => true
+                    ];
+                } catch (\Exception $e) {
+                    // Fallback to view-only record if database creation fails
+                    $newRequest = (object)[
+                        'request_id' => 'AUTO-' . time() . rand(1000, 9999),
+                        'training_title' => $upcoming->training_title ?? '',
+                        'course_id' => $upcoming->course_id ?? null,
+                        'reason' => 'Automatically enrolled from upcoming trainings',
+                        'status' => 'Approved',
+                        'requested_date' => now()->format('Y-m-d'),
+                        'current_level' => $upcoming->current_level ?? 0,
+                        'is_auto' => true
+                    ];
+                }
+                
+                $trainingRequests->push($newRequest);
+                $autoCreatedCount++;
+            } elseif ($dbExists && !$exists) {
+                // If database record exists but not in collection, add it to display
+                $existingDbRequest = \App\Models\TrainingRequest::where('employee_id', Auth::user()->employee_id)
+                    ->where('training_title', $upcoming->training_title ?? '')
+                    ->first();
+                
+                if ($existingDbRequest) {
+                    $newRequest = (object)[
+                        'request_id' => $existingDbRequest->request_id,
+                        'training_title' => $existingDbRequest->training_title,
+                        'course_id' => $existingDbRequest->course_id,
+                        'reason' => $existingDbRequest->reason,
+                        'status' => $existingDbRequest->status,
+                        'requested_date' => $existingDbRequest->requested_date,
+                        'current_level' => $upcoming->current_level ?? 0,
+                        'is_auto' => true
+                    ];
+                    $trainingRequests->push($newRequest);
+                    $autoCreatedCount++;
+                }
+            }
+        }
+
+        // Calculate total after all processing
+        $totalRequests = $existingCount + $autoCreatedCount;
+        
+        // If we auto-created any records, trigger a data refresh
+        $shouldRefreshData = $autoCreatedCount > 0;
       @endphp
-      <small class="text-muted">Total Requests: <span class="badge bg-warning text-dark">{{ $totalRequests }}</span></small>
+      
+      @if($shouldRefreshData)
+        <script>
+          document.addEventListener("DOMContentLoaded", function() {
+            if (typeof refreshTrainingData === "function") {
+              setTimeout(function() { refreshTrainingData(); }, 1000);
+            }
+          });
+        </script>
+      @endif
+      
+      @php
+        // Update the total after all processing
+        $totalRequests = $existingCount + $autoCreatedCount;
+      @endphp
     </div>
-    <button class="btn btn-primary btn-sm" onclick="requestTrainingWithConfirmation()">
-      <i class="bi bi-plus-circle me-1"></i> Request Training
-    </button>
   </div>
   <div class="card-body">
     <div class="table-responsive">
       <table class="table table-hover align-middle">
         <thead class="table-light">
           <tr>
-            <th>Request ID</th>
+            <th>Training ID</th>
             <th>Training Title</th>
             <th>Reason</th>
             <th>Status</th>
@@ -26,60 +164,62 @@
         </thead>
         <tbody>
           @php
-            $uniqueRequests = collect($trainingRequests)->unique('request_id');
+            $uniqueRequests = $trainingRequests->unique('request_id');
+            $isAutoCreated = [];
+            $sequentialId = 1; // Start sequential numbering from 1
           @endphp
           @forelse($uniqueRequests as $r)
-            <tr>
-              <td>{{ $r->request_id }}</td>
+            @php
+              // Check if this is an auto-created request
+              $isAutoCreated[$r->request_id] = substr($r->request_id, 0, 5) === 'AUTO-';
+            @endphp
+            <tr data-training-title="{{ $r->training_title }}"
+                data-course-id="{{ $r->course_id ?? '' }}"
+                class="{{ $isAutoCreated[$r->request_id] ? 'table-info' : '' }}">
+              <td>
+                {{ $sequentialId++ }}
+                @if($isAutoCreated[$r->request_id])
+                  <span class="badge bg-info">Auto</span>
+                @endif
+              </td>
               <td>{{ $r->training_title }}</td>
               <td>{{ $r->reason }}</td>
               <td>
-                <span class="badge {{ $r->status == 'Approved' ? 'bg-success' : ($r->status == 'Rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
-                  {{ $r->status }}
-                </span>
+                @if($r->is_auto ?? false)
+                  <span class="badge bg-success">Active</span>
+                @else
+                  <span class="badge {{ $r->status == 'Approved' ? 'bg-success' : ($r->status == 'Rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
+                    {{ $r->status }}
+                  </span>
+                @endif
               </td>
               <td>{{ $r->requested_date }}</td>
               <td class="text-center">
                 <div class="btn-group" role="group">
                   {{-- View Details Button --}}
-                  <button class="btn btn-outline-info btn-sm" 
+                  <button class="btn btn-outline-info btn-sm"
                           onclick="viewRequestDetails('{{ $r->request_id }}', '{{ addslashes($r->training_title) }}', '{{ addslashes($r->reason) }}', '{{ $r->status }}', '{{ $r->requested_date }}')"
                           title="View Details">
                     <i class="bi bi-eye"></i>
                   </button>
 
-                  {{-- Take Exam Button - Show for approved requests --}}
-                  @if($r->status == 'Approved')
-                    @php
-                      // SIMPLIFIED: Logic to find course_id and make exam available
-                      $courseId = null;
-                      $debugInfo = [];
-                      
-                      // Strategy 1: Get course_id from the request (should work now with eager loading)
-                      if (isset($r->course_id) && $r->course_id && is_numeric($r->course_id)) {
-                        $courseId = (int)$r->course_id;
-                        $debugInfo[] = "Course ID from request: {$courseId}";
-                      }
-                      
-                      // Strategy 2: Get course_id from loaded relationship
-                      if (!$courseId && isset($r->course) && $r->course && $r->course->course_id) {
-                        $courseId = (int)$r->course->course_id;
-                        $debugInfo[] = "Course ID from relationship: {$courseId}";
-                      }
-                      
-                      // Strategy 3: Search by training title
-                      if (!$courseId) {
-                        $debugInfo[] = "Searching by title: {$r->training_title}";
-                        $course = \App\Models\CourseManagement::where('course_title', $r->training_title)
-                          ->orWhereRaw('LOWER(course_title) = LOWER(?)', [$r->training_title])
+                  {{-- Take Exam Button - Always available for auto-created or approved requests --}}
+                  @php
+                    $showExamButton = $r->status == 'Approved' || ($r->is_auto ?? false);
+                    $courseId = null;
+
+                    // Get course_id directly if available
+                    if (!empty($r->course_id)) {
+                      $courseId = $r->course_id;
+                    } else {
+                      // Try to find course by title
+                      $course = \App\Models\CourseManagement::where('course_title', $r->training_title)
                           ->first();
-                        
-                        if ($course) {
-                          $courseId = $course->course_id;
-                          $debugInfo[] = "Found course ID: {$courseId}";
-                        }
+                      if ($course) {
+                        $courseId = $course->course_id;
                       }
-                      
+                    }
+
                       // Strategy 4: FALLBACK - Create course if none exists (for approved requests)
                       if (!$courseId && $r->status == 'Approved') {
                         try {
@@ -94,27 +234,27 @@
                           $debugInfo[] = "Failed to create course: " . $e->getMessage();
                         }
                       }
-                      
+
                       // ENHANCED: Check if exam questions exist and auto-generate if needed
                       $hasExamQuestions = false;
                       $questionCount = 0;
                       if ($courseId) {
                         $questionCount = \App\Models\ExamQuestion::where('course_id', $courseId)->count();
                         $hasExamQuestions = $questionCount > 0;
-                        
+
                         // If no questions exist, try to auto-generate for destination courses
                         if (!$hasExamQuestions && $course) {
                           $courseTitle = strtolower($course->course_title);
-                          $isDestinationCourse = strpos($courseTitle, 'destination') !== false || 
+                          $isDestinationCourse = strpos($courseTitle, 'destination') !== false ||
                                                  strpos($courseTitle, 'location') !== false ||
                                                  strpos($courseTitle, 'knowledge') !== false;
-                          
+
                           if ($isDestinationCourse) {
                             try {
                               // Auto-generate basic questions for destination courses
                               $location = preg_replace('/\b(destination|knowledge|training|course)\b/i', '', $course->course_title);
                               $location = trim($location);
-                              
+
                               if (!empty($location)) {
                                 $questions = [
                                   [
@@ -138,7 +278,7 @@
                                     'correct_answer' => 'Understanding client needs and preferences'
                                   ]
                                 ];
-                                
+
                                 foreach ($questions as $q) {
                                   \App\Models\ExamQuestion::create([
                                     'course_id' => $courseId,
@@ -149,7 +289,7 @@
                                     'difficulty' => 'medium'
                                   ]);
                                 }
-                                
+
                                 $questionCount = count($questions);
                                 $hasExamQuestions = true;
                                 $debugInfo[] = "Auto-generated {$questionCount} questions for {$location}";
@@ -159,10 +299,10 @@
                             }
                           }
                         }
-                        
+
                         $debugInfo[] = $hasExamQuestions ? "Exam available ({$questionCount} questions)" : "No exam questions available";
                       }
-                      
+
                       // ENHANCED: Auto-create dashboard record if missing for approved requests
                       if ($courseId && $r->status == 'Approved') {
                         // Check for existing dashboard record with multiple criteria
@@ -172,7 +312,7 @@
                                     ->orWhere('training_title', $r->training_title);
                           })
                           ->first();
-                        
+
                         if (!$dashboardRecord) {
                           try {
                             // Ensure we have all required fields
@@ -189,7 +329,7 @@
                               'source' => 'approved_request',
                               'remarks' => 'Auto-created for approved request #' . $r->request_id
                             ];
-                            
+
                             $newRecord = \App\Models\EmployeeTrainingDashboard::create($createData);
                             $debugInfo[] = "Dashboard record auto-created (ID: {$newRecord->id})";
                           } catch (\Exception $e) {
@@ -203,7 +343,7 @@
                           }
                         } else {
                           $debugInfo[] = "Dashboard record exists (ID: {$dashboardRecord->id})";
-                          
+
                           // Update existing record to ensure it's properly configured
                           try {
                             $dashboardRecord->update([
@@ -218,29 +358,27 @@
                           }
                         }
                       }
-                      
+
                       $debugString = implode(' | ', $debugInfo);
-                      
+
                       // Add final debug info
                       $debugInfo[] = "Final: courseId={$courseId}, hasQuestions={$hasExamQuestions}, questionCount={$questionCount}";
                       $debugString = implode(' | ', $debugInfo);
                     @endphp
+                    {{-- Exam button - Always enabled --}}
                     @if($courseId)
-                      {{-- TAKE EXAM button - Always clickable if we have a course_id --}}
-                      <a href="{{ route('employee.exam.start', $courseId) }}" class="btn btn-primary btn-sm" title="Take Exam - Course ID: {{ $courseId }} | Questions: {{ $questionCount }} | {{ $debugString }}" target="_blank">
-                        <i class="bi bi-clipboard-check"></i>
+                      <a href="/employee/exam/start/{{ $courseId }}"
+                         class="btn btn-primary btn-sm"
+                         title="Take Exam"
+                         target="_blank">
+                        <i class="fas fa-edit"></i> Take Exam
                       </a>
                     @else
-                      {{-- No course found - show debug info and make it a button that shows the error --}}
-                      <button class="btn btn-secondary btn-sm" disabled title="Course not found - {{ $debugString }}" onclick="alert('Debug Info: {{ $debugString }}')">
-                        <i class="bi bi-clipboard-check"></i>
+                      <button class="btn btn-primary btn-sm"
+                              onclick="startExam('{{ $r->training_title }}', '{{ $r->course_id ?? '' }}')">
+                        <i class="fas fa-edit"></i> Take Exam
                       </button>
                     @endif
-                  @else
-                    <button class="btn btn-secondary btn-sm" disabled title="Exam available after approval">
-                      <i class="bi bi-clipboard-check"></i>
-                    </button>
-                  @endif
 
                   {{-- Reviewer Button - Always available --}}
                   <button class="btn btn-success btn-sm" onclick="openReviewer('{{ $r->training_title }}', '{{ $r->request_id }}')" title="Open Reviewer">
@@ -256,26 +394,6 @@
                     </button>
                   @endif
 
-                  {{-- Delete button - working for all requests --}}
-                  @if($r->status == 'Pending')
-                    <button class="btn btn-outline-danger btn-sm"
-                            onclick="deleteRequestWithConfirmation('{{ $r->request_id }}', '{{ addslashes($r->training_title) }}')"
-                            title="Delete Request">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  @elseif($r->status == 'Approved')
-                    <button class="btn btn-outline-warning btn-sm"
-                            onclick="deleteApprovedRequestWithConfirmation('{{ $r->request_id }}', '{{ addslashes($r->training_title) }}')"
-                            title="Delete Approved Request (Warning: This will remove training progress)">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  @else
-                    <button class="btn btn-outline-danger btn-sm"
-                            onclick="deleteRequestWithConfirmation('{{ $r->request_id }}', '{{ addslashes($r->training_title) }}')"
-                            title="Delete {{ $r->status }} Request">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  @endif
                 </div>
               </td>
             </tr>
@@ -402,14 +520,47 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
 <script>
-// SweetAlert Enhanced Functions for Training Requests
+// Initialize SweetAlert2 Toast configuration - Fixed syntax error
+const Toast = Swal.mixin({
+  toast: true,
+  position: 'top-end',
+  showConfirmButton: false,
+  timer: 3000,
+  timerProgressBar: true,
+  didOpen: (toast) => {
+    toast.addEventListener('mouseenter', Swal.stopTimer)
+    toast.addEventListener('mouseleave', Swal.resumeTimer)
+  }
+});
+
+// Check for new upcoming trainings periodically
+setInterval(() => {
+  checkNewUpcomingTrainings();
+}, 300000); // Check every 5 minutes
+
+// Function to check for new upcoming trainings
+function checkNewUpcomingTrainings() {
+  fetch('{{ route("employee.my_trainings.index") }}')
+    .then(response => response.json())
+    .then(data => {
+      if (data.upcomingTrainings && data.upcomingTrainings.length > 0) {
+        data.upcomingTrainings.forEach(training => {
+          const existingRequest = document.querySelector(`tr[data-course-id="${training.course_id}"]`);
+          if (!existingRequest) {
+            autoCreateTrainingRequest(training);
+          }
+        });
+      }
+    })
+    .catch(error => console.error('Error checking new trainings:', error));
+}
 
 // View Request Details
 function viewRequestDetails(requestId, trainingTitle, reason, status, requestedDate) {
-  const statusBadge = status === 'Approved' ? 
-    '<span class="badge bg-success">Approved</span>' : 
-    status === 'Rejected' ? 
-    '<span class="badge bg-danger">Rejected</span>' : 
+  const statusBadge = status === 'Approved' ?
+    '<span class="badge bg-success">Approved</span>' :
+    status === 'Rejected' ?
+    '<span class="badge bg-danger">Rejected</span>' :
     '<span class="badge bg-warning text-dark">Pending</span>';
 
   // Escape special characters to prevent JavaScript syntax errors
@@ -474,7 +625,7 @@ function requestTrainingWithConfirmation() {
     cancelButtonText: '<i class="fas fa-times"></i> Cancel',
     confirmButtonColor: '#198754',
     cancelButtonColor: '#6c757d',
-    preConfirm: async () => {
+    preConfirm: async function() {
       const password = document.getElementById('requestPassword').value;
       if (!password) {
         Swal.showValidationMessage('Password is required');
@@ -484,7 +635,7 @@ function requestTrainingWithConfirmation() {
         Swal.showValidationMessage('Password must be at least 3 characters');
         return false;
       }
-      
+
       // Verify password with backend immediately
       try {
         Swal.showLoading();
@@ -497,14 +648,14 @@ function requestTrainingWithConfirmation() {
           },
           body: JSON.stringify({ password: password })
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok || !data.success) {
           Swal.showValidationMessage(data.message || 'Invalid password. Please enter your correct password.');
           return false;
         }
-        
+
         return password;
       } catch (error) {
         Swal.showValidationMessage('Network error. Please try again.');
@@ -522,20 +673,20 @@ function requestTrainingWithConfirmation() {
 function showRequestTrainingForm(password) {
   const upcomingTrainings = @json($upcomingTrainings ?? []);
   const availableCourses = @json($availableCourses ?? []);
-  
+
   let courseOptions = '<option value="">Choose a training...</option>';
-  
+
   if (upcomingTrainings.length > 0) {
     courseOptions += '<optgroup label="Your Assigned Trainings">';
     upcomingTrainings.forEach(training => {
-      courseOptions += `<option value="${training.course_id || training.training_title}" 
+      courseOptions += `<option value="${training.course_id || training.training_title}"
                                 data-description="${training.assigned_by || 'System'} | Source: ${training.source || 'Unknown'}"
                                 data-training-id="${training.upcoming_id || ''}"
                                 data-source="${training.source || ''}">${training.training_title}</option>`;
     });
     courseOptions += '</optgroup>';
   }
-  
+
   if (upcomingTrainings.length === 0 && availableCourses.length > 0) {
     courseOptions += '<optgroup label="Available Courses">';
     availableCourses.forEach(course => {
@@ -553,7 +704,7 @@ function showRequestTrainingForm(password) {
         <input type="hidden" name="status" value="Pending">
         <input type="hidden" name="requested_date" value="{{ now()->format('Y-m-d') }}">
         <input type="hidden" name="current_level" id="currentLevelInput" value="0">
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Select Training:</strong></label>
           <select name="course_id" id="courseSelectSwal" class="form-select" required>
@@ -561,17 +712,17 @@ function showRequestTrainingForm(password) {
           </select>
           <small class="text-muted">Select from your assigned upcoming trainings</small>
         </div>
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Training Title:</strong></label>
           <input type="text" name="training_title" id="trainingTitleSwal" class="form-control" required placeholder="Enter training title or select a course above">
         </div>
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Course Description:</strong></label>
           <textarea id="courseDescriptionSwal" class="form-control" rows="2" readonly></textarea>
         </div>
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Reason for Request:</strong></label>
           <textarea name="reason" class="form-control" rows="3" required placeholder="Please explain why you need this training..."></textarea>
@@ -590,7 +741,7 @@ function showRequestTrainingForm(password) {
         const selectedOption = this.options[this.selectedIndex];
         const trainingTitle = document.getElementById('trainingTitleSwal');
         const courseDescription = document.getElementById('courseDescriptionSwal');
-        
+
         if (selectedOption.value) {
           let titleText = selectedOption.textContent.replace(' (Recommended)', '');
           trainingTitle.value = titleText;
@@ -604,7 +755,7 @@ function showRequestTrainingForm(password) {
     preConfirm: () => {
       const form = document.getElementById('requestTrainingForm');
       const formData = new FormData(form);
-      
+
       if (!formData.get('training_title')) {
         Swal.showValidationMessage('Training title is required');
         return false;
@@ -613,7 +764,7 @@ function showRequestTrainingForm(password) {
         Swal.showValidationMessage('Reason is required');
         return false;
       }
-      
+
       return formData;
     }
   }).then((result) => {
@@ -676,7 +827,16 @@ function submitRequestForm(formData) {
         timerProgressBar: true,
         showConfirmButton: false
       }).then(() => {
-        window.location.reload();
+        // Refresh training data to update counts
+        if (typeof refreshTrainingData === 'function') {
+          refreshTrainingData();
+        }
+        // Update UI instead of full page reload
+        if (typeof refreshTrainingData === 'function') {
+          setTimeout(() => {
+            refreshTrainingData();
+          }, 500);
+        }
       });
     } else {
       Swal.fire({
@@ -693,7 +853,7 @@ function submitRequestForm(formData) {
     const errorMessage = error.message;
     let title = 'Error';
     let icon = 'error';
-    
+
     if (errorMessage.includes('Invalid password') || errorMessage.includes('password')) {
       title = '<i class="fas fa-lock text-danger"></i> Password Verification Failed';
       icon = 'error';
@@ -701,7 +861,7 @@ function submitRequestForm(formData) {
       title = 'Network Error';
       icon = 'error';
     }
-    
+
     Swal.fire({
       icon: icon,
       title: title,
@@ -735,7 +895,7 @@ function editRequestWithConfirmation(requestId, trainingTitle, reason, status, r
     cancelButtonText: '<i class="fas fa-times"></i> Cancel',
     confirmButtonColor: '#198754',
     cancelButtonColor: '#6c757d',
-    preConfirm: async () => {
+    preConfirm: async function() {
       const password = document.getElementById('editPassword').value;
       if (!password) {
         Swal.showValidationMessage('Password is required');
@@ -745,7 +905,7 @@ function editRequestWithConfirmation(requestId, trainingTitle, reason, status, r
         Swal.showValidationMessage('Password must be at least 3 characters');
         return false;
       }
-      
+
       // Verify password with backend immediately
       try {
         Swal.showLoading();
@@ -758,14 +918,14 @@ function editRequestWithConfirmation(requestId, trainingTitle, reason, status, r
           },
           body: JSON.stringify({ password: password })
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok || !data.success) {
           Swal.showValidationMessage(data.message || 'Invalid password. Please enter your correct password.');
           return false;
         }
-        
+
         return password;
       } catch (error) {
         Swal.showValidationMessage('Network error. Please try again.');
@@ -793,17 +953,17 @@ function showEditRequestForm(requestId, trainingTitle, reason, status, requested
       <form id="editRequestForm">
         <input type="hidden" name="password" value="${safePassword}">
         <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Training Title:</strong></label>
           <input type="text" name="training_title" class="form-control" value="${safeTrainingTitle}" required>
         </div>
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Reason:</strong></label>
           <textarea name="reason" class="form-control" rows="3" required>${safeReason}</textarea>
         </div>
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Status:</strong></label>
           <select name="status" class="form-select" required>
@@ -812,7 +972,7 @@ function showEditRequestForm(requestId, trainingTitle, reason, status, requested
             <option value="Rejected" ${status === 'Rejected' ? 'selected' : ''}>Rejected</option>
           </select>
         </div>
-        
+
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Requested Date:</strong></label>
           <input type="date" name="requested_date" class="form-control" value="${safeRequestedDate}" required>
@@ -828,7 +988,7 @@ function showEditRequestForm(requestId, trainingTitle, reason, status, requested
     preConfirm: () => {
       const form = document.getElementById('editRequestForm');
       const formData = new FormData(form);
-      
+
       if (!formData.get('training_title')) {
         Swal.showValidationMessage('Training title is required');
         return false;
@@ -837,7 +997,7 @@ function showEditRequestForm(requestId, trainingTitle, reason, status, requested
         Swal.showValidationMessage('Reason is required');
         return false;
       }
-      
+
       return formData;
     }
   }).then((result) => {
@@ -903,7 +1063,10 @@ function submitEditForm(requestId, formData) {
         timerProgressBar: true,
         showConfirmButton: false
       }).then(() => {
-        window.location.reload();
+        // Update counts instead of full reload
+        if (typeof refreshTrainingData === 'function') {
+          refreshTrainingData();
+        }
       });
     } else {
       Swal.fire({
@@ -920,7 +1083,7 @@ function submitEditForm(requestId, formData) {
     const errorMessage = error.message;
     let title = 'Error';
     let icon = 'error';
-    
+
     if (errorMessage.includes('Invalid password') || errorMessage.includes('password')) {
       title = '<i class="fas fa-lock text-danger"></i> Password Verification Failed';
       icon = 'error';
@@ -928,7 +1091,7 @@ function submitEditForm(requestId, formData) {
       title = 'Network Error';
       icon = 'error';
     }
-    
+
     Swal.fire({
       icon: icon,
       title: title,
@@ -962,7 +1125,7 @@ function deleteRequestWithConfirmation(requestId, trainingTitle) {
     cancelButtonText: '<i class="fas fa-times"></i> Cancel',
     confirmButtonColor: '#198754',
     cancelButtonColor: '#6c757d',
-    preConfirm: async () => {
+    preConfirm: async function() {
       const password = document.getElementById('deletePassword').value;
       if (!password) {
         Swal.showValidationMessage('Password is required');
@@ -972,7 +1135,7 @@ function deleteRequestWithConfirmation(requestId, trainingTitle) {
         Swal.showValidationMessage('Password must be at least 3 characters');
         return false;
       }
-      
+
       // Verify password with backend immediately
       try {
         Swal.showLoading();
@@ -985,14 +1148,14 @@ function deleteRequestWithConfirmation(requestId, trainingTitle) {
           },
           body: JSON.stringify({ password: password })
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok || !data.success) {
           Swal.showValidationMessage(data.message || 'Invalid password. Please enter your correct password.');
           return false;
         }
-        
+
         return password;
       } catch (error) {
         Swal.showValidationMessage('Network error. Please try again.');
@@ -1094,7 +1257,10 @@ function submitDeleteRequest(requestId, password) {
         timerProgressBar: true,
         showConfirmButton: false
       }).then(() => {
-        window.location.reload();
+        // Update counts instead of full reload
+        if (typeof refreshTrainingData === 'function') {
+          refreshTrainingData();
+        }
       });
     } else {
       Swal.fire({
@@ -1111,7 +1277,7 @@ function submitDeleteRequest(requestId, password) {
     const errorMessage = error.message;
     let title = 'Error';
     let icon = 'error';
-    
+
     if (errorMessage.includes('Invalid password') || errorMessage.includes('password')) {
       title = '<i class="fas fa-lock text-danger"></i> Password Verification Failed';
       icon = 'error';
@@ -1119,7 +1285,7 @@ function submitDeleteRequest(requestId, password) {
       title = 'Network Error';
       icon = 'error';
     }
-    
+
     Swal.fire({
       icon: icon,
       title: title,
@@ -1163,7 +1329,7 @@ function deleteApprovedRequestWithConfirmation(requestId, trainingTitle) {
     cancelButtonText: '<i class="fas fa-times"></i> Cancel',
     confirmButtonColor: '#dc3545',
     cancelButtonColor: '#6c757d',
-    preConfirm: async () => {
+    preConfirm: async function() {
       const password = document.getElementById('deleteApprovedPassword').value;
       if (!password) {
         Swal.showValidationMessage('Password is required');
@@ -1173,7 +1339,7 @@ function deleteApprovedRequestWithConfirmation(requestId, trainingTitle) {
         Swal.showValidationMessage('Password must be at least 3 characters');
         return false;
       }
-      
+
       // Verify password with backend immediately
       try {
         Swal.showLoading();
@@ -1186,14 +1352,14 @@ function deleteApprovedRequestWithConfirmation(requestId, trainingTitle) {
           },
           body: JSON.stringify({ password: password })
         });
-        
+
         const data = await response.json();
-        
+
         if (!response.ok || !data.success) {
           Swal.showValidationMessage(data.message || 'Invalid password. Please enter your correct password.');
           return false;
         }
-        
+
         return password;
       } catch (error) {
         Swal.showValidationMessage('Network error. Please try again.');
@@ -1262,7 +1428,10 @@ function submitApprovedRequestDeletion(requestId, trainingTitle, password) {
         timerProgressBar: true,
         showConfirmButton: false
       }).then(() => {
-        window.location.reload();
+        // Update counts instead of full reload
+        if (typeof refreshTrainingData === 'function') {
+          refreshTrainingData();
+        }
       });
     } else {
       Swal.fire({
@@ -1278,7 +1447,7 @@ function submitApprovedRequestDeletion(requestId, trainingTitle, password) {
     const errorMessage = error.message;
     let title = 'Error';
     let icon = 'error';
-    
+
     if (errorMessage.includes('Invalid password') || errorMessage.includes('password')) {
       title = '<i class="fas fa-lock text-danger"></i> Password Verification Failed';
       icon = 'error';
@@ -1286,7 +1455,7 @@ function submitApprovedRequestDeletion(requestId, trainingTitle, password) {
       title = 'Network Error';
       icon = 'error';
     }
-    
+
     Swal.fire({
       icon: icon,
       title: title,
@@ -1297,16 +1466,276 @@ function submitApprovedRequestDeletion(requestId, trainingTitle, password) {
   });
 }
 
-// Load courses when modal opens - show only assigned upcoming trainings
+// Automatically create training requests for all upcoming trainings
+document.addEventListener('DOMContentLoaded', function() {
+  const upcomingTrainings = @json($upcomingTrainings ?? []);
+
+  // Process all upcoming trainings
+  if (upcomingTrainings && upcomingTrainings.length > 0) {
+    // Filter trainings that need requests and apply deduplication
+    const seenTrainings = new Set();
+    const trainingsNeedingRequests = upcomingTrainings.filter(training => {
+      // Skip if already has request_id
+      if (training.request_id) {
+        return false;
+      }
+      
+      // Skip if training title is empty or generic
+      const rawTitle = training.training_title || '';
+      if (!rawTitle.trim() || ['training course', 'unknown course', 'unknown', 'course', 'n/a'].includes(rawTitle.toLowerCase().trim())) {
+        return false;
+      }
+      
+      // Apply deduplication logic similar to PHP controller
+      const normalizedTitle = rawTitle.toLowerCase()
+        .replace(/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      
+      // Create deduplication key
+      const deduplicationKey = training.course_id ? 
+        `course_${training.course_id}` : 
+        `title_${normalizedTitle}`;
+      
+      // Check if already seen
+      if (seenTrainings.has(deduplicationKey)) {
+        return false;
+      }
+      
+      // Skip if this is from a recently unassigned competency gap
+      if (training.source && ['competency_gap', 'competency_assigned', 'admin_assigned'].includes(training.source)) {
+        // This would require an AJAX call to check, but for now we'll rely on the PHP-side filtering
+        // The PHP side already handles the $wasRecentlyUnassigned check
+      }
+      
+      // Add to seen set
+      seenTrainings.add(deduplicationKey);
+      return true;
+    });
+
+    // Process unique trainings that need requests
+    trainingsNeedingRequests.forEach(training => {
+      // Add a small delay between requests to prevent overwhelming the server
+      setTimeout(() => {
+        autoCreateTrainingRequest(training);
+      }, Math.random() * 1000); // Random delay up to 1 second
+    });
+
+    // Notification popup removed per user request
+    // Process trainings silently without showing popup
+  }
+});
+
+// Function to create or update training progress
+  function createOrUpdateProgress(training) {
+    const formData = new FormData();
+    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+    formData.append('training_title', training.training_title);
+    formData.append('course_id', training.course_id || '');
+    formData.append('status', 'In Progress');
+    formData.append('progress', '0');
+    formData.append('source', 'auto_request');
+    formData.append('_token', '{{ csrf_token() }}');
+
+    // Create or update progress
+    fetch('/employee/training-progress/create-or-update', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'Accept': 'application/json'
+      },
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Progress tracking initialized silently
+        // Update progress data instead of full reload
+        if (typeof refreshTrainingData === 'function') {
+          refreshTrainingData();
+        }
+      }
+    })
+    .catch(error => console.error('Error updating progress:', error));
+  }
+
+// Function to show success notification for automatic request
+function showAutoRequestSuccess(training) {
+  const toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true
+  });
+
+  toast.fire({
+    icon: 'success',
+    title: `Automatic request created for: ${training.training_title}`
+  });
+}
+
+// Function to automatically create training request and progress with enhanced synchronization
+async function autoCreateTrainingRequest(training) {
+  // Initialize SweetAlert2 toast
+  const Toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    didOpen: (toast) => {
+      toast.addEventListener('mouseenter', Swal.stopTimer)
+      toast.addEventListener('mouseleave', Swal.resumeTimer)
+    }
+  });
+
+  try {
+    // 1. First check for duplicates with enhanced checking
+    const existingRequests = Array.from(document.querySelectorAll('tr[data-training-title], tr[data-course-id]'));
+    const isDuplicate = existingRequests.some(tr => {
+      const trainingTitle = tr.getAttribute('data-training-title');
+      const courseId = tr.getAttribute('data-course-id');
+      return (training.training_title && trainingTitle === training.training_title) ||
+             (training.course_id && courseId === training.course_id?.toString());
+    });
+
+    // If duplicate found, update progress and return
+    if (isDuplicate) {
+      // Training update handled silently
+      await createOrUpdateProgress(training);
+      return;
+    }
+
+    // 2. Processing training silently
+    // 3. Create the training request
+    const formData = new FormData();
+    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+    formData.append('training_title', training.training_title);
+    formData.append('course_id', training.course_id || '');
+    formData.append('status', 'Approved'); // Auto-approve upcoming trainings
+    formData.append('requested_date', '{{ now()->format("Y-m-d") }}');
+    formData.append('reason', 'Automatically enrolled from upcoming trainings');
+    formData.append('current_level', training.current_level || '0');
+    formData.append('source', training.source || 'upcoming_training');
+
+    const response = await fetch('{{ route("employee.my_trainings.store") }}', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'Accept': 'application/json'
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.success) {
+      // 4. Create progress tracking
+      const progressCreated = await createOrUpdateProgress(training);
+      if (!progressCreated) {
+        throw new Error('Failed to initialize progress tracking');
+      }
+
+      // 5. Create notification
+      try {
+        const notifFormData = new FormData();
+        notifFormData.append('message', `New training automatically enrolled: ${training.training_title}`);
+        notifFormData.append('type', 'training');
+        notifFormData.append('_token', '{{ csrf_token() }}');
+
+        await fetch('/employee/my-trainings/notifications/store', {
+          method: 'POST',
+          headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+          },
+          body: notifFormData
+        });
+      } catch (notifError) {
+        console.warn('Notification creation failed:', notifError);
+        // Continue execution even if notification fails
+      }
+
+      // 6. UI counters removed - no longer needed since counters are hidden
+
+      // 7. Show success notification
+      await Toast.fire({
+        icon: 'success',
+        title: 'Success!',
+        text: `Successfully enrolled in: ${training.training_title}`,
+        background: '#d1e7dd',
+        color: '#0a3622'
+      });
+
+      // 8. Update data instead of full page reload
+      if (typeof refreshTrainingData === 'function') {
+        setTimeout(() => {
+          refreshTrainingData();
+        }, 1000);
+      }
+    } else {
+      throw new Error(data.message || 'Failed to create training request');
+    }
+  } catch (error) {
+    console.error('Error in autoCreateTrainingRequest:', error);
+
+    await Toast.fire({
+      icon: 'error',
+      title: 'Error',
+      text: `Failed to process training: ${error.message}`,
+      background: '#f8d7da',
+      color: '#842029'
+    });
+  }
+}
+
+// Handle automatic training requests and modal functionality
 document.getElementById('addTrainingRequestModal')?.addEventListener('show.bs.modal', function () {
   const courseSelect = document.getElementById('courseSelect');
 
-  // Clear existing options
-  courseSelect.innerHTML = '<option value="">Loading courses...</option>';
-
-  // Get upcoming trainings assigned to this employee
+  // Process any unprocessed upcoming trainings first and set up course selection
   const upcomingTrainings = @json($upcomingTrainings ?? []);
 
+  // Clear existing options first
+  courseSelect.innerHTML = '<option value="">Loading courses...</option>';
+
+  // Process unprocessed trainings with deduplication
+  if (upcomingTrainings && upcomingTrainings.length > 0) {
+    const seenTrainings = new Set();
+    const uniqueTrainings = upcomingTrainings.filter(training => {
+      // Apply deduplication logic
+      const normalizedTitle = training.training_title ? 
+        training.training_title.toLowerCase()
+          .replace(/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim() : '';
+      
+      const deduplicationKey = training.course_id ? 
+        `course_${training.course_id}` : 
+        `title_${normalizedTitle}`;
+      
+      if (seenTrainings.has(deduplicationKey)) {
+        return false;
+      }
+      
+      seenTrainings.add(deduplicationKey);
+      return true;
+    });
+
+    uniqueTrainings.forEach(training => {
+      if (!document.querySelector(`tr[data-course-id="${training.course_id}"]`)) {
+        autoCreateTrainingRequest(training);
+      }
+    });
+  }
+
+  // Set up course selection
   courseSelect.innerHTML = '<option value="">Choose a course...</option>';
 
   // Add assigned upcoming trainings as course options
@@ -1409,6 +1838,229 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <script>
+  // Function to start exam
+  function startExam(trainingTitle, existingCourseId) {
+    if (existingCourseId && existingCourseId !== '') {
+      // If we have a course ID, redirect directly to start exam
+      window.open(`/employee/exam/start/${existingCourseId}`, '_blank');
+    } else {
+      // If no course ID, show error message
+      Swal.fire({
+        icon: 'error',
+        title: 'Cannot Start Exam',
+        html: `
+          <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>No Course Found</strong><br>
+            Unable to find a course for "${trainingTitle}". Please contact your administrator.
+          </div>
+        `,
+        confirmButtonColor: '#dc3545',
+        confirmButtonText: 'OK'
+      });
+    }
+  }
+
+// Function to create or update training progress with enhanced error handling and notifications
+async function createOrUpdateProgress(training) {
+  // Configure Toast notifications
+  const Toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    didOpen: (toast) => {
+      toast.addEventListener('mouseenter', Swal.stopTimer)
+      toast.addEventListener('mouseleave', Swal.resumeTimer)
+    }
+  });
+
+    // Show initial processing notification
+    try {
+      // Show initial processing notification
+      await Toast.fire({
+        icon: 'info',
+        title: 'Processing',
+        text: 'Initializing progress tracking...',
+        background: '#cff4fc',
+        color: '#055160'
+      });
+
+      // Create FormData object with enhanced error checking
+      const formData = new FormData();
+
+      if (!training || !training.training_title) {
+        throw new Error('Invalid training data provided');
+      }
+
+      formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+      formData.append('training_title', training.training_title);
+      formData.append('course_id', training.course_id || '');
+      formData.append('status', 'Not Started');
+      formData.append('progress', '0');
+      formData.append('source', training.source || 'auto_request');
+      formData.append('_token', '{{ csrf_token() }}');
+
+    // Add additional training info if available
+    if (training.start_date) formData.append('start_date', training.start_date);
+    if (training.end_date) formData.append('end_date', training.end_date);
+    if (training.assigned_by) formData.append('assigned_by', training.assigned_by);
+    if (training.current_level) formData.append('current_level', training.current_level);
+
+    // Create or update progress
+    const response = await fetch('/employee/training/progress', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'Accept': 'application/json'
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to update progress');
+    }
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Progress tracking initialized silently
+
+      // Update progress data instead of full reload
+      if (typeof refreshTrainingData === 'function') {
+        setTimeout(() => {
+          refreshTrainingData();
+        }, 500);
+      }
+
+      return true;
+    } else {
+      throw new Error(data.message || 'Failed to update progress');
+    }
+  } catch (error) {
+    console.error('Error in createOrUpdateProgress:', error);
+
+    await Toast.fire({
+      icon: 'error',
+      title: 'Error',
+      text: `Failed to update progress: ${error.message}`,
+      background: '#f8d7da',
+      color: '#842029'
+    });
+
+    return false;
+  }
+      // Progress tracking initialized silently
+
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to update progress');
+      }
+
+      // Update progress data instead of full reload
+      if (typeof refreshTrainingData === 'function') {
+        refreshTrainingData();
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in createOrUpdateProgress:', error);
+
+      await Toast.fire({
+        icon: 'error',
+        title: 'Error',
+        text: `Failed to update progress: ${error.message}`,
+        background: '#f8d7da',
+        color: '#842029'
+      });
+
+      return false;
+    }    // First check if progress exists
+    const checkResponse = await fetch(`/employee/training/progress/check/${training.course_id || training.training_title}`, {
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'Accept': 'application/json'
+      }
+    });
+
+    const checkData = await checkResponse.json();
+    const exists = checkData.exists;
+
+    // Prepare form data with enhanced details
+    const formData = new FormData();
+    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+    formData.append('training_title', training.training_title);
+    formData.append('course_id', training.course_id || '');
+    formData.append('status', exists ? 'In Progress' : 'Not Started');
+    formData.append('progress', exists ? checkData.progress || '0' : '0');
+    formData.append('source', training.source || 'auto_request');
+    formData.append('_token', '{{ csrf_token() }}');
+
+    // Add additional training info if available
+    if (training.start_date) formData.append('start_date', training.start_date);
+    if (training.end_date) formData.append('end_date', training.end_date);
+    if (training.assigned_by) formData.append('assigned_by', training.assigned_by);
+    if (training.current_level) formData.append('current_level', training.current_level);
+
+    // Create or update progress
+    const response = await fetch('/employee/training/progress', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'Accept': 'application/json'
+      },
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Progress updated silently
+
+      // Create notification
+      const notifFormData = new FormData();
+      notifFormData.append('message', `Training progress ${exists ? 'updated' : 'initialized'} for: ${training.training_title}`);
+      notifFormData.append('_token', '{{ csrf_token() }}');
+
+      await fetch('/employee/notifications/create', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+          'Accept': 'application/json'
+        },
+        body: notifFormData
+      });
+
+      // Update progress data instead of full reload
+      if (typeof refreshTrainingData === 'function') {
+        setTimeout(() => {
+          refreshTrainingData();
+        }, 1000);
+      }
+
+      return true;
+    } else {
+      throw new Error(data.message || 'Failed to update progress');
+    }
+  } catch (error) {
+    console.error('Error in createOrUpdateProgress:', error);
+
+    await loadingToast.fire({
+      icon: 'error',
+      title: `Failed to update progress: ${error.message}`
+    });
+
+    return false;
+  }
+}  // Function to refresh training requests (silent refresh without loading popup)
+  function refreshTrainingRequests() {
+    // Silent refresh without intrusive loading popup
+    if (typeof refreshTrainingData === 'function') {
+      refreshTrainingData();
+    }
+  }
+
   // Remove all .modal-backdrop elements on page load and after any modal event
   function removeAllModalBackdrops() {
     document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) {
@@ -1435,14 +2087,14 @@ document.addEventListener('DOMContentLoaded', function() {
     const reviewerModal = document.createElement('div');
     reviewerModal.className = 'modal fade';
     reviewerModal.id = 'reviewerModal';
-    
+
     // Create modal header
     const modalDialog = document.createElement('div');
     modalDialog.className = 'modal-dialog modal-lg';
-    
+
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
-    
+
     // Create header
     const modalHeader = document.createElement('div');
     modalHeader.className = 'modal-header bg-success text-white';
@@ -1450,13 +2102,13 @@ document.addEventListener('DOMContentLoaded', function() {
       <h5 class="modal-title"><i class="fas fa-book-open me-2"></i>Training Reviewer: ${trainingTitle}</h5>
       <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
     `;
-    
+
     // Create body
     const modalBody = document.createElement('div');
     modalBody.className = 'modal-body';
     modalBody.id = 'reviewerContent';
     modalBody.innerHTML = getDefaultContent();
-    
+
     // Create footer
     const modalFooter = document.createElement('div');
     modalFooter.className = 'modal-footer';
@@ -1466,7 +2118,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <i class="fas fa-check me-1"></i>Mark as Reviewed
       </button>
     `;
-    
+
     // Assemble modal
     modalContent.appendChild(modalHeader);
     modalContent.appendChild(modalBody);
@@ -1763,10 +2415,12 @@ document.addEventListener('DOMContentLoaded', function() {
           deleteModal.hide();
         }
 
-        // Reload page after short delay
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        // Update data instead of full page reload
+        if (typeof refreshTrainingData === 'function') {
+          setTimeout(() => {
+            refreshTrainingData();
+          }, 500);
+        }
       } else {
         button.innerHTML = originalText;
         button.disabled = false;
@@ -1783,41 +2437,28 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Toast notification function
   function showToast(type, message) {
-    // Create toast container if it doesn't exist
-    let toastContainer = document.getElementById('toastContainer');
-    if (!toastContainer) {
-      toastContainer = document.createElement('div');
-      toastContainer.id = 'toastContainer';
-      toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
-      toastContainer.style.zIndex = '9999';
-      document.body.appendChild(toastContainer);
-    }
+    // Use SweetAlert2 for toasts
+    const Toast = Swal.mixin({
+      toast: true,
+      position: 'top-end',
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
+      didOpen: (toast) => {
+        toast.addEventListener('mouseenter', Swal.stopTimer)
+        toast.addEventListener('mouseleave', Swal.resumeTimer)
+      }
+    });
 
-    // Create toast element
-    const toastId = 'toast_' + Date.now();
-    const toastHtml = `
-      <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="toast-header bg-${type === 'success' ? 'success' : 'danger'} text-white">
-          <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
-          <strong class="me-auto">${type === 'success' ? 'Success' : 'Error'}</strong>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
-        </div>
-        <div class="toast-body">
-          ${message}
-        </div>
-      </div>
-    `;
+    // Map type to icon
+    let icon = 'success';
+    if (type === 'error') icon = 'error';
+    else if (type === 'info') icon = 'info';
+    else if (type === 'warning') icon = 'warning';
 
-    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-
-    // Show toast
-    const toastElement = document.getElementById(toastId);
-    const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
-    toast.show();
-
-    // Remove toast element after it's hidden
-    toastElement.addEventListener('hidden.bs.toast', () => {
-      toastElement.remove();
+    Toast.fire({
+      icon: icon,
+      title: message
     });
   }
 

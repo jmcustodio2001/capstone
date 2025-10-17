@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -135,7 +135,34 @@
     <div class="col-md-2">
       <div class="card text-center border-0 shadow-sm">
         <div class="card-body py-3">
-          <h5 class="text-info mb-1">{{ $progress->count() }}</h5>
+          @php
+            // EXACT SAME LOGIC as the progress table to ensure consistency
+            $currentEmployeeId = Auth::user()->employee_id;
+            
+            // Filter to ONLY approved training requests from _requests.blade.php (same as table)
+            $approvedRequestsOnly = collect($progress)->filter(function ($item) use ($currentEmployeeId) {
+                // Only include items that are from approved training requests
+                return isset($item->source) && 
+                       $item->source == 'approved_request' && 
+                       ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId;
+            });
+            
+            // Group by training title to eliminate any remaining duplicates (same as table)
+            $groupedProgress = $approvedRequestsOnly->groupBy(function ($item) {
+                $trainingTitle = strtolower(trim($item->training_title ?? ''));
+                
+                // Normalize training title (EXACT same logic as table)
+                $normalizedTitle = preg_replace('/\s+/', ' ', $trainingTitle);
+                $normalizedTitle = str_replace([' training', ' course', ' program', ' skills'], '', $normalizedTitle);
+                $normalizedTitle = trim($normalizedTitle);
+                
+                return $normalizedTitle;
+            });
+            
+            // Count unique groups (same as table)
+            $actualProgressCount = $groupedProgress->count();
+          @endphp
+          <h5 class="text-info mb-1">{{ $actualProgressCount }}</h5>
           <small class="text-muted">In Progress</small>
         </div>
       </div>
@@ -201,6 +228,24 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Translation Service Provider
+const translationService = {
+    translations: {},
+    translate(key, params = {}) {
+        let text = this.translations[key] || key;
+        Object.keys(params).forEach(param => {
+            text = text.replace(`:${param}`, params[param]);
+        });
+        return text;
+    },
+    setTranslations(translations) {
+        this.translations = translations;
+    }
+};
+
+window.translationService = translationService;
+</script>
+<script>
 document.addEventListener('DOMContentLoaded', function() {
     const links = document.querySelectorAll('.breadcrumb-link');
     const sections = document.querySelectorAll('.training-section');
@@ -220,9 +265,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Refresh progress data when progress section is shown
+        // Store the current tab in sessionStorage to persist across refreshes
+        sessionStorage.setItem('currentTrainingTab', targetId);
+
+        // Disable automatic refresh when switching to progress tab
+        // This prevents unwanted page reloads and tab switching
+        // Users can manually refresh if needed
         if (targetId === 'progress') {
-            refreshTrainingProgress();
+            console.log('Switched to progress tab - no automatic refresh');
         }
     }
 
@@ -245,28 +295,43 @@ document.addEventListener('DOMContentLoaded', function() {
         refreshTrainingProgress();
     }
 
+    // Determine which tab to show
+    let targetTab = null;
+    
     if (tabParam && ['upcoming', 'completed', 'requests', 'progress', 'feedback', 'notifications'].includes(tabParam)) {
         // Show the tab specified in URL parameter
-        showSection(tabParam);
+        targetTab = tabParam;
     } else {
-        // Show the first section by default
-        if (links.length > 0) {
-            const firstTarget = links[0].getAttribute('data-target');
-            showSection(firstTarget);
+        // Check if user was on a specific tab before (persist across refreshes)
+        const savedTab = sessionStorage.getItem('currentTrainingTab');
+        if (savedTab && ['upcoming', 'completed', 'requests', 'progress', 'feedback', 'notifications'].includes(savedTab)) {
+            targetTab = savedTab;
+        } else {
+            // Show the first section by default only if no saved tab
+            if (links.length > 0) {
+                targetTab = links[0].getAttribute('data-target');
+            }
         }
     }
+    
+    if (targetTab) {
+        showSection(targetTab);
+    }
 
-    // Auto-refresh progress data on page load
+    // Auto-refresh only on initial page load (reduced frequency)
     setTimeout(function() {
-        refreshTrainingProgress();
-    }, 500);
-
-    // Force refresh every 10 seconds for real-time updates
-    setInterval(function() {
-        if (document.getElementById('progress-section').style.display !== 'none') {
+        // Only auto-create requests if explicitly needed
+        if (urlParams.get('auto_create') === 'true') {
+            autoCreateRequestsFromUpcoming();
+        }
+        // Only refresh if explicitly requested via URL parameter
+        if (refreshParam) {
             refreshTrainingProgress();
         }
-    }, 10000);
+    }, 1000);
+
+    // Remove aggressive auto-refresh - only refresh when user switches to progress tab
+    // This prevents constant refreshing that causes UI lag
 });
 
 // Function to refresh training progress data
@@ -282,11 +347,11 @@ function refreshTrainingProgress() {
     .then(data => {
         if (data.success) {
             console.log('Training progress refreshed:', data);
-            // Reload the page to show updated progress if any records were updated
+            // Update UI elements instead of full page reload to prevent refresh loop
             if (data.updated_count > 0) {
-                setTimeout(function() {
-                    window.location.reload();
-                }, 500);
+                console.log(`Updated ${data.updated_count} progress records`);
+                // Refresh only the progress section content instead of full page
+                updateProgressSection(data);
             }
         } else {
             console.error('Failed to refresh training progress:', data.message);
@@ -294,6 +359,77 @@ function refreshTrainingProgress() {
     })
     .catch(error => {
         console.error('Error refreshing training progress:', error);
+    });
+}
+
+// Function to refresh training data and update counts
+function refreshTrainingData() {
+    fetch('/employee/my-trainings/refresh-data', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Training data refreshed:', data);
+            // Update the counts in the dashboard
+            updateDashboardCounts(data.counts);
+        } else {
+            console.error('Failed to refresh training data:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing training data:', error);
+    });
+}
+
+// Function to update dashboard counts
+function updateDashboardCounts(counts) {
+    // Update the count displays
+    const upcomingCard = document.querySelector('.col-md-2:nth-child(1) h5');
+    const completedCard = document.querySelector('.col-md-2:nth-child(2) h5');
+    const requestsCard = document.querySelector('.col-md-2:nth-child(3) h5');
+    const progressCard = document.querySelector('.col-md-2:nth-child(4) h5');
+    const feedbackCard = document.querySelector('.col-md-2:nth-child(5) h5');
+    const notificationsCard = document.querySelector('.col-md-2:nth-child(6) h5');
+
+    if (upcomingCard) upcomingCard.textContent = counts.upcoming;
+    if (completedCard) completedCard.textContent = counts.completed;
+    if (requestsCard) requestsCard.textContent = counts.requests;
+    if (progressCard) progressCard.textContent = counts.progress;
+    if (feedbackCard) feedbackCard.textContent = counts.feedback;
+    if (notificationsCard) notificationsCard.textContent = counts.notifications;
+}
+
+// Function to auto-create requests from upcoming trainings
+function autoCreateRequestsFromUpcoming() {
+    fetch('/employee/my-trainings/auto-create-requests', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log('Auto-created training requests:', data);
+            if (data.created_count > 0) {
+                console.log(`Successfully auto-created ${data.created_count} training requests`);
+                // Refresh data after creation
+                setTimeout(() => {
+                    refreshTrainingData();
+                }, 500);
+            }
+        } else {
+            console.error('Failed to auto-create training requests:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error auto-creating training requests:', error);
     });
 }
 

@@ -388,20 +388,6 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <!-- Real-time Clock & Attendance Actions -->
-    <div class="clock-container">
-      <div id="current-date"></div>
-      <div id="current-time"></div>
-      <div class="attendance-actions mt-4">
-        <button id="time-in-btn" class="btn btn-time-in btn-attendance">
-          <i class="bi bi-alarm-fill me-2"></i>Time In
-        </button>
-        <button id="time-out-btn" class="btn btn-time-out btn-attendance" disabled>
-          <i class="bi bi-alarm me-2"></i>Time Out
-        </button>
-      </div>
-    </div>
-
     <!-- Attendance Stats -->
     <div class="stats-container">
       <div class="stat-card">
@@ -580,39 +566,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script>
-    // Real-time clock functionality
-    function updateClock() {
-      const now = new Date();
-      const timeEl = document.getElementById('current-time');
-      const dateEl = document.getElementById('current-date');
+    // Initialize page functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      // Time In button event listener
+      const timeInBtn = document.getElementById('time-in-btn');
+      if (timeInBtn) {
+        timeInBtn.addEventListener('click', function() {
+          // Use current time automatically
+          const now = new Date();
+          const timeString = now.toTimeString().slice(0,5); // Get HH:MM format
 
-      // Format time (12-hour format)
-      let hours = now.getHours();
-      const minutes = now.getMinutes().toString().padStart(2, '0');
-      const seconds = now.getSeconds().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? 'PM' : 'AM';
-      hours = hours % 12;
-      hours = hours ? hours : 12; // 0 should be 12
-      const displayHours = hours.toString().padStart(2, '0');
-      timeEl.textContent = `${displayHours}:${minutes}:${seconds} ${ampm}`;
-
-      // Format date
-      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-      dateEl.textContent = now.toLocaleDateString('en-US', options);
-    }
-
-    // Update clock immediately and then every second
-    updateClock();
-    setInterval(updateClock, 1000);
-
-    // Time In/Out functionality
-    document.getElementById('time-in-btn').addEventListener('click', function() {
-      // Use current time automatically
-      const now = new Date();
-      const timeString = now.toTimeString().slice(0,5); // Get HH:MM format
-
-      // Show SweetAlert confirmation
-      Swal.fire({
+          // Show SweetAlert confirmation
+          Swal.fire({
         title: 'Time In Confirmation',
         text: `Clock in at ${timeString}?`,
         icon: 'question',
@@ -641,7 +606,10 @@ document.addEventListener('DOMContentLoaded', function() {
           .then(data => {
             if (data.success) {
               // Update UI
-              document.getElementById('time-out-btn').disabled = false;
+              const timeOutBtn = document.getElementById('time-out-btn');
+              if (timeOutBtn) {
+                timeOutBtn.disabled = false;
+              }
               btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Clocked In';
 
               // Show SweetAlert success
@@ -682,9 +650,13 @@ document.addEventListener('DOMContentLoaded', function() {
           });
         }
       });
-    });
+        });
+      }
 
-    document.getElementById('time-out-btn').addEventListener('click', function() {
+      // Time Out button event listener
+      const timeOutBtn = document.getElementById('time-out-btn');
+      if (timeOutBtn) {
+        timeOutBtn.addEventListener('click', function() {
       // Use current time automatically
       const now = new Date();
       const timeString = now.toTimeString().slice(0,5); // Get HH:MM format
@@ -761,19 +733,27 @@ document.addEventListener('DOMContentLoaded', function() {
           });
         }
       });
-    });
+        });
+      }
 
-    // Filter functionality
-    document.getElementById('month-filter').addEventListener('change', filterTable);
-    document.getElementById('year-filter').addEventListener('change', filterTable);
-    document.getElementById('status-filter').addEventListener('change', filterTable);
+      // Filter functionality
+      const monthFilter = document.getElementById('month-filter');
+      const yearFilter = document.getElementById('year-filter');
+      const statusFilter = document.getElementById('status-filter');
+      const resetFilters = document.getElementById('reset-filters');
 
-    document.getElementById('reset-filters').addEventListener('click', function() {
-      document.getElementById('month-filter').value = '';
-      document.getElementById('year-filter').value = '2025';
-      document.getElementById('status-filter').value = '';
-      filterTable();
-    });
+      if (monthFilter) monthFilter.addEventListener('change', filterTable);
+      if (yearFilter) yearFilter.addEventListener('change', filterTable);
+      if (statusFilter) statusFilter.addEventListener('change', filterTable);
+
+      if (resetFilters) {
+        resetFilters.addEventListener('click', function() {
+          if (monthFilter) monthFilter.value = '';
+          if (yearFilter) yearFilter.value = '2025';
+          if (statusFilter) statusFilter.value = '';
+          filterTable();
+        });
+      }
 
     function filterTable() {
       const monthFilter = document.getElementById('month-filter').value;
@@ -935,6 +915,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Check current attendance status from server
     function checkAttendanceStatus() {
+      // Only check status if we have attendance buttons on the page
+      const timeInBtn = document.getElementById('time-in-btn');
+      const timeOutBtn = document.getElementById('time-out-btn');
+      
+      if (!timeInBtn || !timeOutBtn) {
+        // No attendance buttons on this page, skip status check
+        return;
+      }
+
       fetch('{{ route("employee.attendance.status") }}', {
         method: 'GET',
         headers: {
@@ -948,23 +937,26 @@ document.addEventListener('DOMContentLoaded', function() {
           const timeInBtn = document.getElementById('time-in-btn');
           const timeOutBtn = document.getElementById('time-out-btn');
 
-          if (data.has_timed_in && !data.has_timed_out) {
-            // Already timed in, waiting for time out
-            timeInBtn.disabled = true;
-            timeInBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Clocked In';
-            timeOutBtn.disabled = false;
-          } else if (data.has_timed_out) {
-            // Already completed for the day
-            timeInBtn.disabled = false;
-            timeInBtn.innerHTML = '<i class="bi bi-alarm-fill me-2"></i>Time In';
-            timeOutBtn.disabled = true;
-            timeOutBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Clocked Out';
-          } else {
-            // Ready to time in
-            timeInBtn.disabled = false;
-            timeInBtn.innerHTML = '<i class="bi bi-alarm-fill me-2"></i>Time In';
-            timeOutBtn.disabled = true;
-            timeOutBtn.innerHTML = '<i class="bi bi-alarm me-2"></i>Time Out';
+          // Only update buttons if they exist on the page
+          if (timeInBtn && timeOutBtn) {
+            if (data.has_timed_in && !data.has_timed_out) {
+              // Already timed in, waiting for time out
+              timeInBtn.disabled = true;
+              timeInBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Clocked In';
+              timeOutBtn.disabled = false;
+            } else if (data.has_timed_out) {
+              // Already completed for the day
+              timeInBtn.disabled = false;
+              timeInBtn.innerHTML = '<i class="bi bi-alarm-fill me-2"></i>Time In';
+              timeOutBtn.disabled = true;
+              timeOutBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Clocked Out';
+            } else {
+              // Ready to time in
+              timeInBtn.disabled = false;
+              timeInBtn.innerHTML = '<i class="bi bi-alarm-fill me-2"></i>Time In';
+              timeOutBtn.disabled = true;
+              timeOutBtn.innerHTML = '<i class="bi bi-alarm me-2"></i>Time Out';
+            }
           }
         }
       })
@@ -975,6 +967,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Update today's hours in real-time
     function updateTodayHours() {
+      // Check if today-hours element exists before starting interval
+      const todayHoursElement = document.getElementById('today-hours');
+      if (!todayHoursElement) {
+        return; // No today-hours element on this page
+      }
+
       // This function updates the today's hours display
       // It will be called after time in to show live hours
       setInterval(() => {
@@ -998,7 +996,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
             const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-            document.getElementById('today-hours').textContent = `${diffHours}h ${diffMinutes}m`;
+            const todayHoursElement = document.getElementById('today-hours');
+            if (todayHoursElement) {
+              todayHoursElement.textContent = `${diffHours}h ${diffMinutes}m`;
+            }
           }
         })
         .catch(error => {
@@ -1007,14 +1008,43 @@ document.addEventListener('DOMContentLoaded', function() {
       }, 60000); // Update every minute
     }
 
-    // Export functionality
-    document.getElementById('export-btn').addEventListener('click', function() {
-      exportToCSV();
-    });
+      // Export functionality
+      const exportBtn = document.getElementById('export-btn');
+      if (exportBtn) {
+        exportBtn.addEventListener('click', function() {
+          exportToCSV();
+        });
+      }
 
-    // Print functionality
-    document.getElementById('print-btn').addEventListener('click', function() {
-      printAttendanceTable();
+      // Print functionality
+      const printBtn = document.getElementById('print-btn');
+      if (printBtn) {
+        printBtn.addEventListener('click', function() {
+          printAttendanceTable();
+        });
+      }
+
+      // Initialize page functionality
+      checkAttendanceStatus();
+      applyEarlyDepartureStyles();
+
+      // Start real-time updates if user has timed in
+      fetch('{{ route("employee.attendance.status") }}', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.has_timed_in && !data.has_timed_out) {
+          updateTodayHours();
+        }
+      })
+      .catch(error => {
+        console.error('Error initializing:', error);
+      });
     });
 
     // Export to CSV function
@@ -1404,30 +1434,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
       });
     }
-
-    // Initialize page
-    document.addEventListener('DOMContentLoaded', function() {
-      checkAttendanceStatus();
-      applyEarlyDepartureStyles();
-
-      // Start real-time updates if user has timed in
-      fetch('{{ route("employee.attendance.status") }}', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        }
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success && data.has_timed_in && !data.has_timed_out) {
-          updateTodayHours();
-        }
-      })
-      .catch(error => {
-        console.error('Error initializing:', error);
-      });
-    });
   </script>
 </body>
 </html>

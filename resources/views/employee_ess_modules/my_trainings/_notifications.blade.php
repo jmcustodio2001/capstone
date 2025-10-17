@@ -21,7 +21,7 @@
             <tr>
               <td>{{ $n->id }}</td>
               <td>{{ $n->message }}</td>
-              <td>{{ $n->sent_at ? $n->sent_at->format('M d, Y H:i') : 'N/A' }}</td>
+              <td>{{ $n->sent_at ? $n->sent_at->format('M d, Y') : 'N/A' }}</td>
               <td class="text-center">
                 <button
                   class="btn btn-info btn-sm"
@@ -29,7 +29,7 @@
                   data-bs-target="#viewNotificationModal"
                   data-id="{{ $n->id }}"
                   data-message="{{ $n->message }}"
-                  data-sent="{{ $n->sent_at ? $n->sent_at->format('M d, Y H:i') : 'N/A' }}"
+                  data-sent="{{ $n->sent_at ? $n->sent_at->format('M d, Y') : 'N/A' }}"
                 ><i class="bi bi-eye"></i></button>
               </td>
             </tr>

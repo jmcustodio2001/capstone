@@ -13,7 +13,7 @@
       <table class="table table-hover align-middle">
         <thead class="table-light">
           <tr>
-            <th>Progress ID</th>
+            <th>Training ID</th>
             <th>Training Title</th>
             <th>Progress (%)</th>
             <th>Status</th>
@@ -24,11 +24,51 @@
         </thead>
         <tbody>
           @php
-            $uniqueProgress = collect($progress)->unique('progress_id');
+            // ONLY show approved training requests - no other sources
+            $currentEmployeeId = Auth::user()->employee_id;
+            
+            // Filter to ONLY approved training requests from _requests.blade.php
+            $approvedRequestsOnly = collect($progress)->filter(function ($item) use ($currentEmployeeId) {
+                // Only include items that are from approved training requests
+                return isset($item->source) && 
+                       $item->source == 'approved_request' && 
+                       ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId;
+            });
+            
+            // Group by training title to eliminate any remaining duplicates
+            $groupedProgress = $approvedRequestsOnly->groupBy(function ($item) {
+                $trainingTitle = strtolower(trim($item->training_title ?? ''));
+                
+                // Normalize training title
+                $normalizedTitle = preg_replace('/\s+/', ' ', $trainingTitle);
+                $normalizedTitle = str_replace([' training', ' course', ' program', ' skills'], '', $normalizedTitle);
+                $normalizedTitle = trim($normalizedTitle);
+                
+                return $normalizedTitle;
+            });
+            
+            // Take only one item per unique training and add sequential ID
+            $uniqueProgress = collect();
+            $sequentialId = 1;
+            
+            foreach ($groupedProgress as $group) {
+                // Get the most recent approved request
+                $bestItem = $group->sortByDesc(function($item) {
+                    $updated = $item->last_updated ?? $item->updated_at ?? now();
+                    return strtotime($updated);
+                })->first();
+                
+                // Add sequential ID for display
+                $bestItem->display_id = $sequentialId++;
+                $uniqueProgress->push($bestItem);
+            }
+            
+            // Sort by display ID to maintain consistent order
+            $uniqueProgress = $uniqueProgress->sortBy('display_id')->values();
           @endphp
           @forelse($uniqueProgress as $p)
             <tr>
-              <td>{{ $p->progress_id }}</td>
+              <td>{{ $p->display_id }}</td>
               <td>
                 @php
                   // Show only the requested training title, not duplicated course titles
@@ -61,28 +101,17 @@
                 <div class="d-flex flex-column">
                   <div class="fw-semibold">{{ $displayTitle }}</div>
 
-                  {{-- Source badges --}}
+                  {{-- Training metadata badges only --}}
+                  @if($trainingMetadata && ($trainingMetadata['category'] || $trainingMetadata['duration']))
                   <div class="mt-1">
-                    @if(isset($p->source))
-                      @if($p->source == 'approved_request')
-                        <span class="badge bg-info me-1">From Request</span>
-                      @elseif($p->source == 'employee_training_dashboard')
-                        <span class="badge bg-success me-1">Admin Assigned</span>
-                      @elseif($p->source == 'competency_assigned')
-                        <span class="badge bg-warning me-1">Competency Based</span>
-                      @endif
+                    @if($trainingMetadata['category'])
+                      <span class="badge bg-secondary me-1">{{ $trainingMetadata['category'] }}</span>
                     @endif
-
-                    {{-- Training metadata badges --}}
-                    @if($trainingMetadata)
-                      @if($trainingMetadata['category'])
-                        <span class="badge bg-secondary me-1">{{ $trainingMetadata['category'] }}</span>
-                      @endif
-                      @if($trainingMetadata['duration'])
-                        <span class="badge bg-light text-dark me-1">{{ $trainingMetadata['duration'] }}</span>
-                      @endif
+                    @if($trainingMetadata['duration'])
+                      <span class="badge bg-light text-dark me-1">{{ $trainingMetadata['duration'] }}</span>
                     @endif
                   </div>
+                  @endif
 
                    {{-- Enhanced remarks and metadata --}}
                    @php
@@ -360,7 +389,7 @@
                 @endphp
 
                 <div class="d-flex flex-column">
-                  <span class="fw-semibold">{{ $mostRecentUpdate->format('M d, Y H:i') }}</span>
+                  <span class="fw-semibold">{{ $mostRecentUpdate->format('M d, Y') }}</span>
                   <small class="text-muted">
                     <i class="bi bi-clock me-1"></i>{{ $mostRecentUpdate->diffForHumans() }}
                     <br><i class="bi bi-arrow-repeat me-1"></i>{{ $updateSource }}
@@ -455,20 +484,12 @@
                     {{-- View Details button --}}
                     <button
                       class="btn btn-outline-primary btn-sm"
-                      onclick="viewProgressDetails('{{ $p->progress_id }}', '{{ $displayTitle }}', {{ $finalProgressValue }}, '{{ $displayStatus }}', '{{ $mostRecentUpdate->format('M d, Y H:i') }}', '{{ $p->remarks ?? 'No remarks' }}', '{{ $progressSource ?? ($p->source ?? 'Not specified') }}', '{{ $showExpiredDate ? \Carbon\Carbon::parse($expiredDate)->format('M d, Y') : 'Not Set' }}', '{{ $p->course_id ?? '' }}')"
+                      onclick="viewProgressDetails('{{ $p->progress_id }}', '{{ $displayTitle }}', {{ $finalProgressValue }}, '{{ $displayStatus }}', '{{ $mostRecentUpdate->format('M d, Y') }}', '{{ $p->remarks ?? 'No remarks' }}', '{{ $progressSource ?? ($p->source ?? 'Not specified') }}', '{{ $showExpiredDate ? \Carbon\Carbon::parse($expiredDate)->format('M d, Y') : 'Not Set' }}', '{{ $p->course_id ?? '' }}')"
                       title="View detailed progress information"
                     >
                       <i class="bi bi-eye"></i> View Details
                     </button>
 
-                    {{-- Delete button --}}
-                    <button
-                      class="btn btn-outline-danger btn-sm"
-                      onclick="deleteProgressWithConfirmation('{{ $p->progress_id }}', '{{ $displayTitle }}')"
-                      title="Delete this training progress"
-                    >
-                      <i class="bi bi-trash"></i> Delete
-                    </button>
                   @endif
                 </div>
               </td>

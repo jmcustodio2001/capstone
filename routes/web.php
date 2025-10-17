@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\AdminController;
@@ -15,6 +16,9 @@ use App\Http\Controllers\CustomerServiceSalesSkillsTrainingController;
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\ExamController;
 use App\Http\Controllers\SuccessionReadinessRatingController;
+use App\Http\Controllers\EmployeeCertificationController;
+use App\Http\Controllers\EmployeeAwardController;
+use App\Http\Controllers\TrainingProgressUpdateController;
 
 Route::get('/', function () {
     return view('landingpage');
@@ -144,6 +148,66 @@ Route::get('/login', function () {
 // Admin login routes
 Route::get('/admin/login', [AdminController::class, 'showLoginForm'])->name('admin.login');
 Route::post('/admin/login', [AdminController::class, 'login'])->name('admin.login.submit');
+Route::post('/admin/verify-otp', [AdminController::class, 'verifyOTP'])->name('admin.verify_otp');
+Route::post('/admin/resend-otp', [AdminController::class, 'resendOTP'])->name('admin.resend_otp');
+Route::get('/admin/csrf-token', [AdminController::class, 'refreshCSRF'])->name('admin.csrf_token');
+Route::get('/admin/test-email', function() {
+    try {
+        // Check what admin users exist in the database
+        $adminUsers = \App\Models\User::whereIn('role', ['admin', 'superadmin'])->get();
+
+        Log::info("Found admin users:", $adminUsers->toArray());
+
+        if ($adminUsers->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No admin users found in database',
+                'admin_users' => []
+            ]);
+        }
+
+        // Use the first admin user found
+        $adminUser = $adminUsers->first();
+
+        $otpService = new \App\Services\OTPService();
+
+        // Test admin user object
+        $testAdmin = (object) [
+            'email' => $adminUser->email,
+            'first_name' => $adminUser->name,
+            'last_name' => '',
+            'employee_id' => 'ADMIN_' . $adminUser->id
+        ];
+
+        $testOTP = '123456';
+
+        Log::info("Testing admin email sending to: {$testAdmin->email}");
+
+        $result = $otpService->sendAdminOTP($testAdmin, $testOTP);
+
+        return response()->json([
+            'success' => $result['success'],
+            'message' => $result['message'],
+            'test_email' => $testAdmin->email,
+            'test_otp' => $testOTP,
+            'admin_users_in_db' => $adminUsers->map(function($user) {
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role
+                ];
+            })
+        ]);
+
+    } catch (\Exception $e) {
+        Log::error('Test email error: ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
+})->name('admin.test_email');
 Route::post('/admin/logout', [AdminController::class, 'logout'])->name('admin.logout');
 Route::post('/admin/verify-password', [AdminController::class, 'verifyPassword'])->name('admin.verify_password')->middleware(['auth:admin', 'admin.auth']);
 Route::get('/admin/check-password-verification', [AdminController::class, 'checkPasswordVerification'])->name('admin.check_password_verification')->middleware(['auth:admin', 'admin.auth']);
@@ -291,6 +355,16 @@ Route::middleware('auth:employee')->group(function () {
     Route::post('/employee/profile/update', [EmployeeDashboardController::class, 'updateProfile'])->name('employee.profile.update');
     Route::post('/employee/leave-application', [EmployeeDashboardController::class, 'submitLeaveApplication'])->name('employee.leave-application.submit');
     Route::post('/employee/attendance/log', [EmployeeDashboardController::class, 'logAttendance'])->name('employee.attendance.log');
+    Route::get('/employee/dashboard/get-counts', [EmployeeDashboardController::class, 'getDashboardCounts'])->name('employee.dashboard.get_counts');
+    
+    // Employee Training Progress - create or update
+    Route::post('/employee/training-progress/create-or-update', [TrainingProgressUpdateController::class, 'store'])->name('employee.training_progress.create_or_update');
+    Route::post('/employee/training/refresh-progress', [TrainingProgressUpdateController::class, 'refreshProgress'])->name('employee.training.refresh_progress');
+    
+    // Employee Training Data Refresh
+    Route::get('/employee/my-trainings/refresh-data', [App\Http\Controllers\MyTrainingController::class, 'refreshData'])->name('employee.my_trainings.refresh_data');
+    Route::get('/employee/my-trainings/get-counts', [App\Http\Controllers\MyTrainingController::class, 'getTrainingCounts'])->name('employee.my_trainings.get_counts');
+    Route::post('/employee/my-trainings/auto-create-requests', [App\Http\Controllers\MyTrainingController::class, 'autoCreateRequests'])->name('employee.my_trainings.auto_create_requests');
 });
 // Test OTP Route (for debugging)
 Route::get('/test-otp/{email}', function($email) {
@@ -370,6 +444,34 @@ Route::post('/admin/employee-competency-profiles/sync-training', [EmployeeCompet
 Route::get('/admin/employee-competency-profiles/get-training-progress', [EmployeeCompetencyProfileController::class, 'getTrainingProgress'])->name('employee_competency_profiles.get_training_progress')->middleware(['auth:admin', 'admin.auth']);
 Route::get('/api/employee-competency-profile/{employeeId}/{competencyId}', [EmployeeCompetencyProfileController::class, 'getCurrentLevel'])->name('api.employee_competency_profile.current_level')->middleware('auth:admin');
 
+// Employee Competency Profile skill gap detection
+Route::get('/admin/employee-competency-profiles/detect-skill-gaps/{employeeId}', [EmployeeCompetencyProfileController::class, 'detectSkillGaps'])
+    ->name('employee_competency_profiles.detect_skill_gaps')->middleware(['auth:admin', 'admin.auth']);
+
+// Get employee's existing skills
+Route::get('/admin/employee-competency-profiles/get-employee-skills/{employeeId}', [EmployeeCompetencyProfileController::class, 'getEmployeeSkills'])
+    ->name('employee_competency_profiles.get_employee_skills')->middleware(['auth:admin', 'admin.auth']);
+
+// Initialize basic skills for employee
+Route::post('/admin/employee-competency-profiles/initialize-basic-skills/{employeeId}', [EmployeeCompetencyProfileController::class, 'initializeBasicSkills'])
+    ->name('employee_competency_profiles.initialize_basic_skills')->middleware(['auth:admin', 'admin.auth']);
+
+// Employee Certification Routes
+Route::get('/admin/employee-certifications', [EmployeeCertificationController::class, 'index'])->name('employee_certifications.index')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/employee-certifications', [EmployeeCertificationController::class, 'store'])->name('employee_certifications.store')->middleware(['auth:admin', 'admin.auth']);
+Route::put('/admin/employee-certifications/{certification}', [EmployeeCertificationController::class, 'update'])->name('employee_certifications.update')->middleware(['auth:admin', 'admin.auth']);
+Route::delete('/admin/employee-certifications/{certification}', [EmployeeCertificationController::class, 'destroy'])->name('employee_certifications.destroy')->middleware(['auth:admin', 'admin.auth']);
+Route::get('/admin/employee-certifications/employee/{employeeId}', [EmployeeCertificationController::class, 'getEmployeeCertificates'])->name('employee_certifications.employee')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/employee-certifications/verify-password', [EmployeeCertificationController::class, 'verifyPassword'])->name('employee_certifications.verify_password')->middleware(['auth:admin', 'admin.auth']);
+
+// Employee Awards Routes
+Route::get('/admin/employee-awards', [EmployeeAwardController::class, 'getAllAwards'])->name('employee_awards.all')->middleware(['auth:admin', 'admin.auth']);
+Route::get('/admin/employee-awards/employee/{employeeId}', [EmployeeAwardController::class, 'getEmployeeAwards'])->name('employee_awards.employee')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/employee-awards', [EmployeeAwardController::class, 'store'])->name('employee_awards.store')->middleware(['auth:admin', 'admin.auth']);
+Route::put('/admin/employee-awards/{awardId}/status', [EmployeeAwardController::class, 'updateStatus'])->name('employee_awards.update_status')->middleware(['auth:admin', 'admin.auth']);
+Route::delete('/admin/employee-awards/{awardId}', [EmployeeAwardController::class, 'destroy'])->name('employee_awards.destroy')->middleware(['auth:admin', 'admin.auth']);
+Route::get('/admin/employee-awards/statistics/{employeeId?}', [EmployeeAwardController::class, 'getStatistics'])->name('employee_awards.statistics')->middleware(['auth:admin', 'admin.auth']);
+
 Route::get('/admin/competency-gap-analysis', [CompetencyGapAnalysisController::class, 'index'])->name('competency_gap_analysis.index')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/competency-gap-analysis', [CompetencyGapAnalysisController::class, 'store'])->name('competency_gap_analysis.store')->middleware(['auth:admin', 'admin.auth']);
 Route::put('/admin/competency-gap-analysis/{id}', [CompetencyGapAnalysisController::class, 'update'])->name('competency_gap_analysis.update')->middleware(['auth:admin', 'admin.auth']);
@@ -388,6 +490,7 @@ Route::post('/admin/competency-gap-analysis/assign-to-training', [CompetencyGapA
 Route::post('/admin/competency-gap-analysis/{id}/unassign-training', [CompetencyGapAnalysisController::class, 'unassignFromTraining'])->name('competency_gap_analysis.unassign_training')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/competency-gap-analysis/fix-expiration-dates', [CompetencyGapAnalysisController::class, 'fixExpirationDates'])->name('competency_gap_analysis.fix_expiration_dates')->middleware(['auth:admin', 'admin.auth']);
 Route::get('/admin/competency-gap-analysis/create-table', [CompetencyGapAnalysisController::class, 'createCompetencyGapsTable'])->name('competency_gap_analysis.create_table')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/competency-gap-analysis/auto-detect-gaps', [CompetencyGapAnalysisController::class, 'autoDetectGaps'])->name('competency_gap_analysis.auto_detect_gaps')->middleware(['auth:admin', 'admin.auth']);
 
 // Admin Routes - Learning Management
 Route::get('/admin/course-management', [CourseManagementController::class, 'index'])->name('admin.course_management.index')->middleware('auth:admin');
@@ -483,7 +586,7 @@ Route::get('/test-otp-email', function() {
             'employee_email' => $employee->email,
             'email_config' => $emailConfig,
             'result' => $result,
-            'timestamp' => now()->toDateTimeString()
+            'timestamp' => now()
         ]);
 
     } catch (\Exception $e) {
@@ -1061,6 +1164,7 @@ Route::post('/employee/destination-training/decline', [App\Http\Controllers\MyTr
 Route::get('/employee/destination-training/details/{id}', [App\Http\Controllers\MyTrainingController::class, 'getDestinationTrainingDetails'])->name('employee.destination_training.details')->middleware('auth:employee');
 
 // Training progress update routes
+Route::post('/employee/training/progress', [App\Http\Controllers\TrainingProgressUpdateController::class, 'store'])->name('employee.training.progress.store')->middleware('auth:employee');
 Route::post('/employee/training/update-progress-after-exam', [App\Http\Controllers\TrainingProgressUpdateController::class, 'updateProgressAfterExam'])->name('employee.training.update_progress_after_exam')->middleware('auth:employee');
 Route::post('/employee/training/refresh-progress', [App\Http\Controllers\TrainingProgressUpdateController::class, 'refreshProgress'])->name('employee.training.refresh_progress')->middleware('auth:employee');
 

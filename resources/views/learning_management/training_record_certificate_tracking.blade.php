@@ -181,9 +181,6 @@
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Training Records</h4>
         <div class="d-flex gap-2">
-          <button class="btn btn-primary" onclick="addCertificateWithConfirmation()">
-            <i class="bi bi-plus-lg me-1"></i> Add New Record
-          </button>
           <button class="btn btn-success" onclick="autoGenerateWithConfirmation()">
             <i class="bi bi-magic me-1"></i> Auto-Generate Missing Certificates
           </button>
@@ -194,10 +191,16 @@
       </div>
       <div class="card-body">
         <div class="row g-4">
-        @forelse($certificates as $certificate)
+        @php
+          // Group certificates by employee
+          $groupedCertificates = $certificates->groupBy('employee_id');
+        @endphp
+        
+        @forelse($groupedCertificates as $employeeId => $employeeCertificates)
           @php
-            // Safe employee data extraction with null checks
-            $employee = $certificate->employee ?? null;
+            // Get employee data from first certificate
+            $firstCertificate = $employeeCertificates->first();
+            $employee = $firstCertificate->employee ?? null;
             $firstName = $employee->first_name ?? 'Unknown';
             $lastName = $employee->last_name ?? 'Employee';
             $fullName = $firstName . ' ' . $lastName;
@@ -211,7 +214,6 @@
 
             // Generate consistent color based on employee ID for fallback
             $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-            $employeeId = $certificate->employee_id ?? 'default';
             $colorIndex = abs(crc32($employeeId)) % count($colors);
             $bgColor = $colors[$colorIndex];
 
@@ -220,268 +222,265 @@
                 $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
             }
-
-            // Calculate accurate expiry date based on completion date and course type
-            $expiryDate = null;
-            if ($certificate->training_date) {
-                try {
-                    $completionDate = \Carbon\Carbon::parse($certificate->training_date);
-                    $course = $certificate->course ?? null;
-                    $courseTitle = $course && $course->course_title ? strtolower($course->course_title) : '';
-
-                    if (strpos($courseTitle, 'safety') !== false || strpos($courseTitle, 'security') !== false) {
-                        $expiryDate = $completionDate->copy()->addYear();
-                    } elseif (strpos($courseTitle, 'leadership') !== false || strpos($courseTitle, 'management') !== false) {
-                        $expiryDate = $completionDate->copy()->addYears(3);
-                    } elseif (strpos($courseTitle, 'technical') !== false || strpos($courseTitle, 'software') !== false) {
-                        $expiryDate = $completionDate->copy()->addYears(2);
-                    } elseif (strpos($courseTitle, 'destination') !== false || strpos($courseTitle, 'location') !== false) {
-                        $expiryDate = $completionDate->copy()->addMonths(18);
-                    } else {
-                        $expiryDate = $completionDate->copy()->addYears(2);
-                    }
-                } catch (\Exception $e) {
-                    $expiryDate = null;
-                }
-            }
-            
-            if (!$expiryDate && $certificate->certificate_expiry) {
-                try {
-                    $expiryDate = \Carbon\Carbon::parse($certificate->certificate_expiry);
-                } catch (\Exception $e) {
-                    $expiryDate = null;
-                }
-            }
-
-            // Calculate expiry status
-            $expiryStatus = 'valid';
-            $expiryText = 'No expiry';
-            $expiryClass = 'text-muted';
-            if ($expiryDate) {
-                $now = \Carbon\Carbon::now();
-                $daysUntilExpiry = $now->diffInDays($expiryDate, false);
-                
-                if ($daysUntilExpiry < 0) {
-                    $expiryStatus = 'expired';
-                    $expiryText = $expiryDate->format('M d, Y') . ' (EXPIRED)';
-                    $expiryClass = 'text-danger fw-bold';
-                } elseif ($daysUntilExpiry <= 30) {
-                    $expiryStatus = 'expiring-soon';
-                    $expiryText = $expiryDate->format('M d, Y') . ' (Expires soon)';
-                    $expiryClass = 'text-warning fw-bold';
-                } elseif ($daysUntilExpiry <= 90) {
-                    $expiryStatus = 'expiring';
-                    $expiryText = $expiryDate->format('M d, Y') . ' (' . $daysUntilExpiry . ' days left)';
-                    $expiryClass = 'text-info fw-bold';
-                } else {
-                    $expiryStatus = 'valid';
-                    $expiryText = $expiryDate->format('M d, Y') . ' (Valid)';
-                    $expiryClass = 'text-success';
-                }
-            }
-
-            // Remarks logic
-            $remarkText = 'No remarks';
-            $remarkClass = 'text-muted';
-            if($certificate->status) {
-              switch(strtolower($certificate->status)) {
-                case 'completed':
-                  $remarkText = 'Passed';
-                  $remarkClass = 'text-success fw-semibold';
-                  break;
-                case 'expired':
-                  $remarkText = 'Failed';
-                  $remarkClass = 'text-danger fw-semibold';
-                  break;
-                case 'pending':
-                  $remarkText = 'In Progress';
-                  $remarkClass = 'text-warning fw-semibold';
-                  break;
-                case 'pending examination':
-                  $remarkText = 'Awaiting Exam';
-                  $remarkClass = 'text-info fw-semibold';
-                  break;
-                default:
-                  if($certificate->remarks && !empty($certificate->remarks)) {
-                    $remarkText = $certificate->remarks;
-                    $remarkClass = 'text-dark';
-                  }
-              }
-            } elseif($certificate->remarks && !empty($certificate->remarks)) {
-              $remarkText = $certificate->remarks;
-              $remarkClass = 'text-dark';
-            }
-
-            // Generate card header color based on status - Blue-Gray Theme
-            $headerColors = [
-                'completed' => 'linear-gradient(135deg, #6c7b95, #8fa4c7)',
-                'pending' => 'linear-gradient(135deg, #5a6c8a, #7289b0)',
-                'pending examination' => 'linear-gradient(135deg, #4a5a78, #6c7b95)',
-                'expired' => 'linear-gradient(135deg, #3d4a63, #5a6c8a)',
-            ];
-            $statusKey = strtolower($certificate->status ?? 'pending');
-            $headerColor = $headerColors[$statusKey] ?? 'linear-gradient(135deg, #6c7b95, #8fa4c7)';
           @endphp
 
-          <div class="col-lg-6 col-xl-4">
+          <div class="col-12">
             <div class="certificate-card h-100" style="border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); transition: all 0.3s ease;">
-            <!-- Card Header with Gradient -->
-            <div class="card-header" style="background: {{ $headerColor }}; color: white; padding: 1rem; position: relative;">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-center">
-                  <div class="me-3">
-                    <img src="{{ $profilePicUrl }}"
-                         alt="{{ $firstName }} {{ $lastName }}"
-                         class="rounded-circle border border-white"
-                         style="width: 50px; height: 50px; object-fit: cover;"
-                         onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($initials) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
+              <!-- Employee Header -->
+              <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                  <div class="d-flex align-items-center">
+                    <div class="me-3">
+                      <img src="{{ $profilePicUrl }}"
+                           alt="{{ $firstName }} {{ $lastName }}"
+                           class="rounded-circle border"
+                           style="width: 60px; height: 60px; object-fit: cover;"
+                           onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($initials) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
+                    </div>
+                    <div>
+                      <h4 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h4>
+                      <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted">
+                          <i class="bi bi-person-badge me-1"></i>ID: {{ $employeeId ?? 'N/A' }}
+                        </small>
+                        <span class="badge bg-primary px-2 py-1">
+                          <i class="bi bi-award me-1"></i>{{ $employeeCertificates->count() }} Certificate{{ $employeeCertificates->count() > 1 ? 's' : '' }}
+                        </span>
+                        @if(!$employee)
+                          <span class="badge bg-danger">Employee record not found</span>
+                        @endif
+                      </div>
+                    </div>
                   </div>
                   <div>
-                    <h5 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h5>
-                    <p class="mb-0 opacity-75">
-                      <i class="bi bi-person-badge me-1"></i>ID: {{ $certificate->employee_id ?? 'N/A' }}
-                      @if(!$employee)
-                        <span class="ms-2 badge bg-danger bg-opacity-75">Employee record not found</span>
-                      @endif
-                    </p>
-                  </div>
-                </div>
-                <div class="text-end">
-                  <div class="badge bg-white bg-opacity-25 px-3 py-2 mb-1">
-                    <i class="bi bi-hash me-1"></i>{{ $certificate->id }}
-                  </div>
-                  <div>
-                    @if($certificate->status == 'Completed')
-                      <span class="badge bg-success bg-opacity-75 text-white px-3 py-2">
-                        <i class="bi bi-check-circle me-1"></i>{{ $certificate->status }}
-                      </span>
-                    @elseif($certificate->status == 'Pending' || $certificate->status == 'Pending Examination')
-                      <span class="badge bg-warning bg-opacity-75 text-white px-3 py-2">
-                        <i class="bi bi-clock me-1"></i>{{ $certificate->status }}
-                      </span>
-                    @else
-                      <span class="badge bg-danger bg-opacity-75 text-white px-3 py-2">
-                        <i class="bi bi-x-circle me-1"></i>{{ $certificate->status }}
-                      </span>
-                    @endif
+                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#certificates-{{ $employeeId }}" aria-expanded="false">
+                      <i class="bi bi-eye me-1"></i>View Certificates
+                    </button>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Card Body -->
-            <div class="card-body p-4">
-              <div class="row g-4">
-                <!-- Course Information -->
-                <div class="col-md-6">
-                  <div class="info-section">
-                    <h6 class="fw-bold text-primary mb-2">
-                      <i class="bi bi-book me-2"></i>Course Information
-                    </h6>
-                    <div class="bg-light p-3 rounded">
-                      <p class="mb-1 fw-semibold">
-                        @if($certificate->course && isset($certificate->course->course_title))
-                          {{ $certificate->course->course_title }}
-                        @elseif($certificate->course_id)
-                          <span class="text-muted">Course ID: {{ $certificate->course_id }}</span>
-                        @else
-                          <span class="text-muted">No course</span>
-                        @endif
-                      </p>
-                      <small class="text-muted">
-                        <i class="bi bi-calendar-check me-1"></i>
-                        Completed: 
-                        @if($certificate->training_date)
-                          {{ \Carbon\Carbon::parse($certificate->training_date)->format('M d, Y') }}
-                        @else
-                          <span class="text-muted">Not set</span>
-                        @endif
-                      </small>
-                    </div>
-                  </div>
-                </div>
+              <!-- Collapsible Certificates Grid -->
+              <div class="collapse" id="certificates-{{ $employeeId }}">
+                <div class="card-body p-4">
+                  <div class="row g-3">
+                  @foreach($employeeCertificates as $certificate)
+                    @php
+                      // Calculate accurate expiry date based on completion date and course type
+                      $expiryDate = null;
+                      if ($certificate->training_date) {
+                          try {
+                              $completionDate = \Carbon\Carbon::parse($certificate->training_date);
+                              $course = $certificate->course ?? null;
+                              $courseTitle = $course && $course->course_title ? strtolower($course->course_title) : '';
 
-                <!-- Certificate Details -->
-                <div class="col-md-6">
-                  <div class="info-section">
-                    <h6 class="fw-bold text-success mb-2">
-                      <i class="bi bi-award me-2"></i>Certificate Details
-                    </h6>
-                    <div class="bg-light p-3 rounded">
-                      <p class="mb-1">
-                        <strong>Number:</strong>
-                        @if($certificate->certificate_number)
-                          {{ $certificate->certificate_number }}
-                        @else
-                          <span class="text-muted">No number</span>
-                        @endif
-                      </p>
-                      <p class="mb-0">
-                        <strong>Expiry:</strong>
-                        <span class="{{ $expiryClass }}">{{ $expiryText }}</span>
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                              if (strpos($courseTitle, 'safety') !== false || strpos($courseTitle, 'security') !== false) {
+                                  $expiryDate = $completionDate->copy()->addYear();
+                              } elseif (strpos($courseTitle, 'leadership') !== false || strpos($courseTitle, 'management') !== false) {
+                                  $expiryDate = $completionDate->copy()->addYears(3);
+                              } elseif (strpos($courseTitle, 'technical') !== false || strpos($courseTitle, 'software') !== false) {
+                                  $expiryDate = $completionDate->copy()->addYears(2);
+                              } elseif (strpos($courseTitle, 'destination') !== false || strpos($courseTitle, 'location') !== false) {
+                                  $expiryDate = $completionDate->copy()->addMonths(18);
+                              } else {
+                                  $expiryDate = $completionDate->copy()->addYears(2);
+                              }
+                          } catch (\Exception $e) {
+                              $expiryDate = null;
+                          }
+                      }
+                      
+                      if (!$expiryDate && $certificate->certificate_expiry) {
+                          try {
+                              $expiryDate = \Carbon\Carbon::parse($certificate->certificate_expiry);
+                          } catch (\Exception $e) {
+                              $expiryDate = null;
+                          }
+                      }
 
-                <!-- Certificate Actions -->
-                <div class="col-md-6">
-                  <div class="info-section">
-                    <h6 class="fw-bold text-info mb-2">
-                      <i class="bi bi-file-earmark-pdf me-2"></i>Certificate File
-                    </h6>
-                    <div class="bg-light p-3 rounded text-center">
-                      @if($certificate->certificate_url)
-                        <div class="d-flex gap-2 justify-content-center">
-                          <a href="{{ route('certificates.view', $certificate->id) }}" target="_blank" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-eye me-1"></i> View
-                          </a>
-                          <button class="btn btn-outline-success btn-sm" onclick="downloadCertificatePDF({{ $certificate->id }})">
-                            <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF
-                          </button>
+                      // Calculate expiry status
+                      $expiryStatus = 'valid';
+                      $expiryText = 'No expiry';
+                      $expiryClass = 'text-muted';
+                      if ($expiryDate) {
+                          $now = \Carbon\Carbon::now();
+                          $daysUntilExpiry = $now->diffInDays($expiryDate, false);
+                          
+                          if ($daysUntilExpiry < 0) {
+                              $expiryStatus = 'expired';
+                              $expiryText = $expiryDate->format('M d, Y') . ' (EXPIRED)';
+                              $expiryClass = 'text-danger fw-bold';
+                          } elseif ($daysUntilExpiry <= 30) {
+                              $expiryStatus = 'expiring-soon';
+                              $expiryText = $expiryDate->format('M d, Y') . ' (Expires soon)';
+                              $expiryClass = 'text-warning fw-bold';
+                          } elseif ($daysUntilExpiry <= 90) {
+                              $expiryStatus = 'expiring';
+                              $expiryText = $expiryDate->format('M d, Y') . ' (' . $daysUntilExpiry . ' days left)';
+                              $expiryClass = 'text-info fw-bold';
+                          } else {
+                              $expiryStatus = 'valid';
+                              $expiryText = $expiryDate->format('M d, Y') . ' (Valid)';
+                              $expiryClass = 'text-success';
+                          }
+                      }
+
+                      // Remarks logic
+                      $remarkText = 'No remarks';
+                      $remarkClass = 'text-muted';
+                      if($certificate->status) {
+                        switch(strtolower($certificate->status)) {
+                          case 'completed':
+                            $remarkText = 'Passed';
+                            $remarkClass = 'text-success fw-semibold';
+                            break;
+                          case 'expired':
+                            $remarkText = 'Failed';
+                            $remarkClass = 'text-danger fw-semibold';
+                            break;
+                          case 'pending':
+                            $remarkText = 'In Progress';
+                            $remarkClass = 'text-warning fw-semibold';
+                            break;
+                          case 'pending examination':
+                            $remarkText = 'Awaiting Exam';
+                            $remarkClass = 'text-info fw-semibold';
+                            break;
+                          default:
+                            if($certificate->remarks && !empty($certificate->remarks)) {
+                              $remarkText = $certificate->remarks;
+                              $remarkClass = 'text-dark';
+                            }
+                        }
+                      } elseif($certificate->remarks && !empty($certificate->remarks)) {
+                        $remarkText = $certificate->remarks;
+                        $remarkClass = 'text-dark';
+                      }
+                    @endphp
+
+                    <!-- Individual Certificate Card -->
+                    <div class="col-md-6 col-lg-4">
+                      <div class="card h-100 border-0 shadow-sm" style="border-radius: 8px;">
+                        <!-- Certificate Header -->
+                        <div class="card-header bg-light border-0">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center gap-2">
+                              <span class="badge bg-light text-dark px-2 py-1">
+                                <i class="bi bi-hash me-1"></i>{{ $certificate->id }}
+                              </span>
+                              @if($certificate->status == 'Completed')
+                                <span class="badge bg-success px-2 py-1">
+                                  <i class="bi bi-check-circle me-1"></i>Completed
+                                </span>
+                              @elseif($certificate->status == 'Pending' || $certificate->status == 'Pending Examination')
+                                <span class="badge bg-warning px-2 py-1">
+                                  <i class="bi bi-clock me-1"></i>{{ $certificate->status }}
+                                </span>
+                              @else
+                                <span class="badge bg-danger px-2 py-1">
+                                  <i class="bi bi-x-circle me-1"></i>{{ $certificate->status }}
+                                </span>
+                              @endif
+                            </div>
+                          </div>
                         </div>
-                      @else
-                        @if($certificate->employee_id && $certificate->course_id)
-                          <button class="btn btn-outline-warning btn-sm" onclick="generateCertificateWithConfirmation('{{ $certificate->employee_id }}', '{{ $certificate->course_id }}', '{{ $certificate->id }}')">
-                            <i class="bi bi-magic me-1"></i> Generate Certificate
-                          </button>
-                        @else
-                          <span class="text-muted small">
-                            <i class="bi bi-exclamation-triangle me-1"></i>Missing data for generation
-                          </span>
-                        @endif
-                      @endif
-                    </div>
-                  </div>
-                </div>
 
-                <!-- Remarks -->
-                <div class="col-md-6">
-                  <div class="info-section">
-                    <h6 class="fw-bold text-secondary mb-2">
-                      <i class="bi bi-chat-text me-2"></i>Remarks
-                    </h6>
-                    <div class="bg-light p-3 rounded">
-                      <span class="{{ $remarkClass }}">{{ $remarkText }}</span>
+                        <!-- Certificate Body -->
+                        <div class="card-body p-3">
+                          <!-- Course Information -->
+                          <div class="mb-3">
+                            <h6 class="fw-bold text-primary mb-2">
+                              <i class="bi bi-book me-1"></i>Course Information
+                            </h6>
+                            <p class="mb-1 fw-semibold small">
+                              @if($certificate->course && isset($certificate->course->course_title))
+                                {{ $certificate->course->course_title }}
+                              @elseif($certificate->course_id)
+                                <span class="text-muted">Course ID: {{ $certificate->course_id }}</span>
+                              @else
+                                <span class="text-muted">No course</span>
+                              @endif
+                            </p>
+                            <small class="text-muted">
+                              <i class="bi bi-calendar-check me-1"></i>
+                              Completed: 
+                              @if($certificate->training_date)
+                                {{ \Carbon\Carbon::parse($certificate->training_date)->format('M d, Y') }}
+                              @else
+                                <span class="text-muted">Not set</span>
+                              @endif
+                            </small>
+                          </div>
+
+                          <!-- Certificate Details -->
+                          <div class="mb-3">
+                            <h6 class="fw-bold text-success mb-2">
+                              <i class="bi bi-award me-1"></i>Certificate Details
+                            </h6>
+                            <p class="mb-1 small">
+                              <strong>Number:</strong>
+                              @if($certificate->certificate_number)
+                                {{ $certificate->certificate_number }}
+                              @else
+                                <span class="text-muted">No number</span>
+                              @endif
+                            </p>
+                            <p class="mb-0 small">
+                              <strong>Expiry:</strong>
+                              <span class="{{ $expiryClass }}">{{ $expiryText }}</span>
+                            </p>
+                          </div>
+
+                          <!-- Remarks -->
+                          <div class="mb-3">
+                            <h6 class="fw-bold text-secondary mb-2">
+                              <i class="bi bi-chat-text me-1"></i>Remarks
+                            </h6>
+                            <span class="{{ $remarkClass }} small">{{ $remarkText }}</span>
+                          </div>
+
+                          <!-- Certificate Actions -->
+                          <div class="text-center">
+                            @if($certificate->certificate_url)
+                              <div class="d-flex gap-1 justify-content-center">
+                                <a href="{{ route('certificates.view', $certificate->id) }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                                  <i class="bi bi-eye"></i> View
+                                </a>
+                                <button class="btn btn-outline-success btn-sm" onclick="downloadCertificatePDF({{ $certificate->id }})">
+                                  <i class="bi bi-file-earmark-pdf"></i> Download PDF
+                                </button>
+                              </div>
+                            @else
+                              @if($certificate->employee_id && $certificate->course_id)
+                                <button class="btn btn-outline-warning btn-sm" onclick="generateCertificateWithConfirmation('{{ $certificate->employee_id }}', '{{ $certificate->course_id }}', '{{ $certificate->id }}')">
+                                  <i class="bi bi-magic me-1"></i> Generate Certificate
+                                </button>
+                              @else
+                                <span class="text-muted small">
+                                  <i class="bi bi-exclamation-triangle me-1"></i>Missing data for generation
+                                </span>
+                              @endif
+                            @endif
+                          </div>
+                        </div>
+
+                        <!-- Certificate Footer -->
+                        <div class="card-footer bg-transparent border-0 pt-0">
+                          <div class="d-flex justify-content-center gap-1">
+                            <button class="btn btn-outline-primary btn-sm" onclick="editCertificateWithConfirmation({{ $certificate->id }})" title="Edit Record">
+                              <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="deleteCertificateWithConfirmation({{ $certificate->id }})" title="Delete Record">
+                              <i class="bi bi-trash"></i>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  @endforeach
                   </div>
                 </div>
               </div>
-
-              <!-- Action Buttons -->
-              <div class="row mt-4">
-                <div class="col-12">
-                  <div class="d-flex justify-content-end gap-2">
-                    <button class="btn btn-outline-primary" onclick="editCertificateWithConfirmation({{ $certificate->id }})" title="Edit Record">
-                      <i class="bi bi-pencil me-1"></i> Edit Record
-                    </button>
-                    <button class="btn btn-outline-danger" onclick="deleteCertificateWithConfirmation({{ $certificate->id }})" title="Delete Record">
-                      <i class="bi bi-trash me-1"></i> Delete Record
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
             </div>
           </div>
 
@@ -1754,6 +1753,31 @@
     }
 
 
+
+    // Collapsible certificate button functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      // Add event listeners to all collapse buttons
+      const collapseButtons = document.querySelectorAll('[data-bs-toggle="collapse"]');
+      
+      collapseButtons.forEach(button => {
+        const targetId = button.getAttribute('data-bs-target');
+        const targetElement = document.querySelector(targetId);
+        
+        if (targetElement) {
+          targetElement.addEventListener('show.bs.collapse', function() {
+            button.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Hide Certificates';
+            button.classList.remove('btn-outline-primary');
+            button.classList.add('btn-outline-secondary');
+          });
+          
+          targetElement.addEventListener('hide.bs.collapse', function() {
+            button.innerHTML = '<i class="bi bi-eye me-1"></i>View Certificates';
+            button.classList.remove('btn-outline-secondary');
+            button.classList.add('btn-outline-primary');
+          });
+        }
+      });
+    });
 
     // Toast functions removed - using SweetAlert2 throughout the application
   </script>

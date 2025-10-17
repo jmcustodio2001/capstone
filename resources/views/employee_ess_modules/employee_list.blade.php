@@ -17,10 +17,20 @@
       transition: all 0.3s ease;
       border-radius: 12px;
       overflow: hidden;
-      background: transparent !important;
+      background-color: #fff;
       display: flex;
       flex-direction: column;
       border: 1px solid rgba(0,0,0,0.125);
+    }
+
+    .employee-card-wrapper {
+      background: none;
+    }
+
+    .employee-card .card-header {
+      background-color: #f8f9fa;
+      border-bottom: 1px solid #dee2e6;
+      padding: 1rem;
     }
 
     .employee-card:hover {
@@ -28,41 +38,18 @@
       box-shadow: 0 8px 25px rgba(0,0,0,0.15) !important;
     }
 
-    .employee-card:hover .position-absolute.bg-primary {
-      opacity: 1 !important;
-    }
-
-    .employee-card .card-header {
-      position: relative;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-
-    .employee-card .card-header::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-      transition: left 0.5s;
-    }
-
-    .employee-card:hover .card-header::before {
-      left: 100%;
-    }
+    /* Removed custom card header styling to ensure consistent appearance */
 
     .employee-card .card-body {
       flex-grow: 1;
-      background: rgba(255,255,255,0.95) !important;
+      background: #fff;
       display: flex;
       flex-direction: column;
     }
 
     .employee-card .card-footer {
       flex-shrink: 0;
-      background-color: rgba(248,249,250,0.95) !important;
+      background-color: #f8f9fa;
       border-top: 1px solid #dee2e6;
     }
 
@@ -207,9 +194,6 @@
         <h4 class="fw-bold mb-0">Employee Directory</h4>
         <div class="d-flex gap-2">
           <input type="text" id="employee-search" class="form-control form-control-sm" placeholder="Search employees..." style="width: 200px;">
-          <button class="btn btn-primary" onclick="addEmployeeWithConfirmation()">
-            <i class="bi bi-plus-lg me-1"></i> Add Employee
-          </button>
         </div>
       </div>
       <div class="card-body">
@@ -219,12 +203,9 @@
             <div class="col-xl-4 col-lg-6 col-md-6 col-sm-12 employee-card-wrapper">
               <div class="card employee-card h-100 shadow-sm border-0 position-relative">
 
-                <!-- Dynamic Header with Gradient -->
-                <div class="card-header border-0 text-white position-relative"
-                     style="background: linear-gradient(135deg,
-                       {{ ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'][($index % 8)] }} 0%,
-                       {{ ['#FF8E8E', '#6EDDD6', '#67C3D1', '#A8D8C4', '#FFE4B5', '#E6B3E6', '#AAE0D0', '#F9E79F'][($index % 8)] }} 100%);
-                       border-radius: 12px 12px 0 0; min-height: 80px; display: flex; align-items: center; padding: 1rem;">
+                <!-- Card Header -->
+                <div class="card-header border-0 position-relative"
+                     style="background: #f8f9fa; border-radius: 12px 12px 0 0; min-height: 80px; display: flex; align-items: center; padding: 1rem;">
 
                   <!-- Employee Profile Section -->
                   <div class="d-flex align-items-center w-100">
@@ -335,10 +316,7 @@
                   <i class="bi bi-people display-1 text-muted"></i>
                 </div>
                 <h5 class="text-muted mb-2">No Employees Found</h5>
-                <p class="text-muted">There are currently no employees in the system.</p>
-                <button class="btn btn-primary" onclick="addEmployeeWithConfirmation()">
-                  <i class="bi bi-plus-lg me-2"></i>Add First Employee
-                </button>
+                <p class="text-muted">There are currently no employees in the system. Use PHP Artisan commands to create employee accounts.</p>
               </div>
             </div>
           @endforelse
@@ -370,103 +348,21 @@
   <script>
     // Initialize tooltips
     document.addEventListener('DOMContentLoaded', function() {
-      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-      var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
-      });
+      try {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]') || []);
+        if (tooltipTriggerList.length > 0) {
+          var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            if (tooltipTriggerEl && bootstrap && bootstrap.Tooltip) {
+              return new bootstrap.Tooltip(tooltipTriggerEl);
+            }
+            return null;
+          }).filter(Boolean);
+        }
+      } catch (error) {
+        console.warn('Tooltip initialization skipped:', error);
+      }
     });
 
-    // Add Employee with Password Confirmation
-    function addEmployeeWithConfirmation() {
-      Swal.fire({
-        title: '🔐 Admin Password Required',
-        html: `
-          <div class="text-start mb-3">
-            <p class="mb-2"><i class="bi bi-shield-check text-primary"></i> <strong>Security Verification</strong></p>
-            <p class="text-muted small mb-3">Please enter your admin password to add a new employee. This ensures only authorized personnel can create employee accounts.</p>
-          </div>
-          <input type="password" id="admin-password-input" class="swal2-input" placeholder="Enter your admin password" style="margin: 0;">
-        `,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Verify & Continue',
-        cancelButtonText: 'Cancel',
-        confirmButtonColor: '#0d6efd',
-        cancelButtonColor: '#6c757d',
-        preConfirm: () => {
-          const password = document.getElementById('admin-password-input').value;
-          if (!password) {
-            Swal.showValidationMessage('Please enter your password');
-            return false;
-          }
-          if (password.length < 3) {
-            Swal.showValidationMessage('Password must be at least 3 characters');
-            return false;
-          }
-          return password;
-        },
-        allowOutsideClick: false
-      }).then(async (result) => {
-        if (result.isConfirmed) {
-          const password = result.value;
-
-          // Show loading
-          Swal.fire({
-            title: 'Verifying Password...',
-            html: 'Please wait while we verify your credentials.',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            willOpen: () => {
-              Swal.showLoading();
-            }
-          });
-
-            try {
-              // Verify password with backend
-              const response = await fetch('/admin/verify-password', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json',
-                  'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                },
-                body: JSON.stringify({ password: password })
-              });
-
-              // Try to parse JSON safely
-              let result = null;
-              try {
-                result = await response.json();
-              } catch (parseErr) {
-                // Non-JSON response
-                throw new Error('Invalid server response during password verification');
-              }
-
-              if (response.ok && result && result.success) {
-                // Password verified, show add employee form
-                showAddEmployeeForm(password);
-              } else {
-                Swal.fire({
-                  title: '❌ Invalid Password',
-                  text: (result && result.message) ? result.message : 'The password you entered is incorrect. Please try again.',
-                  icon: 'error',
-                  confirmButtonColor: '#dc3545'
-                });
-              }
-            } catch (error) {
-              console.error('Password verification error:', error);
-              Swal.fire({
-                title: '⚠️ Verification Error',
-                text: error.message || 'An error occurred while verifying your password. Please try again.',
-                icon: 'error',
-                confirmButtonColor: '#dc3545'
-              });
-            }
-        }
-      });
-    }
 
     // Search functionality for card layout
     document.getElementById('employee-search').addEventListener('input', function() {
@@ -875,270 +771,7 @@
       });
     })();
 
-    // Show Add Employee Form after password verification
-    function showAddEmployeeForm(adminPassword) {
-      Swal.fire({
-        title: '👤 Add New Employee',
-        html: `
-          <form id="add-employee-form" class="text-start">
-              <div class="mb-3">
-                <label for="employee_id" class="form-label">Employee ID*</label>
-                <input type="text" id="employee_id" name="employee_id" class="form-control" value="{{ $nextEmployeeId }}" readonly>
-                <small class="text-muted">Suggested ID: {{ $nextEmployeeId }}</small>
-              </div>
-              <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Status*</label>
-                <select name="status" class="form-select" required>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">First Name*</label>
-                <input type="text" name="first_name" class="form-control" required>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Last Name*</label>
-                <input type="text" name="last_name" class="form-control" required>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Email*</label>
-                <input type="email" name="email" class="form-control" required>
-              </div>
-              <div class="col-md-6">
-          <label class="form-label fw-bold">Password*</label>
-          <input type="password" name="password" id="swal-password" class="form-control" required minlength="12">
-          <div id="swal-password-requirements" class="mt-1" style="font-size: 0.95em;">
-            <div id="swal-length-check" class="text-danger">✗ 12+ characters</div>
-            <div id="swal-upper-check" class="text-danger">✗ Uppercase</div>
-            <div id="swal-number-check" class="text-danger">✗ Number</div>
-            <div id="swal-symbol-check" class="text-danger">✗ Symbol</div>
-          </div>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Phone Number</label>
-                <input type="text" name="phone_number" class="form-control">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Position</label>
-                <input type="text" name="position" class="form-control">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Department</label>
-                <select name="department_id" class="form-select">
-                  <option value="">Select Department</option>
-                  <option value="1">Human Resources</option>
-                  <option value="2">Information Technology</option>
-                  <option value="3">Finance</option>
-                  <option value="4">Marketing</option>
-                  <option value="5">Operations</option>
-                  <option value="6">Customer Service</option>
-                </select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Address</label>
-                <input type="text" name="address" class="form-control">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label fw-bold">Hire Date</label>
-                <input type="date" name="hire_date" class="form-control">
-              </div>
-            </div>
-          </form>
-        `,
-        width: '800px',
-        showCancelButton: true,
-        confirmButtonText: '💾 Save Employee',
-        cancelButtonText: 'Cancel',
-        confirmButtonColor: '#198754',
-        cancelButtonColor: '#6c757d',
-        didOpen: () => {
-          const passwordInput = document.getElementById('swal-password');
-          passwordInput.addEventListener('input', function() {
-            const password = passwordInput.value;
-            // Length
-            const lengthCheck = document.getElementById('swal-length-check');
-            if (password.length >= 12) {
-              lengthCheck.className = 'text-success';
-              lengthCheck.innerHTML = '✓ 12+ characters';
-            } else {
-              lengthCheck.className = 'text-danger';
-              lengthCheck.innerHTML = '✗ 12+ characters';
-            }
-            // Uppercase
-            const upperCheck = document.getElementById('swal-upper-check');
-            if (/[A-Z]/.test(password)) {
-              upperCheck.className = 'text-success';
-              upperCheck.innerHTML = '✓ Uppercase';
-            } else {
-              upperCheck.className = 'text-danger';
-              upperCheck.innerHTML = '✗ Uppercase';
-            }
-            // Number
-            const numberCheck = document.getElementById('swal-number-check');
-            if (/\d/.test(password)) {
-              numberCheck.className = 'text-success';
-              numberCheck.innerHTML = '✓ Number';
-            } else {
-              numberCheck.className = 'text-danger';
-              numberCheck.innerHTML = '✗ Number';
-            }
-            // Symbol
-            const symbolCheck = document.getElementById('swal-symbol-check');
-            if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-              symbolCheck.className = 'text-success';
-              symbolCheck.innerHTML = '✓ Symbol';
-            } else {
-              symbolCheck.className = 'text-danger';
-              symbolCheck.innerHTML = '✗ Symbol';
-            }
-          });
-        },
-        preConfirm: () => {
-          const form = document.getElementById('add-employee-form');
-          const formData = new FormData(form);
-          const data = {};
 
-          // Validate required fields
-          const requiredFields = ['employee_id', 'status', 'first_name', 'last_name', 'email', 'password'];
-          const missingFields = [];
-
-          requiredFields.forEach(field => {
-            const value = formData.get(field);
-            if (!value || !value.trim()) {
-              missingFields.push(field.replace('_', ' ').toUpperCase());
-            } else {
-              data[field] = value.trim();
-            }
-          });
-
-          // Validate password requirements
-          const password = formData.get('password');
-          if (password) {
-            const errors = [];
-            if (password.length < 12) errors.push('at least 12 characters');
-            if (!/[A-Z]/.test(password)) errors.push('1 uppercase letter');
-            if (!/\d/.test(password)) errors.push('1 number');
-            if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) errors.push('1 symbol');
-
-            if (errors.length > 0) {
-              Swal.showValidationMessage(`Password missing: ${errors.join(', ')}`);
-              return false;
-            }
-          }
-
-          if (missingFields.length > 0) {
-            Swal.showValidationMessage(`Required fields: ${missingFields.join(', ')}`);
-            return false;
-          }
-
-          // Add optional fields
-          ['phone', 'position', 'department_id', 'address', 'hire_date'].forEach(field => {
-            const value = formData.get(field);
-            if (value && value.trim()) {
-              data[field] = value.trim();
-            }
-          });
-
-          return data;
-        },
-        allowOutsideClick: false
-      }).then(async (result) => {
-        if (result.isConfirmed) {
-          await submitEmployeeForm(result.value, adminPassword);
-        }
-      });
-    }
-
-    // Submit Employee Form
-    async function submitEmployeeForm(employeeData, adminPassword) {
-      // Show loading
-      Swal.fire({
-        title: 'Creating Employee...',
-        html: 'Please wait while we create the employee account.',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        willOpen: () => {
-          Swal.showLoading();
-        }
-      });
-
-      try {
-        const formData = new FormData();
-        Object.keys(employeeData).forEach(key => {
-          formData.append(key, employeeData[key]);
-        });
-        formData.append('admin_password', adminPassword);
-        formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-
-        const response = await fetch('{{ route('employees.store') }}', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: {
-            'Accept': 'application/json'
-          },
-          body: formData
-        });
-
-        // If server returns validation errors as JSON (422), parse and show them
-        if (response.status === 422) {
-          let payload = null;
-          try {
-            payload = await response.json();
-          } catch (parseErr) {
-            throw new Error('Validation failed, and server response could not be parsed.');
-          }
-
-          const errors = payload && payload.errors ? payload.errors : null;
-          if (errors) {
-            // Build a readable message
-            let messages = [];
-            Object.keys(errors).forEach(field => {
-              const fieldErrors = errors[field];
-              if (Array.isArray(fieldErrors)) {
-                fieldErrors.forEach(msg => messages.push(msg));
-              } else if (typeof fieldErrors === 'string') {
-                messages.push(fieldErrors);
-              }
-            });
-
-            Swal.fire({
-              title: '❌ Validation Error',
-              html: `<div class="text-start">${messages.map(m => `<div>• ${m}</div>`).join('')}</div>`,
-              icon: 'error',
-              confirmButtonColor: '#dc3545'
-            });
-            return;
-          }
-        }
-
-        if (response.ok) {
-          Swal.fire({
-            title: '✅ Success!',
-            text: 'Employee has been created successfully.',
-            icon: 'success',
-            timer: 2000,
-            timerProgressBar: true,
-            showConfirmButton: false
-          }).then(() => {
-            window.location.reload();
-          });
-        } else {
-          const errorText = await response.text();
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
-        }
-      } catch (error) {
-        console.error('Employee creation error:', error);
-        Swal.fire({
-          title: '❌ Creation Failed',
-          text: 'An error occurred while creating the employee. Please try again.',
-          icon: 'error',
-          confirmButtonColor: '#dc3545'
-        });
-      }
-    }
 
     // Show Edit Employee Form after password verification
     function showEditEmployeeForm(id, firstName, lastName, email, phone, position, department, address, status, adminPassword) {

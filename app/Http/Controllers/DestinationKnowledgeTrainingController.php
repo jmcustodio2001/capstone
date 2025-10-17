@@ -183,7 +183,7 @@ class DestinationKnowledgeTrainingController extends BaseController
         // Fix expiration dates for destination trainings that don't have proper expired_date
         $this->fixExpirationDates();
 
-        $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('created_at', 'desc')->get();
+        $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('id', 'asc')->get();
 
         // Don't automatically update progress from competency gap - preserve admin's input
         // foreach ($destinations as $destination) {
@@ -195,7 +195,7 @@ class DestinationKnowledgeTrainingController extends BaseController
 
         // Get destination masters for auto-population (with fallback if table doesn't exist)
         try {
-            $destinationMasters = DestinationMaster::active()->orderBy('destination_name')->get();
+            $destinationMasters = DestinationMaster::active()->orderBy('id', 'asc')->get();
         } catch (\Exception $e) {
             // Fallback: create empty collection if table doesn't exist
             $destinationMasters = collect([]);
@@ -1868,13 +1868,18 @@ public function requestActivation(Request $request, $id)
         try {
             // Get all destination knowledge training records with employee relationships
             $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('created_at', 'desc')->get();
+            
+            // Get all master destinations (possible training destinations)
+            $masterDestinations = DestinationMaster::where('is_active', true)->orderBy('id')->get();
 
             // Create a view for PDF generation
             $data = [
                 'destinations' => $destinations,
+                'masterDestinations' => $masterDestinations,
                 'title' => 'Destination Knowledge Training Report',
                 'generated_at' => date('Y-m-d H:i:s'),
-                'total_records' => $destinations->count()
+                'total_records' => $destinations->count(),
+                'total_master_destinations' => $masterDestinations->count()
             ];
 
             // Log activity

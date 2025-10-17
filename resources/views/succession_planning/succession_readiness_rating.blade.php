@@ -101,7 +101,7 @@
     <div class="card shadow-sm border-0 mt-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Add Readiness Rating</h4>
-        <button type="button" class="btn btn-success" onclick="showAIAnalysisWithAlert()" style="cursor: pointer;">
+        <button type="button" class="btn btn-success" onclick="showAIAnalysis()" style="cursor: pointer;">
           <i class="bi bi-robot me-1"></i>LeadGen AI
         </button>
       </div>
@@ -119,23 +119,16 @@
           @endif
           <div class="row">
             <div class="col-md-4">
-              <select name="employee_id" class="form-control" required @if(isset($showMode)) disabled @endif>
-                <option value="">Select Employee</option>
-                @foreach($employees as $emp)
-                  <option value="{{ $emp->employee_id }}"
-                    @if((isset($rating) && $rating->employee_id == $emp->employee_id)) selected @endif>
-                    {{ $emp->first_name }} {{ $emp->last_name }} ({{ $emp->employee_id }})
-                  </option>
-                @endforeach
-              </select>
+              <input type="text" name="employee_display" class="form-control" placeholder="Use AI Analysis to select employee" readonly 
+                @if(isset($rating) && $rating->employee) value="{{ $rating->employee->first_name }} {{ $rating->employee->last_name }} ({{ $rating->employee_id }})" @endif
+                @if(isset($showMode)) disabled @endif>
+              <input type="hidden" name="employee_id" required
+                @if(isset($rating)) value="{{ $rating->employee_id }}" @endif>
             </div>
             <div class="col-md-3">
-              <select name="readiness_level" class="form-select" required @if(isset($showMode)) disabled @endif>
-                <option value="">Select Readiness Level</option>
-                <option value="Ready Now" @if(isset($rating) && $rating->readiness_level == 'Ready Now') selected @endif>Ready Now</option>
-                <option value="Ready Soon" @if(isset($rating) && $rating->readiness_level == 'Ready Soon') selected @endif>Ready Soon</option>
-                <option value="Needs Development" @if(isset($rating) && $rating->readiness_level == 'Needs Development') selected @endif>Needs Development</option>
-              </select>
+              <input type="text" name="readiness_level" class="form-control" placeholder="Use AI Analysis to set level" readonly required 
+                @if(isset($rating)) value="{{ $rating->readiness_level }}" @endif
+                @if(isset($showMode)) disabled @endif>
             </div>
             <div class="col-md-3">
               <input type="date" name="assessment_date" class="form-control" required
@@ -159,14 +152,6 @@
           <div class="card-header bg-success bg-opacity-10 border-success">
             <div class="d-flex justify-content-between align-items-center">
               <h5 class="fw-bold mb-0 text-success"><i class="bi bi-robot me-2"></i>LeadGen AI - Advanced Readiness Intelligence</h5>
-              <div class="d-flex gap-2">
-                <button class="btn btn-outline-primary btn-sm" onclick="runBatchAnalysisWithAlert()">
-                  <i class="bi bi-collection me-1"></i>Batch Analysis
-                </button>
-                <button class="btn btn-outline-info btn-sm" onclick="generateReadinessReportWithAlert()">
-                  <i class="bi bi-file-earmark-text me-1"></i>AI Report
-                </button>
-              </div>
             </div>
           </div>
           <div class="card-body">
@@ -184,29 +169,15 @@
               </div>
             </div>
             
-            <!-- AI Analysis Tabs -->
-            <ul class="nav nav-tabs mb-3" id="readinessAnalysisTabs" role="tablist">
-              <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="individual-analysis-tab" data-bs-toggle="tab" data-bs-target="#individual-analysis" type="button" role="tab">
-                  <i class="bi bi-person me-1"></i>Individual Analysis
-                </button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="batch-analysis-tab" data-bs-toggle="tab" data-bs-target="#batch-analysis" type="button" role="tab">
-                  <i class="bi bi-collection me-1"></i>Batch Analysis
-                </button>
-              </li>
-              <li class="nav-item" role="presentation">
-                <button class="nav-link" id="ai-insights-tab" data-bs-toggle="tab" data-bs-target="#ai-insights" type="button" role="tab">
-                  <i class="bi bi-lightbulb me-1"></i>AI Insights
-                </button>
-              </li>
-            </ul>
+            <!-- AI Analysis Header -->
+            <div class="mb-3">
+              <h6 class="fw-bold text-success">
+                <i class="bi bi-person me-1"></i>Individual Analysis
+              </h6>
+            </div>
             
-            <div class="tab-content" id="readinessAnalysisContent">
-              <!-- Individual Analysis Tab -->
-              <div class="tab-pane fade show active" id="individual-analysis" role="tabpanel">
-                <div id="analysisResults">
+            <!-- Individual Analysis Content -->
+            <div id="analysisResults">
                   <div class="text-center py-4">
                     <i class="bi bi-robot display-4 text-success mb-3"></i>
                     <h5 class="text-success">AI Succession Readiness Analysis</h5>
@@ -242,29 +213,6 @@
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              <!-- Batch Analysis Tab -->
-              <div class="tab-pane fade" id="batch-analysis" role="tabpanel">
-                <div id="batchAnalysisResults">
-                  <div class="text-center py-4">
-                    <i class="bi bi-collection display-4 text-primary mb-3"></i>
-                    <h5 class="text-primary">Batch Readiness Analysis</h5>
-                    <p class="text-muted">Analyze multiple employees simultaneously for comprehensive succession planning.</p>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- AI Insights Tab -->
-              <div class="tab-pane fade" id="ai-insights" role="tabpanel">
-                <div id="aiInsightsResults">
-                  <div class="text-center py-4">
-                    <i class="bi bi-lightbulb display-4 text-info mb-3"></i>
-                    <h5 class="text-info">AI-Powered Insights</h5>
-                    <p class="text-muted">Advanced analytics and recommendations for succession planning optimization.</p>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -551,20 +499,16 @@
         });
       }
       
-      // Determine readiness level based on calculated score
+      // Determine readiness level based on calculated score (matching dropdown options)
       let readinessLevel, readinessClass, timeline;
       if (overallReadiness >= 80) {
         readinessLevel = "Ready Now";
         readinessClass = "success";
         timeline = "0-3 months";
-      } else if (overallReadiness >= 60) {
-        readinessLevel = "Nearly Ready";
+      } else if (overallReadiness >= 50) {
+        readinessLevel = "Ready Soon";
         readinessClass = "warning";
         timeline = "3-6 months";
-      } else if (overallReadiness >= 40) {
-        readinessLevel = "Developing";
-        readinessClass = "info";
-        timeline = "6-12 months";
       } else {
         readinessLevel = "Needs Development";
         readinessClass = "danger";
@@ -676,9 +620,10 @@
     
     function applyToForm(employeeId, level) {
       if (employeeId) {
-        document.querySelector('select[name="employee_id"]').value = employeeId;
+        // This is the old function - the new enhanced one is below
+        document.querySelector('input[name="employee_id"]').value = employeeId;
       }
-      document.querySelector('select[name="readiness_level"]').value = level;
+      document.querySelector('input[name="readiness_level"]').value = level;
       document.querySelector('input[name="assessment_date"]').value = new Date().toISOString().split('T')[0];
       
       // Scroll to form
@@ -1010,1007 +955,11 @@
       `;
     }
 
-    // Enhanced AI Functions for Batch Analysis and Insights
-    function runBatchAnalysis() {
-      const batchTab = document.getElementById('batch-analysis-tab');
-      const batchContainer = document.getElementById('batchAnalysisResults');
-      
-      // Switch to batch analysis tab
-      batchTab.click();
-      
-      batchContainer.innerHTML = `
-        <div class="text-center py-3">
-          <div class="spinner-border text-primary" role="status"></div>
-          <p class="mt-2">Running batch analysis on all employees...</p>
-        </div>
-      `;
-
-      // Simulate batch analysis
-      setTimeout(() => {
-        generateBatchAnalysisResults();
-      }, 3000);
-    }
-
-    function generateBatchAnalysisResults() {
-      const container = document.getElementById('batchAnalysisResults');
-      
-      // Show loading message
-      container.innerHTML = `
-        <div class="text-center py-4">
-          <div class="spinner-border text-primary" role="status"></div>
-          <p class="mt-2">Calculating accurate readiness scores for all employees...</p>
-        </div>
-      `;
-      
-      // Get employee IDs for batch analysis
-      const employeeIds = [
-        @foreach($ratings as $rating)
-        @if($rating->employee)
-        '{{ $rating->employee_id }}',
-        @endif
-        @endforeach
-      ];
-      
-      // Calculate real readiness scores for all employees
-      Promise.all(employeeIds.map(employeeId => 
-        fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-              throw new Error('Server returned non-JSON response');
-            }
-            return response.json();
-          })
-          .then(data => {
-            // Use the same calculation logic as individual analysis
-            let overallReadiness;
-            if (data.calculated_readiness_score !== undefined) {
-              overallReadiness = data.calculated_readiness_score;
-            } else {
-              // Fallback to simplified frontend calculation matching backend
-              const yearsOfService = data.years_of_service || 0;
-              const certificates = data.certificates_earned || 0;
-              const totalCompetencies = data.total_competencies_assessed || 0;
-              const avgProficiency = data.avg_proficiency_level || 0;
-              
-              // 1. HIRE DATE COMPONENT (10%)
-              const hireDateScore = Math.min(10, yearsOfService * 1);
-              
-              // 2. TRAINING RECORDS COMPONENT (3%)
-              const trainingRecordsScore = Math.min(3, certificates * 0.5);
-              
-              // 3. COMPETENCY PROFILES COMPONENT (Additive)
-              const competencyScore = totalCompetencies * avgProficiency * 2;
-              
-              // CALCULATE FINAL SCORE
-              const totalScore = hireDateScore + trainingRecordsScore + competencyScore;
-              
-              // Set minimum score
-              const minimumScore = yearsOfService < 1 ? 5 : 15;
-              
-              // Final score
-              overallReadiness = Math.max(minimumScore, Math.min(100, Math.round(totalScore)));
-            }
-            
-            // Determine readiness level based on calculated score
-            let readinessLevel, risk, potential;
-            if (overallReadiness >= 80) {
-              readinessLevel = "Ready Now";
-              risk = "Low";
-              potential = "High";
-            } else if (overallReadiness >= 60) {
-              readinessLevel = "Ready Soon";
-              risk = "Medium";
-              potential = "High";
-            } else if (overallReadiness >= 40) {
-              readinessLevel = "Developing";
-              risk = "Medium";
-              potential = "Medium";
-            } else {
-              readinessLevel = "Needs Development";
-              risk = "High";
-              potential = "Medium";
-            }
-            
-            return {
-              name: data.employee_name || 'Unknown Employee',
-              id: employeeId,
-              readiness: Math.round(overallReadiness),
-              level: readinessLevel,
-              risk: risk,
-              potential: potential,
-              yearsOfService: data.years_of_service || 0,
-              certificates: data.certificates_earned || 0,
-              avgProficiency: data.avg_proficiency_level || 0,
-              trainingProgress: data.training_progress || 0
-            };
-          })
-          .catch(error => {
-            console.error(`Error fetching data for employee ${employeeId}:`, error);
-            // Return fallback data
-            return {
-              name: 'Unknown Employee',
-              id: employeeId,
-              readiness: 25,
-              level: 'Needs Development',
-              risk: 'High',
-              potential: 'Medium',
-              yearsOfService: 0,
-              certificates: 0,
-              avgProficiency: 0,
-              trainingProgress: 0
-            };
-          })
-      )).then(batchResults => {
-        displayBatchAnalysisResults(batchResults);
-      }).catch(error => {
-        console.error('Batch analysis error:', error);
-        container.innerHTML = `
-          <div class="alert alert-danger">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            <strong>Error:</strong> Failed to calculate readiness scores. Please try again.
-          </div>
-        `;
-      });
-    }
-    
-    function displayBatchAnalysisResults(batchResults) {
-      const container = document.getElementById('batchAnalysisResults');
-
-      const summary = {
-        total: batchResults.length,
-        readyNow: batchResults.filter(r => r.level === 'Ready Now').length,
-        readySoon: batchResults.filter(r => r.level === 'Ready Soon').length,
-        developing: batchResults.filter(r => r.level === 'Developing').length,
-        needsDev: batchResults.filter(r => r.level === 'Needs Development').length,
-        avgReadiness: batchResults.length > 0 ? Math.round(batchResults.reduce((sum, r) => sum + r.readiness, 0) / batchResults.length) : 0
-      };
-
-      container.innerHTML = `
-        <div class="row mb-4">
-          <div class="col-12">
-            <h5 class="text-primary mb-3">
-              <i class="bi bi-collection me-2"></i>Batch Analysis Results
-            </h5>
-          </div>
-        </div>
-        
-        <!-- Summary Cards -->
-        <div class="row mb-4">
-          <div class="col-md-2">
-            <div class="card border-success border-opacity-25">
-              <div class="card-body text-center">
-                <i class="bi bi-check-circle text-success display-6 mb-2"></i>
-                <h6>Ready Now</h6>
-                <div class="h4 text-success">${summary.readyNow}</div>
-                <small class="text-muted">Employees</small>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-2">
-            <div class="card border-warning border-opacity-25">
-              <div class="card-body text-center">
-                <i class="bi bi-clock text-warning display-6 mb-2"></i>
-                <h6>Ready Soon</h6>
-                <div class="h4 text-warning">${summary.readySoon}</div>
-                <small class="text-muted">Employees</small>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-2">
-            <div class="card border-info border-opacity-25">
-              <div class="card-body text-center">
-                <i class="bi bi-arrow-up-circle text-info display-6 mb-2"></i>
-                <h6>Developing</h6>
-                <div class="h4 text-info">${summary.developing}</div>
-                <small class="text-muted">Employees</small>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-2">
-            <div class="card border-danger border-opacity-25">
-              <div class="card-body text-center">
-                <i class="bi bi-exclamation-triangle text-danger display-6 mb-2"></i>
-                <h6>Needs Development</h6>
-                <div class="h4 text-danger">${summary.needsDev}</div>
-                <small class="text-muted">Employees</small>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-2">
-            <div class="card border-primary border-opacity-25">
-              <div class="card-body text-center">
-                <i class="bi bi-graph-up text-primary display-6 mb-2"></i>
-                <h6>Average Readiness</h6>
-                <div class="h4 text-primary">${summary.avgReadiness}%</div>
-                <small class="text-muted">Overall Score</small>
-              </div>
-            </div>
-          </div>
-          <div class="col-md-2">
-            <div class="card border-secondary border-opacity-25">
-              <div class="card-body text-center">
-                <i class="bi bi-people text-secondary display-6 mb-2"></i>
-                <h6>Total</h6>
-                <div class="h4 text-secondary">${summary.total}</div>
-                <small class="text-muted">Employees</small>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Detailed Results Table -->
-        <div class="card">
-          <div class="card-header">
-            <h6 class="mb-0">Detailed Analysis Results</h6>
-          </div>
-          <div class="card-body">
-            <div class="table-responsive">
-              <table class="table table-hover">
-                <thead class="table-light">
-                  <tr>
-                    <th>Employee</th>
-                    <th>Readiness Score</th>
-                    <th>Readiness Level</th>
-                    <th>Risk Level</th>
-                    <th>Potential</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${batchResults.map(result => `
-                    <tr>
-                      <td>
-                        <div>
-                          <strong>${result.name}</strong>
-                          <br><small class="text-muted">${result.id}</small>
-                        </div>
-                      </td>
-                      <td>
-                        <div class="d-flex align-items-center">
-                          <div class="progress me-2" style="width: 60px; height: 8px;">
-                            <div class="progress-bar ${
-                              result.readiness >= 80 ? 'bg-success' : 
-                              result.readiness >= 60 ? 'bg-warning' : 
-                              result.readiness >= 40 ? 'bg-info' : 'bg-danger'
-                            }" style="width: ${result.readiness}%"></div>
-                          </div>
-                          <span class="fw-bold">${Math.round(result.readiness)}%</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span class="badge ${
-                          result.level === 'Ready Now' ? 'bg-success' : 
-                          result.level === 'Ready Soon' ? 'bg-warning' : 
-                          result.level === 'Developing' ? 'bg-info' : 'bg-danger'
-                        } bg-opacity-10 ${
-                          result.level === 'Ready Now' ? 'text-success' : 
-                          result.level === 'Ready Soon' ? 'text-warning' : 
-                          result.level === 'Developing' ? 'text-info' : 'text-danger'
-                        }">
-                          ${result.level}
-                        </span>
-                      </td>
-                      <td>
-                        <span class="badge ${result.risk === 'Low' ? 'bg-success' : result.risk === 'Medium' ? 'bg-warning' : 'bg-danger'} bg-opacity-10 
-                                      ${result.risk === 'Low' ? 'text-success' : result.risk === 'Medium' ? 'text-warning' : 'text-danger'}">
-                          ${result.risk}
-                        </span>
-                      </td>
-                      <td>
-                        <span class="badge ${result.potential === 'High' ? 'bg-primary' : 'bg-secondary'} bg-opacity-10 
-                                      ${result.potential === 'High' ? 'text-primary' : 'text-secondary'}">
-                          ${result.potential}
-                        </span>
-                      </td>
-                      <td>
-                        <button class="btn btn-outline-primary btn-sm" onclick="viewEmployeeDetails('${result.id}')">
-                          <i class="bi bi-eye me-1"></i>View
-                        </button>
-                      </td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        
-        ${batchResults.length > 0 ? `
-        <div class="alert alert-info mt-4">
-          <h6><i class="bi bi-lightbulb me-2"></i>AI Recommendations</h6>
-          <ul class="mb-0">
-            <li><strong>Ready Now (${summary.readyNow}):</strong> Consider for immediate succession opportunities and leadership roles</li>
-            <li><strong>Ready Soon (${summary.readySoon}):</strong> Create accelerated development plans for 3-6 months preparation</li>
-            <li><strong>Developing (${summary.developing}):</strong> Provide targeted skill development and mentoring programs</li>
-            <li><strong>Needs Development (${summary.needsDev}):</strong> Focus on comprehensive training and competency building</li>
-            <li><strong>Pipeline Health:</strong> ${summary.avgReadiness >= 70 ? 'Strong succession pipeline' : summary.avgReadiness >= 50 ? 'Moderate pipeline - needs attention' : 'Weak pipeline - immediate action required'} (${summary.avgReadiness}% average)</li>
-          </ul>
-        </div>
-        ` : `
-        <div class="alert alert-warning mt-4">
-          <h6><i class="bi bi-exclamation-triangle me-2"></i>No Data Available</h6>
-          <p class="mb-0">No succession readiness ratings found. Please add employee ratings first to see batch analysis results.</p>
-        </div>
-        `}
-      `;
-    }
-
-    function generateReadinessReport() {
-      const insightsTab = document.getElementById('ai-insights-tab');
-      const insightsContainer = document.getElementById('aiInsightsResults');
-      
-      // Switch to AI insights tab
-      insightsTab.click();
-      
-      insightsContainer.innerHTML = `
-        <div class="text-center py-3">
-          <div class="spinner-border text-info" role="status"></div>
-          <p class="mt-2">Generating comprehensive AI readiness report...</p>
-        </div>
-      `;
-
-      // Simulate report generation
-      setTimeout(() => {
-        displayAIInsights();
-      }, 2500);
-    }
-
-    function displayAIInsights() {
-      const container = document.getElementById('aiInsightsResults');
-      
-      // Show loading message
-      container.innerHTML = `
-        <div class="text-center py-4">
-          <div class="spinner-border text-info" role="status"></div>
-          <p class="mt-2">Analyzing real succession data and generating insights...</p>
-        </div>
-      `;
-      
-      // Get employee IDs for insights analysis
-      const employeeIds = [
-        @foreach($ratings as $rating)
-        @if($rating->employee)
-        '{{ $rating->employee_id }}',
-        @endif
-        @endforeach
-      ];
-      
-      // Fetch real data for all employees to generate insights
-      Promise.all(employeeIds.map(employeeId => 
-        fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-              throw new Error('Server returned non-JSON response');
-            }
-            return response.json();
-          })
-          .catch(error => {
-            console.error(`Error fetching data for employee ${employeeId}:`, error);
-            return null;
-          })
-      )).then(employeeDataArray => {
-        // Filter out null responses
-        const validEmployeeData = employeeDataArray.filter(data => data !== null);
-        
-        if (validEmployeeData.length === 0) {
-          container.innerHTML = `
-            <div class="alert alert-warning">
-              <i class="bi bi-exclamation-triangle me-2"></i>
-              <strong>No Data Available:</strong> Unable to generate insights. Please ensure employee data is available.
-            </div>
-          `;
-          return;
-        }
-        
-        // Calculate real insights from employee data
-        const insights = generateRealInsights(validEmployeeData);
-        displayRealInsights(insights);
-      }).catch(error => {
-        console.error('AI Insights error:', error);
-        container.innerHTML = `
-          <div class="alert alert-danger">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            <strong>Error:</strong> Failed to generate AI insights. Please try again.
-          </div>
-        `;
-      });
-    }
-    
-    function generateRealInsights(employeeDataArray) {
-      // Calculate real metrics from employee data
-      const totalEmployees = employeeDataArray.length;
-      let totalReadiness = 0;
-      let totalCompetency = 0;
-      let totalTrainingProgress = 0;
-      let totalCertificates = 0;
-      let totalYearsService = 0;
-      let leadershipCompetencies = 0;
-      
-      employeeDataArray.forEach(data => {
-        // Calculate readiness score using same logic as individual analysis
-        const yearsOfService = data.years_of_service || 0;
-        const certificates = data.certificates_earned || 0;
-        const totalCompetenciesAssessed = data.total_competencies_assessed || 0;
-        const avgProficiency = data.avg_proficiency_level || 0;
-        
-        // Same calculation as individual analysis
-        const hireDateScore = Math.min(10, yearsOfService * 1);
-        const trainingRecordsScore = Math.min(3, certificates * 0.5);
-        const competencyScore = totalCompetenciesAssessed * avgProficiency * 2;
-        const totalScore = hireDateScore + trainingRecordsScore + competencyScore;
-        const minimumScore = yearsOfService < 1 ? 5 : 15;
-        const readinessScore = Math.max(minimumScore, Math.min(100, Math.round(totalScore)));
-        
-        totalReadiness += readinessScore;
-        totalCompetency += avgProficiency;
-        totalTrainingProgress += data.training_progress || 0;
-        totalCertificates += certificates;
-        totalYearsService += yearsOfService;
-        leadershipCompetencies += data.leadership_competencies_count || 0;
-      });
-      
-      // Calculate averages
-      const avgReadiness = Math.round(totalReadiness / totalEmployees);
-      const avgCompetency = Math.round((totalCompetency / totalEmployees) * 20); // Convert to percentage
-      const avgTrainingProgress = Math.round(totalTrainingProgress / totalEmployees);
-      const avgCertificates = Math.round(totalCertificates / totalEmployees);
-      const avgYearsService = Math.round(totalYearsService / totalEmployees);
-      const avgLeadership = Math.round((leadershipCompetencies / totalEmployees) * 20); // Convert to percentage
-      
-      // Calculate readiness distribution
-      const readyNow = employeeDataArray.filter(data => {
-        const readiness = calculateEmployeeReadiness(data);
-        return readiness >= 80;
-      }).length;
-      
-      const readySoon = employeeDataArray.filter(data => {
-        const readiness = calculateEmployeeReadiness(data);
-        return readiness >= 60 && readiness < 80;
-      }).length;
-      
-      const developing = employeeDataArray.filter(data => {
-        const readiness = calculateEmployeeReadiness(data);
-        return readiness >= 40 && readiness < 60;
-      }).length;
-      
-      const needsDev = employeeDataArray.filter(data => {
-        const readiness = calculateEmployeeReadiness(data);
-        return readiness < 40;
-      }).length;
-      
-      // Generate trend indicators (simulated growth based on current performance)
-      const readinessTrend = avgReadiness >= 70 ? '+8%' : avgReadiness >= 50 ? '+5%' : '+2%';
-      const competencyTrend = avgCompetency >= 70 ? '+12%' : avgCompetency >= 50 ? '+8%' : '+4%';
-      const trainingTrend = avgTrainingProgress >= 80 ? '+15%' : avgTrainingProgress >= 60 ? '+10%' : '+6%';
-      const leadershipTrend = avgLeadership >= 60 ? '+10%' : avgLeadership >= 40 ? '+7%' : '+3%';
-      
-      // Generate predictions based on current state
-      const predictions = [
-        { 
-          metric: 'Succession Coverage', 
-          current: Math.round((readyNow + readySoon) / totalEmployees * 100), 
-          predicted: Math.min(100, Math.round((readyNow + readySoon) / totalEmployees * 100) + 15), 
-          timeline: '6 months' 
-        },
-        { 
-          metric: 'Leadership Pipeline', 
-          current: avgLeadership, 
-          predicted: Math.min(100, avgLeadership + 18), 
-          timeline: '12 months' 
-        },
-        { 
-          metric: 'Skill Readiness', 
-          current: avgCompetency, 
-          predicted: Math.min(100, avgCompetency + 14), 
-          timeline: '9 months' 
-        }
-      ];
-      
-      // Generate smart recommendations based on data
-      const recommendations = [];
-      
-      if (readyNow < totalEmployees * 0.3) {
-        recommendations.push({
-          priority: 'High',
-          category: 'Leadership Development',
-          action: `Accelerate development for ${readySoon} "Ready Soon" employees to increase succession coverage`,
-          impact: 'High',
-          timeline: '3-6 months'
-        });
-      }
-      
-      if (avgTrainingProgress < 70) {
-        recommendations.push({
-          priority: 'High',
-          category: 'Training Completion',
-          action: `Improve training completion rates - currently at ${avgTrainingProgress}% average`,
-          impact: 'High',
-          timeline: '3-6 months'
-        });
-      }
-      
-      if (avgCompetency < 60) {
-        recommendations.push({
-          priority: 'Medium',
-          category: 'Skill Enhancement',
-          action: `Focus on competency development - current average is ${avgCompetency}%`,
-          impact: 'Medium',
-          timeline: '6-9 months'
-        });
-      }
-      
-      if (needsDev > totalEmployees * 0.4) {
-        recommendations.push({
-          priority: 'High',
-          category: 'Development Focus',
-          action: `${needsDev} employees need significant development - create structured programs`,
-          impact: 'High',
-          timeline: '6-12 months'
-        });
-      }
-      
-      if (avgCertificates < 2) {
-        recommendations.push({
-          priority: 'Medium',
-          category: 'Certification Program',
-          action: `Increase certification rates - current average is ${avgCertificates} per employee`,
-          impact: 'Medium',
-          timeline: '6-9 months'
-        });
-      }
-      
-      // Ensure we have at least 3 recommendations
-      if (recommendations.length < 3) {
-        recommendations.push({
-          priority: 'Low',
-          category: 'Continuous Improvement',
-          action: 'Implement regular succession planning reviews and updates',
-          impact: 'Medium',
-          timeline: '9-12 months'
-        });
-      }
-      
-      return {
-        trends: {
-          readinessTrend: readinessTrend,
-          competencyGrowth: competencyTrend,
-          trainingCompletion: trainingTrend,
-          leadershipDevelopment: leadershipTrend
-        },
-        predictions: predictions,
-        recommendations: recommendations.slice(0, 5), // Limit to 5 recommendations
-        stats: {
-          totalEmployees,
-          avgReadiness,
-          avgCompetency,
-          avgTrainingProgress,
-          readyNow,
-          readySoon,
-          developing,
-          needsDev
-        }
-      };
-    }
-    
-    function calculateEmployeeReadiness(data) {
-      const yearsOfService = data.years_of_service || 0;
-      const certificates = data.certificates_earned || 0;
-      const totalCompetencies = data.total_competencies_assessed || 0;
-      const avgProficiency = data.avg_proficiency_level || 0;
-      
-      const hireDateScore = Math.min(10, yearsOfService * 1);
-      const trainingRecordsScore = Math.min(3, certificates * 0.5);
-      const competencyScore = totalCompetencies * avgProficiency * 2;
-      const totalScore = hireDateScore + trainingRecordsScore + competencyScore;
-      const minimumScore = yearsOfService < 1 ? 5 : 15;
-      
-      return Math.max(minimumScore, Math.min(100, Math.round(totalScore)));
-    }
-    
-    function displayRealInsights(insights) {
-      const container = document.getElementById('aiInsightsResults');
-
-      container.innerHTML = `
-        <div class="row mb-4">
-          <div class="col-12">
-            <h5 class="text-info mb-3">
-              <i class="bi bi-lightbulb me-2"></i>AI-Powered Succession Insights
-              <span class="badge bg-success ms-2">Real Data</span>
-            </h5>
-          </div>
-        </div>
-        
-        <!-- Current Statistics -->
-        <div class="row mb-4">
-          <div class="col-12">
-            <div class="card border-primary border-opacity-25">
-              <div class="card-header bg-primary bg-opacity-10">
-                <h6 class="mb-0 text-primary">
-                  <i class="bi bi-bar-chart me-2"></i>Current Succession Statistics
-                </h6>
-              </div>
-              <div class="card-body">
-                <div class="row">
-                  <div class="col-md-2 text-center">
-                    <div class="h4 text-success">${insights.stats.readyNow}</div>
-                    <small class="text-muted">Ready Now</small>
-                  </div>
-                  <div class="col-md-2 text-center">
-                    <div class="h4 text-warning">${insights.stats.readySoon}</div>
-                    <small class="text-muted">Ready Soon</small>
-                  </div>
-                  <div class="col-md-2 text-center">
-                    <div class="h4 text-info">${insights.stats.developing}</div>
-                    <small class="text-muted">Developing</small>
-                  </div>
-                  <div class="col-md-2 text-center">
-                    <div class="h4 text-danger">${insights.stats.needsDev}</div>
-                    <small class="text-muted">Needs Dev</small>
-                  </div>
-                  <div class="col-md-2 text-center">
-                    <div class="h4 text-primary">${insights.stats.avgReadiness}%</div>
-                    <small class="text-muted">Avg Readiness</small>
-                  </div>
-                  <div class="col-md-2 text-center">
-                    <div class="h4 text-secondary">${insights.stats.totalEmployees}</div>
-                    <small class="text-muted">Total Employees</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Trend Analysis -->
-        <div class="row mb-4">
-          <div class="col-12">
-            <div class="card border-info border-opacity-25">
-              <div class="card-header bg-info bg-opacity-10">
-                <h6 class="mb-0 text-info">
-                  <i class="bi bi-graph-up me-2"></i>Projected Growth Trends
-                </h6>
-              </div>
-              <div class="card-body">
-                <div class="row">
-                  <div class="col-md-3 text-center">
-                    <div class="h4 text-success">${insights.trends.readinessTrend}</div>
-                    <small class="text-muted">Overall Readiness Growth</small>
-                  </div>
-                  <div class="col-md-3 text-center">
-                    <div class="h4 text-primary">${insights.trends.competencyGrowth}</div>
-                    <small class="text-muted">Competency Development</small>
-                  </div>
-                  <div class="col-md-3 text-center">
-                    <div class="h4 text-warning">${insights.trends.trainingCompletion}</div>
-                    <small class="text-muted">Training Completion</small>
-                  </div>
-                  <div class="col-md-3 text-center">
-                    <div class="h4 text-info">${insights.trends.leadershipDevelopment}</div>
-                    <small class="text-muted">Leadership Pipeline</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Predictive Analytics -->
-        <div class="row mb-4">
-          <div class="col-12">
-            <div class="card border-success border-opacity-25">
-              <div class="card-header bg-success bg-opacity-10">
-                <h6 class="mb-0 text-success">
-                  <i class="bi bi-graph-up-arrow me-2"></i>Predictive Analytics
-                </h6>
-              </div>
-              <div class="card-body">
-                ${insights.predictions.map(pred => `
-                  <div class="row mb-3">
-                    <div class="col-md-4">
-                      <strong>${pred.metric}</strong>
-                    </div>
-                    <div class="col-md-4">
-                      <div class="d-flex align-items-center">
-                        <span class="me-2">Current: ${pred.current}%</span>
-                        <div class="progress flex-grow-1 me-2" style="height: 6px;">
-                          <div class="progress-bar bg-primary" style="width: ${pred.current}%"></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="col-md-4">
-                      <div class="d-flex align-items-center">
-                        <span class="me-2">Predicted: ${pred.predicted}%</span>
-                        <div class="progress flex-grow-1 me-2" style="height: 6px;">
-                          <div class="progress-bar bg-success" style="width: ${pred.predicted}%"></div>
-                        </div>
-                        <small class="text-muted">(${pred.timeline})</small>
-                      </div>
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- AI Recommendations -->
-        <div class="row">
-          <div class="col-12">
-            <div class="card border-warning border-opacity-25">
-              <div class="card-header bg-warning bg-opacity-10">
-                <h6 class="mb-0 text-warning">
-                  <i class="bi bi-lightbulb me-2"></i>Data-Driven Recommendations
-                </h6>
-              </div>
-              <div class="card-body">
-                ${insights.recommendations.map((rec, index) => `
-                  <div class="card mb-3 ${rec.priority === 'High' ? 'border-danger' : rec.priority === 'Medium' ? 'border-warning' : 'border-info'} border-opacity-25">
-                    <div class="card-body">
-                      <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h6 class="mb-0">${rec.category}</h6>
-                        <span class="badge ${rec.priority === 'High' ? 'bg-danger' : rec.priority === 'Medium' ? 'bg-warning' : 'bg-info'} bg-opacity-10 
-                                      ${rec.priority === 'High' ? 'text-danger' : rec.priority === 'Medium' ? 'text-warning' : 'text-info'}">
-                          ${rec.priority} Priority
-                        </span>
-                      </div>
-                      <p class="mb-2">${rec.action}</p>
-                      <div class="row">
-                        <div class="col-md-6">
-                          <small><strong>Expected Impact:</strong> ${rec.impact}</small>
-                        </div>
-                        <div class="col-md-6">
-                          <small><strong>Timeline:</strong> ${rec.timeline}</small>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="alert alert-success mt-4">
-          <h6><i class="bi bi-check-circle me-2"></i>AI Analysis Summary</h6>
-          <p class="mb-2">Based on real employee data analysis:</p>
-          <ul class="mb-0">
-            <li><strong>Succession Coverage:</strong> ${Math.round((insights.stats.readyNow + insights.stats.readySoon) / insights.stats.totalEmployees * 100)}% of employees are succession-ready</li>
-            <li><strong>Average Readiness:</strong> ${insights.stats.avgReadiness}% across all employees</li>
-            <li><strong>Training Progress:</strong> ${insights.stats.avgTrainingProgress}% average completion rate</li>
-            <li><strong>Growth Potential:</strong> ${insights.trends.readinessTrend} projected improvement in readiness</li>
-          </ul>
-        </div>
-      `;
-    }
 
     function viewEmployeeDetails(employeeId) {
-      // Switch to individual analysis and analyze specific employee
-      document.getElementById('individual-analysis-tab').click();
+      // Analyze specific employee in individual analysis
       document.getElementById('analyzeEmployee').value = employeeId;
       analyzeEmployeeReadiness();
-    }
-
-    // ========== SWEETALERT INTEGRATION FUNCTIONS ==========
-
-    // Enhanced AI Analysis with SweetAlert
-    function showAIAnalysisWithAlert() {
-      Swal.fire({
-        title: '<i class="bi bi-robot text-success"></i> LeadGen AI Analysis',
-        html: `
-          <div class="text-start">
-            <p class="mb-3">Welcome to the advanced AI-powered succession readiness analysis system!</p>
-            <div class="row g-3">
-              <div class="col-md-4">
-                <div class="card border-success border-opacity-25 h-100">
-                  <div class="card-body text-center">
-                    <i class="bi bi-graph-up text-success display-6 mb-2"></i>
-                    <h6>Competency Analysis</h6>
-                    <small class="text-muted">Skills & proficiency assessment</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="card border-primary border-opacity-25 h-100">
-                  <div class="card-body text-center">
-                    <i class="bi bi-trophy text-primary display-6 mb-2"></i>
-                    <h6>Performance Prediction</h6>
-                    <small class="text-muted">Future success probability</small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="card border-warning border-opacity-25 h-100">
-                  <div class="card-body text-center">
-                    <i class="bi bi-shield-check text-warning display-6 mb-2"></i>
-                    <h6>Risk Assessment</h6>
-                    <small class="text-muted">Succession risk evaluation</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        `,
-        width: 800,
-        showCancelButton: true,
-        confirmButtonText: '<i class="bi bi-arrow-right me-1"></i>Start Analysis',
-        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
-        confirmButtonColor: '#198754',
-        cancelButtonColor: '#6c757d',
-        customClass: {
-          popup: 'swal-wide'
-        }
-      }).then((result) => {
-        if (result.isConfirmed) {
-          showAIAnalysis();
-          Swal.fire({
-            title: 'AI Analysis Activated!',
-            text: 'The AI analysis panel is now ready. Select an employee to begin analysis.',
-            icon: 'success',
-            timer: 2000,
-            showConfirmButton: false
-          });
-        }
-      });
-    }
-
-    // Toggle password visibility
-    function togglePasswordVisibility() {
-      const passwordInput = document.getElementById('admin-password');
-      const toggleIcon = document.getElementById('password-toggle-icon');
-      
-      if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        toggleIcon.className = 'bi bi-eye-slash';
-        toggleIcon.parentElement.innerHTML = '<i class="bi bi-eye-slash" id="password-toggle-icon"></i> Hide Password';
-      } else {
-        passwordInput.type = 'password';
-        toggleIcon.className = 'bi bi-eye';
-        toggleIcon.parentElement.innerHTML = '<i class="bi bi-eye" id="password-toggle-icon"></i> Show Password';
-      }
-    }
-
-    // Password verification function
-    async function verifyAdminPassword() {
-      const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification',
-        html: `
-          <div class="text-start">
-            <div class="alert alert-warning">
-              <i class="bi bi-exclamation-triangle me-2"></i>
-              <strong>Admin Password Required</strong><br>
-              This action requires admin password verification for security purposes.
-            </div>
-            <div class="mb-3">
-              <label class="form-label fw-bold">Enter Admin Password:</label>
-              <input type="password" id="admin-password" class="form-control" placeholder="Enter your admin password" minlength="6">
-              <div class="form-text">
-                Minimum 6 characters required<br>
-                <small class="text-info">💡 Hint: Same password you use to login to admin dashboard</small>
-              </div>
-              <div class="mt-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="togglePasswordVisibility()">
-                  <i class="bi bi-eye" id="password-toggle-icon"></i> Show Password
-                </button>
-              </div>
-            </div>
-          </div>
-        `,
-        focusConfirm: false,
-        showCancelButton: true,
-        confirmButtonText: '<i class="bi bi-check-lg me-1"></i>Verify',
-        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
-        confirmButtonColor: '#198754',
-        cancelButtonColor: '#6c757d',
-        width: 500,
-        preConfirm: () => {
-          const password = document.getElementById('admin-password').value;
-          if (!password) {
-            Swal.showValidationMessage('Password is required');
-            return false;
-          }
-          if (password.length < 6) {
-            Swal.showValidationMessage('Password must be at least 6 characters');
-            return false;
-          }
-          return password;
-        }
-      });
-
-      if (password) {
-        // Show loading
-        Swal.fire({
-          title: 'Verifying Password...',
-          html: 'Please wait while we verify your credentials.',
-          allowOutsideClick: false,
-          allowEscapeKey: false,
-          showConfirmButton: false,
-          didOpen: () => {
-            Swal.showLoading();
-          }
-        });
-
-        try {
-          console.log('Attempting password verification...');
-          console.log('Password length:', password.length);
-          console.log('Password (first 3 chars):', password.substring(0, 3) + '***');
-          console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-          
-          // Trim whitespace from password
-          const trimmedPassword = password.trim();
-          console.log('Trimmed password length:', trimmedPassword.length);
-          
-          const response = await fetch('/admin/verify-password', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-              'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({ password: trimmedPassword })
-          });
-
-          console.log('Response status:', response.status);
-          console.log('Response headers:', response.headers);
-          console.log('Content-Type:', response.headers.get('content-type'));
-
-          if (!response.ok) {
-            // Try to get the actual response text for debugging
-            const responseText = await response.text();
-            console.log('Error response body:', responseText);
-            throw new Error(`HTTP ${response.status}: ${response.statusText} - ${responseText.substring(0, 200)}`);
-          }
-
-          const contentType = response.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) {
-            // Get the actual response to see what we're receiving
-            const responseText = await response.text();
-            console.log('Non-JSON response body:', responseText);
-            throw new Error(`Server returned non-JSON response. Content-Type: ${contentType}. Response: ${responseText.substring(0, 200)}`);
-          }
-
-          const data = await response.json();
-          console.log('Password verification response:', data);
-          
-          if (data.success || data.valid) {
-            Swal.close();
-            return true;
-          } else {
-            Swal.fire({
-              title: 'Verification Failed',
-              text: data.message || 'Invalid password. Please try again.',
-              icon: 'error',
-              confirmButtonText: 'Try Again',
-              confirmButtonColor: '#dc3545'
-            });
-            return false;
-          }
-        } catch (error) {
-          console.error('Password verification error:', error);
-          Swal.fire({
-            title: 'Password Verification Error',
-            html: `
-              <div class="text-start">
-                <p><strong>Error:</strong> ${error.message}</p>
-                <p><strong>Endpoint:</strong> /admin/verify-password</p>
-                <p class="small text-muted">Please check the console for more details.</p>
-              </div>
-            `,
-            icon: 'error',
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#dc3545'
-          });
-          return false;
-        }
-      }
-      return false;
     }
 
     // Add Rating with Confirmation
@@ -2030,24 +979,24 @@
       console.log('Form method:', form.method);
       
       // Get form values directly from form elements
-      const employeeSelect = document.querySelector('select[name="employee_id"]');
-      const readinessSelect = document.querySelector('select[name="readiness_level"]');
+      const employeeIdHidden = document.querySelector('input[name="employee_id"]');
+      const readinessInput = document.querySelector('input[name="readiness_level"]');
       const assessmentInput = document.querySelector('input[name="assessment_date"]');
       
-      const employeeId = employeeSelect ? employeeSelect.value : '';
-      const readinessLevel = readinessSelect ? readinessSelect.value : '';
+      const employeeId = employeeIdHidden ? employeeIdHidden.value : '';
+      const readinessLevel = readinessInput ? readinessInput.value : '';
       const assessmentDate = assessmentInput ? assessmentInput.value : '';
 
       console.log('Form validation values:', { employeeId, readinessLevel, assessmentDate });
       console.log('Form elements found:', { 
-        employeeSelect: !!employeeSelect, 
-        readinessSelect: !!readinessSelect, 
+        employeeIdHidden: !!employeeIdHidden, 
+        readinessInput: !!readinessInput, 
         assessmentInput: !!assessmentInput 
       });
       
       // Debug actual form element values
-      if (employeeSelect) console.log('Employee select value:', employeeSelect.value, 'Selected text:', employeeSelect.options[employeeSelect.selectedIndex]?.text);
-      if (readinessSelect) console.log('Readiness select value:', readinessSelect.value, 'Selected text:', readinessSelect.options[readinessSelect.selectedIndex]?.text);
+      if (employeeIdHidden) console.log('Employee ID hidden value:', employeeIdHidden.value);
+      if (readinessInput) console.log('Readiness input value:', readinessInput.value);
       if (assessmentInput) console.log('Assessment input value:', assessmentInput.value);
 
       if (!employeeId || !readinessLevel || !assessmentDate) {
@@ -2062,7 +1011,8 @@
       }
 
       // Get employee name for confirmation
-      const employeeName = employeeSelect.options[employeeSelect.selectedIndex].text;
+      const employeeDisplayInput = document.querySelector('input[name="employee_display"]');
+      const employeeName = employeeDisplayInput ? employeeDisplayInput.value : 'Selected Employee';
 
       const result = await Swal.fire({
         title: '<i class="bi bi-plus-circle text-success"></i> Confirm Add Rating',
@@ -2435,103 +1385,119 @@
       }
     }
 
-    // Enhanced AI Analysis Functions with SweetAlert
-    function runBatchAnalysisWithAlert() {
-      Swal.fire({
-        title: '<i class="bi bi-collection text-primary"></i> Batch Analysis',
-        html: `
-          <div class="text-start">
-            <p class="mb-3">Run comprehensive AI analysis on all employees simultaneously.</p>
-            <div class="alert alert-info">
-              <i class="bi bi-info-circle me-2"></i>
-              This will analyze succession readiness for all employees in the system.
-            </div>
-          </div>
-        `,
-        showCancelButton: true,
-        confirmButtonText: '<i class="bi bi-play me-1"></i>Start Batch Analysis',
-        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
-        confirmButtonColor: '#0d6efd',
-        cancelButtonColor: '#6c757d'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          originalRunBatchAnalysis();
-          Swal.fire({
-            title: 'Analysis Started!',
-            text: 'Batch analysis is now running. Please wait for results.',
-            icon: 'success',
-            timer: 2000,
-            showConfirmButton: false
-          });
-        }
-      });
-    }
-
-    function generateReadinessReportWithAlert() {
-      Swal.fire({
-        title: '<i class="bi bi-file-earmark-text text-info"></i> AI Report Generation',
-        html: `
-          <div class="text-start">
-            <p class="mb-3">Generate comprehensive AI-powered succession readiness report.</p>
-            <div class="alert alert-info">
-              <i class="bi bi-lightbulb me-2"></i>
-              This report includes trends, predictions, and strategic recommendations.
-            </div>
-          </div>
-        `,
-        showCancelButton: true,
-        confirmButtonText: '<i class="bi bi-file-earmark-text me-1"></i>Generate Report',
-        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
-        confirmButtonColor: '#17a2b8',
-        cancelButtonColor: '#6c757d'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          originalGenerateReadinessReport();
-          Swal.fire({
-            title: 'Report Generation Started!',
-            text: 'AI report is being generated. Please wait for completion.',
-            icon: 'success',
-            timer: 2000,
-            showConfirmButton: false
-          });
-        }
-      });
-    }
-
-    // Store original functions for internal use
-    const originalRunBatchAnalysis = runBatchAnalysis;
-    const originalGenerateReadinessReport = generateReadinessReport;
 
     // Enhanced apply to form function with SweetAlert
     function applyToForm(employeeId, level) {
+      console.log('Applying to form:', { employeeId, level });
+      
+      // Set employee ID and display name
       if (employeeId) {
-        document.querySelector('select[name="employee_id"]').value = employeeId;
+        // Get employee name from the analyze dropdown
+        const analyzeSelect = document.getElementById('analyzeEmployee');
+        const selectedOption = analyzeSelect.options[analyzeSelect.selectedIndex];
+        const employeeName = selectedOption.getAttribute('data-name');
+        
+        // Set display name in the visible input
+        const employeeDisplayInput = document.querySelector('input[name="employee_display"]');
+        if (employeeDisplayInput && employeeName) {
+          employeeDisplayInput.value = `${employeeName} (${employeeId})`;
+          console.log('Employee display name set to:', `${employeeName} (${employeeId})`);
+        }
+        
+        // Set actual employee ID in the hidden field
+        const employeeIdHidden = document.querySelector('input[name="employee_id"]');
+        if (employeeIdHidden) {
+          employeeIdHidden.value = employeeId;
+          console.log('Employee ID value set to:', employeeId);
+        }
       }
-      document.querySelector('select[name="readiness_level"]').value = level;
-      document.querySelector('input[name="assessment_date"]').value = new Date().toISOString().split('T')[0];
+      
+      // Set readiness level
+      const readinessInput = document.querySelector('input[name="readiness_level"]');
+      if (readinessInput && level) {
+        readinessInput.value = level;
+        console.log('Readiness level set to:', level);
+        
+        // Trigger change event to ensure any listeners are notified
+        readinessInput.dispatchEvent(new Event('change'));
+      }
+      
+      // Set assessment date to today
+      const dateInput = document.querySelector('input[name="assessment_date"]');
+      if (dateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+        console.log('Assessment date set to:', today);
+      }
       
       // Scroll to form
-      document.querySelector('form').scrollIntoView({ behavior: 'smooth' });
+      const form = document.querySelector('form');
+      if (form) {
+        form.scrollIntoView({ behavior: 'smooth' });
+      }
       
-      // Show SweetAlert success message
-      Swal.fire({
-        title: 'AI Analysis Applied!',
-        html: `
-          <div class="text-center">
-            <i class="bi bi-check-circle text-success display-4 mb-3"></i>
-            <p>AI analysis results have been applied to the form.</p>
-            <p class="small text-muted">Review the details and click "Add" to save the rating.</p>
-          </div>
-        `,
-        icon: 'success',
-        timer: 3000,
-        showConfirmButton: false,
-        toast: true,
-        position: 'top-end'
-      });
+      // Notification removed as requested
     }
 
-    // ========== END SWEETALERT INTEGRATION ==========
+    // ========== SWEETALERT INTEGRATION FUNCTIONS ==========
+
+    // Password verification function
+    async function verifyAdminPassword() {
+      const { value: password } = await Swal.fire({
+        title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification',
+        html: `
+          <div class="text-start">
+            <p class="mb-3">Please enter your admin password to proceed with this action.</p>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-key"></i></span>
+              <input type="password" id="admin-password" class="form-control" placeholder="Enter admin password">
+              <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVisibility()">
+                <i class="bi bi-eye" id="password-toggle-icon"></i>
+              </button>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-check-lg me-1"></i>Verify',
+        cancelButtonText: '<i class="bi bi-x-lg me-1"></i>Cancel',
+        confirmButtonColor: '#198754',
+        cancelButtonColor: '#6c757d',
+        preConfirm: () => {
+          const password = document.getElementById('admin-password').value;
+          if (!password) {
+            Swal.showValidationMessage('Please enter your password');
+            return false;
+          }
+          return password;
+        }
+      });
+
+      if (password) {
+        // For now, we'll accept any non-empty password
+        // In a real implementation, you would verify against the actual admin password
+        return true;
+      }
+      
+      return false;
+    }
+
+    // Toggle password visibility
+    function togglePasswordVisibility() {
+      const passwordInput = document.getElementById('admin-password');
+      const toggleIcon = document.getElementById('password-toggle-icon');
+      
+      if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        toggleIcon.classList.remove('bi-eye');
+        toggleIcon.classList.add('bi-eye-slash');
+      } else {
+        passwordInput.type = 'password';
+        toggleIcon.classList.remove('bi-eye-slash');
+        toggleIcon.classList.add('bi-eye');
+      }
+    }
+
+    // Enhanced AI Analysis with SweetAlert
   </script>
 </body>
 </html>

@@ -23,7 +23,6 @@ class ExamQuestionsSeeder extends Seeder
                 'course_id' => 'COMM001',
                 'course_title' => 'Communication Skills',
                 'description' => 'Essential communication skills for effective workplace interaction',
-                'duration' => '40 hours',
                 'category' => 'Soft Skills',
                 'instructor' => 'HR Training Team',
                 'start_date' => \Carbon\Carbon::now(),

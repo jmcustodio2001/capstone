@@ -11,6 +11,7 @@ use App\Models\ActivityLog;
 use App\Models\DestinationKnowledgeTraining;
 use App\Models\TrainingNotification;
 use App\Models\CourseManagementNotification;
+use App\Models\CourseManagement;
 use Illuminate\Support\Facades\Auth;
 class CompetencyLibraryController extends Controller
 {
@@ -19,11 +20,12 @@ class CompetencyLibraryController extends Controller
     public function index()
     {
         // Exclude all destination training related competencies from the library view
+        // But keep legitimate competencies like "Destination and Product Knowledge" from seeder
         $competencies = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
             ->where('category', '!=', 'General')
             ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
             ->where('competency_name', 'NOT LIKE', '%ITALY%')
-            ->where('competency_name', 'NOT LIKE', '%destination%')
+            ->where('competency_name', 'NOT LIKE', '%Destination Knowledge -%') // Only exclude auto-generated destination knowledge
             ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
             ->orderBy('id', 'desc')
             ->get();
@@ -94,11 +96,16 @@ class CompetencyLibraryController extends Controller
             }
 
             $competency = CompetencyLibrary::create($competencyData);
+            
+            // Auto-sync to course management
+            $this->syncCompetencyToCourseManagement($competency);
+            
             ActivityLog::createLog([
                 'module' => 'Competency Management',
                 'action' => 'create',
                 'description' => 'Added competency: ' . $competency->competency_name .
-                    ($competency->category === 'Destination Knowledge' ? ' (Auto-categorized as Destination Knowledge with 100% proficiency)' : ''),
+                    ($competency->category === 'Destination Knowledge' ? ' (Auto-categorized as Destination Knowledge with 100% proficiency)' : '') .
+                    ' (Auto-synced to Course Management)',
                 'model_type' => CompetencyLibrary::class,
                 'model_id' => $competency->id,
             ]);
@@ -178,11 +185,16 @@ class CompetencyLibraryController extends Controller
             }
 
             $competency->update($competencyData);
+            
+            // Auto-sync to course management
+            $this->syncCompetencyToCourseManagement($competency);
+            
             ActivityLog::createLog([
                 'module' => 'Competency Management',
                 'action' => 'update',
                 'description' => 'Updated competency: ' . $competency->competency_name .
-                    ($competency->category === 'Destination Knowledge' ? ' (Auto-categorized as Destination Knowledge with 100% proficiency)' : ''),
+                    ($competency->category === 'Destination Knowledge' ? ' (Auto-categorized as Destination Knowledge with 100% proficiency)' : '') .
+                    ' (Auto-synced to Course Management)',
                 'model_type' => CompetencyLibrary::class,
                 'model_id' => $competency->id,
             ]);
@@ -561,6 +573,36 @@ class CompetencyLibraryController extends Controller
                 'success' => false,
                 'message' => 'Failed to send notification: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Auto-sync a single competency to course management
+     */
+    private function syncCompetencyToCourseManagement($competency)
+    {
+        try {
+            // Check if course already exists for this competency
+            $existingCourse = CourseManagement::where('course_title', $competency->competency_name)->first();
+            
+            if (!$existingCourse) {
+                // Create new course from competency
+                $course = CourseManagement::create([
+                    'course_title' => $competency->competency_name,
+                    'description' => $competency->description ?? 'Auto-synced from Competency Library',
+                    'start_date' => now(),
+                    'status' => 'Active'
+                ]);
+                
+                \Illuminate\Support\Facades\Log::info("Auto-synced competency '{$competency->competency_name}' to course management");
+                return $course;
+            }
+            
+            return $existingCourse;
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error syncing competency to course management: ' . $e->getMessage());
+            return null;
         }
     }
 }

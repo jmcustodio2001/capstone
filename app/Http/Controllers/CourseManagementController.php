@@ -7,6 +7,9 @@ use App\Models\EmployeeTrainingDashboard;
 use App\Models\ActivityLog;
 use App\Models\CourseManagementNotification;
 use App\Models\UpcomingTraining;
+use App\Models\CompetencyLibrary;
+use App\Models\DestinationKnowledgeTraining;
+use App\Models\DestinationMaster;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,7 +23,18 @@ class CourseManagementController extends Controller
     public function index()
     {
         try {
-            $courses = CourseManagement::all();
+            // Get existing courses from course_management table (exclude only actual destination training courses)
+            $courses = CourseManagement::where('course_title', 'NOT LIKE', '%Destination Training%')
+                ->where('course_title', 'NOT LIKE', '%destination training%')
+                ->get();
+            
+            // Auto-sync competencies from competency library as courses
+            $this->syncCompetenciesToCourses();
+            
+            // Refresh courses after sync (exclude only actual destination training courses)
+            $courses = CourseManagement::where('course_title', 'NOT LIKE', '%Destination Training%')
+                ->where('course_title', 'NOT LIKE', '%destination training%')
+                ->get();
         } catch (\Exception $e) {
             Log::error('Error fetching courses: ' . $e->getMessage());
             $courses = collect();
@@ -129,7 +143,17 @@ class CourseManagementController extends Controller
             $competencyNotifications = collect();
         }
 
-        return view('learning_management.course_management', compact('courses', 'assignedTrainings', 'competencyAssignments', 'trainingRequests', 'pendingActivationRequests', 'competencyNotifications'));
+        // Get destination master data (possible training destinations)
+        try {
+            $destinationMasters = DestinationMaster::where('is_active', true)
+                ->orderBy('id', 'asc')
+                ->get();
+        } catch (\Exception $e) {
+            Log::error('Error fetching destination masters: ' . $e->getMessage());
+            $destinationMasters = collect();
+        }
+
+        return view('learning_management.course_management', compact('courses', 'assignedTrainings', 'competencyAssignments', 'trainingRequests', 'pendingActivationRequests', 'competencyNotifications', 'destinationMasters'));
     }
 
     public function create()
@@ -1306,6 +1330,48 @@ class CourseManagementController extends Controller
                 'success' => false,
                 'message' => 'Error creating course: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Auto-sync competencies from competency library to course management
+     */
+    private function syncCompetenciesToCourses()
+    {
+        try {
+            // Get all competencies from competency library (include all competencies)
+            $competencies = CompetencyLibrary::all();
+            
+            $synced = 0;
+            $skipped = 0;
+            
+            foreach ($competencies as $competency) {
+                // Check if course already exists for this competency
+                $existingCourse = CourseManagement::where('course_title', $competency->competency_name)->first();
+                
+                if (!$existingCourse) {
+                    // Create new course from competency
+                    $course = CourseManagement::create([
+                        'course_title' => $competency->competency_name,
+                        'description' => $competency->description ?? 'Auto-synced from Competency Library',
+                        'start_date' => now(),
+                        'status' => 'Active'
+                    ]);
+                    
+                    $synced++;
+                    
+                    Log::info("Auto-synced competency '{$competency->competency_name}' to course management");
+                } else {
+                    $skipped++;
+                }
+            }
+            
+            if ($synced > 0) {
+                Log::info("Competency sync completed: {$synced} new courses created, {$skipped} already existed");
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error syncing competencies to courses: ' . $e->getMessage());
         }
     }
 }

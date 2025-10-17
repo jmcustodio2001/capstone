@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Schema\Blueprint;
 
 class CompetencyGapAnalysisController extends Controller
@@ -67,7 +68,7 @@ class CompetencyGapAnalysisController extends Controller
             ->where('category', '!=', 'General')
             ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
             ->where('competency_name', 'NOT LIKE', '%ITALY%')
-            ->where('competency_name', 'NOT LIKE', '%destination%')
+            ->where('competency_name', 'NOT LIKE', '%Destination Knowledge -%')
             ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
             ->get();
 
@@ -1374,19 +1375,142 @@ class CompetencyGapAnalysisController extends Controller
             $gap->assigned_to_training = false;
             $gap->save();
 
+            // Remove related training records from upcoming trainings
+            // Find and remove upcoming training records that match this competency gap
+            $competencyName = $gap->competency->competency_name ?? '';
+            $employeeId = $gap->employee_id;
+
+            if ($competencyName && $employeeId) {
+                // Remove from UpcomingTraining table if it exists
+                try {
+                    $upcomingTrainings = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
+                        ->where(function($query) use ($competencyName) {
+                            $query->where('training_title', 'LIKE', '%' . $competencyName . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . str_replace(' Training', '', $competencyName) . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . str_replace(' Course', '', $competencyName) . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . str_replace(' Program', '', $competencyName) . '%');
+                        })
+                        ->where(function($query) {
+                            $query->where('source', 'competency_gap')
+                                  ->orWhere('source', 'competency_assigned')
+                                  ->orWhere('source', 'admin_assigned');
+                        })
+                        ->get();
+
+                    foreach ($upcomingTrainings as $training) {
+                        $training->delete();
+                    }
+
+                    $removedCount = $upcomingTrainings->count();
+                } catch (\Exception $e) {
+                    // If UpcomingTraining model doesn't exist, continue
+                    $removedCount = 0;
+                }
+
+                // Also remove from EmployeeTrainingDashboard if assigned through competency gap
+                try {
+                    $dashboardTrainings = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                        ->where(function($query) use ($competencyName) {
+                            $query->where('training_title', 'LIKE', '%' . $competencyName . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . str_replace(' Training', '', $competencyName) . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . str_replace(' Course', '', $competencyName) . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . str_replace(' Program', '', $competencyName) . '%');
+                        })
+                        ->where('source', 'competency_assigned')
+                        ->get();
+
+                    foreach ($dashboardTrainings as $training) {
+                        $training->delete();
+                    }
+
+                    $removedCount += $dashboardTrainings->count();
+                } catch (\Exception $e) {
+                    // Continue if model doesn't exist
+                }
+
+                // Remove from TrainingRequest table (for _requests.blade.php) - Enhanced matching
+                try {
+                    // More aggressive matching for training requests
+                    $trainingRequests = \App\Models\TrainingRequest::where('employee_id', $employeeId)
+                        ->where(function($query) use ($competencyName) {
+                            // Clean competency name for better matching
+                            $cleanCompetencyName = str_replace([' Training', ' Course', ' Program', ' Skills'], '', $competencyName);
+                            
+                            $query->where('training_title', 'LIKE', '%' . $competencyName . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . $cleanCompetencyName . '%')
+                                  ->orWhere('training_title', $competencyName)
+                                  ->orWhere('training_title', $cleanCompetencyName);
+                        })
+                        ->where(function($query) {
+                            $query->where('reason', 'LIKE', '%competency%')
+                                  ->orWhere('reason', 'LIKE', '%gap%')
+                                  ->orWhere('reason', 'LIKE', '%admin%')
+                                  ->orWhere('reason', 'LIKE', '%Automatically enrolled%')
+                                  ->orWhere('status', 'Approved'); // Include auto-approved from competency gaps
+                        })
+                        ->get();
+
+                    foreach ($trainingRequests as $request) {
+                        Log::info("Removing training request: {$request->training_title} (ID: {$request->request_id})");
+                        $request->delete();
+                    }
+
+                    $removedCount += $trainingRequests->count();
+                    Log::info("Removed {$trainingRequests->count()} training requests for competency: {$competencyName}");
+                } catch (\Exception $e) {
+                    Log::warning("Error removing training requests: " . $e->getMessage());
+                }
+
+                // Remove from TrainingProgress table (for _progress.blade.php) - Enhanced matching
+                try {
+                    // More aggressive matching for training progress
+                    $cleanCompetencyName = str_replace([' Training', ' Course', ' Program', ' Skills'], '', $competencyName);
+                    
+                    $trainingProgress = \App\Models\TrainingProgress::where('employee_id', $employeeId)
+                        ->where(function($query) use ($competencyName, $cleanCompetencyName) {
+                            $query->where('training_title', 'LIKE', '%' . $competencyName . '%')
+                                  ->orWhere('training_title', 'LIKE', '%' . $cleanCompetencyName . '%')
+                                  ->orWhere('training_title', $competencyName)
+                                  ->orWhere('training_title', $cleanCompetencyName);
+                        })
+                        ->where(function($query) {
+                            $query->where('source', 'approved_request')
+                                  ->orWhere('source', 'auto_approved_request')
+                                  ->orWhere('source', 'competency_assigned')
+                                  ->orWhereNull('source'); // Include records without source
+                        })
+                        ->get();
+
+                    foreach ($trainingProgress as $progress) {
+                        Log::info("Removing training progress: {$progress->training_title} (ID: {$progress->progress_id})");
+                        $progress->delete();
+                    }
+
+                    $removedCount += $trainingProgress->count();
+                    Log::info("Removed {$trainingProgress->count()} training progress records for competency: {$competencyName}");
+                } catch (\Exception $e) {
+                    Log::warning("Error removing training progress: " . $e->getMessage());
+                }
+            }
+
             // Log the activity
             ActivityLog::create([
                 'user_id' => Auth::id(),
                 'module' => 'Competency Management',
                 'action' => 'unassign_training',
-                'description' => "Unassigned competency gap from training for employee ID: {$gap->employee_id} - {$gap->competency->competency_name}",
+                'description' => "Unassigned competency gap from training for employee ID: {$gap->employee_id} - {$gap->competency->competency_name}. Removed {$removedCount} related training records.",
                 'model_type' => CompetencyGap::class,
                 'model_id' => $gap->id,
             ]);
 
+            // Clear any cached data that might affect counts
+            $this->clearTrainingCaches($employeeId);
+
             return response()->json([
                 'success' => true,
-                'message' => 'Competency gap unassigned from training successfully. You can now edit or delete this record.'
+                'message' => "Competency gap unassigned from training successfully. Removed {$removedCount} related records from upcoming trainings, training requests, and training progress. You can now edit or delete this record.",
+                'removed_count' => $removedCount,
+                'refresh_required' => true
             ]);
 
         } catch (\Exception $e) {
@@ -1473,6 +1597,144 @@ class CompetencyGapAnalysisController extends Controller
                 'success' => false,
                 'message' => 'Error creating table: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Automatically detect and create competency gaps for all employees
+     * This checks all employee competency profiles and creates gap records
+     * when current level is below required level
+     */
+    public function autoDetectGaps()
+    {
+        try {
+            $createdGaps = 0;
+            $updatedGaps = 0;
+            $skippedGaps = 0;
+            $errors = [];
+
+            // Get all competencies from the library (exclude destination training)
+            $competencies = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
+                ->where('category', '!=', 'General')
+                ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+                ->where('competency_name', 'NOT LIKE', '%ITALY%')
+                ->where('competency_name', 'NOT LIKE', '%destination%')
+                ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
+                ->get();
+
+            // Get all employees
+            $employees = Employee::all();
+
+            foreach ($employees as $employee) {
+                foreach ($competencies as $competency) {
+                    try {
+                        // Get employee's competency profile for this competency
+                        $profile = EmployeeCompetencyProfile::where('employee_id', $employee->employee_id)
+                            ->where('competency_id', $competency->id)
+                            ->first();
+
+                        // If profile exists, check if there's a gap
+                        if ($profile) {
+                            // Use the competency's rate as the required level (1-5 scale)
+                            $requiredRate = $competency->rate ?? 5;
+                            // Use the employee's proficiency level (1-5 scale)
+                            $currentProficiencyLevel = $profile->proficiency_level ?? 0;
+                            
+                            // Only create gap if employee's proficiency level is below the required rate
+                            if ($currentProficiencyLevel < $requiredRate) {
+                                $gap = $requiredRate - $currentProficiencyLevel;
+                                // Check if gap already exists
+                                $existingGap = CompetencyGap::where('employee_id', $employee->employee_id)
+                                    ->where('competency_id', $competency->id)
+                                    ->first();
+
+                                if ($existingGap) {
+                                    // Update existing gap
+                                    $existingGap->update([
+                                        'required_level' => $requiredRate,
+                                        'current_level' => $currentProficiencyLevel,
+                                        'gap' => $gap,
+                                        'gap_description' => "Auto-detected: {$employee->first_name} {$employee->last_name} needs to improve {$competency->competency_name} from level {$currentProficiencyLevel} to level {$requiredRate}",
+                                        'is_active' => 1,
+                                        'expired_date' => now()->addMonths(6)->format('Y-m-d')
+                                    ]);
+                                    $updatedGaps++;
+                                } else {
+                                    // Create new gap record
+                                    CompetencyGap::create([
+                                        'employee_id' => $employee->employee_id,
+                                        'competency_id' => $competency->id,
+                                        'required_level' => $requiredRate,
+                                        'current_level' => $currentProficiencyLevel,
+                                        'gap' => $gap,
+                                        'gap_description' => "Auto-detected: {$employee->first_name} {$employee->last_name} needs to improve {$competency->competency_name} from level {$currentProficiencyLevel} to level {$requiredRate}",
+                                        'is_active' => 1,
+                                        'expired_date' => now()->addMonths(6)->format('Y-m-d')
+                                    ]);
+                                    $createdGaps++;
+                                }
+                            } else {
+                                $skippedGaps++;
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        $errors[] = "Error processing {$employee->employee_id} - {$competency->competency_name}: " . $e->getMessage();
+                        Log::error("Auto-detect gap error for {$employee->employee_id}: " . $e->getMessage());
+                    }
+                }
+            }
+
+            // Log single activity for the entire operation
+            try {
+                ActivityLog::create([
+                    'admin_id' => Auth::id(),
+                    'action' => 'Auto-Detect Competency Gaps',
+                    'module' => 'Competency Gap Analysis',
+                    'description' => "Auto-detected competency gaps: Created {$createdGaps}, Updated {$updatedGaps}, Skipped {$skippedGaps}",
+                    'ip_address' => request()->ip()
+                ]);
+            } catch (\Exception $e) {
+                Log::warning('Could not log activity: ' . $e->getMessage());
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Competency gaps auto-detection completed',
+                'created' => $createdGaps,
+                'updated' => $updatedGaps,
+                'skipped' => $skippedGaps,
+                'total_processed' => $createdGaps + $updatedGaps + $skippedGaps,
+                'errors' => count($errors) > 0 ? $errors : null
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error in auto-detect gaps: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error detecting gaps: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Clear training-related caches and force data refresh
+     */
+    private function clearTrainingCaches($employeeId)
+    {
+        try {
+            // Clear any Laravel cache that might be storing training counts
+            Cache::forget("employee_training_counts_{$employeeId}");
+            Cache::forget("upcoming_trainings_{$employeeId}");
+            Cache::forget("training_requests_{$employeeId}");
+            Cache::forget("training_progress_{$employeeId}");
+            
+            // Force refresh of any cached dashboard data
+            Cache::forget("employee_dashboard_{$employeeId}");
+            
+            Log::info("Cleared training caches for employee: {$employeeId}");
+        } catch (\Exception $e) {
+            Log::warning("Error clearing training caches: " . $e->getMessage());
         }
     }
 

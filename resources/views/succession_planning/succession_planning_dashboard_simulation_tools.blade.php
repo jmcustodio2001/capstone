@@ -14,115 +14,238 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- jQuery for AJAX functionality -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  
+
+  <script>
+    // Initialize static text content
+    window.messages = {
+      loading: 'Loading...',
+      error: 'Error',
+      success: 'Success',
+      confirm: 'Confirm',
+      cancel: 'Cancel',
+      noCandidates: 'No candidates available',
+      addCandidate: 'Add Candidate',
+      editSimulation: 'Edit Simulation',
+      deleteSimulation: 'Delete Simulation',
+      candidates: 'Candidates',
+      successPlanning: 'Succession Planning'
+    };
+
+    // Initialize when document is ready
+    $(document).ready(function() {
+      try {
+        // Initialize tooltips
+        $('[data-bs-toggle="tooltip"]').tooltip();
+
+        // Add click handlers to role nodes
+        $('.role-node').each(function() {
+          const $node = $(this);
+          const positionId = $node.data('position-id');
+
+          if (positionId) {
+            $node.on('click', function(e) {
+              e.preventDefault();
+              console.log('Role node clicked:', positionId);
+              showCandidates(positionId);
+            });
+          }
+        });
+
+        // Initialize any dropdowns
+        if (typeof bootstrap !== 'undefined') {
+          const dropdownElements = document.querySelectorAll('.dropdown-toggle');
+          dropdownElements.forEach(element => {
+            new bootstrap.Dropdown(element);
+          });
+        }
+
+        console.log('Document ready - initialization complete');
+      } catch (error) {
+        console.error('Error during initialization:', error);
+      }
+    });
+  </script>
+
   <!-- Enhanced AI Scenario Styling -->
   <style>
+    /* Role Chart Styling */
+    .org-chart {
+      padding: 2rem;
+    }
+
+    .role-node {
+      background: white;
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .role-node:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .role-node .readiness-score {
+      position: absolute;
+      top: -10px;
+      right: -10px;
+      background: #198754;
+      color: white;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: bold;
+      border: 2px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .role-node h6 {
+      margin-bottom: 0.25rem;
+      font-weight: 600;
+      color: #000;
+    }
+
+    .role-node p {
+      font-size: 0.875rem;
+      color: #000;
+    }
+
+    .role-node small {
+      font-size: 0.75rem;
+      color: #000;
+    }
+
+    .role-node.leader {
+      background: #ffffff;
+      border: 2px solid #0d6efd;
+    }
+
+    .role-node.manager {
+      background: #ffffff;
+      border: 2px solid #198754;
+    }
+
+    .role-node.successor {
+      background: #ffffff;
+      border: 2px solid #6c757d;
+    }
+
     .ai-scenario-card {
       transition: all 0.3s ease;
       box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
-    
+
     .ai-scenario-card:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     }
-    
+
     .ai-risk-item {
       color: #dc3545;
       font-weight: 500;
     }
-    
+
     .ai-recommendation {
       color: #198754;
       font-weight: 500;
     }
-    
+
     .progress-bar-animated {
       animation: progress-bar-stripes 1s linear infinite;
     }
-    
+
     @keyframes progress-bar-stripes {
       0% { background-position: 1rem 0; }
       100% { background-position: 0 0; }
     }
-    
+
     .swal2-popup {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    
+
     .swal2-title {
       font-weight: 600;
     }
-    
+
     .btn-group .btn {
       border-radius: 0.375rem;
       margin-right: 2px;
     }
-    
+
     .action-btns .btn {
       font-size: 0.875rem;
       padding: 0.25rem 0.5rem;
     }
-    
+
     .simulation-card {
       border: none;
       box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
       transition: box-shadow 0.15s ease-in-out;
     }
-    
+
     .simulation-card:hover {
       box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
     }
-    
+
     .card-header-custom {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-bottom: none;
+      background-color: #fff;
+      color: #333;
+      border-bottom: 1px solid #dee2e6;
+      padding: 0.75rem 1.25rem;
     }
-    
+
     .badge {
       font-size: 0.75rem;
       padding: 0.35em 0.65em;
     }
-    
+
     .spinner-border {
       width: 2rem;
       height: 2rem;
     }
-    
+
     .text-muted {
       color: #6c757d !important;
     }
-    
+
     .alert {
       border: 1px solid transparent;
       border-radius: 0.375rem;
     }
-    
+
     .alert-info {
       background-color: #d1ecf1;
       border-color: #bee5eb;
       color: #0c5460;
     }
-    
+
     .alert-success {
       background-color: #d4edda;
       border-color: #c3e6cb;
       color: #155724;
     }
-    
+
     .alert-warning {
       background-color: #fff3cd;
       border-color: #ffeaa7;
       color: #856404;
     }
-    
+
     .alert-danger {
       background-color: #f8d7da;
       border-color: #f5c6cb;
       color: #721c24;
     }
-    
+
     /* Enhanced Progress Bar Styling with Colors */
     .progress {
       background-color: #e9ecef;
@@ -130,7 +253,7 @@
       overflow: hidden;
       box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
     }
-    
+
     .progress-bar {
       background-color: #0d6efd;
       transition: width 0.6s ease;
@@ -142,77 +265,104 @@
       font-size: 0.75rem;
       text-shadow: 0 1px 2px rgba(0,0,0,0.2);
     }
-    
+
     /* Success - Green for high readiness (90%+) */
     .progress-bar.bg-success {
       background: linear-gradient(45deg, #198754, #20c997) !important;
       color: white !important;
     }
-    
+
     /* Warning - Yellow/Orange for medium readiness (70-89%) */
     .progress-bar.bg-warning {
       background: linear-gradient(45deg, #fd7e14, #ffc107) !important;
       color: #000 !important;
       text-shadow: 0 1px 2px rgba(255,255,255,0.3);
     }
-    
+
     /* Secondary - Gray for low readiness (<70%) */
     .progress-bar.bg-secondary {
       background: linear-gradient(45deg, #6c757d, #adb5bd) !important;
       color: white !important;
     }
-    
+
     /* Info - Blue for competency skills */
     .progress-bar.bg-info {
       background: linear-gradient(45deg, #0dcaf0, #17a2b8) !important;
       color: #000 !important;
       text-shadow: 0 1px 2px rgba(255,255,255,0.3);
     }
-    
+
     /* Primary - Default blue */
     .progress-bar.bg-primary {
       background: linear-gradient(45deg, #0d6efd, #6610f2) !important;
       color: white !important;
     }
-    
+
     /* Danger - Red for critical issues */
     .progress-bar.bg-danger {
       background: linear-gradient(45deg, #dc3545, #e74c3c) !important;
       color: white !important;
     }
-    
+
     /* Animated stripes for loading states */
     .progress-bar-striped {
       background-image: linear-gradient(45deg, rgba(255, 255, 255, 0.15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.15) 75%, transparent 75%, transparent);
       background-size: 1rem 1rem;
     }
-    
+
     .progress-bar-animated {
       animation: progress-bar-stripes 1s linear infinite;
     }
-    
+
     @keyframes progress-bar-stripes {
       0% { background-position: 1rem 0; }
       100% { background-position: 0 0; }
     }
-    
+
     /* Hover effects for interactive progress bars */
     .progress:hover .progress-bar {
       transform: scaleY(1.1);
       transition: all 0.3s ease;
     }
-    
+
     /* Different sizes for different contexts */
     .progress-sm {
       height: 0.5rem;
     }
-    
+
     .progress-lg {
       height: 1.5rem;
     }
-    
+
     .progress-xl {
       height: 2rem;
+    }
+
+    /* Candidates Modal Styling */
+    .candidates-modal-content {
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .candidates-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1rem;
+      padding: 1rem;
+    }
+
+    .candidate-card {
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .candidate-competencies {
+      padding-top: 1rem;
+      border-top: 1px solid #dee2e6;
     }
   </style>
 </head>
@@ -304,70 +454,131 @@
         </button>
       </div>
       <div class="card-body org-chart">
-        @if(isset($positions) && count($positions) > 0)
-          @php
-            $ceoPositions = $positions->where('level', 1);
-            $executivePositions = $positions->where('level', 2);
-            $managerPositions = $positions->where('level', 3);
-          @endphp
-          
+        <div class="container-fluid">
+          <div class="row justify-content-center">
+            <div class="col-12 col-lg-10">
+              <h5 class="text-center mb-4">🏢 IMPORTANT ROLES IN A TRAVEL AND TOURS INDUSTRY</h5>
+
+              @if(isset($positions) && count($positions) > 0)
+                @php
+                  $ceoPositions = $positions->where('level', 1);
+                  $executivePositions = $positions->where('level', 2);
+                  $managerPositions = $positions->where('level', 3);
+                @endphp
+
+          <!-- Executive Level -->
           @if($ceoPositions->count() > 0)
             <div class="row justify-content-center mb-4">
-              @foreach($ceoPositions as $position)
-                @php
-                  $topCandidate = $topCandidates[$position->id]->first() ?? null;
-                  $readinessScore = $topCandidate ? round($topCandidate['readiness_score'] ?? 0) : 0;
-                @endphp
-                <div class="col-md-4">
-                  <div class="role-node leader" onclick="showCandidates('{{ $position->id }}')">
-                    <div class="readiness-score">{{ $readinessScore }}%</div>
-                    <h5 class="mb-1">{{ $position->position_title }}</h5>
-                    <p class="mb-0 small">{{ $position->department ?? 'Executive' }}</p>
-                    <small class="opacity-75">{{ $topCandidate ? 'Next: ' . ($topCandidate['name'] ?? 'TBD') : 'No successor' }}</small>
-                  </div>
+              <div class="col-md-6">
+                <div class="role-node leader" data-position-id="1" style="background-color: #ffffff;">
+                  <div class="readiness-score">{{ isset($readinessScores[1]) ? $readinessScores[1] : '0' }}%</div>
+                  <h5 class="mb-2" style="color: #000;">General Manager / CEO</h5>
+                  <p class="mb-2 badge text-bg-light border" style="color: #000;">Executive Level</p>
+                  <small class="d-block" style="color: #000;">Head of the company; makes strategic decisions for the entire business.</small>
                 </div>
-              @endforeach
-            </div>
-            <div class="connection-line"></div>
-          @endif
-          
-          @if($executivePositions->count() > 0)
-            <div class="row justify-content-center mb-4">
-              @foreach($executivePositions as $position)
-                @php
-                  $topCandidate = $topCandidates[$position->id]->first() ?? null;
-                  $readinessScore = $topCandidate ? round($topCandidate['readiness_score'] ?? 0) : 0;
-                @endphp
-                <div class="col-md-3">
-                  <div class="role-node manager" onclick="showCandidates('{{ $position->id }}')">
-                    <div class="readiness-score">{{ $readinessScore }}%</div>
-                    <h6 class="mb-1">{{ $position->position_title }}</h6>
-                    <p class="mb-0 small">{{ $position->department ?? 'Department' }}</p>
-                    <small class="opacity-75">{{ $topCandidate['name'] ?? 'No successor' }}</small>
-                  </div>
-                </div>
-              @endforeach
-            </div>
-            <div class="connection-line"></div>
-          @endif
-          
-          @if($managerPositions->count() > 0)
-            <div class="row justify-content-center">
-              @foreach($managerPositions->take(4) as $position)
-                @php
-                  $topCandidate = $topCandidates[$position->id]->first() ?? null;
-                  $readinessScore = $topCandidate ? round($topCandidate['readiness_score'] ?? 0) : 0;
-                @endphp
-                <div class="col-md-2">
-                  <div class="role-node successor" onclick="showCandidates('{{ $position->id }}')">
-                    <div class="readiness-score">{{ $readinessScore }}%</div>
-                    <h6 class="mb-1 small">{{ Str::limit($position->position_title, 12) }}</h6>
-                    <small class="opacity-75">{{ $topCandidate['name'] ?? 'No successor' }}</small>
-                  </div>
-                </div>
-              @endforeach
+              </div>
             </div>
           @endif
+
+          <!-- Management Level -->
+          <div class="row justify-content-center g-4 mb-4">
+            <div class="col-lg-3 col-md-6">
+              <div class="role-node manager" data-position-id="2">
+                <div class="readiness-score">{{ isset($readinessScores[2]) ? $readinessScores[2] : '0' }}%</div>
+                <h6 class="mb-2">Operations Manager</h6>
+                <p class="mb-2 badge text-bg-light border">Operations</p>
+                <small class="d-block">Manages the day-to-day activities of tours, bookings, transport, and logistics.</small>
+              </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <div class="role-node manager" onclick="showCandidates('3')">
+                <div class="readiness-score">{{ isset($readinessScores[3]) ? $readinessScores[3] : '0' }}%</div>
+                <h6 class="mb-2">Sales & Marketing Manager</h6>
+                <p class="mb-2 badge text-bg-light border">Sales</p>
+                <small class="d-block">Promotes tour packages and drives company sales.</small>
+              </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <div class="role-node manager" onclick="showCandidates('4')">
+                <div class="readiness-score">{{ isset($readinessScores[4]) ? $readinessScores[4] : '0' }}%</div>
+                <h6 class="mb-2">Finance Manager</h6>
+                <p class="mb-2 badge text-bg-light border">Finance</p>
+                <small class="d-block">Handles budgeting, billing, payroll, and financial reporting.</small>
+              </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+              <div class="role-node manager" onclick="showCandidates('5')">
+                <div class="readiness-score">{{ isset($readinessScores[5]) ? $readinessScores[5] : '0' }}%</div>
+                <h6 class="mb-2">HR Manager</h6>
+                <p class="mb-2 badge text-bg-light border">Human Resources</p>
+                <small class="d-block">Oversees recruitment, training, and employee development.</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Supervisory Level -->
+          <div class="row justify-content-center g-4 mb-4">
+            <div class="col-md-5">
+              <div class="role-node successor" data-position-id="6">
+                <div class="readiness-score">{{ isset($readinessScores[6]) ? $readinessScores[6] : '0' }}%</div>
+                <h6 class="mb-2">Tour Coordinator</h6>
+                <p class="mb-2 badge text-bg-light border">Supervisory</p>
+                <small class="d-block">Organizes tour schedules, itineraries, and assigns tour guides.</small>
+              </div>
+            </div>
+            <div class="col-md-5">
+              <div class="role-node successor" data-position-id="7">
+                <div class="readiness-score">{{ isset($readinessScores[7]) ? $readinessScores[7] : '0' }}%</div>
+                <h6 class="mb-2">Customer Service Supervisor</h6>
+                <p class="mb-2 badge text-bg-light border">Supervisory</p>
+                <small class="d-block">Handles client concerns, complaints, and ensures service quality.</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Operational Level -->
+          <div class="row justify-content-center g-4">
+            <div class="col-lg-2 col-md-4">
+              <div class="role-node successor" onclick="showCandidates('8')">
+                <div class="readiness-score">{{ isset($readinessScores[8]) ? $readinessScores[8] : '0' }}%</div>
+                <h6 class="mb-2">Tour Guide</h6>
+                <p class="mb-2 badge text-bg-light border">Operational</p>
+                <small class="d-block">Leads tours and provides assistance to tourists.</small>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4">
+              <div class="role-node successor" onclick="showCandidates('9')">
+                <div class="readiness-score">{{ isset($readinessScores[9]) ? $readinessScores[9] : '0' }}%</div>
+                <h6 class="mb-2">Travel Agent</h6>
+                <p class="mb-2 badge text-bg-light border">Operational</p>
+                <small class="d-block">Arranges flights, accommodations, and visa assistance.</small>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4">
+              <div class="role-node successor" onclick="showCandidates('10')">
+                <div class="readiness-score">{{ isset($readinessScores[10]) ? $readinessScores[10] : '0' }}%</div>
+                <h6 class="mb-2">Reservation Officer</h6>
+                <p class="mb-2 badge text-bg-light border">Operational</p>
+                <small class="d-block">Manages bookings and works with travel agent.</small>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4">
+              <div class="role-node successor" onclick="showCandidates('11')">
+                <div class="readiness-score">{{ isset($readinessScores[11]) ? $readinessScores[11] : '0' }}%</div>
+                <h6 class="mb-2">Ticketing Officer</h6>
+                <p class="mb-2 badge text-bg-light border">Operational</p>
+                <small class="d-block">Issues flight tickets using GDS systems.</small>
+              </div>
+            </div>
+            <div class="col-lg-2 col-md-4">
+              <div class="role-node successor" onclick="showCandidates('12')">
+                <div class="readiness-score">{{ isset($readinessScores[12]) ? $readinessScores[12] : '0' }}%</div>
+                <h6 class="mb-2">Transport Coordinator</h6>
+                <p class="mb-2 badge text-bg-light border">Operational</p>
+                <small class="d-block">Manages pick-up/drop-off schedules.</small>
+              </div>
+            </div>
+          </div>
         @else
           <div class="text-center py-5">
             <i class="bi bi-diagram-3 display-4 text-muted mb-3"></i>
@@ -375,6 +586,7 @@
             <p class="text-muted">Create organizational positions to see the role chart.</p>
           </div>
         @endif
+      </div>
       </div>
     </div>
 
@@ -402,7 +614,7 @@
               // Sort by readiness score and take top 6 candidates only
               $topUniqueCandidates = $uniqueCandidates->sortByDesc('readiness_score')->take(6);
             @endphp
-            
+
             @foreach($topUniqueCandidates as $candidate)
               <div class="col-md-4 mb-3">
                 <div class="candidate-card card h-100">
@@ -413,12 +625,12 @@
                           // Get employee data for profile picture
                           $employee = \App\Models\Employee::where('employee_id', $candidate['employee_id'])->first();
                           $profilePicUrl = null;
-                          
+
                           if ($employee && $employee->profile_picture) {
                               // Direct asset URL generation - Laravel handles the storage symlink
                               $profilePicUrl = asset('storage/' . $employee->profile_picture);
                           }
-                          
+
                           // Generate fallback avatar if no profile picture
                           if (!$profilePicUrl) {
                               $fullName = $candidate['name'] ?? 'Employee';
@@ -426,13 +638,13 @@
                               $employeeId = $candidate['employee_id'] ?? 'default';
                               $colorIndex = abs(crc32($employeeId)) % count($colors);
                               $bgColor = $colors[$colorIndex];
-                              $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) . 
+                              $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                              "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
                           }
                         @endphp
-                        <img src="{{ $profilePicUrl }}" 
-                             alt="{{ $candidate['name'] ?? 'Employee' }}" 
-                             class="rounded-circle" 
+                        <img src="{{ $profilePicUrl }}"
+                             alt="{{ $candidate['name'] ?? 'Employee' }}"
+                             class="rounded-circle"
                              style="width: 50px; height: 50px; object-fit: cover;">
                       </div>
                       <div>
@@ -589,30 +801,30 @@
                           $firstName = $item->employee->first_name ?? 'Unknown';
                           $lastName = $item->employee->last_name ?? 'Employee';
                           $fullName = $firstName . ' ' . $lastName;
-                          
+
                           // Check if profile picture exists - simplified approach
                           $profilePicUrl = null;
                           if ($item->employee->profile_picture) {
                               // Direct asset URL generation - Laravel handles the storage symlink
                               $profilePicUrl = asset('storage/' . $item->employee->profile_picture);
                           }
-                          
+
                           // Generate consistent color based on employee name for fallback
                           $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
                           $employeeId = $item->employee->employee_id ?? 'default';
                           $colorIndex = abs(crc32($employeeId)) % count($colors);
                           $bgColor = $colors[$colorIndex];
-                          
+
                           // Fallback to UI Avatars if no profile picture found
                           if (!$profilePicUrl) {
-                              $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) . 
+                              $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                              "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
                           }
                         @endphp
-                        
-                        <img src="{{ $profilePicUrl }}" 
-                             alt="{{ $firstName }} {{ $lastName }}" 
-                             class="rounded-circle" 
+
+                        <img src="{{ $profilePicUrl }}"
+                             alt="{{ $firstName }} {{ $lastName }}"
+                             class="rounded-circle"
                              style="width: 40px; height: 40px; object-fit: cover;">
                       </div>
                       <span class="fw-semibold">
@@ -630,8 +842,8 @@
                 </td>
                 <td>{{ \Carbon\Carbon::parse($item->created_at)->format('d/m/Y') }}</td>
                 <td>
-                  @php 
-                    $cert = $certificateStatuses[$item->id] ?? null; 
+                  @php
+                    $cert = $certificateStatuses[$item->id] ?? null;
                     $statusClass = 'secondary';
                     if($cert) {
                       switch(strtolower($cert['status'])) {
@@ -696,7 +908,7 @@
                     @php
                       $remarkText = 'No remarks';
                       $remarkClass = 'text-muted';
-                      
+
                       if(isset($cert['status'])) {
                         switch(strtolower($cert['status'])) {
                           case 'completed':
@@ -736,7 +948,7 @@
                       title="Edit Simulation">
                       <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-outline-danger btn-sm" 
+                    <button class="btn btn-outline-danger btn-sm"
                       onclick="deleteSimulationWithConfirmation('{{ $item->id }}', '{{ $item->employee ? $item->employee->first_name . ' ' . $item->employee->last_name : 'N/A' }}')"
                       title="Delete Simulation">
                       <i class="bi bi-trash"></i>
@@ -759,16 +971,185 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  
+
   <script>
-    // Test export functionality when page loads
+    // Function to show candidates for a position
+    async function showCandidates(positionId) {
+      if (!positionId) {
+        console.error('No position ID provided');
+        return;
+      }
+
+      // Debug position information
+      console.log('Showing candidates for position:', positionId);
+
+      // Show loading state
+      Swal.fire({
+        title: 'Loading...',
+        html: 'Fetching candidates data',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      try {
+        // Get CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (!csrfToken) {
+          throw new Error('CSRF token not found');
+        }
+
+        console.log('Fetching candidates for position:', positionId);
+        const response = await fetch(`/admin/succession-simulations/candidates/${positionId}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch candidates: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Received candidate data:', data);
+
+        if (!data.candidates || data.candidates.length === 0) {
+          Swal.fire({
+            icon: 'info',
+            title: 'No Candidates Found',
+            text: 'There are no succession candidates available for this position.',
+            confirmButtonColor: '#0d6efd'
+          });
+          return;
+        }
+
+        // Build candidate details HTML
+        let candidatesHtml = '<div class="candidates-grid">';
+        data.candidates.forEach(candidate => {
+          const readinessClass = candidate.readiness_score >= 90 ? 'text-success' :
+                               candidate.readiness_score >= 70 ? 'text-warning' :
+                               'text-secondary';
+
+          candidatesHtml += `
+            <div class="candidate-card">
+              <div class="d-flex align-items-center mb-3">
+                <div class="candidate-avatar me-3">
+                  <img src="${candidate.profile_picture || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(candidate.name) + '&background=random'}"
+                       alt="${candidate.name}"
+                       class="rounded-circle"
+                       style="width: 48px; height: 48px; object-fit: cover;">
+                </div>
+                <div>
+                  <h6 class="mb-1">${candidate.name}</h6>
+                  <small class="d-block">${candidate.current_position || 'Current Position N/A'}</small>
+                </div>
+                <div class="ms-auto">
+                  <span class="badge ${readinessClass}">${Math.round(candidate.readiness_score)}% Ready</span>
+                </div>
+              </div>
+              <div class="candidate-competencies">
+                ${candidate.competencies ? Object.entries(candidate.competencies).map(([key, value]) => `
+                  <div class="mb-2">
+                    <small class="d-block mb-1">${key}</small>
+                    <div class="progress" style="height: 8px;">
+                      <div class="progress-bar ${value >= 90 ? 'bg-success' : value >= 70 ? 'bg-info' : 'bg-warning'}"
+                           role="progressbar"
+                           style="width: ${value}%"
+                           aria-valuenow="${value}"
+                           aria-valuemin="0"
+                           aria-valuemax="100"></div>
+                    </div>
+                  </div>
+                `).join('') : '<p class="text-muted">No competency data available</p>'}
+              </div>
+            </div>
+          `;
+        });
+        candidatesHtml += '</div>';
+
+        // Show candidates in modal
+        Swal.fire({
+          title: `Succession Candidates for Position`,
+          html: candidatesHtml,
+          width: '800px',
+          confirmButtonText: 'Close',
+          confirmButtonColor: '#0d6efd',
+          customClass: {
+            htmlContainer: 'candidates-modal-content'
+          }
+        });
+      } catch (error) {
+        console.error('Error fetching candidates:', error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Failed to load succession candidates. Please try again.',
+          confirmButtonColor: '#dc3545'
+        });
+      } finally {
+        // Close loading state if it's still open
+        if (Swal.isLoading()) {
+          Swal.close();
+        }
+      }
+    }
+
+    // Initialize when document is ready
     document.addEventListener('DOMContentLoaded', function() {
+      // Initialize tooltips
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+
+      // Initialize translation service defaults
+      if (window.translationService) {
+        window.translationService.setTranslations({
+          ...window.translationService.translations,
+          'loading': 'Loading...',
+          'error': 'Error',
+          'success': 'Success',
+          'confirm': 'Confirm',
+          'cancel': 'Cancel'
+        });
+      }
+    });
+
+    // Test export functionality when page loads
+    $(document).ready(function() {
       console.log('Page loaded successfully!');
-      console.log('Export functions available:');
-      console.log('- exportScenarioReportWithConfirmation:', typeof exportScenarioReportWithConfirmation);
-      console.log('- exportAllScenarioReports:', typeof exportAllScenarioReports);
-      console.log('- submitExportRequest:', typeof submitExportRequest);
-      console.log('- verifyAdminPassword:', typeof verifyAdminPassword);
+
+      // Add event listeners - check if elements exist first
+      if ($('.role-node').length > 0) {
+        $('.role-node').on('click', function() {
+          const positionId = $(this).data('position-id');
+          if (positionId) {
+            showCandidates(positionId);
+          }
+        });
+      }
+
+      // Initialize translation service defaults
+      window.textContent = window.textContent || {
+        successPlanning: 'Succession Planning',
+        addCandidate: 'Add Candidate',
+        editSimulation: 'Edit Simulation',
+        deleteSimulation: 'Delete Simulation',
+        candidates: 'Candidates',
+        noCandidates: 'No candidates available',
+        loading: 'Loading...',
+        error: 'Error',
+        success: 'Success',
+        confirm: 'Confirm',
+        cancel: 'Cancel'
+      };
+
+      // Initialize tooltips
+      $('[data-bs-toggle="tooltip"]').tooltip();
     });
   </script>
   <!-- Edit Simulation Modal -->
@@ -822,7 +1203,7 @@
 
   <script>
     // ===== SWEETALERT INTEGRATION & PASSWORD VERIFICATION =====
-    
+
     // Real admin password verification function
     async function verifyAdminPassword(password) {
       try {
@@ -835,14 +1216,14 @@
           },
           body: JSON.stringify({ password: password })
         });
-        
+
         // Check if response is JSON
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
           console.error('Non-JSON response received from password verification');
           return false;
         }
-        
+
         const data = await response.json();
         return response.ok && data.success;
       } catch (error) {
@@ -900,7 +1281,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           Swal.close();
           showAddCandidateForm();
@@ -920,7 +1301,7 @@
       // Get employees and positions data
       const employees = @json($employees ?? []);
       const positions = @json($positions ?? []);
-      
+
       // Build employee options
       let employeeOptions = '<option value="">Select Employee</option>';
       if (Array.isArray(employees)) {
@@ -934,7 +1315,7 @@
           }
         });
       }
-      
+
       // Build position options
       let positionOptions = '<option value="">Select Position</option>';
       if (Array.isArray(positions)) {
@@ -942,7 +1323,7 @@
           positionOptions += `<option value="${position.id}">${position.position_title} - ${position.department || 'General'}</option>`;
         });
       }
-      
+
       Swal.fire({
         title: '<i class="bi bi-person-plus text-primary"></i> Add New Succession Candidate',
         html: `
@@ -1001,7 +1382,7 @@
         preConfirm: () => {
           const form = document.getElementById('swalAddCandidateForm');
           const formData = new FormData(form);
-          
+
           // Validation
           if (!formData.get('employee_id')) {
             Swal.showValidationMessage('Please select an employee');
@@ -1011,7 +1392,7 @@
             Swal.showValidationMessage('Please select a target position');
             return false;
           }
-          
+
           return Object.fromEntries(formData);
         }
       }).then((result) => {
@@ -1024,7 +1405,7 @@
     // Submit Add Candidate
     async function submitAddCandidate(data) {
       console.log('Submitting candidate data:', data);
-      
+
       Swal.fire({
         title: 'Adding Candidate...',
         html: 'Please wait while we add the succession candidate.',
@@ -1042,7 +1423,7 @@
         Object.keys(data).forEach(key => {
           formData.append(key, data[key]);
         });
-        
+
         // Add CSRF token
         formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
 
@@ -1161,7 +1542,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           Swal.close();
           showEditSimulationForm(id, employeeId, simulationResult, createdAt);
@@ -1182,13 +1563,13 @@
       const originalEmployeeId = employeeId;
       const originalSimulationResult = simulationResult;
       const originalCreatedAt = createdAt;
-      
+
       // Build employee options dynamically
       const employees = @json($employees);
       const completedCertificates = @json($completedCertificates ?? []);
-      
+
       console.log('Building employee options. Current employeeId:', employeeId, 'Type:', typeof employeeId);
-      
+
       let employeeOptions = '<option value="">Select Employee</option>';
       employees.forEach(emp => {
         // Convert both to strings for comparison to avoid type issues
@@ -1196,13 +1577,13 @@
         employeeOptions += `<option value="${emp.id}" ${selected}>${emp.name}</option>`;
         console.log(`Employee: ${emp.name} (ID: ${emp.id}, Type: ${typeof emp.id}), Selected: ${selected}, Comparing: "${employeeId}" === "${emp.id}"`);
       });
-      
+
       let certificateOptions = '<option value="">Select Simulation Result</option>';
       completedCertificates.forEach(cert => {
         const selected = simulationResult == cert.display_text ? 'selected' : '';
         certificateOptions += `<option value="${cert.display_text}" ${selected}>${cert.display_text}</option>`;
       });
-      
+
       Swal.fire({
         title: '<i class="bi bi-pencil text-warning"></i> Edit Simulation Entry',
         html: `
@@ -1234,26 +1615,26 @@
         preConfirm: () => {
           const form = document.getElementById('swalEditSimulationForm');
           const formData = new FormData(form);
-          
+
           // Debug: Log form data extraction
           console.log('Form data extracted:');
           for (let [key, value] of formData.entries()) {
             console.log(`${key}: ${value}`);
           }
-          
+
           // Also try direct element access as backup
           const employeeSelect = form.querySelector('select[name="employee_id"]');
           const simulationSelect = form.querySelector('select[name="simulation_result"]');
           const dateInput = form.querySelector('input[name="created_at"]');
-          
+
           console.log('Direct element values:');
           console.log('Employee Select:', employeeSelect ? employeeSelect.value : 'not found');
           console.log('Simulation Select:', simulationSelect ? simulationSelect.value : 'not found');
           console.log('Date Input:', dateInput ? dateInput.value : 'not found');
-          
+
           const employeeId = formData.get('employee_id') || (employeeSelect ? employeeSelect.value : '');
           const simulationResult = formData.get('simulation_result') || (simulationSelect ? simulationSelect.value : '');
-          
+
           if (!employeeId || employeeId === '') {
             Swal.showValidationMessage('Please select an employee');
             return false;
@@ -1262,24 +1643,24 @@
             Swal.showValidationMessage('Please select a simulation result');
             return false;
           }
-          
+
           // Return the validated data with fallback to original values
           const result = {
             employee_id: employeeId || originalEmployeeId, // Fallback to original parameter if form fails
             simulation_result: simulationResult || originalSimulationResult,
             created_at: formData.get('created_at') || (dateInput ? dateInput.value : '') || originalCreatedAt
           };
-          
+
           console.log('Final result to return:', result);
           console.log('Original parameters - employeeId:', employeeId, 'simulationResult:', simulationResult, 'createdAt:', createdAt);
-          
+
           // Final validation before returning
           if (!result.employee_id || result.employee_id === '') {
             console.error('CRITICAL: employee_id is still empty after all fallbacks!');
             Swal.showValidationMessage('Critical error: Employee ID could not be determined. Please try again.');
             return false;
           }
-          
+
           return result;
         }
       }).then((result) => {
@@ -1304,33 +1685,33 @@
 
       try {
         const formData = new FormData();
-        
+
         // Debug: Log the data being passed
         console.log('Edit simulation data received:', data);
         console.log('Employee ID:', data.employee_id);
         console.log('Simulation Result:', data.simulation_result);
         console.log('Created At:', data.created_at);
-        
+
         // Validate that we have the required data
         if (!data.employee_id || data.employee_id === '') {
           throw new Error('Employee ID is missing from the edit form data');
         }
-        
+
         // Map the form data to controller expected fields
         formData.append('employee_id', data.employee_id);
         formData.append('simulation_result', data.simulation_result);
         formData.append('simulation_date', data.created_at); // Map created_at to simulation_date
-        
+
         // Add required fields with default values (same as add function)
         formData.append('simulation_name', 'Succession Planning Simulation');
         formData.append('simulation_type', 'leadership');
         formData.append('status', 'completed');
-        
+
         // Add optional fields with defaults
         formData.append('scenario_description', 'Updated succession planning simulation entry');
         formData.append('performance_rating', 'satisfactory');
         formData.append('notes', 'Updated via succession planning dashboard');
-        
+
         formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
 
         // Debug: Log what we're sending to the server
@@ -1351,19 +1732,19 @@
         // Check if response is JSON
         const contentType = response.headers.get('content-type');
         let responseData;
-        
+
         if (contentType && contentType.includes('application/json')) {
           responseData = await response.json();
         } else {
           // If not JSON, get text content for debugging
           const textContent = await response.text();
           console.error('Non-JSON response received:', textContent);
-          
+
           // Check if it's a redirect to login page
           if (textContent.includes('<!DOCTYPE') || textContent.includes('<html')) {
             throw new Error('Session expired. Please refresh the page and try again.');
           }
-          
+
           throw new Error('Invalid server response. Please try again.');
         }
 
@@ -1387,7 +1768,7 @@
           } else if (responseData && responseData.message) {
             errorMessage = responseData.message;
           }
-          
+
           throw new Error(errorMessage);
         }
       } catch (error) {
@@ -1450,7 +1831,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           Swal.close();
           submitDeleteSimulation(id, employeeName);
@@ -1490,19 +1871,19 @@
         // Check if response is JSON
         const contentType = response.headers.get('content-type');
         let responseData;
-        
+
         if (contentType && contentType.includes('application/json')) {
           responseData = await response.json();
         } else {
           // If not JSON, get text content for debugging
           const textContent = await response.text();
           console.error('Non-JSON response received:', textContent);
-          
+
           // Check if it's a redirect to login page
           if (textContent.includes('<!DOCTYPE') || textContent.includes('<html')) {
             throw new Error('Session expired. Please refresh the page and try again.');
           }
-          
+
           throw new Error('Invalid server response. Please try again.');
         }
 
@@ -1526,7 +1907,7 @@
           } else if (responseData && responseData.message) {
             errorMessage = responseData.message;
           }
-          
+
           throw new Error(errorMessage);
         }
       } catch (error) {
@@ -1544,7 +1925,7 @@
     async function addSimulationWithConfirmation() {
       // Find the form more specifically using ID
       const form = document.getElementById('addSimulationForm');
-      
+
       if (!form) {
         Swal.fire({
           icon: 'error',
@@ -1554,24 +1935,24 @@
         });
         return;
       }
-      
+
       const formData = new FormData(form);
-      
+
       // Debug: Log all form data
       console.log('=== ADD SIMULATION DEBUG ===');
       console.log('Form found:', !!form);
       console.log('Form ID:', form ? form.id : 'no form');
-      
+
       console.log('FormData contents:');
       for (let [key, value] of formData.entries()) {
         console.log(`  ${key}: "${value}" (type: ${typeof value})`);
       }
-      
+
       // Also try to get values directly from form elements as backup
       const employeeSelect = form.querySelector('select[name="employee_id"]');
       const simulationSelect = form.querySelector('select[name="simulation_result"]');
       const dateInput = form.querySelector('input[name="created_at"]');
-      
+
       console.log('Form elements found:', {
         employeeSelect: !!employeeSelect,
         simulationSelect: !!simulationSelect,
@@ -1580,35 +1961,35 @@
         simulationValue: simulationSelect ? simulationSelect.value : 'not found',
         dateValue: dateInput ? dateInput.value : 'not found'
       });
-      
+
       // Check if elements have values
       if (employeeSelect) {
         console.log('Employee select options count:', employeeSelect.options.length);
         console.log('Employee select selectedIndex:', employeeSelect.selectedIndex);
         console.log('Employee select selected option:', employeeSelect.selectedOptions[0] ? employeeSelect.selectedOptions[0].text : 'none');
       }
-      
+
       // Get values with multiple fallback methods
       let employeeId = formData.get('employee_id');
       let simulationResult = formData.get('simulation_result');
       let createdAt = formData.get('created_at');
-      
+
       // Fallback 1: Direct element access
       if (!employeeId && employeeSelect) {
         employeeId = employeeSelect.value;
         console.log('Using fallback 1 for employeeId:', employeeId);
       }
-      
+
       if (!simulationResult && simulationSelect) {
         simulationResult = simulationSelect.value;
         console.log('Using fallback 1 for simulationResult:', simulationResult);
       }
-      
+
       if (!createdAt && dateInput) {
         createdAt = dateInput.value;
         console.log('Using fallback 1 for createdAt:', createdAt);
       }
-      
+
       // Fallback 2: Try alternative selectors
       if (!employeeId) {
         const altEmployeeSelect = document.querySelector('#addSimulationForm select[name="employee_id"]');
@@ -1617,19 +1998,19 @@
           console.log('Using fallback 2 for employeeId:', employeeId);
         }
       }
-      
+
       console.log('Final values to validate:', {
         employeeId,
         simulationResult,
         createdAt
       });
-      
+
       // Validation with fallback values
       if (!employeeId || employeeId === '' || employeeId === 'not found') {
         console.error('CRITICAL: Employee ID is empty or invalid!');
         console.error('FormData employee_id:', formData.get('employee_id'));
         console.error('Direct element value:', employeeSelect ? employeeSelect.value : 'element not found');
-        
+
         Swal.fire({
           icon: 'warning',
           title: 'Missing Information',
@@ -1652,7 +2033,7 @@
         });
         return;
       }
-      
+
       if (!simulationResult || simulationResult === '') {
         Swal.fire({
           icon: 'warning',
@@ -1662,7 +2043,7 @@
         });
         return;
       }
-      
+
       if (!createdAt || createdAt === '') {
         Swal.fire({
           icon: 'warning',
@@ -1720,7 +2101,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           Swal.close();
           // Pass the validated values instead of original formData
@@ -1757,41 +2138,41 @@
       try {
         // Create a new FormData with the required fields mapped correctly
         const submitData = new FormData();
-        
+
         // Get validated values
         const employeeId = validatedData.employee_id;
         const simulationResult = validatedData.simulation_result;
         const createdAt = validatedData.created_at;
-        
+
         console.log('Validated data to submit:', {
           employee_id: employeeId,
           simulation_result: simulationResult,
           created_at: createdAt
         });
-        
+
         // Double-check that we have the employee_id
         if (!employeeId || employeeId === '') {
           throw new Error('Employee ID is missing from the validated data');
         }
-        
+
         // Map existing form fields to controller expected fields
         submitData.append('employee_id', employeeId);
         submitData.append('simulation_result', simulationResult); // For backward compatibility
         submitData.append('simulation_date', createdAt); // Map created_at to simulation_date
-        
+
         // Add required fields with default values
         submitData.append('simulation_name', 'Succession Planning Simulation');
         submitData.append('simulation_type', 'leadership');
         submitData.append('status', 'completed');
-        
+
         // Add optional fields with defaults
         submitData.append('scenario_description', 'Succession planning simulation entry');
         submitData.append('performance_rating', 'satisfactory');
         submitData.append('notes', 'Added via succession planning dashboard');
-        
+
         // Add CSRF token
         submitData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-        
+
         // Log what we're sending to the server
         console.log('Submitting data:', Object.fromEntries(submitData));
 
@@ -1808,19 +2189,19 @@
         // Check if response is JSON
         const contentType = response.headers.get('content-type');
         let responseData;
-        
+
         if (contentType && contentType.includes('application/json')) {
           responseData = await response.json();
         } else {
           // If not JSON, get text content for debugging
           const textContent = await response.text();
           console.error('Non-JSON response received:', textContent);
-          
+
           // Check if it's a redirect to login page
           if (textContent.includes('<!DOCTYPE') || textContent.includes('<html')) {
             throw new Error('Session expired. Please refresh the page and try again.');
           }
-          
+
           throw new Error('Invalid server response. Please try again.');
         }
 
@@ -1844,7 +2225,7 @@
           } else if (responseData && responseData.message) {
             errorMessage = responseData.message;
           }
-          
+
           throw new Error(errorMessage);
         }
       } catch (error) {
@@ -1865,7 +2246,7 @@
     function generateAdvancedAIScenarios(type, severity, timeline) {
       const scenarios = generateEnhancedScenarioData(type, severity, timeline);
       displayAdvancedScenarios(scenarios);
-      
+
       Swal.fire({
         icon: 'success',
         title: '🤖 AI Analysis Complete!',
@@ -1997,11 +2378,11 @@
     function displayAdvancedScenarios(scenarios) {
       const container = document.getElementById('scenarioResults');
       let html = '';
-      
+
       scenarios.forEach((scenario, index) => {
         const riskColor = scenario.probability >= 80 ? 'danger' : scenario.probability >= 60 ? 'warning' : 'success';
         const confidenceColor = scenario.aiConfidence >= 85 ? 'success' : scenario.aiConfidence >= 70 ? 'warning' : 'secondary';
-        
+
         html += `
           <div class="col-12 mb-4">
             <div class="card border-${riskColor} border-opacity-25 ai-scenario-card">
@@ -2022,7 +2403,7 @@
               </div>
               <div class="card-body">
                 <p class="text-muted mb-4">${scenario.description}</p>
-                
+
                 <!-- AI Metrics Dashboard -->
                 <div class="row mb-4">
                   <div class="col-md-3">
@@ -2050,7 +2431,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- AI Analysis Sections -->
                 <div class="row mb-4">
                   <div class="col-md-6">
@@ -2070,7 +2451,7 @@
                     </ul>
                   </div>
                 </div>
-                
+
                 <!-- Financial Impact & Recovery -->
                 <div class="alert alert-info border-info">
                   <div class="row">
@@ -2084,7 +2465,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- AI Action Buttons -->
                 <div class="d-flex gap-2 mt-3">
                   <button class="btn btn-primary" onclick="implementAIScenario('${scenario.title}', ${index})">
@@ -2102,7 +2483,7 @@
           </div>
         `;
       });
-      
+
       container.innerHTML = html;
     }
 
@@ -2163,7 +2544,7 @@
           timeOptimization: Math.floor(Math.random() * 20) + 80,
           costReduction: Math.floor(Math.random() * 35) + 15
         };
-        
+
         Swal.fire({
           title: '<i class="bi bi-check-circle text-success"></i> AI Simulation Complete',
           html: `
@@ -2197,7 +2578,7 @@
 
     function generateAIScenarios(type, severity, timeline) {
       const container = document.getElementById('scenarioResults');
-      
+
       container.innerHTML = `
         <div class="col-12 mb-3">
           <div class="text-center py-3">
@@ -2223,17 +2604,17 @@
         html: `
           <form id="swalScheduleReviewForm" class="text-start">
             <p class="mb-3">Schedule a review for AI scenario: <strong>"${scenarioTitle}"</strong></p>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Review Date</label>
               <input type="date" class="form-control" name="review_date" required min="${new Date().toISOString().split('T')[0]}">
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Review Time</label>
               <input type="time" class="form-control" name="review_time" required>
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Review Type</label>
               <select class="form-select" name="review_type" required>
@@ -2244,17 +2625,17 @@
                 <option value="outcome">Outcome Assessment</option>
               </select>
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Attendees</label>
               <textarea class="form-control" name="attendees" rows="2" placeholder="List key attendees for the review..."></textarea>
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Review Notes</label>
               <textarea class="form-control" name="notes" rows="3" placeholder="Additional notes or agenda items..."></textarea>
             </div>
-            
+
             <div class="alert alert-info">
               <i class="bi bi-robot me-2"></i>
               <strong>AI Enhancement:</strong> The system will automatically prepare AI insights and recommendations for this review.
@@ -2270,7 +2651,7 @@
         preConfirm: () => {
           const form = document.getElementById('swalScheduleReviewForm');
           const formData = new FormData(form);
-          
+
           if (!formData.get('review_date')) {
             Swal.showValidationMessage('Please select a review date');
             return false;
@@ -2283,7 +2664,7 @@
             Swal.showValidationMessage('Please select a review type');
             return false;
           }
-          
+
           return Object.fromEntries(formData);
         }
       });
@@ -2363,7 +2744,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           Swal.close();
           showCustomScenarioForm();
@@ -2388,12 +2769,12 @@
               <label class="form-label fw-bold">Scenario Title <span class="text-danger">*</span></label>
               <input type="text" class="form-control" name="scenario_title" placeholder="Enter a descriptive title for your scenario" required>
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Scenario Description <span class="text-danger">*</span></label>
               <textarea class="form-control" name="scenario_description" rows="3" placeholder="Describe the scenario situation and context..." required></textarea>
             </div>
-            
+
             <div class="row">
               <div class="col-md-6 mb-3">
                 <label class="form-label fw-bold">Impact Level</label>
@@ -2416,17 +2797,17 @@
                 </select>
               </div>
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Key Positions Affected</label>
               <textarea class="form-control" name="affected_positions" rows="2" placeholder="List the key positions that would be affected..."></textarea>
             </div>
-            
+
             <div class="mb-3">
               <label class="form-label fw-bold">Specific Concerns</label>
               <textarea class="form-control" name="specific_concerns" rows="3" placeholder="Describe specific concerns or challenges for this scenario..."></textarea>
             </div>
-            
+
             <div class="alert alert-info">
               <i class="bi bi-robot me-2"></i>
               <strong>AI Enhancement:</strong> The AI will analyze your inputs and generate intelligent recommendations, risk assessments, and mitigation strategies.
@@ -2442,7 +2823,7 @@
         preConfirm: () => {
           const form = document.getElementById('swalCustomScenarioForm');
           const formData = new FormData(form);
-          
+
           if (!formData.get('scenario_title')) {
             Swal.showValidationMessage('Please enter a scenario title');
             return false;
@@ -2459,7 +2840,7 @@
             Swal.showValidationMessage('Please select a timeline');
             return false;
           }
-          
+
           return Object.fromEntries(formData);
         }
       }).then((result) => {
@@ -2493,7 +2874,7 @@
             progress += Math.random() * 25;
             if (progress > 100) progress = 100;
             progressBar.style.width = progress + '%';
-            
+
             if (progress >= 100) {
               clearInterval(interval);
               setTimeout(() => {
@@ -2523,7 +2904,7 @@
       };
 
       displayAdvancedScenarios([customScenario]);
-      
+
       Swal.fire({
         icon: 'success',
         title: '🤖 Custom AI Scenario Generated!',
@@ -2561,21 +2942,21 @@
         'Activate automated stakeholder communication',
         'Launch intelligent talent pipeline development'
       ];
-      
+
       const timelineSpecific = {
         immediate: ['Activate emergency protocols within 24 hours', 'Deploy crisis management AI assistant'],
         short: ['Implement accelerated development programs', 'Deploy AI-assisted mentoring systems'],
         medium: ['Launch comprehensive succession planning', 'Implement predictive competency modeling'],
         long: ['Develop strategic leadership pipeline', 'Deploy long-term AI monitoring systems']
       };
-      
+
       return [...baseRecommendations, ...(timelineSpecific[timeline] || timelineSpecific.medium)];
     }
 
     // Export Scenario Report with Confirmation
     async function exportScenarioReportWithConfirmation() {
       console.log('Export Scenario Report function called!'); // Debug log
-      
+
       const { value: password } = await Swal.fire({
         title: '<i class="bi bi-shield-lock text-info"></i> Security Verification Required',
         html: `
@@ -2623,7 +3004,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           Swal.close();
           exportAllScenarioReports();
@@ -2641,7 +3022,7 @@
     // Export All Scenario Reports
     async function exportAllScenarioReports() {
       console.log('Export All Scenario Reports function called!'); // Debug log
-      
+
       const result = await Swal.fire({
         title: '<i class="bi bi-file-earmark-spreadsheet text-info"></i> Select Export Type',
         html: `
@@ -2655,7 +3036,7 @@
                 <option value="comprehensive">Comprehensive Report (All Data)</option>
               </select>
             </div>
-            
+
             <div class="alert alert-info">
               <i class="bi bi-info-circle me-2"></i>
               <strong>Export Options:</strong>
@@ -2676,12 +3057,12 @@
         preConfirm: () => {
           const form = document.getElementById('swalExportForm');
           const formData = new FormData(form);
-          
+
           if (!formData.get('export_type')) {
             Swal.showValidationMessage('Please select an export type');
             return false;
           }
-          
+
           return Object.fromEntries(formData);
         }
       });
@@ -2694,7 +3075,7 @@
     // Submit Export Request
     async function submitExportRequest(exportType) {
       console.log('Submit Export Request called with type:', exportType); // Debug log
-      
+
       const { value: password } = await Swal.fire({
         title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification Required',
         html: `
@@ -2746,7 +3127,7 @@
 
         try {
           console.log('Creating export form with type:', exportType); // Debug log
-          
+
           // Create form for file download
           const form = document.createElement('form');
           form.method = 'POST';
@@ -2845,13 +3226,13 @@
       };
 
       const template = scenarioTemplates[type] || scenarioTemplates.departure;
-      
+
       // Calculate impact metrics based on severity and timeline
       const impactMultipliers = { low: 0.3, medium: 0.6, high: 0.8, critical: 1.0 };
       const timelineMultipliers = { immediate: 1.2, short: 1.0, medium: 0.8, long: 0.6 };
-      
+
       const baseImpact = impactMultipliers[severity] * timelineMultipliers[timeline];
-      
+
       return {
         ...template,
         impactLevel: severity,
@@ -2879,19 +3260,19 @@
     function getBudgetImpact(severity, type) {
       const baseCosts = { departure: 150000, expansion: 300000, restructure: 200000, crisis: 500000, growth: 400000 };
       const severityMultipliers = { low: 0.5, medium: 1.0, high: 1.5, critical: 2.0 };
-      
+
       const baseCost = baseCosts[type] || 200000;
       const multiplier = severityMultipliers[severity] || 1.0;
-      
+
       return `$${Math.round(baseCost * multiplier).toLocaleString()}`;
     }
 
     function displayGeneratedScenarios(scenario) {
       const container = document.getElementById('scenarioResults');
-      
+
       const riskColor = scenario.riskScore >= 80 ? 'danger' : scenario.riskScore >= 60 ? 'warning' : 'success';
       const impactColor = scenario.impactLevel === 'critical' ? 'danger' : scenario.impactLevel === 'high' ? 'warning' : 'primary';
-      
+
       container.innerHTML = `
         <div class="col-12">
           <div class="card border-${impactColor} border-opacity-25">
@@ -2905,7 +3286,7 @@
             </div>
             <div class="card-body">
               <p class="text-muted mb-3">${scenario.description}</p>
-              
+
               <!-- Key Metrics -->
               <div class="row mb-4">
                 <div class="col-md-3">
@@ -2933,7 +3314,7 @@
                   </div>
                 </div>
               </div>
-              
+
               <!-- Key Factors -->
               <div class="row mb-4">
                 <div class="col-md-6">
@@ -2953,13 +3334,13 @@
                   </ul>
                 </div>
               </div>
-              
+
               <!-- Financial Impact -->
               <div class="alert alert-info">
                 <h6><i class="bi bi-currency-dollar me-2"></i>Estimated Financial Impact</h6>
                 <p class="mb-0">Total estimated cost: <strong>${scenario.budgetImpact}</strong> (including recruitment, training, productivity loss, and interim solutions)</p>
               </div>
-              
+
               <!-- Action Buttons -->
               <div class="d-flex gap-2 mt-3">
                 <button class="btn btn-primary" onclick="implementScenario('${scenario.title}')">
@@ -2991,13 +3372,13 @@
         alert('No scenarios to export. Please generate scenarios first.');
         return;
       }
-      
+
       // Simulate report generation
       const button = event.target;
       const originalText = button.innerHTML;
       button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Generating...';
       button.disabled = true;
-      
+
       setTimeout(() => {
         // Create downloadable report
         const reportData = {
@@ -3009,7 +3390,7 @@
             description: card.querySelector('.text-muted').textContent
           }))
         };
-        
+
         const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3019,11 +3400,11 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
+
         // Reset button
         button.innerHTML = originalText;
         button.disabled = false;
-        
+
         showNotification('Scenario report exported successfully!', 'success');
       }, 1500);
     }
@@ -3051,17 +3432,17 @@
     // Interactive Role Chart Functions with SweetAlert
     async function showCandidates(positionId) {
       console.log('showCandidates called with positionId:', positionId);
-      
+
       // Get position info from the page data
       const positions = @json($positions ?? []);
       const topCandidates = @json($topCandidates ?? []);
-      
+
       const position = positions.find(p => p.id == positionId);
       const candidates = topCandidates[positionId] || [];
-      
+
       console.log('Position found:', position);
       console.log('Candidates found:', candidates);
-      
+
       if (!position) {
         Swal.fire({
           icon: 'error',
@@ -3071,9 +3452,9 @@
         });
         return;
       }
-      
+
       // Build candidates HTML for SweetAlert
-      const candidatesHtml = candidates.length > 0 ? 
+      const candidatesHtml = candidates.length > 0 ?
         candidates.map(candidate => `
           <div class="card mb-3">
             <div class="card-body">
@@ -3085,7 +3466,7 @@
               </div>
               <p class="text-muted small mb-2">${candidate.current_position || 'Employee'}</p>
               <div class="progress mb-2" style="height: 10px; background-color: #e9ecef; border-radius: 5px;">
-                <div class="progress-bar ${candidate.readiness_score >= 90 ? 'bg-success' : candidate.readiness_score >= 70 ? 'bg-warning' : 'bg-secondary'}" 
+                <div class="progress-bar ${candidate.readiness_score >= 90 ? 'bg-success' : candidate.readiness_score >= 70 ? 'bg-warning' : 'bg-secondary'}"
                      style="width: ${candidate.readiness_score || 0}%; border-radius: 5px; transition: width 0.6s ease;">
                   <span style="font-size: 0.75rem; color: white; font-weight: 600;">${Math.round(candidate.readiness_score || 0)}%</span>
                 </div>
@@ -3095,9 +3476,9 @@
               </button>
             </div>
           </div>
-        `).join('') : 
+        `).join('') :
         '<div class="text-center py-4"><i class="bi bi-people display-4 text-muted mb-3"></i><h5 class="text-muted">No candidates available</h5><p class="text-muted">No succession candidates found for this position.</p></div>';
-      
+
       // Show in SweetAlert
       Swal.fire({
         title: `<i class="bi bi-people me-2"></i>${position.position_title} Candidates`,
@@ -3126,7 +3507,7 @@
       // Map position types to actual position IDs
       const positionMapping = {
         'ceo': 1,
-        'cto': 2, 
+        'cto': 2,
         'cfo': 3,
         'cmo': 4,
         'dev_manager': 5,
@@ -3134,10 +3515,10 @@
         'sales_manager': 7,
         'hr_manager': 8
       };
-      
+
       const positionId = positionMapping[positionType];
       if (!positionId) return [];
-      
+
       try {
         const response = await fetch(`/api/succession-planning/position/${positionId}/candidates`, {
           headers: {
@@ -3145,9 +3526,9 @@
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
           }
         });
-        
+
         if (!response.ok) throw new Error('Failed to fetch candidates');
-        
+
         const candidates = await response.json();
         return candidates.map(candidate => ({
           name: candidate.name,
@@ -3165,7 +3546,7 @@
         return getSampleCandidates(positionType);
       }
     }
-    
+
     function getSampleCandidates(positionType) {
       const mockData = {
         'ceo': [
@@ -3187,7 +3568,7 @@
     function displayCandidatesInModal(candidates) {
       const container = document.getElementById('candidatesContainer');
       container.innerHTML = '';
-      
+
       candidates.forEach(candidate => {
         const candidateCard = `
           <div class="col-md-6 mb-3">
@@ -3199,7 +3580,7 @@
                 </div>
                 <p class="text-muted small mb-2">${candidate.department} • ${candidate.experience}</p>
                 <div class="progress mb-2" style="height: 6px;">
-                  <div class="progress-bar ${candidate.readiness >= 90 ? 'bg-success' : candidate.readiness >= 80 ? 'bg-warning' : 'bg-secondary'}" 
+                  <div class="progress-bar ${candidate.readiness >= 90 ? 'bg-success' : candidate.readiness >= 80 ? 'bg-warning' : 'bg-secondary'}"
                        style="width: ${candidate.readiness}%"></div>
                 </div>
                 <button class="btn btn-sm btn-outline-primary" onclick="viewCandidateDetails('${candidate.employee_id || candidate.name.toLowerCase().replace(' ', '_')}')">
@@ -3223,20 +3604,20 @@
         });
         return;
       }
-      
+
       console.log('viewCandidateDetails called with employeeId:', employeeId);
-      
+
       // Get employee data from the page
       const employees = @json($employees ?? []);
       const topCandidates = @json($topCandidates ?? []);
-      
+
       // Find employee in candidates first
       let employee = null;
       for (const positionId in topCandidates) {
         const candidates = topCandidates[positionId];
         if (Array.isArray(candidates)) {
-          const found = candidates.find(candidate => 
-            candidate.employee_id == employeeId || 
+          const found = candidates.find(candidate =>
+            candidate.employee_id == employeeId ||
             candidate.id == employeeId
           );
           if (found) {
@@ -3245,7 +3626,7 @@
           }
         }
       }
-      
+
       if (!employee) {
         // Show fallback modal with option to view profile
         Swal.fire({
@@ -3266,12 +3647,12 @@
         });
         return;
       }
-      
+
       // Show employee details in SweetAlert
       const employeeName = employee.name || 'Unknown Employee';
       const readinessScore = employee.readiness_score || 0;
       const currentPosition = employee.current_position || 'Employee';
-      
+
       Swal.fire({
         title: `<i class="bi bi-person-circle me-2"></i>${employeeName}`,
         html: `
@@ -3286,17 +3667,17 @@
                 <span class="text-muted">${currentPosition}</span>
               </div>
             </div>
-            
+
             <div class="mb-3">
               <strong>Succession Readiness:</strong>
               <div class="progress mt-2" style="height: 20px; background-color: #e9ecef; border-radius: 10px;">
-                <div class="progress-bar ${readinessScore >= 90 ? 'bg-success' : readinessScore >= 70 ? 'bg-warning' : 'bg-secondary'}" 
+                <div class="progress-bar ${readinessScore >= 90 ? 'bg-success' : readinessScore >= 70 ? 'bg-warning' : 'bg-secondary'}"
                      style="width: ${readinessScore}%; border-radius: 10px; transition: width 0.6s ease;">
                   <span style="font-size: 0.75rem; font-weight: 600; line-height: 20px;">${Math.round(readinessScore)}%</span>
                 </div>
               </div>
             </div>
-            
+
             ${employee.competency_breakdown ? `
               <div class="mb-3">
                 <strong>Key Competencies:</strong>
@@ -3313,7 +3694,7 @@
                 </div>
               </div>
             ` : ''}
-            
+
             <div class="text-center mt-4">
               <button class="btn btn-primary me-2" onclick="window.open('{{ route('employee_competency_profiles.index') }}?employee_id=${employeeId}&from=succession-planning', '_blank')">
                 <i class="bi bi-box-arrow-up-right me-1"></i>View Full Profile
@@ -3340,25 +3721,25 @@
 
     function simulateScenario(scenarioIndex) {
       console.log('Simulate scenario called with index:', scenarioIndex);
-      
+
       const modal = new bootstrap.Modal(document.getElementById('scenarioResultsModal'));
-      
+
       // Get scenario data from the page
       const scenarioCards = document.querySelectorAll('.scenario-card');
       console.log('Found scenario cards:', scenarioCards.length);
-      
+
       if (scenarioIndex >= scenarioCards.length) {
         console.error('Scenario not found - index:', scenarioIndex, 'total cards:', scenarioCards.length);
         alert('Scenario not found');
         return;
       }
-      
+
       const scenarioCard = scenarioCards[scenarioIndex];
       const scenarioTitle = scenarioCard.querySelector('.card-title').textContent.trim();
       const impactLevel = scenarioCard.querySelector('.badge').textContent.trim();
-      
+
       document.getElementById('scenarioTitle').textContent = scenarioTitle + ' - Simulation Results';
-      
+
       // Run simulation
       const results = runScenarioSimulation(scenarioIndex, scenarioTitle, impactLevel);
       displayScenarioResults(results);
@@ -3381,16 +3762,16 @@
       const readyLeaders = parseInt(document.querySelectorAll('.card-body h2.text-success')[0]?.textContent) || 0;
       const inDevelopment = parseInt(document.querySelector('.card-body h2.text-warning')?.textContent) || 0;
       const keyPositions = parseInt(document.querySelector('.card-body h2.text-info')?.textContent) || 0;
-      
+
       console.log('Real data extracted for simulation:', {
         totalCandidates, readyLeaders, inDevelopment, keyPositions
       });
-      
+
       // Calculate real metrics based on actual data
       const successorRatio = totalCandidates > 0 ? Math.round((readyLeaders / totalCandidates) * 100) : 0;
       const riskLevel = inDevelopment > 5 ? 'High' : inDevelopment > 2 ? 'Medium' : 'Low';
       const positionsAtRisk = Math.max(1, keyPositions - readyLeaders);
-      
+
       const baseResults = {
         'Scenario Analysis': scenarioTitle,
         'Impact Level': impactLevel,
@@ -3399,7 +3780,7 @@
         'Current Risk Level': riskLevel,
         'Successor Readiness': successorRatio + '%'
       };
-      
+
       // Add specific results based on scenario type using real data
       if (scenarioTitle.toLowerCase().includes('ceo') || scenarioTitle.toLowerCase().includes('departure')) {
         const transitionTime = readyLeaders >= 2 ? '2-3 months' : readyLeaders === 1 ? '3-6 months' : '6-12 months';
@@ -3408,7 +3789,7 @@
           'Ready Successors': readyLeaders,
           'Total Candidates': totalCandidates,
           'Transition Time': transitionTime,
-          'Risk Factors': readyLeaders === 0 ? 
+          'Risk Factors': readyLeaders === 0 ?
             ['Critical leadership gap', 'No ready successors', 'High business risk'] :
             ['Leadership transition risk', 'Stakeholder confidence', 'Knowledge transfer'],
           'Recommendations': readyLeaders === 0 ? [
@@ -3461,7 +3842,7 @@
           'Positions at Risk': positionsAtRisk,
           'Available Successors': readyLeaders,
           'Development Pipeline': inDevelopment,
-          'Recovery Time': readyLeaders >= positionsAtRisk ? '3-6 months' : 
+          'Recovery Time': readyLeaders >= positionsAtRisk ? '3-6 months' :
                           totalCandidates >= positionsAtRisk ? '6-9 months' : '9-12 months',
           'Recommendations': readyLeaders >= positionsAtRisk ? [
             'Maintain current development pace',
@@ -3479,7 +3860,7 @@
     function displayScenarioResults(results) {
       const container = document.getElementById('scenarioResultsContainer');
       let html = '<div class="simulation-results">';
-      
+
       // Add real data indicator
       html += `
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -3489,20 +3870,20 @@
           </span>
         </div>
       `;
-      
+
       Object.keys(results).forEach(key => {
         const value = results[key];
         const isRecommendations = key.toLowerCase().includes('recommendation');
         const isRiskLevel = key.toLowerCase().includes('risk level');
-        
+
         // Determine risk level class for styling
         let riskClass = '';
         if (isRiskLevel && typeof value === 'string') {
-          riskClass = value.toLowerCase().includes('high') ? 'risk-level-high' : 
-                     value.toLowerCase().includes('medium') ? 'risk-level-medium' : 
+          riskClass = value.toLowerCase().includes('high') ? 'risk-level-high' :
+                     value.toLowerCase().includes('medium') ? 'risk-level-medium' :
                      value.toLowerCase().includes('low') ? 'risk-level-low' : '';
         }
-        
+
         if (isRecommendations && Array.isArray(value)) {
           html += `
             <div class="recommendations-list">
@@ -3514,18 +3895,18 @@
           html += `
             <div class="simulation-metric ${riskClass}">
               <strong>${key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}:</strong>
-              ${Array.isArray(value) ? 
-                `<ul class="mb-0 mt-2">${value.map(item => `<li>${item}</li>`).join('')}</ul>` : 
+              ${Array.isArray(value) ?
+                `<ul class="mb-0 mt-2">${value.map(item => `<li>${item}</li>`).join('')}</ul>` :
                 `<span class="metric-value ms-2">${value}</span>`
               }
-              ${key === 'Simulation Status' && value === 'Completed' ? 
+              ${key === 'Simulation Status' && value === 'Completed' ?
                 `<span class="simulation-status-completed ms-2">✓ ${value}</span>` : ''
               }
             </div>
           `;
         }
       });
-      
+
       html += '</div>';
       container.innerHTML = html;
     }
@@ -3536,23 +3917,23 @@
       const originalText = button.innerHTML;
       button.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Running...';
       button.disabled = true;
-      
+
       // Simulate processing time
       setTimeout(() => {
         const modal = new bootstrap.Modal(document.getElementById('scenarioResultsModal'));
         document.getElementById('scenarioTitle').textContent = 'Comprehensive Scenario Analysis';
-        
+
         // Get real data from the dashboard
         const totalCandidates = parseInt(document.querySelector('.card-body h2.text-primary')?.textContent) || 0;
         const readyLeaders = parseInt(document.querySelectorAll('.card-body h2.text-success')[0]?.textContent) || 0;
         const inDevelopment = parseInt(document.querySelector('.card-body h2.text-warning')?.textContent) || 0;
         const keyPositions = parseInt(document.querySelector('.card-body h2.text-info')?.textContent) || 0;
-        
+
         // Calculate real risk level
         const riskLevel = inDevelopment > 5 ? 'High' : inDevelopment > 2 ? 'Medium' : 'Low';
         const successorRatio = totalCandidates > 0 ? Math.round((readyLeaders / totalCandidates) * 100) : 0;
         const developmentGaps = Math.max(0, keyPositions - readyLeaders);
-        
+
         // Generate recommendations based on real data
         const recommendations = [];
         if (readyLeaders < keyPositions) {
@@ -3585,10 +3966,10 @@
           'Key Recommendations': recommendations,
           'Next Review Date': new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString()
         };
-        
+
         displayScenarioResults(comprehensiveResults);
         modal.show();
-        
+
         // Reset button
         button.innerHTML = originalText;
         button.disabled = false;
@@ -3598,16 +3979,16 @@
     // Add Candidate Form Submission
     document.getElementById('addCandidateForm').addEventListener('submit', function(e) {
       e.preventDefault();
-      
+
       const formData = new FormData(this);
       const data = Object.fromEntries(formData);
-      
+
       // Show loading state
       const submitBtn = this.querySelector('button[type="submit"]');
       const originalText = submitBtn.innerHTML;
       submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Adding...';
       submitBtn.disabled = true;
-      
+
       // Send to backend
       fetch('/api/succession-planning/candidates', {
         method: 'POST',
@@ -3623,13 +4004,13 @@
           // Close modal
           const modal = bootstrap.Modal.getInstance(document.getElementById('addCandidateModal'));
           modal.hide();
-          
+
           // Reset form
           this.reset();
-          
+
           // Show success message
           showNotification('Candidate added successfully!', 'success');
-          
+
           // Reload candidates list
           location.reload();
         } else {
@@ -3656,9 +4037,9 @@
         ${message}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       `;
-      
+
       document.body.appendChild(notification);
-      
+
       // Auto remove after 5 seconds
       setTimeout(() => {
         if (notification.parentNode) {
@@ -3672,42 +4053,42 @@
       const employeeSelect = document.getElementById('employee_id');
       const positionSelect = document.getElementById('target_position_id');
       const selectedEmployee = employeeSelect.value;
-      
+
       // Reset position dropdown
       positionSelect.innerHTML = '<option value="">Select Position</option>';
-      
+
       if (!selectedEmployee) {
         positionSelect.innerHTML = '<option value="">Select Employee First</option>';
         return;
       }
-      
+
       // Get employee competencies
       const selectedOption = employeeSelect.querySelector(`option[value="${selectedEmployee}"]`);
       const employeeCompetencies = JSON.parse(selectedOption.getAttribute('data-competencies') || '[]');
-      
+
       // Show all positions and calculate readiness
       const allPositions = document.querySelectorAll('#target_position_id option[data-requirements]');
-      
+
       allPositions.forEach(option => {
         const requirements = JSON.parse(option.getAttribute('data-requirements') || '[]');
         const minScore = parseInt(option.getAttribute('data-min-score') || '50');
-        
+
         // Calculate basic compatibility score
         let compatibilityScore = 0;
         if (requirements.length > 0) {
-          const matchingCompetencies = requirements.filter(req => 
+          const matchingCompetencies = requirements.filter(req =>
             employeeCompetencies.includes(req.competency_id)
           ).length;
           compatibilityScore = Math.round((matchingCompetencies / requirements.length) * 100);
         } else {
           compatibilityScore = 75; // Default for positions without requirements
         }
-        
+
         // Update option text with compatibility indicator
         const originalText = option.textContent.split(' (')[0]; // Remove existing indicators
         let indicator = '';
         let className = '';
-        
+
         if (compatibilityScore >= 80) {
           indicator = ' (🟢 High Match)';
           className = 'text-success';
@@ -3718,11 +4099,11 @@
           indicator = ' (🔴 Low Match)';
           className = 'text-danger';
         }
-        
+
         option.textContent = originalText + indicator;
         option.className = className;
         option.style.display = 'block';
-        
+
         // Add to select
         positionSelect.appendChild(option.cloneNode(true));
       });
@@ -3747,12 +4128,12 @@
                   @if(isset($employees))
                     @foreach($employees as $employee)
                       @if(is_object($employee) && $employee->first_name && $employee->last_name)
-                        <option value="{{ $employee->employee_id }}" 
+                        <option value="{{ $employee->employee_id }}"
                                 data-competencies="{{ json_encode($employee->competencyProfiles->pluck('competency_id')->toArray()) }}">
                           {{ $employee->first_name }} {{ $employee->last_name }} - {{ $employee->position ?? 'Employee' }}
                         </option>
                       @elseif(is_array($employee) && isset($employee['first_name']) && isset($employee['last_name']))
-                        <option value="{{ $employee['employee_id'] }}" 
+                        <option value="{{ $employee['employee_id'] }}"
                                 data-competencies="{{ json_encode($employee['competency_profiles'] ?? []) }}">
                           {{ $employee['first_name'] }} {{ $employee['last_name'] }} - {{ $employee['position'] ?? 'Employee' }}
                         </option>
@@ -3767,7 +4148,7 @@
                   <option value="">Select Employee First</option>
                   @if(isset($positions))
                     @foreach($positions as $position)
-                      <option value="{{ $position->id }}" 
+                      <option value="{{ $position->id }}"
                               data-requirements="{{ json_encode($position->required_competencies ?? []) }}"
                               data-min-score="{{ $position->min_readiness_score ?? 50 }}"
                               style="display: none;">

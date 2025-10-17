@@ -410,18 +410,13 @@
             @endif
           </div>
         </div>
-      @endif
+      @endif  
 
       <!-- Possible Training Destinations Table -->
       <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center" style="background: #fff3cd;">
           <div class="d-flex align-items-center gap-3">
-            <h2 class="fw-bold mb-1">Possible Training Destinations</h2>
-          </div>
-          <div class="d-flex gap-2">
-            <button class="btn btn-primary btn-sm" onclick="confirmAction('add-destination', 'Add New Destination', 'Are you sure you want to add a new destination?')">
-              <i class="bi bi-plus-lg me-1"></i> Add New Destination
-            </button>
+            <h2 class="fw-bold mb-1">Accredited Training Centers</h2>
           </div>
         </div>
         <div class="card-body">
@@ -436,13 +431,12 @@
                     <th>Objectives</th>
                     <th>Duration</th>
                     <th>Delivery Mode</th>
-                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="possibleDestinationsTableBody">
                   @foreach($possibleDestinations as $index => $destination)
                     <tr class="possible-destination-row" data-index="{{ $index }}">
-                      <td>{{ $destination->id }}</td>
+                      <td>{{ $loop->iteration }}</td>
                       <td><strong>{{ $destination->destination_name }}</strong></td>
                       <td>
                         <div style="max-width: 200px;">
@@ -457,37 +451,27 @@
                       <td>{{ $destination->duration }}</td>
                       <td>
                         @switch($destination->delivery_mode)
-                          @case('On-site Training')
-                            <span class="badge bg-success">🏢 On-site Training</span>
+                          @case('On-Site Training')
+                            <span style="color: #000;">🏢 On-Site Training</span>
                             @break
                           @case('Blended Learning')
-                            <span class="badge bg-primary">🔄 Blended Learning</span>
+                            <span style="color: #000;">🔄 Blended Learning</span>
                             @break
                           @case('Workshop')
-                            <span class="badge bg-purple">🎯 Workshop</span>
+                            <span style="color: #000;">🎯 Workshop</span>
                             @break
                           @case('Seminar')
-                            <span class="badge bg-info">📚 Seminar</span>
+                            <span style="color: #000;">📚 Seminar</span>
                             @break
                           @case('Field Training')
-                            <span class="badge bg-danger">🏃 Field Training</span>
+                            <span style="color: #000;">🏃 Field Training</span>
+                            @break
+                          @case('Table Training')
+                            <span style="color: #000;">📋 Table Training</span>
                             @break
                           @default
-                            <span class="badge bg-secondary">{{ $destination->delivery_mode }}</span>
+                            <span style="color: #000;">{{ $destination->delivery_mode }}</span>
                         @endswitch
-                      </td>
-                      <td>
-                        <div class="btn-group" role="group">
-                          <button class="btn btn-outline-warning btn-sm" onclick="confirmAction('edit-destination', 'Edit Destination', 'Are you sure you want to edit {{ $destination->destination_name }}?', {{ $destination->id }})" title="Edit Destination">
-                            <i class="bi bi-pencil"></i>
-                          </button>
-                          <button class="btn btn-outline-danger btn-sm delete-possible-btn"
-                                  data-destination-id="{{ $destination->id }}"
-                                  data-destination-name="{{ $destination->destination_name }}"
-                                  onclick="confirmDelete({{ $destination->id }}, '{{ $destination->destination_name }}')" title="Delete Destination">
-                            <i class="bi bi-trash"></i>
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   @endforeach
@@ -551,9 +535,6 @@
             <button class="btn btn-primary" id="applyFilters"><i class="bi bi-funnel"></i> Filter</button>
           </div>
           <div class="d-flex gap-2">
-            <button class="btn btn-outline-info btn-sm" onclick="confirmAction('sync-competency', 'Sync Competency Profiles', 'This will sync competency profiles. Continue?')">
-              <i class="bi bi-person-check me-1"></i> Sync Competency Profiles
-            </button>
             <button class="btn btn-outline-primary btn-sm" onclick="confirmAction('export-excel', 'Export Excel', 'Export training data to Excel?')">
               <i class="bi bi-download me-1"></i> Export Excel
             </button>
@@ -630,7 +611,7 @@
                             @endif
                           </h5>
                           <p class="mb-0 opacity-75">
-                            <i class="bi bi-hash me-1"></i>ID: {{ $record->id }}
+                            <i class="bi bi-hash me-1"></i>ID: {{ $loop->iteration }}
                           </p>
                         </div>
                       </div>
@@ -658,22 +639,25 @@
                               @if($record->delivery_mode)
                                 @switch($record->delivery_mode)
                                   @case('On-site Training')
-                                    <span class="badge" style="background-color: #198754; color: white;">🏢 On-site Training</span>
+                                    <span style="color: #000;">🏢 On-site Training</span>
                                     @break
                                   @case('Blended Learning')
-                                    <span class="badge" style="background-color: #0d6efd; color: white;">🔄 Blended Learning</span>
+                                    <span style="color: #000;">🔄 Blended Learning</span>
                                     @break
                                   @case('Workshop')
-                                    <span class="badge" style="background-color: #6f42c1; color: white;">🎯 Workshop</span>
+                                    <span style="color: #000;">🎯 Workshop</span>
                                     @break
                                   @case('Seminar')
-                                    <span class="badge" style="background-color: #20c997; color: white;">📚 Seminar</span>
+                                    <span style="color: #000;">📚 Seminar</span>
                                     @break
                                   @case('Field Training')
-                                    <span class="badge" style="background-color: #dc3545; color: white;">🏃 Field Training</span>
+                                    <span style="color: #000;">🏃 Field Training</span>
+                                    @break
+                                  @case('Table Training')
+                                    <span style="color: #000;">📋 Table Training</span>
                                     @break
                                   @default
-                                    <span class="badge bg-secondary">{{ $record->delivery_mode }}</span>
+                                    <span style="color: #000;">{{ $record->delivery_mode }}</span>
                                 @endswitch
                               @else
                                 <span class="text-muted">Not Set</span>
@@ -1686,9 +1670,13 @@
     }
 
     // Add event listeners for duplicate checking
-    document.getElementById('employee_id').addEventListener('change', checkForDuplicates);
-    document.getElementById('destination_name').addEventListener('change', checkForDuplicates);
-    document.getElementById('delivery_mode').addEventListener('change', checkForDuplicates);
+    const employeeIdEl = document.getElementById('employee_id');
+    const destinationNameEl = document.getElementById('destination_name');
+    const deliveryModeEl = document.getElementById('delivery_mode');
+    
+    if (employeeIdEl) employeeIdEl.addEventListener('change', checkForDuplicates);
+    if (destinationNameEl) destinationNameEl.addEventListener('change', checkForDuplicates);
+    if (deliveryModeEl) deliveryModeEl.addEventListener('change', checkForDuplicates);
 
     modalEl.addEventListener('hidden.bs.modal', function () {
       resetForm();
@@ -1730,7 +1718,9 @@
   });
 
   // Filter functionality - Updated for card layout
-  document.getElementById('applyFilters').addEventListener('click', function() {
+  const applyFiltersBtn = document.getElementById('applyFilters');
+  if (applyFiltersBtn) {
+    applyFiltersBtn.addEventListener('click', function() {
     const search = document.getElementById('searchInput').value.toLowerCase();
     const progressFilter = document.getElementById('progressFilter').value;
     const dateFilter = document.getElementById('dateFilter').value;
@@ -1770,10 +1760,13 @@
       
       cardCol.style.display = show ? '' : 'none';
     });
-  });
+    });
+  }
 
   // Export Excel (basic CSV)
-  document.getElementById('exportExcel').addEventListener('click', function() {
+  const exportExcelBtn = document.getElementById('exportExcel');
+  if (exportExcelBtn) {
+    exportExcelBtn.addEventListener('click', function() {
     let csv = '';
     document.querySelectorAll('table thead th').forEach(th => {
       csv += '"' + th.textContent.trim() + '",';
@@ -1792,12 +1785,16 @@
     link.href = URL.createObjectURL(blob);
     link.download = 'destination_knowledge_training.csv';
     link.click();
-  });
+    });
+  }
 
   // Export PDF (print)
-  document.getElementById('exportPdf').addEventListener('click', function() {
-    window.print();
-  });
+  const exportPdfBtn = document.getElementById('exportPdf');
+  if (exportPdfBtn) {
+    exportPdfBtn.addEventListener('click', function() {
+      window.print();
+    });
+  }
 
   // (Deprecated duplicate) Sync Missing Records handler removed. Use setupSyncButton() below.
   </script>
@@ -2478,6 +2475,12 @@
     const applyFiltersBtn = document.getElementById('applyFilters');
     const tableRows = document.querySelectorAll('table tbody tr:not(.empty-row)');
 
+    // Check if all required elements exist
+    if (!searchInput || !progressFilter || !dateFilter || !applyFiltersBtn) {
+      console.log('Filter elements not found, skipping filter setup');
+      return;
+    }
+
     function applyFilters() {
       const searchTerm = searchInput.value.toLowerCase();
       const statusFilter = progressFilter.value.toLowerCase();
@@ -2815,7 +2818,7 @@
               try {
                 const data = await response.json();
                 msg = data.message || msg;
-              } catch {}
+              } catch (e) {}
               Swal.fire({
                 icon: 'error',
                 title: 'Assignment Failed',
@@ -2897,8 +2900,11 @@
           
           if (totalRecords <= possibleItemsPerPage) {
             // Hide pagination if not needed
-            const pagination = document.querySelector('#possiblePrevBtn').closest('.d-flex');
-            if (pagination) pagination.style.display = 'none';
+            const possiblePrevBtn = document.querySelector('#possiblePrevBtn');
+            if (possiblePrevBtn) {
+              const pagination = possiblePrevBtn.closest('.d-flex');
+              if (pagination) pagination.style.display = 'none';
+            }
             return;
           }
           
@@ -2930,25 +2936,34 @@
           });
           
           // Update pagination info
-          document.getElementById('possibleCurrentStart').textContent = startIndex + 1;
-          document.getElementById('possibleCurrentEnd').textContent = Math.min(endIndex, totalRecords);
-          document.getElementById('possibleTotalRecords').textContent = totalRecords;
-          document.getElementById('possibleCurrentPage').textContent = page;
+          const possibleCurrentStart = document.getElementById('possibleCurrentStart');
+          const possibleCurrentEnd = document.getElementById('possibleCurrentEnd');
+          const possibleTotalRecords = document.getElementById('possibleTotalRecords');
+          const possibleCurrentPageEl = document.getElementById('possibleCurrentPage');
+          
+          if (possibleCurrentStart) possibleCurrentStart.textContent = startIndex + 1;
+          if (possibleCurrentEnd) possibleCurrentEnd.textContent = Math.min(endIndex, totalRecords);
+          if (possibleTotalRecords) possibleTotalRecords.textContent = totalRecords;
+          if (possibleCurrentPageEl) possibleCurrentPageEl.textContent = page;
           
           // Update button states
           const prevBtn = document.getElementById('possiblePrevBtn');
           const nextBtn = document.getElementById('possibleNextBtn');
           
-          if (page <= 1) {
-            prevBtn.classList.add('disabled');
-          } else {
-            prevBtn.classList.remove('disabled');
+          if (prevBtn) {
+            if (page <= 1) {
+              prevBtn.classList.add('disabled');
+            } else {
+              prevBtn.classList.remove('disabled');
+            }
           }
           
-          if (page >= totalPages) {
-            nextBtn.classList.add('disabled');
-          } else {
-            nextBtn.classList.remove('disabled');
+          if (nextBtn) {
+            if (page >= totalPages) {
+              nextBtn.classList.add('disabled');
+            } else {
+              nextBtn.classList.remove('disabled');
+            }
           }
         }
 
@@ -2964,8 +2979,11 @@
           
           if (totalRecords <= trainingItemsPerPage) {
             // Hide pagination if not needed
-            const pagination = document.querySelector('#trainingPrevBtn').closest('.d-flex');
-            if (pagination) pagination.style.display = 'none';
+            const trainingPrevBtn = document.querySelector('#trainingPrevBtn');
+            if (trainingPrevBtn) {
+              const pagination = trainingPrevBtn.closest('.d-flex');
+              if (pagination) pagination.style.display = 'none';
+            }
             return;
           }
           
@@ -2997,25 +3015,34 @@
           });
           
           // Update pagination info
-          document.getElementById('trainingCurrentStart').textContent = startIndex + 1;
-          document.getElementById('trainingCurrentEnd').textContent = Math.min(endIndex, totalRecords);
-          document.getElementById('trainingTotalRecords').textContent = totalRecords;
-          document.getElementById('trainingCurrentPage').textContent = page;
+          const trainingCurrentStart = document.getElementById('trainingCurrentStart');
+          const trainingCurrentEnd = document.getElementById('trainingCurrentEnd');
+          const trainingTotalRecords = document.getElementById('trainingTotalRecords');
+          const trainingCurrentPageEl = document.getElementById('trainingCurrentPage');
+          
+          if (trainingCurrentStart) trainingCurrentStart.textContent = startIndex + 1;
+          if (trainingCurrentEnd) trainingCurrentEnd.textContent = Math.min(endIndex, totalRecords);
+          if (trainingTotalRecords) trainingTotalRecords.textContent = totalRecords;
+          if (trainingCurrentPageEl) trainingCurrentPageEl.textContent = page;
           
           // Update button states
           const prevBtn = document.getElementById('trainingPrevBtn');
           const nextBtn = document.getElementById('trainingNextBtn');
           
-          if (page <= 1) {
-            prevBtn.classList.add('disabled');
-          } else {
-            prevBtn.classList.remove('disabled');
+          if (prevBtn) {
+            if (page <= 1) {
+              prevBtn.classList.add('disabled');
+            } else {
+              prevBtn.classList.remove('disabled');
+            }
           }
           
-          if (page >= totalPages) {
-            nextBtn.classList.add('disabled');
-          } else {
-            nextBtn.classList.remove('disabled');
+          if (nextBtn) {
+            if (page >= totalPages) {
+              nextBtn.classList.add('disabled');
+            } else {
+              nextBtn.classList.remove('disabled');
+            }
           }
         }
 

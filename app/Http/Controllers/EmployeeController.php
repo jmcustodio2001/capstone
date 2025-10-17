@@ -228,7 +228,17 @@ class EmployeeController extends Controller
             'email' => 'required|email',
             'password' => 'required|string|min:6',
             'remember' => 'nullable|boolean',
+            'g-recaptcha-response' => 'required',
         ]);
+
+        // Verify CAPTCHA
+        if (!$this->verifyCaptcha($request->input('g-recaptcha-response'))) {
+            return response()->json([
+                'success' => false,
+                'message' => 'CAPTCHA verification failed. Please try again.',
+                'step' => 'captcha_error'
+            ], 422);
+        }
 
         $email = $request->email;
         $ipAddress = $request->ip();
@@ -1721,6 +1731,43 @@ class EmployeeController extends Controller
                 ], 500);
             }
             return back()->with('error', 'Failed to save employee: ' . $e->getMessage())->withInput();
+        }
+    }
+
+    /**
+     * Verify Google reCAPTCHA response
+     */
+    private function verifyCaptcha($captchaResponse)
+    {
+        if (empty($captchaResponse)) {
+            return false;
+        }
+
+        $secretKey = env('RECAPTCHA_SECRET_KEY');
+        if (empty($secretKey)) {
+            Log::warning('RECAPTCHA_SECRET_KEY not configured');
+            return false;
+        }
+
+        try {
+            $response = Http::asForm()->post('https://www.google.com/recaptcha/api/siteverify', [
+                'secret' => $secretKey,
+                'response' => $captchaResponse,
+                'remoteip' => request()->ip()
+            ]);
+
+            $result = $response->json();
+            
+            Log::info('CAPTCHA verification result', [
+                'success' => $result['success'] ?? false,
+                'error_codes' => $result['error-codes'] ?? [],
+                'ip' => request()->ip()
+            ]);
+
+            return $result['success'] ?? false;
+        } catch (\Exception $e) {
+            Log::error('CAPTCHA verification error: ' . $e->getMessage());
+            return false;
         }
     }
 

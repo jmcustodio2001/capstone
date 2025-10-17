@@ -154,19 +154,14 @@ class AttendanceTimeLog extends Model
     {
         return [
             'employee_id',
-            'log_date', 
+            'log_date',
             'time_in',
             'time_out',
             'break_start_time',
             'break_end_time',
             'total_hours',
             'overtime_hours',
-            'status',
-            'location',
-            'ip_address',
-            'notes',
-            'created_at',
-            'updated_at'
+            'status'
         ];
     }
 
@@ -177,13 +172,13 @@ class AttendanceTimeLog extends Model
     {
         $columns = self::getTableColumns();
         $config = $columns[$field] ?? null;
-        
+
         if (!$config) {
             return $this->$field;
         }
 
         $value = $this->$field;
-        
+
         if (is_null($value)) {
             return '--';
         }
@@ -195,21 +190,21 @@ class AttendanceTimeLog extends Model
                 } catch (\Exception $e) {
                     return $value;
                 }
-                
+
             case 'time':
                 try {
                     return Carbon::parse($value)->format($config['format'] ?? 'H:i');
                 } catch (\Exception $e) {
                     return $value;
                 }
-                
+
             case 'datetime':
                 try {
                     return Carbon::parse($value)->format($config['format'] ?? 'Y-m-d H:i:s');
                 } catch (\Exception $e) {
                     return $value;
                 }
-                
+
             case 'decimal':
                 if ($config['format'] === 'hours') {
                     $hours = floor($value);
@@ -217,10 +212,10 @@ class AttendanceTimeLog extends Model
                     return "{$hours}h {$minutes}m";
                 }
                 return number_format($value, 2);
-                
+
             case 'badge':
                 return $value;
-                
+
             default:
                 return $value;
         }

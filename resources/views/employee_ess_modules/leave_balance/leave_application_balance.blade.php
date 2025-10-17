@@ -873,26 +873,42 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   // Update leave balance text when leave type changes
-  document.getElementById('leave_type').addEventListener('change', function() {
-    const type = this.value;
-    const balanceText = document.getElementById('leave-balance-text');
+  const leaveTypeElement = document.getElementById('leave_type');
+  if (leaveTypeElement) {
+    leaveTypeElement.addEventListener('change', function() {
+      const type = this.value;
+      const balanceText = document.getElementById('leave-balance-text');
 
-    if (type && leaveBalances[type]) {
-      balanceText.textContent = `Available balance: ${leaveBalances[type].available} days (${leaveBalances[type].used} used out of ${leaveBalances[type].total})`;
-      balanceText.className = 'form-text';
+      if (balanceText) {
+        if (type && leaveBalances[type]) {
+          balanceText.textContent = `Available balance: ${leaveBalances[type].available} days (${leaveBalances[type].used} used out of ${leaveBalances[type].total})`;
+          balanceText.className = 'form-text';
 
-      // Set max days to available balance
-      document.getElementById('leave_days').setAttribute('max', leaveBalances[type].available);
-    } else {
-      balanceText.textContent = 'Please select a leave type to see your balance';
-      balanceText.className = 'form-text text-muted';
-    }
-  });
+          // Set max days to available balance
+          const leaveDaysElement = document.getElementById('leave_days');
+          if (leaveDaysElement) {
+            leaveDaysElement.setAttribute('max', leaveBalances[type].available);
+          }
+        } else {
+          balanceText.textContent = 'Please select a leave type to see your balance';
+          balanceText.className = 'form-text text-muted';
+        }
+      }
+    });
+  }
 
   // Calculate end date based on start date and number of days
   function calculateEndDate() {
-    const startDate = document.getElementById('start_date').value;
-    const days = parseInt(document.getElementById('leave_days').value) || 0;
+    const startDateElement = document.getElementById('start_date');
+    const leaveDaysElement = document.getElementById('leave_days');
+    const endDateElement = document.getElementById('end_date');
+    
+    if (!startDateElement || !leaveDaysElement || !endDateElement) {
+      return; // Exit if any required elements are missing
+    }
+    
+    const startDate = startDateElement.value;
+    const days = parseInt(leaveDaysElement.value) || 0;
 
     if (startDate && days > 0) {
       const start = new Date(startDate);
@@ -903,7 +919,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Format date as YYYY-MM-DD
       const endFormatted = end.toISOString().split('T')[0];
-      document.getElementById('end_date').value = endFormatted;
+      endDateElement.value = endFormatted;
     }
   }
 
@@ -1053,7 +1069,9 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // AJAX Form submission for new leave application with SweetAlert and Password Verification
-  document.getElementById('leaveForm').addEventListener('submit', function(e) {
+  const leaveFormElement = document.getElementById('leaveForm');
+  if (leaveFormElement) {
+    leaveFormElement.addEventListener('submit', function(e) {
     e.preventDefault();
 
     const form = this;
@@ -1151,6 +1169,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
+  }
 
   // Function to verify employee password before form submission
   function verifyEmployeePassword(password, form, formData) {
@@ -1479,7 +1498,9 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // AJAX Form submission for edit leave application with password verification
-  document.getElementById('editLeaveForm').addEventListener('submit', function(e) {
+  const editLeaveFormElement = document.getElementById('editLeaveForm');
+  if (editLeaveFormElement) {
+    editLeaveFormElement.addEventListener('submit', function(e) {
     e.preventDefault();
 
     const form = this;
@@ -1577,6 +1598,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
+  }
 
   // View leave application
   document.querySelectorAll('.view-leave').forEach(button => {
@@ -1715,7 +1737,12 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Set minimum start date to today for edit form
-  document.getElementById('edit_start_date').setAttribute('min', formattedToday);
+  const today = new Date();
+  const formattedToday = today.toISOString().split('T')[0];
+  const editStartDateElement = document.getElementById('edit_start_date');
+  if (editStartDateElement) {
+    editStartDateElement.setAttribute('min', formattedToday);
+  }
 
   // Toast notification function
   function showToast(title, message, type = 'info') {
@@ -1980,9 +2007,10 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // Set minimum start date to today
-  const today = new Date();
-  const formattedToday = today.toISOString().split('T')[0];
-  document.getElementById('start_date').setAttribute('min', formattedToday);
+  const startDateElement = document.getElementById('start_date');
+  if (startDateElement) {
+    startDateElement.setAttribute('min', formattedToday);
+  }
 
   // API Integration Functions
   window.LeaveAPI = {

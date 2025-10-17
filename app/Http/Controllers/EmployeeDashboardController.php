@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Routing\Controller;
 use Carbon\Carbon;
 
@@ -70,9 +71,11 @@ class EmployeeDashboardController extends Controller
         $latestPayslip = $this->getLatestPayslipAmount($employeeId);
         $payslipMonth = $this->getLatestPayslipMonth($employeeId);
 
-        // Get upcoming trainings count from upcoming trainings list
+        // Get upcoming trainings count using the same logic as MyTrainingController
+        $upcomingTrainings = $this->getAccurateUpcomingTrainingsCount($employeeId);
+        
+        // Get upcoming trainings list for the view
         $upcomingTrainingsList = $this->getUpcomingTrainingsFromMyTrainingController($employeeId);
-        $upcomingTrainings = $upcomingTrainingsList->count();
 
         // Get recent requests with mixed types
         $recentRequests = collect();
@@ -245,6 +248,96 @@ class EmployeeDashboardController extends Controller
             ->merge($destinationAssigned->toArray());
 
         return $upcoming;
+    }
+
+    /**
+     * Get accurate upcoming trainings count using the same logic as MyTrainingController
+     */
+    private function getAccurateUpcomingTrainingsCount($employeeId)
+    {
+        // Clear any cached data first to ensure fresh counts
+        Cache::forget("employee_training_counts_{$employeeId}");
+        Cache::forget("upcoming_trainings_{$employeeId}");
+        
+        // Use the exact same logic as MyTrainingController
+        $manualUpcoming = \App\Models\UpcomingTraining::where('employee_id', $employeeId)->get();
+        
+        $adminAssigned = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
+            ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+            ->whereHas('course')
+            ->get();
+            
+        $competencyAssigned = \App\Models\CompetencyCourseAssignment::where('employee_id', $employeeId)
+            ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+            ->whereHas('course')
+            ->get();
+
+        // Apply the same deduplication logic as MyTrainingController
+        $allTrainings = collect()
+            ->merge($manualUpcoming->toArray())
+            ->merge($adminAssigned->toArray())
+            ->merge($competencyAssigned->toArray());
+
+        $seenTitles = [];
+        $seenCourseIds = [];
+        $deduplicated = $allTrainings->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
+            $item = (object) $item;
+            
+            $rawTitle = $item->training_title ?? '';
+            if (empty(trim($rawTitle))) {
+                return false;
+            }
+            
+            $normalizedTitle = strtolower(trim($rawTitle));
+            $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development)\b/i', '', $normalizedTitle);
+            $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
+            
+            $courseId = $item->course_id ?? null;
+            if ($courseId && in_array($courseId, $seenCourseIds)) {
+                return false;
+            }
+            
+            if (in_array($normalizedTitle, $seenTitles)) {
+                return false;
+            }
+            
+            if ($courseId) {
+                $seenCourseIds[] = $courseId;
+            }
+            $seenTitles[] = $normalizedTitle;
+            
+            return true;
+        });
+        
+        return $deduplicated->count();
+    }
+
+    /**
+     * Get fresh dashboard counts for AJAX refresh
+     */
+    public function getDashboardCounts()
+    {
+        $employeeId = Auth::guard('employee')->user()->employee_id;
+        
+        // Get fresh upcoming trainings count
+        $upcomingTrainings = $this->getAccurateUpcomingTrainingsCount($employeeId);
+        
+        // Get training requests count
+        $requestsCount = \App\Models\TrainingRequest::where('employee_id', $employeeId)->count();
+        
+        // Get training progress count (only approved requests)
+        $progressCount = \App\Models\TrainingRequest::where('employee_id', $employeeId)
+            ->where('status', 'Approved')
+            ->count();
+        
+        return response()->json([
+            'success' => true,
+            'counts' => [
+                'upcoming' => $upcomingTrainings,
+                'requests' => $requestsCount,
+                'progress' => $progressCount
+            ]
+        ]);
     }
 
     /**

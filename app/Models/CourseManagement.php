@@ -42,4 +42,12 @@ class CourseManagement extends Model
     {
         return $this->belongsTo(Employee::class, 'employee_id');
     }
+
+    /**
+     * Get exam attempts for this course
+     */
+    public function attempts()
+    {
+        return $this->hasMany(ExamAttempt::class, 'course_id', 'course_id');
+    }
 }

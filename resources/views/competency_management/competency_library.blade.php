@@ -71,8 +71,8 @@
     }
     
     .table th {
-      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%);
-      color: #2c5282;
+      background-color: #f8f9fa;
+      color: #495057;
       border: none;
       font-weight: 600;
       font-size: 0.875rem;
@@ -92,12 +92,12 @@
     }
     
     .category-badge {
-      font-size: 0.75rem;
-      padding: 0.4rem 0.8rem;
-      border-radius: 20px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
+      font-size: 0.8rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: normal;
     }
     
     .progress-sm {
@@ -126,8 +126,8 @@
     }
     
     .row-number {
-      background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%);
-      color: #2c5282;
+      background: none;
+      color: #495057;
       font-weight: 700;
       font-size: 0.8rem;
       padding: 0.3rem 0.6rem;
@@ -366,17 +366,8 @@
 
     <!-- Competency List Section -->
     <div class="card shadow-sm border-0 mt-4">
-      <div class="card-header d-flex justify-content-between align-items-center">
+      <div class="card-header">
         <h4 class="fw-bold mb-0">Competency List</h4>
-        <div class="d-flex gap-2">
-          @if(Auth::guard('admin')->check() && strtoupper(Auth::guard('admin')->user()->role) === 'ADMIN')
-            <button class="btn btn-primary" onclick="addCompetency()">
-              <i class="bi bi-plus-lg me-1"></i> Add Competency
-            </button>
-          @else
-            <span class="text-muted">Admin access required for management actions</span>
-          @endif
-        </div>
       </div>
       <div class="card-body p-0">
         @forelse($competencies as $index => $comp)
@@ -385,31 +376,21 @@
               <table class="table table-hover mb-0">
                 <thead>
                   <tr>
-                    <th width="5%" class="text-center">#</th>
+                    <th width="5%" class="text-center">ID</th>
                     <th width="22%">Competency Name</th>
                     <th width="12%" class="text-center">Category</th>
                     <th width="28%">Description</th>
                     <th width="15%">Proficiency Level</th>
                     <th width="8%" class="text-center">Rating</th>
-                    <th width="10%" class="text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
           @endif
                   @php
-                    $categoryColors = [
-                      'Technical' => 'bg-primary',
-                      'Leadership' => 'bg-success',
-                      'Communication' => 'bg-info',
-                      'Behavioral' => 'bg-warning',
-                      'Management' => 'bg-danger',
-                      'Analytical' => 'bg-purple',
-                      'Creative' => 'bg-pink',
-                      'Strategic' => 'bg-dark'
-                    ];
+                    // Use single color for all categories (same as card header)
                     $effectiveCategory = $comp->category ?? '';
-                    $colorClass = $categoryColors[$effectiveCategory] ?? 'bg-secondary';
-                    $progressPercent = round((($comp->rate ?? 0)/5)*100);
+                    $colorClass = 'bg-primary'; // Single blue color for all badges
+                    $progressPercent = ($comp->rate ?? 0) * 20;
                     $progressPercent = max(0, min(100, $progressPercent));
                     $percentClass = $progressPercent >= 80 ? 'text-success' : ($progressPercent >= 50 ? 'text-warning' : 'text-danger');
                   @endphp
@@ -422,7 +403,7 @@
                     </td>
                     <td class="text-center">
                       <span class="badge category-badge {{ $colorClass }} text-white">
-                        <i class="bi bi-tag-fill me-1"></i>{{ $effectiveCategory }}
+                        {{ $effectiveCategory }}
                       </span>
                     </td>
                     <td>
@@ -453,55 +434,6 @@
                       </div>
                       <div class="small text-muted fw-semibold">({{ $comp->rate ?? 0 }}/5)</div>
                     </td>
-                    <td class="text-center">
-                      @if(Auth::guard('admin')->check() && strtoupper(Auth::guard('admin')->user()->role) === 'ADMIN')
-                        <div class="btn-group" role="group">
-                          <button class="btn btn-outline-primary btn-sm edit-competency-btn"
-                                  data-id="{{ $comp->id }}"
-                                  data-name="{{ $comp->competency_name }}"
-                                  data-description="{{ $comp->description }}"
-                                  data-category="{{ $comp->category }}"
-                                  data-rate="{{ $comp->rate }}"
-                                  title="Edit Competency"
-                                  data-bs-toggle="tooltip">
-                            <i class="bi bi-pencil-square"></i>
-                          </button>
-                          @if(isset($comp->notification_sent) && $comp->notification_sent)
-                            <button class="btn btn-outline-secondary btn-sm" disabled
-                                    title="Already Notified"
-                                    data-bs-toggle="tooltip">
-                              <i class="bi bi-bell-slash"></i>
-                            </button>
-                          @else
-                            <button class="btn btn-outline-info btn-sm notify-course-btn"
-                                    data-id="{{ $comp->id }}"
-                                    data-name="{{ $comp->competency_name }}"
-                                    data-description="{{ $comp->description }}"
-                                    title="Notify Course Management"
-                                    data-bs-toggle="tooltip">
-                              <i class="bi bi-bell-fill"></i>
-                            </button>
-                          @endif
-                          <form id="deleteForm{{ $comp->id }}" action="{{ route('admin.competency_library.destroy', $comp->id) }}" method="POST" style="display:inline-block;">
-                            @csrf
-                            @method('DELETE')
-                            <button type="button" class="btn btn-outline-danger btn-sm delete-competency-btn"
-                                    data-id="{{ $comp->id }}"
-                                    data-name="{{ $comp->competency_name }}"
-                                    title="Delete Competency"
-                                    data-bs-toggle="tooltip">
-                              <i class="bi bi-trash3-fill"></i>
-                            </button>
-                          </form>
-                        </div>
-                      @else
-                        <div class="text-center">
-                          <span class="badge bg-light text-muted">
-                            <i class="bi bi-lock-fill me-1"></i>Restricted
-                          </span>
-                        </div>
-                      @endif
-                    </td>
                   </tr>
           @if($loop->last)
                 </tbody>
@@ -514,12 +446,7 @@
               <i class="bi bi-inbox display-1 text-muted"></i>
             </div>
             <h5 class="text-muted mb-2">No Competencies Found</h5>
-            <p class="text-muted mb-3">Get started by adding your first competency to the library.</p>
-            @if(Auth::guard('admin')->check() && strtoupper(Auth::guard('admin')->user()->role) === 'ADMIN')
-              <button class="btn btn-primary" onclick="addCompetency()">
-                <i class="bi bi-plus-lg me-1"></i> Add Your First Competency
-              </button>
-            @endif
+            <p class="text-muted mb-3">The competency library is currently empty.</p>
           </div>
         @endforelse
       </div>
@@ -640,138 +567,12 @@
 
   <script>
     document.addEventListener('DOMContentLoaded', function () {
-      // Initialize Bootstrap modals
-      const editCompetencyModal = new bootstrap.Modal(document.getElementById('editCompetencyModal'));
+      // Initialize Bootstrap modals for add competency functionality only
       window.addCompetencyModal = new bootstrap.Modal(document.getElementById('addCompetencyModal'));
 
-      // ========== COMPETENCY EDIT FUNCTIONALITY ==========
-      document.querySelectorAll('.edit-competency-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const id = this.getAttribute('data-id');
-          const name = this.getAttribute('data-name');
-          const description = this.getAttribute('data-description');
-          const category = this.getAttribute('data-category');
-          const rate = this.getAttribute('data-rate');
-
-          console.log('Edit button clicked, Swal available:', typeof Swal);
-
-          // Show SweetAlert confirmation
-          try {
-            Swal.fire({
-              title: 'Edit Competency',
-              text: 'Are you sure you want to edit this competency?',
-              icon: 'question',
-              showCancelButton: true,
-              confirmButtonColor: '#007bff',
-              cancelButtonColor: '#6c757d',
-              confirmButtonText: 'Yes, edit it!',
-              cancelButtonText: 'Cancel'
-            }).then((result) => {
-              if (result.isConfirmed) {
-                console.log('User confirmed edit, proceeding to password verification');
-                // Show password verification before proceeding to edit
-                showPasswordVerification(id, name, description, category, rate);
-              }
-            });
-          } catch (e) {
-            console.error('Error showing initial confirmation dialog:', e);
-          }
-        });
-      });
-
-      // Function to show password verification dialog
-      function showPasswordVerification(id, name, description, category, rate) {
-        try {
-          Swal.fire({
-            title: 'Password Verification',
-            text: 'Please enter your password to proceed',
-            input: 'password',
-            inputPlaceholder: 'Enter your password',
-            inputAttributes: {
-              autocapitalize: 'off',
-              autocorrect: 'off'
-            },
-            showCancelButton: true,
-            confirmButtonColor: '#007bff',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Verify',
-            cancelButtonText: 'Cancel',
-            inputValidator: (value) => {
-              if (!value) {
-                return 'Password is required!';
-              }
-            }
-          }).then((passwordResult) => {
-            if (passwordResult.isConfirmed) {
-              const password = passwordResult.value;
-
-              // Verify password via AJAX
-              $.ajax({
-                url: '/admin/verify-password',
-                type: 'POST',
-                data: { password: password },
-                headers: {
-                  'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                success: function(response) {
-                  if (response.success) {
-                    // Proceed to edit after successful verification
-                    proceedToEdit(id, name, description, category, rate);
-                  } else {
-                    Swal.fire({
-                      title: 'Verification Failed',
-                      text: 'Incorrect password. Please try again.',
-                      icon: 'error',
-                      confirmButtonColor: '#dc3545'
-                    });
-                  }
-                },
-                error: function(xhr) {
-                  Swal.fire({
-                    title: 'Error',
-                    text: 'An error occurred during verification. Please try again.',
-                    icon: 'error',
-                    confirmButtonColor: '#dc3545'
-                  });
-                }
-              });
-            }
-          });
-        } catch (e) {
-          console.error('Error showing password verification dialog:', e);
-        }
-      }
-
-      // Function to proceed with editing after verification
-      function proceedToEdit(id, name, description, category, rate) {
-        // Debug logging
-        console.log('Edit button clicked for ID:', id);
-        console.log('Data attributes:', { id, name, description, category, rate });
-
-        // Set form action URL
-        const actionUrl = `/admin/competency-library/${id}`;
-        const form = document.getElementById('editCompetencyForm');
-        form.action = actionUrl;
-        console.log('Form action set to:', actionUrl);
-        console.log('Form element action attribute:', form.getAttribute('action'));
-
-        // Populate form fields
-        document.getElementById('edit-competency-name').value = name || '';
-        document.getElementById('edit-description').value = description || '';
-        document.getElementById('edit-category').value = category || '';
-        document.getElementById('edit-rate').value = rate || '';
-
-        // Verify form fields were populated
-        console.log('Form fields populated:', {
-          name: document.getElementById('edit-competency-name').value,
-          description: document.getElementById('edit-description').value,
-          category: document.getElementById('edit-category').value,
-          rate: document.getElementById('edit-rate').value
-        });
-
-        // Show modal
-        editCompetencyModal.show();
-      }
+      // ========== COMPETENCY MANAGEMENT - AUTO-SYNC TO COURSES ==========
+      // All competencies now automatically sync to course management
+      // No manual edit/delete/notify actions needed
 
       // Function to submit the edit form
       function submitEditForm() {
@@ -902,118 +703,7 @@
       });
 
       // ========== ADD COMPETENCY FUNCTIONALITY ==========
-      window.addCompetency = function() {
-        console.log('Add competency button clicked, Swal available:', typeof Swal);
-
-        // Show SweetAlert confirmation
-        try {
-          Swal.fire({
-            title: 'Add New Competency',
-            text: 'Are you sure you want to add a new competency?',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#007bff',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Yes, add it!',
-            cancelButtonText: 'Cancel'
-          }).then((result) => {
-            if (result.isConfirmed) {
-              console.log('User confirmed add, proceeding to password verification');
-              // Show password verification
-              showPasswordVerificationForAdd();
-            }
-          });
-        } catch (e) {
-          console.error('Error showing initial confirmation dialog:', e);
-        }
-      }
-
-      // Function to show password verification for add
-      window.showPasswordVerificationForAdd = function() {
-        try {
-          Swal.fire({
-            title: 'Password Verification',
-            text: 'Please enter your password to proceed',
-            input: 'password',
-            inputPlaceholder: 'Enter your password',
-            inputAttributes: {
-              autocapitalize: 'off',
-              autocorrect: 'off'
-            },
-            showCancelButton: true,
-            confirmButtonColor: '#007bff',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Verify',
-            cancelButtonText: 'Cancel',
-            inputValidator: (value) => {
-              if (!value) {
-                return 'Password is required!';
-              }
-            }
-          }).then((passwordResult) => {
-            if (passwordResult.isConfirmed) {
-              const password = passwordResult.value;
-
-              // Verify password via AJAX
-              $.ajax({
-                url: '/admin/verify-password',
-                type: 'POST',
-                data: { password: password },
-                headers: {
-                  'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                success: function(response) {
-                  if (response.success) {
-                    // Proceed to open add modal after successful verification
-                    window.addCompetencyModal.show();
-                  } else {
-                    Swal.fire({
-                      title: 'Verification Failed',
-                      text: 'Incorrect password. Please try again.',
-                      icon: 'error',
-                      confirmButtonColor: '#dc3545'
-                    });
-                  }
-                },
-                error: function(xhr) {
-                  Swal.fire({
-                    title: 'Error',
-                    text: 'An error occurred during verification. Please try again.',
-                    icon: 'error',
-                    confirmButtonColor: '#dc3545'
-                  });
-                }
-              });
-            }
-          });
-        } catch (e) {
-          console.error('Error showing password verification dialog:', e);
-        }
-      }
-
-      // Star rating hover effect for add modal
-      const addRateInput = document.getElementById('add-rate');
-      if (addRateInput) {
-        addRateInput.addEventListener('input', function() {
-          const value = parseInt(this.value);
-          if (value >= 1 && value <= 5) {
-            // You could add visual feedback here if needed
-          }
-        });
-      }
-
-      // Star rating hover effect for edit modal
-      const editRateInput = document.getElementById('edit-rate');
-      if (editRateInput) {
-        editRateInput.addEventListener('input', function() {
-          const value = parseInt(this.value);
-          if (value >= 1 && value <= 5) {
-            // You could add visual feedback here if needed
-          }
-        });
-      }
-
-      // Apply progress widths without inline Blade in style attributes (avoids linter errors)
+      // Apply progress bar widths for visual display
       document.querySelectorAll('.progress-bar[data-progress-width]').forEach(function(el){
         var w = el.getAttribute('data-progress-width');
         if (w !== null) {
@@ -1021,171 +711,15 @@
         }
       });
 
-      // ========== COURSE MANAGEMENT NOTIFICATION FUNCTIONALITY ==========
-      document.querySelectorAll('.notify-course-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const id = this.getAttribute('data-id');
-          const name = this.getAttribute('data-name');
-          const description = this.getAttribute('data-description');
-
-          console.log('Notify course management button clicked for competency:', name);
-
-          // Show SweetAlert confirmation
-          Swal.fire({
-            title: 'Notify Course Management',
-            text: `Send notification to course management about active courses using "${name}"?`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#17a2b8',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Send Notification',
-            cancelButtonText: 'Cancel'
-          }).then((result) => {
-            if (result.isConfirmed) {
-              console.log('User confirmed notification for competency ID:', id);
-
-              // Send AJAX request to notify course management
-              $.ajax({
-                url: `/admin/competency-library/${id}/notify-course-management`,
-                type: 'POST',
-                data: { competency_name: name, description: description },
-                headers: {
-                  'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                success: function(response) {
-                  console.log('Notification sent successfully:', response);
-                  Swal.fire({
-                    title: 'Notification Sent',
-                    text: 'Course management has been notified about active courses using this competency.',
-                    icon: 'success',
-                    confirmButtonColor: '#28a745'
-                  });
-                },
-                error: function(xhr) {
-                  console.error('Error sending notification:', xhr);
-                  let errorMessage = 'Failed to send notification. Please try again.';
-                  if (xhr.responseJSON && xhr.responseJSON.message) {
-                    errorMessage = xhr.responseJSON.message;
-                  }
-                  Swal.fire({
-                    title: 'Error',
-                    text: errorMessage,
-                    icon: 'error',
-                    confirmButtonColor: '#dc3545'
-                  });
-                }
-              });
-            }
-          });
+      // Star rating input for add competency modal
+      const addRateInput = document.getElementById('add-rate');
+      if (addRateInput) {
+        addRateInput.addEventListener('input', function() {
+          const value = parseInt(this.value);
+          if (value >= 1 && value <= 5) {
+            // Visual feedback for rating selection
+          }
         });
-      });
-
-      // ========== DELETE COMPETENCY FUNCTIONALITY ==========
-      document.querySelectorAll('.delete-competency-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const id = this.getAttribute('data-id');
-          const name = this.getAttribute('data-name');
-
-          console.log('Delete button clicked for competency:', name);
-
-          // Show SweetAlert confirmation
-          Swal.fire({
-            title: 'Delete Competency',
-            text: `Are you sure you want to delete "${name}"? This action cannot be undone.`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#dc3545',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Yes, delete it!',
-            cancelButtonText: 'Cancel'
-          }).then((result) => {
-            if (result.isConfirmed) {
-              console.log('User confirmed deletion for competency ID:', id);
-
-              // Show password verification
-              showPasswordVerificationForDelete(id, name);
-            }
-          });
-        });
-      });
-
-      // Function to show password verification for delete
-      function showPasswordVerificationForDelete(id, name) {
-        try {
-          Swal.fire({
-            title: 'Password Verification',
-            text: 'Please enter your password to confirm deletion',
-            input: 'password',
-            inputPlaceholder: 'Enter your password',
-            inputAttributes: {
-              autocapitalize: 'off',
-              autocorrect: 'off'
-            },
-            showCancelButton: true,
-            confirmButtonColor: '#dc3545',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Verify & Delete',
-            cancelButtonText: 'Cancel',
-            inputValidator: (value) => {
-              if (!value) {
-                return 'Password is required!';
-              }
-            }
-          }).then((passwordResult) => {
-            if (passwordResult.isConfirmed) {
-              const password = passwordResult.value;
-
-              // Verify password via AJAX
-              $.ajax({
-                url: '/admin/verify-password',
-                type: 'POST',
-                data: { password: password },
-                headers: {
-                  'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
-                },
-                success: function(response) {
-                  if (response.success) {
-                    // Proceed with deletion after successful verification
-                    submitDeleteForm(id);
-                  } else {
-                    Swal.fire({
-                      title: 'Verification Failed',
-                      text: 'Incorrect password. Please try again.',
-                      icon: 'error',
-                      confirmButtonColor: '#dc3545'
-                    });
-                  }
-                },
-                error: function(xhr) {
-                  Swal.fire({
-                    title: 'Error',
-                    text: 'An error occurred during verification. Please try again.',
-                    icon: 'error',
-                    confirmButtonColor: '#dc3545'
-                  });
-                }
-              });
-            }
-          });
-        } catch (e) {
-          console.error('Error showing password verification dialog:', e);
-        }
-      }
-
-      // Function to submit the delete form
-      function submitDeleteForm(id) {
-        const form = document.getElementById('deleteForm' + id);
-        if (form) {
-          form.submit();
-        } else {
-          console.error('Delete form not found for ID:', id);
-          Swal.fire({
-            title: 'Error',
-            text: 'Could not find the delete form. Please try again.',
-            icon: 'error',
-            confirmButtonColor: '#dc3545'
-          });
-        }
       }
     });
   </script>

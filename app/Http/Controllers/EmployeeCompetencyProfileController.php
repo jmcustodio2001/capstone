@@ -606,6 +606,192 @@ class EmployeeCompetencyProfileController extends Controller
     }
 
     /**
+            'Communication Skills',
+            'Problem-Solving',
+            'Time Management',
+            'Teamwork',
+            'Leadership'
+        ];
+
+        $mediumPrioritySkills = [
+            'Sales Skills',
+            'Product Knowledge',
+            'Cultural Awareness',
+            'Technology Proficiency'
+        ];
+
+        $name = strtolower($competencyName);
+        
+        foreach ($highPrioritySkills as $skill) {
+            if (stripos($name, strtolower($skill)) !== false) {
+                return 'High';
+            }
+        }
+
+        foreach ($mediumPrioritySkills as $skill) {
+            if (stripos($name, strtolower($skill)) !== false) {
+                return 'Medium';
+            }
+        }
+
+        return 'Low';
+    }
+
+    /**
+     * Initialize basic skills for employee with no competency profiles
+     */
+    public function initializeBasicSkills($employeeId)
+    {
+        try {
+            $employee = Employee::where('employee_id', $employeeId)->first();
+            
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found.'
+                ], 404);
+            }
+
+            // Check if employee already has competency profiles
+            $existingCount = EmployeeCompetencyProfile::where('employee_id', $employeeId)->count();
+            
+            if ($existingCount > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee already has competency profiles. Use skill gap detection instead.'
+                ], 400);
+            }
+
+            // Get basic competencies to initialize (common skills for all employees)
+            $basicCompetencies = CompetencyLibrary::whereIn('competency_name', [
+                'Communication Skills',
+                'Customer Service Excellence', 
+                'Problem-Solving',
+                'Time Management',
+                'Teamwork',
+                'Professional Ethics',
+                'Adaptability',
+                'Basic Computer Skills'
+            ])->get();
+
+            // If no basic competencies found, get first 8 competencies from library
+            if ($basicCompetencies->count() === 0) {
+                $basicCompetencies = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
+                    ->limit(8)
+                    ->get();
+            }
+
+            $createdProfiles = [];
+            $currentDate = now();
+
+            foreach ($basicCompetencies as $competency) {
+                $profile = EmployeeCompetencyProfile::create([
+                    'employee_id' => $employeeId,
+                    'competency_id' => $competency->id,
+                    'proficiency_level' => 1, // Start with beginner level
+                    'assessment_date' => $currentDate,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+
+                $createdProfiles[] = [
+                    'id' => $profile->id,
+                    'competency_name' => $competency->competency_name,
+                    'category' => $competency->category,
+                    'proficiency_level' => 1
+                ];
+
+                // Log the activity
+                \App\Models\ActivityLog::create([
+                    'user_id' => Auth::guard('admin')->id(),
+                    'action' => 'CREATE',
+                    'module' => 'Employee Competency Profiles',
+                    'description' => "Auto-initialized basic skill: {$competency->competency_name} for employee {$employee->first_name} {$employee->last_name}",
+                    'model' => 'EmployeeCompetencyProfile',
+                    'model_id' => $profile->id,
+                    'changes' => json_encode([
+                        'employee_id' => $employeeId,
+                        'competency_id' => $competency->id,
+                        'proficiency_level' => 1,
+                        'note' => 'Auto-initialized basic skill'
+                    ]),
+                    'ip_address' => request()->ip(),
+                    'user_agent' => request()->userAgent()
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Basic skills initialized successfully.',
+                'created_profiles' => $createdProfiles,
+                'total_created' => count($createdProfiles),
+                'employee' => [
+                    'employee_id' => $employee->employee_id,
+                    'name' => $employee->first_name . ' ' . $employee->last_name
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error initializing basic skills: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get employee's existing skills/competency profiles
+     */
+    public function getEmployeeSkills($employeeId)
+    {
+        try {
+            $employee = Employee::where('employee_id', $employeeId)->first();
+            
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found.'
+                ], 404);
+            }
+
+            $skills = EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                ->with(['competency:id,competency_name,category,description'])
+                ->orderBy('assessment_date', 'desc')
+                ->get()
+                ->map(function ($profile) {
+                    return [
+                        'id' => $profile->id,
+                        'competency_id' => $profile->competency_id,
+                        'competency_name' => $profile->competency->competency_name ?? 'Unknown Competency',
+                        'category' => $profile->competency->category ?? null,
+                        'description' => $profile->competency->description ?? null,
+                        'proficiency_level' => $profile->proficiency_level,
+                        'assessment_date' => $profile->assessment_date,
+                        'created_at' => $profile->created_at,
+                        'updated_at' => $profile->updated_at
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'skills' => $skills,
+                'total_skills' => $skills->count(),
+                'employee' => [
+                    'employee_id' => $employee->employee_id,
+                    'name' => $employee->first_name . ' ' . $employee->last_name,
+                    'position' => $employee->position
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving employee skills: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Notify course management about employee competency profile status
      */
     public function notifyCourseManagement(Request $request, $id)

@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
         
         $this->call([
             ExamQuestionsSeeder::class,
+            CompetencyLibrarySeeder::class,
+            DestinationMasterSeeder::class,
         ]);
 
         $this->call(CompetencyGapSeeder::class);

@@ -47,6 +47,46 @@
     .gap-card .card-header img {
       border: 2px solid rgba(255,255,255,0.3) !important;
     }
+    
+    /* Competency gap item styling */
+    .competency-gap-item {
+      position: relative;
+    }
+    
+    .competency-gap-item.border-top {
+      border-top: 1px solid #e9ecef !important;
+      margin-top: 1rem !important;
+      padding-top: 1rem !important;
+    }
+    
+    /* Competency numbering badge */
+    .competency-gap-item .badge {
+      font-size: 0.7rem;
+    }
+    
+    /* View All Gaps Button */
+    .view-all-gaps-btn {
+      transition: all 0.3s ease;
+    }
+    
+    .view-all-gaps-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Toggle icon rotation */
+    .view-all-gaps-btn .toggle-icon {
+      transition: transform 0.3s ease;
+    }
+    
+    .view-all-gaps-btn[aria-expanded="true"] .toggle-icon {
+      transform: rotate(180deg);
+    }
+    
+    /* Collapse animation */
+    .collapse {
+      transition: all 0.3s ease;
+    }
   </style>
 </head>
 <body style="background-color: #f8f9fa !important;">
@@ -128,29 +168,11 @@
                   <td>
                     <!-- Debug: {{ $comp->category }} -->
                     @php
-                      $categoryColors = [
-                        'Technical' => 'bg-primary',
-                        'Leadership' => 'bg-success',
-                        'Communication' => 'bg-info',
-                        'Behavioral' => 'bg-warning',
-                        'Management' => 'bg-danger',
-                        'Analytical' => 'bg-purple',
-                        'Creative' => 'bg-pink',
-                        'Strategic' => 'bg-dark',
-                        'Destination Knowledge' => 'bg-orange'
-                      ];
-                      $colorClass = $categoryColors[$comp->category] ?? 'bg-secondary';
-
-                      // Special styling for Destination Knowledge
-                      if ($comp->category === 'Destination Knowledge') {
-                        $badgeClass = 'badge text-white fw-bold';
-                        $badgeStyle = 'background-color: #fd7e14 !important;'; // Orange background
-                        $iconClass = 'bi bi-geo-alt-fill me-1';
-                      } else {
-                        $badgeClass = "badge {$colorClass} bg-opacity-10 text-" . str_replace('bg-', '', $colorClass);
-                        $badgeStyle = '';
-                        $iconClass = '';
-                      }
+                      // Use single color for all categories (same as card header)
+                      $colorClass = 'bg-primary'; // Single blue color for all badges
+                      $badgeClass = 'badge bg-primary text-white';
+                      $badgeStyle = '';
+                      $iconClass = '';
                     @endphp
                     <span class="{{ $badgeClass }}" @if($comp->category === 'Destination Knowledge') style="{{ $badgeStyle }}" @endif>
                       @if($comp->category === 'Destination Knowledge')
@@ -197,38 +219,41 @@
               <i class="bi bi-download"></i> Export
             </button>
           </form>
-          <button class="btn btn-warning btn-sm" id="syncTrainingBtn" title="Sync Training Progress with Competency Levels">
-            <i class="bi bi-arrow-repeat"></i> Sync Training Progress
+          <button class="btn btn-info btn-sm" id="autoDetectGapsBtn" title="Auto-detect competency gaps for all employees">
+            <i class="bi bi-magic"></i> Auto-Detect Gaps
           </button>
           <input type="text" id="gap-search" class="form-control form-control-sm" placeholder="Search employee..." style="width: 180px;">
-          <button class="btn btn-primary btn-sm" id="addGapBtn">
-            <i class="bi bi-plus-lg"></i> Add Gap Record
-          </button>
         </div>
       </div>
       <div class="card-body">
-        @forelse($gaps as $index => $gap)
+        @php
+          // Group gaps by employee
+          $groupedGaps = $gaps->groupBy('employee_id');
+        @endphp
+        
+        @forelse($groupedGaps as $employeeId => $employeeGaps)
           @if($loop->first)
             <div class="row g-4" id="gap-cards-container">
           @endif
               <div class="col-lg-6 col-xl-4">
                 <div class="card h-100 shadow-sm border-0 gap-card" style="transition: all 0.3s ease;">
                   @php
-                    $firstName = $gap->employee->first_name ?? 'Unknown';
-                    $lastName = $gap->employee->last_name ?? 'Employee';
+                    $firstGap = $employeeGaps->first();
+                    $firstName = $firstGap->employee->first_name ?? 'Unknown';
+                    $lastName = $firstGap->employee->last_name ?? 'Employee';
                     $fullName = $firstName . ' ' . $lastName;
 
                     // Check if profile picture exists - simplified approach
                     $profilePicUrl = null;
-                    if ($gap->employee->profile_picture) {
+                    if ($firstGap->employee->profile_picture) {
                         // Direct asset URL generation - Laravel handles the storage symlink
-                        $profilePicUrl = asset('storage/' . $gap->employee->profile_picture);
+                        $profilePicUrl = asset('storage/' . $firstGap->employee->profile_picture);
                     }
 
                     // Generate consistent color based on employee name for fallback
                     $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-                    $employeeId = $gap->employee->employee_id ?? 'default';
-                    $colorIndex = abs(crc32($employeeId)) % count($colors);
+                    $employeeIdForColor = $firstGap->employee->employee_id ?? 'default';
+                    $colorIndex = abs(crc32($employeeIdForColor)) % count($colors);
                     $bgColor = $colors[$colorIndex];
 
                     // Fallback to UI Avatars if no profile picture found
@@ -236,10 +261,6 @@
                         $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                        "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
                     }
-
-                    // Calculate required level percentage
-                    $requiredLevel = min(5, max(0, $gap->required_level ?? 0));
-                    $requiredPercentage = ($requiredLevel / 5) * 100;
                   @endphp
                   
                   <!-- Card Header with Employee Info -->
@@ -251,23 +272,48 @@
                            style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);">
                       <div class="flex-grow-1">
                         <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
-                        <small class="text-dark fw-bold">#{{ $index + 1 }}</small>
+                        <small class="text-dark fw-bold">{{ $employeeGaps->count() }} Competency Gap{{ $employeeGaps->count() > 1 ? 's' : '' }}</small>
                       </div>
                     </div>
                   </div>
                   
                   <div class="card-body">
-                    <!-- Competency Name -->
-                    <h6 class="card-title fw-bold text-dark mb-3">
-                      @if($gap->competency)
-                        {{ $gap->competency->competency_name }}
-                      @else
-                        N/A
-                      @endif
-                    </h6>
+                    <!-- View All Gaps Button -->
+                    <div class="d-grid mb-3">
+                      <button class="btn btn-outline-primary btn-sm view-all-gaps-btn" 
+                              type="button" 
+                              data-bs-toggle="collapse" 
+                              data-bs-target="#gaps-{{ $employeeId }}" 
+                              aria-expanded="false" 
+                              aria-controls="gaps-{{ $employeeId }}">
+                        <i class="bi bi-eye me-1"></i>View All {{ $employeeGaps->count() }} Competency Gap{{ $employeeGaps->count() > 1 ? 's' : '' }}
+                        <i class="bi bi-chevron-down ms-1 toggle-icon"></i>
+                      </button>
+                    </div>
 
-                    <!-- Progress Bars Section -->
-                    <div class="mb-3">
+                    <!-- Collapsible Gaps Container -->
+                    <div class="collapse" id="gaps-{{ $employeeId }}">
+                      <!-- All Competencies for this Employee -->
+                      @foreach($employeeGaps as $gapIndex => $gap)
+                      <div class="competency-gap-item mb-4 {{ $gapIndex > 0 ? 'border-top pt-3' : '' }}">
+                        <!-- Competency Name -->
+                        <h6 class="card-title fw-bold text-dark mb-3">
+                          <span class="badge bg-secondary me-2">{{ $gapIndex + 1 }}</span>
+                          @if($gap->competency)
+                            {{ $gap->competency->competency_name }}
+                          @else
+                            N/A
+                          @endif
+                        </h6>
+
+                        @php
+                          // Calculate required level percentage for this gap
+                          $requiredLevel = min(5, max(0, $gap->required_level ?? 0));
+                          $requiredPercentage = ($requiredLevel / 5) * 100;
+                        @endphp
+
+                        <!-- Progress Bars Section -->
+                        <div class="mb-3">
                       <!-- Rate Progress -->
                       <div class="mb-2">
                         <div class="d-flex justify-content-between align-items-center mb-1">
@@ -465,7 +511,6 @@
                             $expiredDateObj = \Carbon\Carbon::parse($expiredDateRaw);
                             $now = \Carbon\Carbon::now();
                             $dateFormatted = $expiredDateObj->format('M d, Y');
-                            $timeFormatted = $expiredDateObj->format('h:i A');
                             $daysLeft = $now->diffInDays($expiredDateObj, false);
                             $isExpired = $now->gt($expiredDateObj);
                             $showExpiredDate = true;
@@ -476,7 +521,6 @@
                         @if($showExpiredDate)
                           <div class="text-center">
                             <div class="fw-semibold">{{ $dateFormatted }}</div>
-                            <div class="text-muted small">{{ $timeFormatted }}</div>
                             <div class="mt-1">
                               @if(!$isExpired)
                                 <span class="badge bg-info bg-opacity-10 text-info">
@@ -521,24 +565,6 @@
                                 title="View Details">
                           <i class="bi bi-eye"></i>
                         </button>
-                        @if(!$gap->assigned_to_training)
-                          <button class="btn btn-outline-primary btn-sm edit-gap-btn"
-                                  data-id="{{ $gap->id }}"
-                                  data-employee-id="{{ $gap->employee_id }}"
-                                  data-competency-id="{{ $gap->competency_id }}"
-                                  data-rate="{{ $gap->competency->rate ?? '' }}"
-                                  data-required-level="{{ $gap->required_level }}"
-                                  data-current-level="{{ $gap->current_level }}"
-                                  data-gap="{{ $gap->gap }}"
-                                  data-expired-date=""
-                                  title="Edit Gap">
-                            <i class="bi bi-pencil"></i>
-                          </button>
-                        @else
-                          <button class="btn btn-outline-secondary btn-sm" disabled title="Cannot edit - already assigned to training">
-                            <i class="bi bi-lock"></i>
-                          </button>
-                        @endif
                         @if(!$gap->assigned_to_training)
                           <button class="btn btn-outline-danger btn-sm delete-gap-btn"
                                   data-id="{{ $gap->id }}"
@@ -585,6 +611,9 @@
                         @endif
                       </div>
                     </div>
+                      </div> <!-- End competency-gap-item -->
+                    @endforeach
+                    </div> <!-- End collapsible gaps container -->
                   </div>
                 </div>
               </div>
@@ -687,116 +716,6 @@
     </div>
   </div>
 
-  <!-- Edit Gap Modal (Single Modal) -->
-  <div class="modal fade" id="editGapModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-      <form id="editGapForm" method="POST">
-        @csrf
-        @method('PUT')
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Edit Gap Record</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label for="edit-gap-employee-id" class="form-label">Employee*</label>
-              <select id="edit-gap-employee-id" name="employee_id" class="form-select" required>
-                <option value="">Select Employee</option>
-                @foreach($employees as $emp)
-                  @if(is_array($emp))
-                    <option value="{{ $emp['id'] }}">{{ $emp['name'] }}</option>
-                  @else
-                    <option value="{{ $emp->employee_id }}">{{ $emp->first_name }} {{ $emp->last_name }}</option>
-                  @endif
-                @endforeach
-              </select>
-            </div>
-            <div class="mb-3">
-              <label for="edit-gap-competency-id" class="form-label">Competency*</label>
-              <select id="edit-gap-competency-id" name="competency_id" class="form-select" required>
-                <option value="">Select Competency</option>
-                @foreach($competencies as $comp)
-                  <option value="{{ $comp->id }}" data-rate="{{ $comp->rate }}">
-                    {{ $comp->competency_name }} (Rate: {{ $comp->rate }})
-                  </option>
-                @endforeach
-              </select>
-            </div>
-            <div class="row">
-              <div class="col-md-4 mb-3">
-                <label for="edit-gap-rate" class="form-label">Rate</label>
-                <input id="edit-gap-rate" type="number" class="form-control readonly-field" readonly>
-              </div>
-              <div class="col-md-4 mb-3">
-                <label for="edit-gap-required-level" class="form-label">Required Level*</label>
-                <input id="edit-gap-required-level" type="number" name="required_level"
-                       class="form-control required-level" min="1" max="5" required>
-              </div>
-              <div class="col-md-4 mb-3">
-                <label for="edit-gap-current-level" class="form-label">Current Level*</label>
-                <input id="edit-gap-current-level" type="number" name="current_level"
-                       class="form-control current-level" min="1" max="5" required>
-              </div>
-              <div class="col-md-4 offset-md-8 mb-3">
-                <label for="edit-gap-value" class="form-label">Gap</label>
-                <input id="edit-gap-value" type="number" name="gap"
-                       class="form-control gap-field readonly-field" readonly>
-              </div>
-            </div>
-            <div class="row">
-              <div class="col-12 mb-3">
-                <label for="edit-expired-date" class="form-label">Expiration Date (Optional)</label>
-                <input id="edit-expired-date" type="datetime-local" name="expired_date" class="form-control">
-                <small class="form-text text-muted">Leave empty for no expiration</small>
-              </div>
-            </div>
-
-            <!-- Security Section for Edit -->
-            <div class="row g-3 mt-3">
-              <div class="col-12">
-                <div class="alert alert-warning border-start border-warning border-4">
-                  <i class="bi bi-shield-lock-fill me-2 text-warning"></i>
-                  <strong>Sweet Security Verification:</strong> Please verify your password to edit this gap record.
-                  <div class="mt-2">
-                    <small class="text-muted">
-                      <i class="bi bi-info-circle me-1"></i>
-                      This additional security step ensures only authorized administrators can edit competency gap records.
-                    </small>
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-6">
-                <label for="edit-admin-password" class="form-label fw-semibold">
-                  <i class="bi bi-key me-1"></i>Verify Your Password*
-                </label>
-                <input id="edit-admin-password" type="password" name="admin_password" class="form-control" required
-                       placeholder="Enter your admin password">
-                <small class="form-text text-muted">Required for security verification</small>
-              </div>
-              <div class="col-md-6">
-                <label for="edit-confirm-admin-password" class="form-label fw-semibold">
-                  <i class="bi bi-key-fill me-1"></i>Confirm Password*
-                </label>
-                <input id="edit-confirm-admin-password" type="password" name="confirm_admin_password" class="form-control" required
-                       placeholder="Confirm your password">
-                <small class="form-text text-muted">Re-enter password for confirmation</small>
-                <div id="edit-password-match-indicator" class="mt-1" style="display: none;">
-                  <small id="edit-password-match-text"></small>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary">
-              <i class="bi bi-arrow-repeat me-1"></i> Update
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <!-- Add Gap Modal -->
   <div class="modal fade" id="addGapModal" tabindex="-1" aria-hidden="true">
@@ -959,58 +878,6 @@
     </div>
   </div>
 
-  <!-- Password Verification Modal -->
-  <div class="modal fade" id="passwordVerificationModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header bg-warning">
-          <h5 class="modal-title">
-            <i class="bi bi-shield-lock-fill me-2"></i>Verify Your Password
-          </h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="alert alert-warning border-start border-warning border-4">
-            <i class="bi bi-shield-lock-fill me-2 text-warning"></i>
-            <strong>Sweet Security Verification:</strong> Please verify your password to proceed with this action.
-            <div class="mt-2">
-              <small class="text-muted">
-                <i class="bi bi-info-circle me-1"></i>
-                This additional security step ensures only authorized administrators can perform sensitive operations.
-              </small>
-            </div>
-          </div>
-          <div class="row g-3">
-            <div class="col-12">
-              <label for="verify-admin-password" class="form-label fw-semibold">
-                <i class="bi bi-key me-1"></i>Enter Your Admin Password*
-              </label>
-              <input id="verify-admin-password" type="password" class="form-control" required
-                     placeholder="Enter your admin password">
-              <small class="form-text text-muted">Required for security verification</small>
-            </div>
-            <div class="col-12">
-              <label for="verify-confirm-admin-password" class="form-label fw-semibold">
-                <i class="bi bi-key-fill me-1"></i>Confirm Password*
-              </label>
-              <input id="verify-confirm-admin-password" type="password" class="form-control" required
-                     placeholder="Confirm your password">
-              <small class="form-text text-muted">Re-enter password for confirmation</small>
-              <div id="verify-password-match-indicator" class="mt-1" style="display: none;">
-                <small id="verify-password-match-text"></small>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="button" class="btn btn-warning" id="verify-password-btn">
-            <i class="bi bi-shield-check me-1"></i>Verify & Proceed
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Delete Confirmation Modal -->
   <div class="modal fade" id="deleteConfirmationModal" tabindex="-1" aria-hidden="true">
@@ -1188,10 +1055,8 @@ function showToast(message, duration = 3000) {
 document.addEventListener('DOMContentLoaded', function () {
   // Initialize Bootstrap modals
   const editCompetencyModal = new bootstrap.Modal(document.getElementById('editCompetencyModal'));
-  const editGapModal = new bootstrap.Modal(document.getElementById('editGapModal'));
   const addGapModal = new bootstrap.Modal(document.getElementById('addGapModal'));
   const addCompetencyModal = new bootstrap.Modal(document.getElementById('addCompetencyModal'));
-  const passwordVerificationModal = new bootstrap.Modal(document.getElementById('passwordVerificationModal'));
 
   // Auto-assign button handler - Fixed to work with competency gaps
   function setupAutoAssignButtons() {
@@ -1277,45 +1142,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
       });
 
-      // ========== GAP EDIT FUNCTIONALITY ==========
-      document.querySelectorAll('.edit-gap-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const id = this.getAttribute('data-id');
-          const employeeId = this.getAttribute('data-employee-id');
-          const competencyId = this.getAttribute('data-competency-id');
-          const rate = this.getAttribute('data-rate');
-          const requiredLevel = this.getAttribute('data-required-level');
-          const currentLevel = this.getAttribute('data-current-level');
-          const gap = this.getAttribute('data-gap');
-          const expiredDate = this.getAttribute('data-expired-date');
-
-          // Store the action data
-          const actionData = {
-            id, employeeId, competencyId, rate, requiredLevel, currentLevel, gap, expiredDate
-          };
-
-          // Set pending action to show edit modal with data
-          pendingAction = function(data) {
-            // Set form action URL
-            document.getElementById('editGapForm').action = `/admin/competency-gap-analysis/${data.id}`;
-
-            // Populate form fields
-            document.getElementById('edit-gap-employee-id').value = data.employeeId;
-            document.getElementById('edit-gap-competency-id').value = data.competencyId;
-            document.getElementById('edit-gap-rate').value = data.rate;
-            document.getElementById('edit-gap-required-level').value = data.requiredLevel;
-            document.getElementById('edit-gap-current-level').value = data.currentLevel;
-            document.getElementById('edit-gap-value').value = data.gap;
-            document.getElementById('edit-expired-date').value = data.expiredDate || '';
-
-            // Show modal
-            editGapModal.show();
-          };
-
-          pendingActionData = actionData;
-          passwordVerificationModal.show();
-        });
-      });
 
       // ========== GAP CALCULATION ==========
       const calculateGap = (inputElement) => {
@@ -1469,114 +1295,60 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-      // Sync Training Progress Button Handler
-      const syncTrainingBtn = document.getElementById('syncTrainingBtn');
-      if (syncTrainingBtn) {
-        syncTrainingBtn.addEventListener('click', function() {
-        const button = this;
-        const originalHtml = button.innerHTML;
-
-        // Show loading state
-        button.disabled = true;
-        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Syncing...';
-
-        fetch('{{ route("admin.course_management.sync_training_competency") }}', {
-          method: 'POST',
-          headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          }
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            showSuccessToast(`✅ ${data.message} Updated ${data.updated_records} training records.`, 5000);
-
-            // Show detailed sync results if available
-            if (data.sync_details && data.sync_details.length > 0) {
-              setTimeout(() => {
-                let detailsMessage = '📊 Sync Details:\n';
-                data.sync_details.slice(0, 5).forEach(detail => {
-                  if (detail.sync_type === 'training_to_competency') {
-                    detailsMessage += `• ${detail.competency}: Gap closed (${detail.old_current_level} → ${detail.new_current_level})\n`;
-                  } else {
-                    detailsMessage += `• ${detail.course_title}: ${detail.old_progress}% → ${detail.new_progress}%\n`;
-                  }
-                });
-                if (data.sync_details.length > 5) {
-                  detailsMessage += `... and ${data.sync_details.length - 5} more records updated.`;
-                }
-                showInfoToast(detailsMessage, 6000);
-              }, 2000);
-            }
-
-            // Refresh the page to show updated competency gap levels
-            setTimeout(() => {
-              showInfoToast('🔄 Refreshing page to show updated competency levels...', 2000);
-              setTimeout(() => {
-                window.location.reload();
-              }, 2500);
-            }, 3000);
-          } else {
-            showErrorToast('❌ ' + (data.message || 'Failed to sync training records'), 4000);
-          }
-
-          // Reset button
-          button.disabled = false;
-          button.innerHTML = originalHtml;
-        })
-        .catch(error => {
-          console.error('Sync error:', error);
-          showErrorToast('❌ Network error occurred during sync', 4000);
-
-          // Reset button
-          button.disabled = false;
-          button.innerHTML = originalHtml;
-        });
-        });
-      }
 
       // Handle Extend Expiration buttons
       let currentGapId = null;
-      let pendingAction = null; // Store the action to perform after password verification
-      let pendingActionData = null; // Store data needed for the action
       const extendExpirationModal = new bootstrap.Modal(document.getElementById('extendExpirationModal'));
       const deleteConfirmationModal = new bootstrap.Modal(document.getElementById('deleteConfirmationModal'));
 
-      // Password verification button handler
-      const verifyPasswordBtn = document.getElementById('verify-password-btn');
-      if (verifyPasswordBtn) {
-        verifyPasswordBtn.addEventListener('click', function() {
-        if (!validateVerificationPasswords()) {
-          return;
-        }
+      // Auto-Detect Gaps button handler
+      const autoDetectGapsBtn = document.getElementById('autoDetectGapsBtn');
+      if (autoDetectGapsBtn) {
+        autoDetectGapsBtn.addEventListener('click', function() {
+          const button = this;
+          const originalHtml = button.innerHTML;
 
-        // Close verification modal
-        passwordVerificationModal.hide();
 
-        // Execute the pending action
-        if (pendingAction) {
-          pendingAction(pendingActionData);
-          pendingAction = null;
-          pendingActionData = null;
-        }
+          // Show loading state
+          button.disabled = true;
+          button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Detecting...';
 
-        // Clear verification form
-        document.getElementById('verify-admin-password').value = '';
-        document.getElementById('verify-confirm-admin-password').value = '';
-        document.getElementById('verify-password-match-indicator').style.display = 'none';
-        });
-      }
+          fetch('{{ route("competency_gap_analysis.auto_detect_gaps") }}', {
+            method: 'POST',
+            headers: {
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              showSuccessToast(`✅ ${data.message}\n📊 Created: ${data.created} | Updated: ${data.updated} | Skipped: ${data.skipped}`, 6000);
 
-      // Add Gap button handler - shows password verification first
-      const addGapBtn = document.getElementById('addGapBtn');
-      if (addGapBtn) {
-        addGapBtn.addEventListener('click', function() {
-        pendingAction = function() {
-          addGapModal.show();
-        };
-        passwordVerificationModal.show();
+              // Reload page to show new gaps
+              setTimeout(() => {
+                showInfoToast('🔄 Refreshing page to show detected gaps...', 2000);
+                setTimeout(() => {
+                  window.location.reload();
+                }, 2500);
+              }, 3000);
+            } else {
+              showErrorToast('❌ ' + (data.message || 'Failed to auto-detect gaps'), 4000);
+            }
+
+            // Reset button
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+          })
+          .catch(error => {
+            console.error('Auto-detect error:', error);
+            showErrorToast('❌ Network error occurred during auto-detection', 4000);
+
+            // Reset button
+            button.disabled = false;
+            button.innerHTML = originalHtml;
+          });
         });
       }
 
@@ -1597,27 +1369,17 @@ document.addEventListener('DOMContentLoaded', function () {
           const employeeName = button.dataset.employee;
           const competencyName = button.dataset.competency;
 
-          // Store the action data
-          const actionData = {
-            gapId, employeeName, competencyName
-          };
+          // Directly show delete modal with data
+          currentGapId = gapId;
+          document.getElementById('delete-employee-name').textContent = employeeName;
+          document.getElementById('delete-competency-name').textContent = competencyName;
 
-          // Set pending action to show delete modal with data
-          pendingAction = function(data) {
-            currentGapId = data.gapId;
-            document.getElementById('delete-employee-name').textContent = data.employeeName;
-            document.getElementById('delete-competency-name').textContent = data.competencyName;
+          // Clear password fields
+          document.getElementById('delete-admin-password').value = '';
+          document.getElementById('delete-confirm-admin-password').value = '';
+          document.getElementById('delete-password-match-indicator').style.display = 'none';
 
-            // Clear password fields
-            document.getElementById('delete-admin-password').value = '';
-            document.getElementById('delete-confirm-admin-password').value = '';
-            document.getElementById('delete-password-match-indicator').style.display = 'none';
-
-            deleteConfirmationModal.show();
-          };
-
-          pendingActionData = actionData;
-          passwordVerificationModal.show();
+          deleteConfirmationModal.show();
         }
       });
 
@@ -1684,11 +1446,6 @@ document.addEventListener('DOMContentLoaded', function () {
       const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
       if (confirmDeleteBtn) {
         confirmDeleteBtn.addEventListener('click', function() {
-        // Validate passwords first
-        if (!validateDeletePasswords()) {
-          return;
-        }
-
         if (!currentGapId) {
           showErrorToast('No competency gap selected', 3000);
           return;
@@ -1749,72 +1506,6 @@ document.addEventListener('DOMContentLoaded', function () {
           });
       }
 
-      // AJAX for Edit Gap Form
-      const editGapForm = document.getElementById('editGapForm');
-      if (editGapForm) {
-        editGapForm.addEventListener('submit', function(e) {
-          e.preventDefault();
-
-          // Validate passwords first
-          if (!validateEditPasswords()) {
-            return;
-          }
-
-          // Show loading state
-          const submitBtn = editGapForm.querySelector('button[type="submit"]');
-          const originalBtnText = submitBtn.innerHTML;
-          submitBtn.disabled = true;
-          submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Updating...';
-
-          const formData = new FormData(editGapForm);
-
-          fetch(editGapForm.action, {
-            method: 'POST',
-            headers: {
-              'X-Requested-With': 'XMLHttpRequest',
-              'X-CSRF-TOKEN': formData.get('_token'),
-              'Accept': 'application/json',
-            },
-            body: formData
-          })
-          .then(async response => {
-            let data;
-            try {
-              data = await response.json();
-            } catch (e) {
-              console.error('JSON parse error:', e);
-              data = null;
-            }
-
-            // Reset button state
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalBtnText;
-
-            if (response.ok && data && data.success) {
-              // Auto-close modal immediately
-              editGapModal.hide();
-              showSuccessToast('✅ Gap record updated successfully!', 3000);
-              // Reload page to show updated record
-              window.location.reload();
-            } else if (data && data.errors) {
-              // Show validation errors
-              const errorMessages = Object.values(data.errors).flat();
-              showErrorToast('❌ Validation errors:\n' + errorMessages.join('\n'), 5000);
-            } else if (data && data.message) {
-              showErrorToast('❌ ' + data.message, 4000);
-            } else {
-              showErrorToast('❌ Error updating gap record. Please check all required fields.', 4000);
-            }
-          })
-          .catch(error => {
-            console.error('Network error:', error);
-            // Reset button state
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalBtnText;
-            showErrorToast('❌ Network error occurred while updating. Please try again.', 4000);
-          });
-        });
-      }
 
       // Real-time password matching feedback
       function updatePasswordMatchIndicator() {
@@ -2807,6 +2498,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(response => response.json())
         .then(data => {
           if (data.success) {
+            const removedCount = data.removed_count || 0;
             Swal.fire({
               icon: 'success',
               title: 'Training Unassigned Successfully!',
@@ -2819,15 +2511,26 @@ document.addEventListener('DOMContentLoaded', function () {
                       <small class="text-muted">
                         ${data.message || 'Training has been successfully unassigned. The record can now be edited.'}
                       </small>
+                      ${removedCount > 0 ? `<br><small class="text-info"><i class="bi bi-info-circle me-1"></i>Removed ${removedCount} related training records from all views.</small>` : ''}
                     </div>
+                  </div>
+                  <div class="alert alert-info border-start border-info border-4 mt-2">
+                    <i class="bi bi-arrow-clockwise me-2 text-info"></i>
+                    <small><strong>Note:</strong> Training counts will be updated automatically. The page will refresh to show current data.</small>
                   </div>
                 </div>
               `,
-              timer: 3000,
+              timer: 4000,
               timerProgressBar: true,
               showConfirmButton: false
             }).then(() => {
-              window.location.reload();
+              // Try to refresh dashboard counts via AJAX first, then reload
+              refreshDashboardCounts().finally(() => {
+                // Force a complete page reload to refresh all counts
+                setTimeout(() => {
+                  window.location.reload(true);
+                }, 1000);
+              });
             });
           } else {
             Swal.fire({
@@ -2890,6 +2593,99 @@ document.addEventListener('DOMContentLoaded', function () {
         setupAutoAssignButtons();
       }
       
+      // Function to refresh dashboard counts via AJAX
+      function refreshDashboardCounts() {
+        // Try both endpoints to ensure counts are updated
+        const endpoints = [
+          '/employee/my-trainings/get-counts',
+          '/employee/dashboard/get-counts'
+        ];
+        
+        return Promise.all(endpoints.map(endpoint => 
+          fetch(endpoint, {
+            method: 'GET',
+            headers: {
+              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'Accept': 'application/json'
+            }
+          })
+          .then(response => response.json())
+          .catch(error => {
+            console.warn(`Error fetching from ${endpoint}:`, error);
+            return null;
+          })
+        ))
+        .then(results => {
+          // Use the first successful result
+          const data = results.find(result => result && result.success);
+          
+          if (data && data.counts) {
+            // Try multiple selectors to find dashboard count elements
+            const selectors = [
+              '[data-count="upcoming"]',
+              '.upcoming-count',
+              '#upcoming-count',
+              '.card-body h2:contains("' + data.counts.upcoming + '")',
+              '.card:contains("Upcoming") .card-body h2',
+              '.card:contains("Upcoming") h2'
+            ];
+            
+            // Update upcoming count
+            selectors.forEach(selector => {
+              try {
+                const element = document.querySelector(selector);
+                if (element) {
+                  element.textContent = data.counts.upcoming;
+                  console.log(`Updated upcoming count via selector: ${selector}`);
+                }
+              } catch (e) {
+                // Ignore selector errors
+              }
+            });
+            
+            // Also try to find and update by card content
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+              const cardText = card.textContent.toLowerCase();
+              if (cardText.includes('upcoming')) {
+                const countElement = card.querySelector('h2, .h2, .card-title, .display-4, .fw-bold');
+                if (countElement && /^\d+$/.test(countElement.textContent.trim())) {
+                  countElement.textContent = data.counts.upcoming;
+                  console.log('Updated upcoming count in card:', countElement);
+                }
+              }
+            });
+            
+            console.log('Dashboard counts refresh attempted:', data.counts);
+          }
+        })
+        .catch(error => {
+          console.warn('Could not refresh dashboard counts:', error);
+        });
+      }
+
+      // Handle View All Gaps button toggle
+      document.addEventListener('click', function(e) {
+        if (e.target.closest('.view-all-gaps-btn')) {
+          const btn = e.target.closest('.view-all-gaps-btn');
+          const targetId = btn.getAttribute('data-bs-target');
+          const collapseElement = document.querySelector(targetId);
+          
+          // Update button text and icon when collapsed/expanded
+          collapseElement.addEventListener('shown.bs.collapse', function() {
+            const gapCount = btn.textContent.match(/\d+/)[0];
+            btn.innerHTML = `<i class="bi bi-eye-slash me-1"></i>Hide ${gapCount} Competency Gap${gapCount > 1 ? 's' : ''} <i class="bi bi-chevron-up ms-1 toggle-icon"></i>`;
+            btn.setAttribute('aria-expanded', 'true');
+          });
+          
+          collapseElement.addEventListener('hidden.bs.collapse', function() {
+            const gapCount = btn.textContent.match(/\d+/)[0];
+            btn.innerHTML = `<i class="bi bi-eye me-1"></i>View All ${gapCount} Competency Gap${gapCount > 1 ? 's' : ''} <i class="bi bi-chevron-down ms-1 toggle-icon"></i>`;
+            btn.setAttribute('aria-expanded', 'false');
+          });
+        }
+      });
+
       // Call reattach function after page loads
       reattachEventListeners();
     });

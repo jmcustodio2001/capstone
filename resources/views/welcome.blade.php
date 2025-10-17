@@ -6,8 +6,6 @@
     <title>JETLOUGE TRAVEL AND TOURS : HUMAN RESOURCES 2</title>
     <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- SweetAlert2 CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         * {
             margin: 0;
@@ -623,115 +621,28 @@
     <script>
         // Show welcome message on page load
         document.addEventListener('DOMContentLoaded', function() {
-            Swal.fire({
-                title: 'Welcome to HR2ESS!',
-                text: 'JETLOUGE TRAVEL AND TOURS Human Resources Portal',
-                icon: 'success',
-                timer: 3000,
-                timerProgressBar: true,
-                showConfirmButton: false,
-                toast: true,
-                position: 'top-end',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: '#fff'
-            });
+            // Welcome message removed - no popup on page load
         });
 
-        // Admin login confirmation
+        // Admin login - direct redirect
         function confirmAdminLogin() {
-            Swal.fire({
-                title: 'Admin Login',
-                text: 'You are about to access the Admin Portal',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#1a2980',
-                cancelButtonColor: '#d33',
-                confirmButtonText: '<i class="fas fa-user-shield"></i> Continue to Admin',
-                cancelButtonText: 'Cancel',
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdrop: 'rgba(0,0,0,0.4)',
-                showLoaderOnConfirm: true,
-                preConfirm: () => {
-                    return new Promise((resolve) => {
-                        setTimeout(() => {
-                            resolve();
-                        }, 1000);
-                    });
-                }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    Swal.fire({
-                        title: 'Redirecting...',
-                        text: 'Taking you to Admin Login',
-                        icon: 'info',
-                        timer: 1500,
-                        timerProgressBar: true,
-                        showConfirmButton: false,
-                        didClose: () => {
-                            window.location.href = '{{ route('admin.login') }}';
-                        }
-                    });
-                }
-            });
+            window.location.href = '{{ route('admin.login') }}';
         }
 
-        // Employee login confirmation
+        // Employee login - direct redirect
         function confirmEmployeeLogin() {
-            Swal.fire({
-                title: 'Employee Login',
-                text: 'You are about to access the Employee Portal',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonColor: '#26d0ce',
-                cancelButtonColor: '#d33',
-                confirmButtonText: '<i class="fas fa-user-tie"></i> Continue to Employee',
-                cancelButtonText: 'Cancel',
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdrop: 'rgba(0,0,0,0.4)',
-                showLoaderOnConfirm: true,
-                preConfirm: () => {
-                    return new Promise((resolve) => {
-                        setTimeout(() => {
-                            resolve();
-                        }, 1000);
-                    });
-                }
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    Swal.fire({
-                        title: 'Redirecting...',
-                        text: 'Taking you to Employee Login',
-                        icon: 'info',
-                        timer: 1500,
-                        timerProgressBar: true,
-                        showConfirmButton: false,
-                        didClose: () => {
-                            window.location.href = '{{ route('employee.login') }}';
-                        }
-                    });
-                }
-            });
+            window.location.href = '{{ route('employee.login') }}';
         }
 
         // Add system status check functionality
         function checkSystemStatus() {
-            Swal.fire({
-                title: 'System Status',
-                html: `
-                    <div style="text-align: left;">
-                        <p><i class="fas fa-server" style="color: #28a745;"></i> <strong>Server:</strong> Online</p>
-                        <p><i class="fas fa-database" style="color: #28a745;"></i> <strong>Database:</strong> Connected</p>
-                        <p><i class="fas fa-shield-alt" style="color: #28a745;"></i> <strong>Security:</strong> Active</p>
-                        <p><i class="fas fa-users" style="color: #17a2b8;"></i> <strong>Active Users:</strong> 127</p>
-                        <p><i class="fas fa-clock" style="color: #ffc107;"></i> <strong>Last Update:</strong> ${new Date().toLocaleString()}</p>
-                    </div>
-                `,
-                icon: 'info',
-                confirmButtonText: 'Close',
-                confirmButtonColor: '#007bff',
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdrop: 'rgba(0,0,0,0.4)'
-            });
+            const statusMessage = 'System Status:\n' +
+                'Server: Online\n' +
+                'Database: Connected\n' +
+                'Security: Active\n' +
+                'Active Users: 127\n' +
+                'Last Update: ' + new Date().toLocaleString();
+            alert(statusMessage);
         }
 
         // Add keyboard shortcuts
@@ -755,27 +666,11 @@
 
         // Add click effect to decorative elements
         document.querySelector('.passport-stamp').addEventListener('click', function() {
-            Swal.fire({
-                title: 'HR2ESS Portal',
-                text: 'Authorized Personnel Only',
-                icon: 'info',
-                timer: 2000,
-                showConfirmButton: false,
-                toast: true,
-                position: 'top-end'
-            });
+            alert('HR2ESS Portal - Authorized Personnel Only');
         });
 
         document.querySelector('.luggage-tag').addEventListener('click', function() {
-            Swal.fire({
-                title: 'Welcome Aboard!',
-                text: 'JETLOUGE HR2 Portal - Your journey to efficient HR management',
-                icon: 'success',
-                timer: 2000,
-                showConfirmButton: false,
-                toast: true,
-                position: 'top-end'
-            });
+            alert('Welcome Aboard! JETLOUGE HR2 Portal - Your journey to efficient HR management');
         });
     </script>
 </body>

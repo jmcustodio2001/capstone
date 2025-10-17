@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Database\Schema\Blueprint;
 use App\Models\UpcomingTraining;
 use App\Models\CompletedTraining;
@@ -230,11 +231,9 @@ class MyTrainingController extends Controller
                     $table->string('employee_id', 20);
                     $table->text('message');
                     $table->timestamp('sent_at');
-                    $table->boolean('is_read')->default(false);
                     $table->timestamps();
 
                     $table->index('employee_id');
-                    $table->index('is_read');
                 });
 
                 Log::info('training_notifications table created successfully');
@@ -248,12 +247,10 @@ class MyTrainingController extends Controller
                     `employee_id` varchar(20) NOT NULL,
                     `message` text NOT NULL,
                     `sent_at` timestamp NOT NULL,
-                    `is_read` tinyint(1) NOT NULL DEFAULT 0,
                     `created_at` timestamp NULL DEFAULT NULL,
                     `updated_at` timestamp NULL DEFAULT NULL,
                     PRIMARY KEY (`id`),
-                    KEY `training_notifications_employee_id_index` (`employee_id`),
-                    KEY `training_notifications_is_read_index` (`is_read`)
+                    KEY `training_notifications_employee_id_index` (`employee_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
                 Log::info('training_notifications table created using direct SQL');
@@ -321,6 +318,90 @@ class MyTrainingController extends Controller
         }
     }
 
+    /**
+     * Create notifications for upcoming trainings
+     */
+    private function createNotificationsForUpcomingTrainings($upcomingTrainings, $employeeId)
+    {
+        try {
+            // Ensure the notifications table exists
+            $this->ensureTrainingNotificationsTableExists();
+            
+            Log::info("Processing {$employeeId} - Total upcoming trainings to process: " . count($upcomingTrainings));
+            
+            foreach ($upcomingTrainings as $index => $training) {
+                // Handle both array and object formats
+                if (is_array($training)) {
+                    $training = (object) $training;
+                } elseif (!is_object($training)) {
+                    Log::warning("Skipping invalid training data at index {$index}: " . json_encode($training));
+                    continue;
+                }
+                
+                Log::info("Processing training {$index}: " . json_encode([
+                    'title' => $training->training_title ?? 'N/A',
+                    'source' => $training->source ?? 'N/A',
+                    'upcoming_id' => $training->upcoming_id ?? 'N/A'
+                ]));
+                
+                // Check if notification already exists for this training (more specific check)
+                $trainingTitle = $training->training_title ?? '';
+                $existingNotification = TrainingNotification::where('employee_id', $employeeId)
+                    ->where('message', 'LIKE', '%' . str_replace("'", "''", $trainingTitle) . '%')
+                    ->where('created_at', '>=', now()->subDays(7)) // Only check recent notifications
+                    ->first();
+                
+                if (!$existingNotification && !empty($training->training_title)) {
+                    // Create notification based on training source
+                    $message = '';
+                    $source = $training->source ?? 'unknown';
+                    
+                    switch ($source) {
+                        case 'admin_assigned':
+                            $message = "You have been assigned a new training: '{$training->training_title}' by admin.";
+                            break;
+                        case 'competency_assigned':
+                        case 'competency_gap':
+                            $message = "You have been assigned competency training: '{$training->training_title}' to address skill gaps.";
+                            break;
+                        case 'destination_assigned':
+                            $message = "You have been assigned destination knowledge training: '{$training->training_title}'.";
+                            break;
+                        default:
+                            $message = "You have a new upcoming training: '{$training->training_title}'.";
+                            break;
+                    }
+                    
+                    $notification = TrainingNotification::create([
+                        'employee_id' => $employeeId,
+                        'message' => $message,
+                        'sent_at' => now()
+                    ]);
+                    
+                    Log::info("Successfully created notification ID {$notification->id} for training: {$training->training_title} (Source: {$source})");
+                } else {
+                    Log::info("Skipping notification creation - either exists or empty title. Title: '{$trainingTitle}', Existing: " . ($existingNotification ? 'Yes' : 'No'));
+                }
+            }
+            
+            // If no notifications were created and we have upcoming trainings, create a summary notification
+            $notificationCount = TrainingNotification::where('employee_id', $employeeId)->count();
+            if ($notificationCount == 0 && count($upcomingTrainings) > 0) {
+                Log::info("No notifications found, creating summary notification for {$employeeId}");
+                TrainingNotification::create([
+                    'employee_id' => $employeeId,
+                    'message' => "You have " . count($upcomingTrainings) . " upcoming training(s) assigned to you. Please check your training dashboard for details.",
+                    'sent_at' => now()
+                ]);
+                Log::info("Created summary notification for {$employeeId}");
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error creating notifications for upcoming trainings: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+        }
+    }
+
     public function index()
     {
         // Ensure required tables exist before proceeding
@@ -335,6 +416,10 @@ class MyTrainingController extends Controller
 
         $employeeId = Auth::user()->employee_id;
 
+        // Clear any cached data first to ensure fresh counts
+        Cache::forget("employee_training_counts_{$employeeId}");
+        Cache::forget("upcoming_trainings_{$employeeId}");
+        
         // Get all upcoming trainings including competency gap assignments
         $manualUpcoming = UpcomingTraining::where('employee_id', $employeeId)->get()->map(function($training) use ($employeeId) {
             // Fix expiration date for competency gap trainings
@@ -656,9 +741,10 @@ class MyTrainingController extends Controller
             ->merge($competencyAssigned->toArray())
             ->merge($destinationAssigned->toArray());
 
-        // ENHANCED deduplication with comprehensive title normalization
-        $seenTrainings = [];
-        $upcoming = $allTrainings->filter(function($item) use (&$seenTrainings, $employeeId) {
+        // SIMPLE and AGGRESSIVE deduplication to fix the 8->4 issue
+        $seenTitles = [];
+        $seenCourseIds = [];
+        $upcoming = $allTrainings->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
             $item = (object) $item;
             
             // Get raw training title
@@ -669,100 +755,29 @@ class MyTrainingController extends Controller
                 return false;
             }
             
-            // COMPREHENSIVE title normalization for "Communication Skills" duplicates
+            // Normalize title for comparison
             $normalizedTitle = strtolower(trim($rawTitle));
-            
-            // Remove common suffixes/prefixes that cause duplicates
             $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/i', '', $normalizedTitle);
-            $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle)); // Clean up spaces
+            $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
             
-            // Create multiple deduplication keys for comprehensive matching
+            // Check for duplicates by course_id first (most reliable)
             $courseId = $item->course_id ?? null;
-            $source = $item->source ?? '';
-            
-            $deduplicationKeys = [
-                // Primary key: employee + normalized title
-                $employeeId . '_title_' . $normalizedTitle,
-                // Secondary key: employee + course_id (if available)
-                $courseId ? $employeeId . '_course_' . $courseId : null,
-                // Tertiary key: employee + raw title (for exact matches)
-                $employeeId . '_raw_' . strtolower(trim($rawTitle))
-            ];
-            
-            // Remove null keys
-            $deduplicationKeys = array_filter($deduplicationKeys);
-            
-            // Check if any of these keys already exist
-            $isDuplicate = false;
-            $existingKey = null;
-            $existingItem = null;
-            
-            foreach ($deduplicationKeys as $checkKey) {
-                if (isset($seenTrainings[$checkKey])) {
-                    $isDuplicate = true;
-                    $existingKey = $checkKey;
-                    $existingItem = $seenTrainings[$checkKey];
-                    break;
-                }
+            if ($courseId && in_array($courseId, $seenCourseIds)) {
+                return false; // Skip duplicate course_id
             }
             
-            // Additional fuzzy matching for edge cases
-            if (!$isDuplicate && strlen($normalizedTitle) > 2) {
-                foreach ($seenTrainings as $key => $existingTraining) {
-                    $existingNormalized = strtolower(trim($existingTraining->training_title ?? ''));
-                    $existingNormalized = preg_replace('/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/i', '', $existingNormalized);
-                    $existingNormalized = preg_replace('/\s+/', ' ', trim($existingNormalized));
-                    
-                    // Check for very similar titles (like "communication" vs "communication")
-                    if ($normalizedTitle === $existingNormalized && strlen($normalizedTitle) > 2) {
-                        $isDuplicate = true;
-                        $existingKey = $key;
-                        $existingItem = $existingTraining;
-                        break;
-                    }
-                }
+            // Check for duplicates by normalized title
+            if (in_array($normalizedTitle, $seenTitles)) {
+                return false; // Skip duplicate title
             }
             
-            if ($isDuplicate && $existingItem) {
-                // Priority-based replacement
-                $existingSource = $existingItem->source ?? '';
-                $currentSource = $item->source ?? '';
-                
-                $sourcePriority = [
-                    'admin_assigned' => 5,
-                    'competency_assigned' => 4,
-                    'competency_gap' => 3,
-                    'manual' => 2,
-                    'destination_assigned' => 1
-                ];
-                
-                $existingPriority = $sourcePriority[$existingSource] ?? 0;
-                $currentPriority = $sourcePriority[$currentSource] ?? 0;
-                
-                if ($currentPriority > $existingPriority) {
-                    // Replace with higher priority item - remove old keys first
-                    foreach ($seenTrainings as $key => $training) {
-                        if ($training === $existingItem) {
-                            unset($seenTrainings[$key]);
-                        }
-                    }
-                    
-                    // Add new item with all its keys
-                    foreach ($deduplicationKeys as $newKey) {
-                        $seenTrainings[$newKey] = $item;
-                    }
-                    return true;
-                } else {
-                    // Skip this duplicate (lower or equal priority)
-                    return false;
-                }
-            } else {
-                // First time seeing this training - add with all keys
-                foreach ($deduplicationKeys as $newKey) {
-                    $seenTrainings[$newKey] = $item;
-                }
-                return true;
+            // Add to seen lists
+            if ($courseId) {
+                $seenCourseIds[] = $courseId;
             }
+            $seenTitles[] = $normalizedTitle;
+            
+            return true;
         })->map(function($item) {
             return (object) $item;
         })->values(); // Reset array keys
@@ -771,6 +786,11 @@ class MyTrainingController extends Controller
         Log::info('DEBUG - Final deduplicated trainings:', [
             'employee_id' => $employeeId,
             'total_count' => $upcoming->count(),
+            'all_trainings_before_dedup' => $allTrainings->count(),
+            'manual_upcoming' => $manualUpcoming->count(),
+            'admin_assigned' => $adminAssigned->count(),
+            'competency_assigned' => $competencyAssigned->count(),
+            'destination_assigned' => $destinationAssigned->count(),
             'trainings' => $upcoming->map(function($item) {
                 return [
                     'upcoming_id' => $item->upcoming_id ?? 'N/A',
@@ -1191,11 +1211,13 @@ class MyTrainingController extends Controller
                 return (object)[
                     'progress_id' => 'dashboard_' . $training->id,
                     'training_title' => $training->course->course_title ?? 'Unknown Course',
+                    'progress' => $displayProgress, // Fixed field name to match view
                     'progress_percentage' => $displayProgress,
                     'last_updated' => $training->updated_at->format('Y-m-d H:i'),
                     'status' => $displayProgress >= 100 ? 'Completed' : ($displayProgress > 0 ? 'In Progress' : 'Not Started'),
                     'source' => 'dashboard_progress',
-                    'course_id' => $training->course_id
+                    'course_id' => $training->course_id,
+                    'expired_date' => $training->expired_date ?? null
                 ];
             });
 
@@ -1240,6 +1262,7 @@ class MyTrainingController extends Controller
                 return (object)[
                     'progress_id' => 'request_' . $request->request_id,
                     'training_title' => $request->training_title,
+                    'progress' => $actualProgress, // Fixed field name to match view
                     'progress_percentage' => $actualProgress,
                     'last_updated' => $lastUpdated,
                     'status' => $actualProgress >= 100 ? 'Completed' : ($actualProgress > 0 ? 'In Progress' : 'Ready to Start'),
@@ -1278,8 +1301,33 @@ class MyTrainingController extends Controller
             return $group->sortByDesc('progress_percentage')->first();
         })
         ->values();
+        
+        // DIRECT FIX: Create notifications immediately for upcoming trainings
+        $this->ensureTrainingNotificationsTableExists();
+        
+        // Force create notifications for each upcoming training
+        foreach ($upcoming as $training) {
+            $trainingObj = (object) $training;
+            $trainingTitle = $trainingObj->training_title ?? '';
+            
+            if (!empty($trainingTitle)) {
+                // Check if notification exists
+                $exists = TrainingNotification::where('employee_id', $employeeId)
+                    ->where('message', 'LIKE', '%' . $trainingTitle . '%')
+                    ->exists();
+                
+                if (!$exists) {
+                    TrainingNotification::create([
+                        'employee_id' => $employeeId,
+                        'message' => "You have been assigned training: '{$trainingTitle}'. Please check your upcoming trainings.",
+                        'sent_at' => now()
+                    ]);
+                }
+            }
+        }
+        
         $feedback = TrainingFeedback::where('employee_id', $employeeId)->get();
-        $notifications = TrainingNotification::where('employee_id', $employeeId)->get();
+        $notifications = TrainingNotification::where('employee_id', $employeeId)->orderBy('sent_at', 'desc')->get();
 
         // Get training requests for the employee with course relationship
         $trainingRequests = TrainingRequest::with('course')->where('employee_id', $employeeId)->get();
@@ -1402,6 +1450,122 @@ class MyTrainingController extends Controller
         ))->with('upcomingTrainings', $upcoming);
     }
 
+    /**
+     * Get fresh training counts for dashboard update
+     */
+    public function getTrainingCounts()
+    {
+        $employeeId = Auth::user()->employee_id;
+        
+        // Clear caches to ensure fresh data
+        Cache::forget("employee_training_counts_{$employeeId}");
+        Cache::forget("upcoming_trainings_{$employeeId}");
+        Cache::forget("training_requests_{$employeeId}");
+        Cache::forget("training_progress_{$employeeId}");
+        
+        // Get fresh counts using the same logic as index method
+        // Upcoming trainings count
+        $upcomingCount = $this->getUpcomingTrainingsCount($employeeId);
+        
+        // Training requests count (excluding recently unassigned)
+        $requestsCount = TrainingRequest::where('employee_id', $employeeId)
+            ->whereNotExists(function($query) use ($employeeId) {
+                $query->select(DB::raw(1))
+                      ->from('competency_gaps')
+                      ->join('competency_library', 'competency_gaps.competency_id', '=', 'competency_library.id')
+                      ->where('competency_gaps.employee_id', $employeeId)
+                      ->where('competency_gaps.assigned_to_training', false)
+                      ->where('competency_gaps.updated_at', '>', now()->subMinutes(5))
+                      ->whereRaw('(training_requests.training_title LIKE CONCAT("%", competency_library.competency_name, "%") 
+                                  OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Training", ""), "%")
+                                  OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Course", ""), "%")
+                                  OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Program", ""), "%"))');
+            })
+            ->count();
+        
+        // Training progress count (only approved requests that haven't been recently unassigned)
+        $progressCount = TrainingRequest::where('employee_id', $employeeId)
+            ->where('status', 'Approved')
+            ->whereNotExists(function($query) use ($employeeId) {
+                $query->select(DB::raw(1))
+                      ->from('competency_gaps')
+                      ->join('competency_library', 'competency_gaps.competency_id', '=', 'competency_library.id')
+                      ->where('competency_gaps.employee_id', $employeeId)
+                      ->where('competency_gaps.assigned_to_training', false)
+                      ->where('competency_gaps.updated_at', '>', now()->subMinutes(5))
+                      ->whereRaw('(training_requests.training_title LIKE CONCAT("%", competency_library.competency_name, "%") 
+                                  OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Training", ""), "%")
+                                  OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Course", ""), "%")
+                                  OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Program", ""), "%"))');
+            })
+            ->count();
+        
+        return response()->json([
+            'success' => true,
+            'counts' => [
+                'upcoming' => $upcomingCount,
+                'requests' => $requestsCount,
+                'progress' => $progressCount
+            ]
+        ]);
+    }
+
+    /**
+     * Get upcoming trainings count with proper deduplication
+     */
+    private function getUpcomingTrainingsCount($employeeId)
+    {
+        // Use the same logic as the main index method but just count
+        $manualUpcoming = UpcomingTraining::where('employee_id', $employeeId)->get();
+        $adminAssigned = EmployeeTrainingDashboard::where('employee_id', $employeeId)
+            ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+            ->whereHas('course')
+            ->get();
+        $competencyAssigned = CompetencyCourseAssignment::where('employee_id', $employeeId)
+            ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+            ->whereHas('course')
+            ->get();
+        
+        // Apply the same deduplication logic as in index method
+        $allTrainings = collect()
+            ->merge($manualUpcoming->toArray())
+            ->merge($adminAssigned->toArray())
+            ->merge($competencyAssigned->toArray());
+
+        $seenTitles = [];
+        $seenCourseIds = [];
+        $deduplicated = $allTrainings->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
+            $item = (object) $item;
+            
+            $rawTitle = $item->training_title ?? '';
+            if (empty(trim($rawTitle))) {
+                return false;
+            }
+            
+            $normalizedTitle = strtolower(trim($rawTitle));
+            $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development)\b/i', '', $normalizedTitle);
+            $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
+            
+            $courseId = $item->course_id ?? null;
+            if ($courseId && in_array($courseId, $seenCourseIds)) {
+                return false;
+            }
+            
+            if (in_array($normalizedTitle, $seenTitles)) {
+                return false;
+            }
+            
+            if ($courseId) {
+                $seenCourseIds[] = $courseId;
+            }
+            $seenTitles[] = $normalizedTitle;
+            
+            return true;
+        });
+        
+        return $deduplicated->count();
+    }
+
     public function store(Request $request)
     {
         // Ensure required tables exist before storing
@@ -1455,6 +1619,25 @@ class MyTrainingController extends Controller
                     'reason' => $request->reason,
                     'status' => 'Pending',
                     'requested_date' => $request->requested_date
+                ]);
+
+                // Automatically create progress tracking record
+                TrainingProgress::create([
+                    'employee_id' => $employeeId,
+                    'course_id' => $courseId,
+                    'training_title' => $request->training_title,
+                    'progress' => 0,
+                    'status' => 'Not Started',
+                    'source' => 'training_request',
+                    'request_id' => $trainingRequest->request_id,
+                    'last_accessed' => now()
+                ]);
+
+                // Create notification record
+                TrainingNotification::create([
+                    'employee_id' => $employeeId,
+                    'message' => "Your training request for '{$request->training_title}' has been submitted and is pending approval.",
+                    'sent_at' => now()
                 ]);
 
                 // Log activity
@@ -3186,4 +3369,215 @@ class MyTrainingController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Refresh training data and return updated counts
+     */
+    public function refreshData()
+    {
+        try {
+            $employeeId = Auth::user()->employee_id;
+
+            // Get updated counts for each section - using the same logic as the main index method
+            
+            // Get upcoming count with proper deduplication
+            $manualUpcoming = UpcomingTraining::where('employee_id', $employeeId)->get();
+            $adminAssigned = EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+                ->whereHas('course')
+                ->get();
+            $competencyAssigned = CompetencyCourseAssignment::where('employee_id', $employeeId)
+                ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+                ->whereHas('course')
+                ->get();
+            
+            // Combine and deduplicate by training title (same logic as main method)
+            $allTrainings = collect()
+                ->merge($manualUpcoming->pluck('training_title'))
+                ->merge($adminAssigned->map(function($item) { return $item->course->course_title ?? ''; }))
+                ->merge($competencyAssigned->map(function($item) { return $item->course->course_title ?? ''; }))
+                ->filter()
+                ->unique()
+                ->values();
+            
+            $upcomingCount = $allTrainings->count();
+            $completedCount = CompletedTraining::where('employee_id', $employeeId)->count();
+            
+            // Calculate requests count including auto-generated ones from upcoming trainings
+            $realRequests = TrainingRequest::where('employee_id', $employeeId)->get();
+            $upcomingTrainings = $allTrainings; // Use the same upcoming trainings data
+            
+            // Count auto-generated requests (same logic as in _requests.blade.php)
+            $autoCreatedCount = 0;
+            foreach ($upcomingTrainings as $upcomingTitle) {
+                $exists = $realRequests->contains(function ($request) use ($upcomingTitle) {
+                    return $request->training_title === $upcomingTitle;
+                });
+                if (!$exists) {
+                    $autoCreatedCount++;
+                }
+            }
+            
+            $requestsCount = $realRequests->count() + $autoCreatedCount;
+            
+            // Progress count - EXACT SAME LOGIC as the progress table to ensure consistency
+            // Build progress data the same way as the main index method
+            
+            // Get approved training requests that should appear in progress
+            $approvedRequests = TrainingRequest::with('course')
+                ->where('employee_id', $employeeId)
+                ->where('status', 'Approved')
+                ->get()
+                ->map(function($request) use ($employeeId) {
+                    return (object)[
+                        'progress_id' => 'request_' . $request->request_id,
+                        'training_title' => $request->training_title,
+                        'source' => 'approved_request',
+                        'course_id' => $request->course_id,
+                        'employee_id' => $employeeId
+                    ];
+                });
+            
+            // Filter to ONLY approved training requests (same as table)
+            $approvedRequestsOnly = $approvedRequests->filter(function ($item) use ($employeeId) {
+                return isset($item->source) && 
+                       $item->source == 'approved_request' && 
+                       ($item->employee_id ?? $employeeId) == $employeeId;
+            });
+            
+            // Group by training title to eliminate duplicates (same as table)
+            $groupedProgress = $approvedRequestsOnly->groupBy(function ($item) {
+                $trainingTitle = strtolower(trim($item->training_title ?? ''));
+                
+                // Normalize training title (EXACT same logic as table)
+                $normalizedTitle = preg_replace('/\s+/', ' ', $trainingTitle);
+                $normalizedTitle = str_replace([' training', ' course', ' program', ' skills'], '', $normalizedTitle);
+                $normalizedTitle = trim($normalizedTitle);
+                
+                return $normalizedTitle;
+            });
+            
+            // Count unique groups (same as table)
+            $progressCount = $groupedProgress->count();
+            
+            $feedbackCount = TrainingFeedback::where('employee_id', $employeeId)->count();
+            $notificationsCount = TrainingNotification::where('employee_id', $employeeId)->count();
+
+            return response()->json([
+                'success' => true,
+                'counts' => [
+                    'upcoming' => $upcomingCount,
+                    'completed' => $completedCount,
+                    'requests' => $requestsCount,
+                    'progress' => $progressCount,
+                    'feedback' => $feedbackCount,
+                    'notifications' => $notificationsCount
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error refreshing training data: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to refresh data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Auto-create training requests from upcoming trainings
+     */
+    public function autoCreateRequests()
+    {
+        try {
+            $employeeId = Auth::user()->employee_id;
+            $createdCount = 0;
+
+            // Get upcoming trainings (same logic as index method)
+            $manualUpcoming = UpcomingTraining::where('employee_id', $employeeId)->get();
+            $adminAssigned = EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+                ->whereHas('course')
+                ->get();
+            $competencyAssigned = CompetencyCourseAssignment::where('employee_id', $employeeId)
+                ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
+                ->whereHas('course')
+                ->get();
+
+            // Combine all upcoming trainings
+            $allUpcoming = collect()
+                ->merge($manualUpcoming)
+                ->merge($adminAssigned->map(function($item) {
+                    return (object)[
+                        'training_title' => $item->course->course_title ?? '',
+                        'course_id' => $item->course_id
+                    ];
+                }))
+                ->merge($competencyAssigned->map(function($item) {
+                    return (object)[
+                        'training_title' => $item->course->course_title ?? '',
+                        'course_id' => $item->course_id
+                    ];
+                }));
+
+            // Get existing requests
+            $existingRequests = TrainingRequest::where('employee_id', $employeeId)->get();
+
+            foreach ($allUpcoming as $upcoming) {
+                // Check if request already exists
+                $exists = $existingRequests->contains(function ($request) use ($upcoming) {
+                    return $request->training_title === $upcoming->training_title;
+                });
+
+                if (!$exists && !empty($upcoming->training_title)) {
+                    // Create training request
+                    $dbRequest = TrainingRequest::create([
+                        'employee_id' => $employeeId,
+                        'course_id' => $upcoming->course_id ?? null,
+                        'training_title' => $upcoming->training_title,
+                        'reason' => 'Automatically enrolled from upcoming trainings',
+                        'status' => 'Approved',
+                        'requested_date' => now()->format('Y-m-d')
+                    ]);
+
+                    // Create progress record
+                    TrainingProgress::create([
+                        'employee_id' => $employeeId,
+                        'course_id' => $upcoming->course_id ?? null,
+                        'training_title' => $upcoming->training_title,
+                        'progress' => 0,
+                        'status' => 'Not Started',
+                        'source' => 'auto_approved_request',
+                        'request_id' => $dbRequest->request_id,
+                        'last_accessed' => now()
+                    ]);
+
+                    // Create notification
+                    TrainingNotification::create([
+                        'employee_id' => $employeeId,
+                        'message' => "You have been automatically enrolled in '{$upcoming->training_title}' training.",
+                        'sent_at' => now(),
+                        'is_read' => false
+                    ]);
+
+                    $createdCount++;
+                }
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully auto-created {$createdCount} training requests",
+                'created_count' => $createdCount
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error auto-creating training requests: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to auto-create requests: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
 }

@@ -155,6 +155,53 @@
         <strong>Total Records:</strong> {{ $total_records }} | 
         <strong>Status:</strong> All Active Training Records
     </div>
+
+    <!-- POSSIBLE TRAINING DESTINATIONS (Master List) -->
+    <div style="margin-bottom: 30px;">
+        <h2 style="color: #333; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #4a90e2; padding-bottom: 5px;">
+            📚 POSSIBLE TRAINING DESTINATIONS (Master List)
+        </h2>
+        <p style="font-size: 10px; color: #666; margin-bottom: 10px;">
+            <em>These are pre-defined training destinations available in the system. Total: {{ $total_master_destinations }}</em>
+        </p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 3%;">#</th>
+                    <th style="width: 25%;">Destination / Training Title</th>
+                    <th style="width: 8%;">Duration</th>
+                    <th style="width: 27%;">Details</th>
+                    <th style="width: 27%;">Objectives</th>
+                    <th style="width: 10%;">Delivery Mode</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach($masterDestinations as $index => $master)
+                    <tr>
+                        <td style="text-align: center;">{{ $index + 1 }}</td>
+                        <td class="destination-name">{{ $master->destination_name }}</td>
+                        <td style="text-align: center;">{{ $master->duration }}</td>
+                        <td style="font-size: 8px;">{{ $master->details }}</td>
+                        <td style="font-size: 8px;">{{ $master->objectives }}</td>
+                        <td style="text-align: center;">
+                            <span class="delivery-mode">{{ $master->delivery_mode }}</span>
+                        </td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+
+    <!-- EMPLOYEE TRAINING RECORDS -->
+    <div style="margin-top: 40px;">
+        <h2 style="color: #333; font-size: 16px; margin-bottom: 15px; border-bottom: 2px solid #28a745; padding-bottom: 5px;">
+            👥 EMPLOYEE TRAINING RECORDS
+        </h2>
+        <p style="font-size: 10px; color: #666; margin-bottom: 10px;">
+            <em>Individual employee training assignments and progress tracking</em>
+        </p>
+    </div>
     
     <table>
         <thead>

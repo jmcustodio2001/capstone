@@ -537,4 +537,175 @@ Login Details:
 This is an automated message from {$companyName}.
         ";
     }
+
+    /**
+     * Send OTP to admin email (similar to employee but for admin users)
+     */
+    public function sendAdminOTP($adminUser, string $otpCode): array
+    {
+        try {
+            Log::info("=== OTP SERVICE ADMIN EMAIL START ===");
+            Log::info("Attempting to send admin OTP email to: {$adminUser->email}");
+            Log::info("Admin user object: " . json_encode($adminUser));
+            Log::info("OTP Code: {$otpCode}");
+            
+            // Check SMTP configuration
+            Log::info("SMTP Configuration Check:", [
+                'host' => $this->mail->Host,
+                'port' => $this->mail->Port,
+                'username' => $this->mail->Username,
+                'smtp_secure' => $this->mail->SMTPSecure,
+                'smtp_auth' => $this->mail->SMTPAuth
+            ]);
+            
+            // Clear any previous recipients
+            $this->mail->clearAddresses();
+            $this->mail->clearAttachments();
+
+            // Add recipient
+            $this->mail->addAddress($adminUser->email, $adminUser->first_name);
+            Log::info("Added recipient: {$adminUser->email} ({$adminUser->first_name})");
+
+            // Email content for admin
+            $this->mail->Subject = 'HR2ESS Admin Login - Verification Code';
+            $this->mail->Body = $this->getAdminOTPEmailTemplate($adminUser, $otpCode);
+            $this->mail->AltBody = $this->getAdminOTPEmailPlainText($adminUser, $otpCode);
+
+            Log::info('Admin email content prepared, attempting to send...');
+            Log::info('Email subject: ' . $this->mail->Subject);
+
+            // Send email
+            $result = $this->mail->send();
+
+            Log::info('Admin OTP Email send result', [
+                'admin_email' => $adminUser->email,
+                'result' => $result,
+                'success' => $result ? 'YES' : 'NO',
+                'smtp_debug' => 'Check SMTP logs above'
+            ]);
+
+            if ($result) {
+                Log::info("✅ Admin OTP email sent successfully!");
+                Log::info("=== OTP SERVICE ADMIN EMAIL END (SUCCESS) ===");
+                return [
+                    'success' => true,
+                    'message' => 'Admin OTP sent successfully to your email address.'
+                ];
+            } else {
+                Log::error("❌ PHPMailer returned false - email not sent");
+                Log::info("=== OTP SERVICE ADMIN EMAIL END (FAILED) ===");
+                return [
+                    'success' => false,
+                    'message' => 'Failed to send admin OTP email - PHPMailer returned false.'
+                ];
+            }
+
+        } catch (Exception $e) {
+            Log::error('❌ Admin PHPMailer Exception: ' . $e->getMessage(), [
+                'admin_email' => $adminUser->email,
+                'error_code' => $e->getCode(),
+                'detailed_error' => method_exists($e, 'errorMessage') ? $e->errorMessage() : 'No detailed error',
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            Log::info("=== OTP SERVICE ADMIN EMAIL END (EXCEPTION) ===");
+
+            return [
+                'success' => false,
+                'message' => 'Failed to send admin OTP email: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Get HTML template for admin OTP email
+     */
+    private function getAdminOTPEmailTemplate($adminUser, string $otpCode): string
+    {
+        $companyName = env('APP_NAME', 'Jetlouge Travels');
+        $adminName = $adminUser->first_name;
+
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset='UTF-8'>
+            <title>Admin Login Verification</title>
+        </head>
+        <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;'>
+            <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 30px;'>
+                <h1 style='color: white; margin: 0; font-size: 28px;'>{$companyName}</h1>
+                <p style='color: #f0f0f0; margin: 10px 0 0 0; font-size: 16px;'>Admin Portal - Login Verification</p>
+            </div>
+            
+            <div style='background: #f9f9f9; padding: 30px; border-radius: 10px; border-left: 5px solid #667eea;'>
+                <h2 style='color: #333; margin-top: 0;'>Hello {$adminName},</h2>
+                
+                <p>We received an admin login request for your {$companyName} account.</p>
+                
+                <div style='background: white; padding: 20px; border-radius: 8px; text-align: center; margin: 25px 0; border: 2px dashed #667eea;'>
+                    <p style='margin: 0 0 10px 0; font-size: 16px; color: #666;'>Your Admin Verification Code:</p>
+                    <h1 style='font-size: 36px; color: #667eea; margin: 10px 0; letter-spacing: 8px; font-family: monospace;'>{$otpCode}</h1>
+                    <p style='margin: 10px 0 0 0; font-size: 14px; color: #999;'>This code expires in 10 minutes</p>
+                </div>
+                
+                <div style='background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;'>
+                    <h3 style='color: #856404; margin: 0 0 10px 0; font-size: 16px;'>🔒 Security Notice:</h3>
+                    <ul style='margin: 0; padding-left: 20px; color: #856404;'>
+                        <li>Never share this code with anyone</li>
+                        <li>If you didn't request this login, contact IT immediately</li>
+                        <li>This code can only be used once</li>
+                        <li>Admin access requires additional security verification</li>
+                    </ul>
+                </div>
+                
+                <div style='background: #e9ecef; padding: 15px; border-radius: 8px; margin: 20px 0;'>
+                    <h4 style='margin: 0 0 10px 0; color: #495057;'>Login Details:</h4>
+                    <p style='margin: 5px 0; color: #6c757d;'><strong>Time:</strong> " . Carbon::now()->format('F j, Y g:i A T') . "</p>
+                    <p style='margin: 5px 0; color: #6c757d;'><strong>Email:</strong> {$adminUser->email}</p>
+                    <p style='margin: 5px 0; color: #6c757d;'><strong>Access Level:</strong> Administrator</p>
+                </div>
+                
+                <div style='margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6; font-size: 14px; color: #6c757d;'>
+                    <p>This is an automated security message from {$companyName} Admin System.</p>
+                    <p>Please do not reply to this email. For support, contact your system administrator.</p>
+                </div>
+            </div>
+        </body>
+        </html>";
+    }
+
+    /**
+     * Get plain text version of admin OTP email
+     */
+    private function getAdminOTPEmailPlainText($adminUser, string $otpCode): string
+    {
+        $companyName = env('APP_NAME', 'Jetlouge Travels');
+        $adminName = $adminUser->first_name;
+
+        return "
+ADMIN LOGIN VERIFICATION CODE
+
+Hello {$adminName},
+
+We received an admin login request for your {$companyName} account.
+
+Your admin verification code is: {$otpCode}
+
+This code will expire in 10 minutes.
+
+SECURITY NOTICE:
+- Never share this code with anyone
+- If you didn't request this login, contact IT immediately
+- This code can only be used once
+- Admin access requires additional security verification
+
+Login Details:
+- Time: " . Carbon::now()->format('F j, Y g:i A T') . "
+- Email: {$adminUser->email}
+- Access Level: Administrator
+
+This is an automated security message from {$companyName} Admin System.
+        ";
+    }
 }

@@ -27,7 +27,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             // Fetch certificates with relationships - enhanced error handling
             $certificates = TrainingRecordCertificateTracking::with(['employee', 'course'])
                 ->orderBy('created_at', 'desc')
-                ->paginate(10);
+                ->get();
             
             // Safely get employees and courses with error handling
             $employees = collect();
@@ -46,7 +46,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             }
             
             // Debug logging with safe counts
-            Log::info('Certificate tracking - Records found: ' . $certificates->total());
+            Log::info('Certificate tracking - Records found: ' . $certificates->count());
             Log::info('Certificate tracking - Employees available: ' . $employees->count());
             Log::info('Certificate tracking - Courses available: ' . $courses->count());
             
@@ -79,7 +79,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             // If there's an error, try to ensure table structure and return empty data
             $this->ensureTableStructure();
             
-            $certificates = collect()->paginate(10);
+            $certificates = collect();
             $employees = collect();
             $courses = collect();
             

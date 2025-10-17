@@ -39,15 +39,6 @@
       box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
     }
     
-    .training-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 4px;
-      background: linear-gradient(90deg, #007bff, #28a745, #ffc107, #dc3545);
-    }
     
     .card-header-custom {
       background: rgba(13, 110, 253, 0.05);
@@ -274,15 +265,6 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap">
       <h4 class="fw-bold mb-2 mb-md-0">Employee Training Records</h4>
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <button class="btn btn-success btn-sm d-flex align-items-center mobile-hidden" onclick="createMissingEntriesWithConfirmation()">
-          <i class="bi bi-arrow-repeat me-1"></i> <span class="d-none d-lg-inline">Create Missing Entries</span>
-        </button>
-        <button class="btn btn-info btn-sm d-flex align-items-center mobile-hidden" onclick="fixExpiredDatesWithConfirmation()">
-          <i class="bi bi-calendar-check me-1"></i> <span class="d-none d-lg-inline">Fix Expired Dates</span>
-        </button>
-        <button class="btn btn-warning btn-sm d-flex align-items-center mobile-hidden" onclick="removeUnknownCoursesWithConfirmation()">
-          <i class="bi bi-trash me-1"></i> <span class="d-none d-lg-inline">Remove Unknown Courses</span>
-        </button>
         <button class="btn btn-sm btn-outline-primary d-flex align-items-center" onclick="exportTrainingDataWithConfirmation()">
           <i class="bi bi-download me-1"></i> <span class="d-none d-sm-inline">Export</span>
         </button>
@@ -590,19 +572,19 @@
               // Determine final status
               if ($isExpired && $currentProgress < 100) {
                 $statusBadgeClass = 'bg-danger';
-                $statusTextClass = 'text-danger';
+                $statusTextClass = 'text-dark';
                 $statusText = 'Expired';
               } elseif ($currentProgress >= 100) {
                 $statusBadgeClass = 'bg-success';
-                $statusTextClass = 'text-success';
+                $statusTextClass = 'text-dark';
                 $statusText = 'Completed';
               } elseif ($currentProgress > 0) {
                 $statusBadgeClass = 'bg-primary';
-                $statusTextClass = 'text-primary';
+                $statusTextClass = 'text-dark';
                 $statusText = 'In Progress';
               } else {
                 $statusBadgeClass = 'bg-secondary';
-                $statusTextClass = 'text-secondary';
+                $statusTextClass = 'text-dark';
                 $statusText = 'Not Started';
               }
             @endphp
@@ -684,19 +666,15 @@
             @if(!$isTrainingRequest)
               <div class="action-buttons">
                 <button class="btn btn-outline-primary btn-action" 
-                        onclick="viewTrainingDetails('{{ $record->id }}', '{{ ($record->employee->first_name ?? 'Unknown') }} {{ ($record->employee->last_name ?? 'Employee') }}', '{{ $displayTitle }}', '{{ $displayProgress }}', '{{ $statusText }}', '{{ $finalExpiredDate ? \Carbon\Carbon::parse($finalExpiredDate)->format('Y-m-d H:i') : 'Not Set' }}', '{{ $record->last_accessed ? \Carbon\Carbon::parse($record->last_accessed)->format('Y-m-d H:i') : 'Never' }}')"
+                        onclick="viewTrainingDetails('{{ $record->id }}', '{{ ($record->employee->first_name ?? 'Unknown') }} {{ ($record->employee->last_name ?? 'Employee') }}', '{{ $displayTitle }}', '{{ $displayProgress }}', '{{ $statusText }}', '{{ $finalExpiredDate ? \Carbon\Carbon::parse($finalExpiredDate)->format('Y-m-d') : 'Not Set' }}', '{{ $record->last_accessed ? \Carbon\Carbon::parse($record->last_accessed)->format('Y-m-d') : 'Never' }}')"
                         data-bs-toggle="tooltip" title="View Details">
                   <i class="bi bi-eye"></i>
                 </button>
-                <button class="btn btn-outline-warning btn-action" 
-                        onclick="editTrainingWithConfirmation('{{ $record->id }}', '{{ $record->employee_id }}', '{{ $record->course_id }}', '{{ $record->progress }}', '{{ $record->last_accessed }}')"
-                        data-bs-toggle="tooltip" title="Edit Training">
-                  <i class="bi bi-pencil"></i>
-                </button>
-                <button class="btn btn-outline-danger btn-action" 
-                        onclick="deleteTrainingWithConfirmation('{{ $record->id }}', '{{ ($record->employee->first_name ?? 'Unknown') }} {{ ($record->employee->last_name ?? 'Employee') }}', '{{ $displayTitle }}')"
-                        data-bs-toggle="tooltip" title="Delete Training">
-                  <i class="bi bi-trash"></i>
+                <button class="btn btn-outline-success btn-action certificate-btn" 
+                        onclick="alert('Button clicked!'); window.open('/admin/training-record-certificate-tracking?employee_id={{ $record->employee->employee_id ?? '' }}&employee_name={{ urlencode(($record->employee->first_name ?? 'Unknown') . ' ' . ($record->employee->last_name ?? 'Employee')) }}', '_blank');"
+                        data-bs-toggle="tooltip" title="View Certificates"
+                        style="display: none;">
+                  <i class="bi bi-award"></i>
                 </button>
               </div>
             @else

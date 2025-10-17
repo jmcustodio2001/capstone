@@ -728,6 +728,7 @@ function getNotificationIcon(type) {
   const icons = {
     'employee_registration': 'bi bi-person-plus text-success',
     'training_completion': 'bi bi-book text-primary',
+    'training_request': 'bi bi-clipboard-plus text-warning',
     'leave_request': 'bi bi-calendar-check text-info',
     'system_update': 'bi bi-arrow-up-circle text-warning',
     'competency_request': 'bi bi-star text-warning',

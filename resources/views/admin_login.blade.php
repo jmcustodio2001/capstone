@@ -10,10 +10,49 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <!-- Bootstrap Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-  <!-- SweetAlert2 CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.min.css" rel="stylesheet">
   <!-- Login Page Styles -->
   <link rel="stylesheet" href="{{ asset('assets/css/admin_login-style.css') }}">
+  
+  <!-- Google reCAPTCHA -->
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  
+  <!-- OTP Specific Styles -->
+  <style>
+    .otp-input {
+      transition: all 0.3s ease;
+    }
+    .otp-input:focus {
+      box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+      border-color: var(--jetlouge-primary);
+    }
+    .otp-icon {
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .timer-warning {
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0.5; }
+    }
+    .form-transition {
+      transition: all 0.5s ease-in-out;
+    }
+    .btn-login:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    .captcha-container {
+      display: flex;
+      justify-content: center;
+      margin: 20px 0;
+    }
+  </style>
 </head>
 <body>
   <div class="login-container">
@@ -80,46 +119,197 @@
               Warning: {{ 3 - session('attempts') }} login attempts remaining.
             </div>
       @endif
-              <form method="POST" action="{{ route('admin.login.submit') }}" id="adminLoginForm">
+              <!-- Notification Area -->
+              <div id="notificationArea" class="mb-3" style="display: none;">
+                <div id="notificationAlert" class="alert" role="alert">
+                  <i id="notificationIcon" class="me-2"></i>
+                  <span id="notificationMessage"></span>
+                </div>
+              </div>
+
+              <!-- Login Form -->
+              <form method="POST" action="{{ route('admin.login.submit') }}" id="adminLoginForm" style="display: block;">
                 @csrf
-                  <div class="mb-3">
-                    <label for="email" class="form-label fw-semibold">Email Address</label>
-                    <div class="input-group">
-                      <span class="input-group-text">
-                        <i class="bi bi-envelope"></i>
-                      </span>
-                      <input type="email" class="form-control" id="email" name="email" placeholder="Enter your email" required value="{{ old('email') }}">
-                    </div>
+                <input type="hidden" name="force_session_renewal" value="1">
+                
+                <div class="mb-3">
+                  <label for="email" class="form-label fw-semibold">Email Address</label>
+                  <div class="input-group">
+                    <span class="input-group-text">
+                      <i class="bi bi-envelope"></i>
+                    </span>
+                    <input type="email" class="form-control @error('email') is-invalid @enderror" id="email" name="email" placeholder="Enter your email" required value="{{ old('email') }}">
+                    @error('email')
+                      <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                   </div>
-                  <div class="mb-3">
-                    <label for="password" class="form-label fw-semibold">Password</label>
-                    <div class="input-group">
-                      <span class="input-group-text">
-                        <i class="bi bi-lock"></i>
-                      </span>
-                      <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
-                      <button class="btn btn-outline-secondary" type="button" id="togglePassword">
-                        <i class="bi bi-eye"></i>
-                      </button>
-                    </div>
+                </div>
+                
+                <div class="mb-3">
+                  <label for="password" class="form-label fw-semibold">Password</label>
+                  <div class="input-group">
+                    <span class="input-group-text">
+                      <i class="bi bi-lock"></i>
+                    </span>
+                    <input type="password" class="form-control @error('password') is-invalid @enderror" id="password" name="password" placeholder="Enter your password" required>
+                    <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                      <i class="bi bi-eye"></i>
+                    </button>
+                    @error('password')
+                      <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
                   </div>
-                  <button type="submit" class="btn btn-login mb-3" id="submitBtn">
-                    <i class="bi bi-box-arrow-in-right me-2"></i>
-                    Sign In
+                </div>
+                
+                <!-- Google reCAPTCHA -->
+                <div class="mb-3 captcha-container">
+                  @if(config('services.recaptcha.site_key'))
+                    <div class="g-recaptcha" data-sitekey="{{ config('services.recaptcha.site_key') }}" data-theme="light"></div>
+                  @else
+                    <div class="alert alert-warning">
+                      <i class="bi bi-exclamation-triangle me-2"></i>
+                      reCAPTCHA not configured. Please set RECAPTCHA_SITE_KEY in your environment file.
+                    </div>
+                  @endif
+                  @error('g-recaptcha-response')
+                    <div class="invalid-feedback d-block">{{ $message }}</div>
+                  @enderror
+                </div>
+                
+                
+                <button type="submit" class="btn btn-login mb-3" id="submitBtn">
+                  <i class="bi bi-box-arrow-in-right me-2"></i>
+                  Sign In
+                </button>
+                
+                <hr class="my-4">
+              </form>
+              
+              <!-- OTP Verification Form -->
+              <form id="otpForm" style="display: none;">
+                @csrf
+                <div class="text-center mb-4">
+                  <div class="otp-icon mb-3">
+                    <i class="bi bi-shield-check" style="font-size: 3rem; color: var(--jetlouge-primary);"></i>
+                  </div>
+                  <h4 style="color: var(--jetlouge-primary); font-weight: 700;">Verify Your Identity</h4>
+                  <p class="text-muted">We've sent a 6-digit verification code to your email address.</p>
+                  <p class="fw-bold" id="otpEmailDisplay"></p>
+                </div>
+
+                <div class="mb-3">
+                  <label for="otp_code" class="form-label fw-semibold">Enter Verification Code</label>
+                  <div class="otp-input-container">
+                    <input type="tel" class="form-control otp-input" id="otp_code" name="otp_code"
+                           placeholder="000000" maxlength="6" autocomplete="off"
+                           inputmode="numeric" pattern="[0-9]*"
+                           style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem; font-weight: bold;">
+                  </div>
+                  <div class="invalid-feedback" id="otpError"></div>
+                </div>
+
+                <div class="mb-3 text-center">
+                  <small class="text-muted">
+                    <i class="bi bi-clock me-1"></i>
+                    Code expires in <span id="otpTimer" class="fw-bold text-danger">10:00</span>
+                  </small>
+                </div>
+
+                <button type="submit" class="btn btn-login mb-3" id="verifyOtpButton">
+                  <i class="bi bi-check-circle me-2"></i> Verify Code
+                </button>
+
+                <div class="text-center mb-3">
+                  <button type="button" class="btn btn-outline-secondary" id="resendOtpButton">
+                    <i class="bi bi-arrow-clockwise me-2"></i> Resend Code
                   </button>
-                  <hr class="my-4">
-                </form>
+                </div>
+
+                <div class="text-center">
+                  <button type="button" class="btn-forgot" id="backToLoginButton">
+                    <i class="bi bi-arrow-left me-1"></i> Back to Login
+                  </button>
+                </div>
+
+                <hr class="my-4">
+              </form>
             </div>
     </div>
   </div>
 
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- SweetAlert2 JS -->
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.all.min.js"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      // Global variables
+      let otpTimer;
+      let otpTimeLeft = 600; // 10 minutes in seconds
+      let currentUserEmail = '';
+      let notificationTimeout;
+
+      // Notification system
+      function showNotification(message, type = 'info', duration = 5000) {
+        const notificationArea = document.getElementById('notificationArea');
+        const notificationAlert = document.getElementById('notificationAlert');
+        const notificationIcon = document.getElementById('notificationIcon');
+        const notificationMessage = document.getElementById('notificationMessage');
+        
+        if (!notificationArea || !notificationAlert || !notificationIcon || !notificationMessage) {
+          console.error('Notification elements not found');
+          return;
+        }
+        
+        // Clear existing timeout
+        if (notificationTimeout) {
+          clearTimeout(notificationTimeout);
+        }
+        
+        // Set icon and classes based on type
+        notificationAlert.className = 'alert';
+        switch(type) {
+          case 'success':
+            notificationAlert.classList.add('alert-success');
+            notificationIcon.className = 'bi bi-check-circle me-2';
+            break;
+          case 'error':
+          case 'danger':
+            notificationAlert.classList.add('alert-danger');
+            notificationIcon.className = 'bi bi-exclamation-circle me-2';
+            break;
+          case 'warning':
+            notificationAlert.classList.add('alert-warning');
+            notificationIcon.className = 'bi bi-exclamation-triangle me-2';
+            break;
+          case 'info':
+          default:
+            notificationAlert.classList.add('alert-info');
+            notificationIcon.className = 'bi bi-info-circle me-2';
+            break;
+        }
+        
+        notificationMessage.textContent = message;
+        notificationArea.style.display = 'block';
+        
+        // Auto-hide after duration
+        if (duration > 0) {
+          notificationTimeout = setTimeout(() => {
+            hideNotification();
+          }, duration);
+        }
+      }
+      
+      function hideNotification() {
+        const notificationArea = document.getElementById('notificationArea');
+        if (notificationArea) {
+          notificationArea.style.display = 'none';
+        }
+        if (notificationTimeout) {
+          clearTimeout(notificationTimeout);
+          notificationTimeout = null;
+        }
+      }
+
       // Clean up any old localStorage attempt tracking since we now use server-side tracking
       localStorage.removeItem('loginAttempts');
       localStorage.removeItem('lockoutTime');
@@ -132,31 +322,32 @@
         };
       }
 
-      // Show error message with SweetAlert if there are validation errors
+      // DOM elements
+      const loginForm = document.getElementById('adminLoginForm');
+      const otpForm = document.getElementById('otpForm');
+      const submitBtn = document.getElementById('submitBtn');
+      const verifyOtpButton = document.getElementById('verifyOtpButton');
+      const resendOtpButton = document.getElementById('resendOtpButton');
+      const backToLoginButton = document.getElementById('backToLoginButton');
+      const otpInput = document.getElementById('otp_code');
+      const otpError = document.getElementById('otpError');
+      const otpEmailDisplay = document.getElementById('otpEmailDisplay');
+      const otpTimerDisplay = document.getElementById('otpTimer');
+      const togglePassword = document.getElementById('togglePassword');
+      const passwordInput = document.getElementById('password');
+      const emailInput = document.getElementById('email');
+
+      // Show error message if there are validation errors
       const errorAlert = document.getElementById('errorAlert');
       if (errorAlert && !errorAlert.classList.contains('d-none')) {
         const errorMessage = errorAlert.textContent.trim();
         if (errorMessage) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Login Failed',
-            text: errorMessage,
-            confirmButtonText: 'Try Again',
-            confirmButtonColor: '#dc3545',
-            showClass: {
-              popup: 'animate__animated animate__fadeInDown'
-            },
-            hideClass: {
-              popup: 'animate__animated animate__fadeOutUp'
-            }
-          });
+          // Keep the existing Bootstrap alert visible
+          errorAlert.style.display = 'block';
         }
       }
 
       // Password toggle functionality
-      const togglePassword = document.getElementById('togglePassword');
-      const passwordInput = document.getElementById('password');
-
       if (togglePassword && passwordInput) {
         togglePassword.addEventListener('click', function() {
           const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
@@ -168,13 +359,109 @@
         });
       }
 
-      // Form validation and submission with SweetAlert
-      const loginForm = document.getElementById('adminLoginForm');
-      const submitBtn = document.getElementById('submitBtn');
-      const emailInput = document.getElementById('email');
 
+      // CSRF token handling
+      function getCSRFToken() {
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        return metaTag ? metaTag.getAttribute('content') : null;
+      }
+
+      async function refreshCSRFTokenIfNeeded() {
+        try {
+          const response = await fetch('/admin/csrf-token', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest'
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.csrf_token || data.token) {
+              const newToken = data.csrf_token || data.token;
+              const metaTag = document.querySelector('meta[name="csrf-token"]');
+              if (metaTag) {
+                metaTag.setAttribute('content', newToken);
+              }
+              return newToken;
+            }
+          }
+        } catch (error) {
+          console.log('Token refresh failed, using existing token');
+        }
+        
+        return getCSRFToken();
+      }
+
+      // OTP Timer functionality
+      function startOTPTimer() {
+        otpTimeLeft = 600; // Reset to 10 minutes
+        updateTimerDisplay();
+
+        otpTimer = setInterval(() => {
+          otpTimeLeft--;
+          updateTimerDisplay();
+
+          if (otpTimeLeft <= 0) {
+            clearInterval(otpTimer);
+            showExpiredMessage();
+          }
+        }, 1000);
+      }
+
+      function updateTimerDisplay() {
+        const minutes = Math.floor(otpTimeLeft / 60);
+        const seconds = otpTimeLeft % 60;
+        otpTimerDisplay.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        // Change color based on time remaining
+        if (otpTimeLeft <= 60) {
+          otpTimerDisplay.className = 'fw-bold text-danger';
+        } else if (otpTimeLeft <= 300) {
+          otpTimerDisplay.className = 'fw-bold text-warning';
+        } else {
+          otpTimerDisplay.className = 'fw-bold text-success';
+        }
+      }
+
+      function showExpiredMessage() {
+        showNotification('Your verification code has expired. Click "Resend Code" to request a new one.', 'warning', 0);
+      }
+
+      // Show OTP form
+      function showOTPForm(email) {
+        currentUserEmail = email;
+        loginForm.style.display = 'none';
+        otpForm.style.display = 'block';
+        otpEmailDisplay.textContent = email;
+        otpInput.focus();
+        startOTPTimer();
+
+        // Clear any previous errors
+        otpError.textContent = '';
+        otpInput.classList.remove('is-invalid');
+      }
+
+      // Show login form
+      function showLoginForm() {
+        otpForm.style.display = 'none';
+        loginForm.style.display = 'block';
+
+        // Clear OTP form
+        otpInput.value = '';
+        otpError.textContent = '';
+        otpInput.classList.remove('is-invalid');
+
+        // Clear timer
+        if (otpTimer) {
+          clearInterval(otpTimer);
+        }
+      }
+
+      // Form validation and submission with CAPTCHA and 2FA
       if (loginForm && submitBtn) {
-        loginForm.addEventListener('submit', function(e) {
+        loginForm.addEventListener('submit', async function(e) {
           e.preventDefault();
 
           // Validate form fields
@@ -182,23 +469,13 @@
           const password = passwordInput.value.trim();
 
           if (!email) {
-            Swal.fire({
-              icon: 'warning',
-              title: 'Email Required',
-              text: 'Please enter your email address.',
-              confirmButtonColor: '#ffc107'
-            });
+            showNotification('Please enter your email address.', 'warning');
             emailInput.focus();
             return false;
           }
 
           if (!password) {
-            Swal.fire({
-              icon: 'warning',
-              title: 'Password Required',
-              text: 'Please enter your password.',
-              confirmButtonColor: '#ffc107'
-            });
+            showNotification('Please enter your password.', 'warning');
             passwordInput.focus();
             return false;
           }
@@ -206,56 +483,336 @@
           // Email format validation
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           if (!emailRegex.test(email)) {
-            Swal.fire({
-              icon: 'warning',
-              title: 'Invalid Email',
-              text: 'Please enter a valid email address.',
-              confirmButtonColor: '#ffc107'
-            });
+            showNotification('Please enter a valid email address.', 'warning');
             emailInput.focus();
             return false;
           }
 
-          // Check if CSRF token exists
-          const csrfToken = loginForm.querySelector('input[name="_token"]');
-          if (!csrfToken || !csrfToken.value) {
-            Swal.fire({
-              icon: 'error',
-              title: 'Security Error',
-              text: 'Security token missing. Please refresh the page and try again.',
-              confirmButtonColor: '#dc3545'
-            }).then(() => {
-              window.location.reload();
-            });
+          // CAPTCHA validation
+          const recaptchaResponse = grecaptcha.getResponse();
+          if (!recaptchaResponse) {
+            showNotification('Please complete the CAPTCHA verification.', 'warning');
             return false;
           }
 
-          // Show loading SweetAlert
-          Swal.fire({
-            title: 'Signing In...',
-            text: 'Please wait while we verify your credentials.',
-            icon: 'info',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
+          // Check if CSRF token exists
+          const csrfToken = getCSRFToken();
+          if (!csrfToken) {
+            showNotification('Security token missing. Please refresh the page and try again.', 'error');
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
+            return false;
+          }
 
-          // Update button state
           const originalText = submitBtn.innerHTML;
-          submitBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Signing In...';
           submitBtn.disabled = true;
+          submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Authenticating...';
 
-          // Submit the form - server will handle attempt counting and lockout
-          loginForm.submit();
+          try {
+            const formData = new FormData(this);
+            if (!formData.has('_token')) {
+              formData.append('_token', csrfToken);
+            }
 
-          // Re-enable button after a delay in case of errors
-          setTimeout(() => {
-            submitBtn.innerHTML = originalText;
+            const response = await fetch('{{ route("admin.login.submit") }}', {
+              method: 'POST',
+              body: formData,
+              credentials: 'same-origin',
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken
+              }
+            });
+
+            const data = await response.json();
+            console.log('Login response:', data);
+
+            if (data.success) {
+              if (data.step === 'otp_required') {
+                // Show success message and switch to OTP form
+                let message = data.message;
+                showNotification('Verification Code Sent! ' + message, 'success', 3000);
+                setTimeout(() => {
+                  showOTPForm(email);
+                }, 1000);
+              } else if (data.step === 'login_complete') {
+                // Direct login successful
+                showNotification('Login successful! Redirecting...', 'success', 2000);
+                setTimeout(() => {
+                  window.location.href = data.redirect_url || '{{ route("admin.dashboard") }}';
+                }, 1000);
+              }
+            } else {
+              // Handle server-side error responses
+              if (data.step === 'lockout') {
+                showLockoutTimer(data.lockout_remaining_seconds || (data.lockout_remaining * 60), data.lockout_count || 1);
+              } else {
+                let errorText = data.message || 'An unknown error occurred.';
+                showNotification('Login Failed: ' + errorText, 'error');
+
+                // Reset CAPTCHA on error
+                grecaptcha.reset();
+              }
+            }
+          } catch (error) {
+            console.error('Login error:', error);
+            showNotification('Connection Error: Unable to connect to the server. Please check your internet connection and try again.', 'error');
+            
+            // Reset CAPTCHA on error
+            grecaptcha.reset();
+          } finally {
+            // Restore button state
             submitBtn.disabled = false;
-          }, 10000);
+            submitBtn.innerHTML = originalText;
+          }
+        });
+      }
+
+      // Lockout timer functionality
+      let lockoutTimer;
+      
+      function showLockoutTimer(remainingSeconds, lockoutCount) {
+        const minutes = Math.floor(remainingSeconds / 60);
+        const seconds = Math.floor(remainingSeconds % 60);
+        
+        // Clear any existing timer
+        if (lockoutTimer) {
+          clearInterval(lockoutTimer);
+        }
+        
+        // Create lockout message element
+        const lockoutDiv = document.createElement('div');
+        lockoutDiv.id = 'lockout-message';
+        lockoutDiv.className = 'alert alert-danger text-center';
+        lockoutDiv.style.position = 'fixed';
+        lockoutDiv.style.top = '20px';
+        lockoutDiv.style.left = '50%';
+        lockoutDiv.style.transform = 'translateX(-50%)';
+        lockoutDiv.style.zIndex = '9999';
+        lockoutDiv.style.minWidth = '400px';
+        lockoutDiv.innerHTML = `
+          <h5>Account Temporarily Locked</h5>
+          <p>Account temporarily locked due to too many failed attempts.</p>
+          <p><strong>Lockout #${lockoutCount}</strong></p>
+          <div style="font-size: 2rem; font-weight: bold; color: #dc3545; margin: 20px 0;">
+            <span id="lockout-timer">${minutes}:${seconds.toString().padStart(2, '0')}</span>
+          </div>
+          <p>Please try again when the timer reaches zero.</p>
+          <small>Progressive lockout: Each lockout doubles the wait time.</small>
+        `;
+        
+        document.body.appendChild(lockoutDiv);
+        startLockoutCountdown(Math.floor(remainingSeconds));
+      }
+      
+      function startLockoutCountdown(totalSeconds) {
+        let timeLeft = Math.floor(totalSeconds);
+        const timerElement = document.getElementById('lockout-timer');
+        
+        lockoutTimer = setInterval(() => {
+          timeLeft--;
+          
+          const minutes = Math.floor(timeLeft / 60);
+          const seconds = Math.floor(timeLeft % 60);
+          
+          if (timerElement) {
+            timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            
+            // Change color based on time remaining
+            if (timeLeft <= 30) {
+              timerElement.style.color = '#dc3545'; // Red
+              timerElement.classList.add('timer-warning');
+            } else if (timeLeft <= 60) {
+              timerElement.style.color = '#fd7e14'; // Orange
+            } else {
+              timerElement.style.color = '#6f42c1'; // Purple
+            }
+          }
+          
+          if (timeLeft <= 0) {
+            clearInterval(lockoutTimer);
+            
+            // Remove lockout message
+            const lockoutMessage = document.getElementById('lockout-message');
+            if (lockoutMessage) {
+              lockoutMessage.remove();
+            }
+            
+            // Show message that they can try again
+            showNotification('Lockout Expired: You can now try logging in again. Please be careful with your credentials.', 'info', 8000);
+          }
+        }, 1000);
+      }
+
+      // OTP form submission
+      if (otpForm && verifyOtpButton) {
+        otpForm.addEventListener('submit', async function(e) {
+          e.preventDefault();
+
+          const otpCode = otpInput.value.trim();
+          if (otpCode.length !== 6) {
+            showOTPError('Please enter a 6-digit verification code.');
+            return;
+          }
+
+          const originalText = verifyOtpButton.innerHTML;
+          verifyOtpButton.disabled = true;
+          verifyOtpButton.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Verifying...';
+
+          try {
+            let csrfToken = getCSRFToken();
+            
+            const formData = new FormData();
+            formData.append('otp_code', otpCode);
+            formData.append('_token', csrfToken);
+
+            let response = await fetch('{{ route("admin.verify_otp") }}', {
+              method: 'POST',
+              body: formData,
+              credentials: 'same-origin',
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken
+              }
+            });
+
+            // If CSRF error, try refreshing token once
+            if (!response.ok && response.status === 419) {
+              console.log('CSRF token expired, refreshing...');
+              csrfToken = await refreshCSRFTokenIfNeeded();
+              
+              const retryFormData = new FormData();
+              retryFormData.append('otp_code', otpCode);
+              retryFormData.append('_token', csrfToken);
+
+              response = await fetch('{{ route("admin.verify_otp") }}', {
+                method: 'POST',
+                body: retryFormData,
+                credentials: 'same-origin',
+                headers: {
+                  'X-Requested-With': 'XMLHttpRequest',
+                  'X-CSRF-TOKEN': csrfToken
+                }
+              });
+            }
+
+            const data = await response.json();
+            
+            if (data.success && data.step === 'login_complete') {
+              // Clear timer on successful login
+              if (otpTimer) {
+                clearInterval(otpTimer);
+              }
+
+              // Show success message and redirect
+              showNotification('Login Successful! ' + data.message, 'success', 2000);
+              setTimeout(() => {
+                window.location.href = data.redirect_url || '{{ route("admin.dashboard") }}';
+              }, 1000);
+            } else {
+              showOTPError(data.message);
+              if (data.remaining_attempts !== undefined) {
+                showOTPError(`${data.message} (${data.remaining_attempts} attempts remaining)`);
+              }
+            }
+          } catch (error) {
+            console.error('OTP verification error:', error);
+            showOTPError('Unable to verify code. Please try again.');
+          } finally {
+            // Restore button state
+            verifyOtpButton.disabled = false;
+            verifyOtpButton.innerHTML = originalText;
+          }
+        });
+      }
+
+      // Resend OTP functionality
+      function resendOTP() {
+        const originalText = resendOtpButton.innerHTML;
+        resendOtpButton.disabled = true;
+        resendOtpButton.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Sending...';
+
+        const csrfToken = getCSRFToken();
+        
+        if (!csrfToken) {
+          showNotification('Session Error: Please refresh the page and try again.', 'error');
+          resendOtpButton.disabled = false;
+          resendOtpButton.innerHTML = originalText;
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('_token', csrfToken);
+
+        fetch('{{ route("admin.resend_otp") }}', {
+          method: 'POST',
+          body: formData,
+          credentials: 'same-origin',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': csrfToken
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            showNotification('Code Resent! ' + data.message, 'success');
+            // Restart timer
+            startOTPTimer();
+          } else {
+            showNotification('Resend Failed: ' + data.message, 'error');
+          }
+        })
+        .catch(error => {
+          console.error('Resend OTP error:', error);
+          showNotification('Connection Error: Unable to resend code. Please try again.', 'error');
+        })
+        .finally(() => {
+          resendOtpButton.disabled = false;
+          resendOtpButton.innerHTML = originalText;
+        });
+      }
+
+      // Show OTP error
+      function showOTPError(message) {
+        otpError.textContent = message;
+        otpInput.classList.add('is-invalid');
+        otpError.style.display = 'block';
+      }
+
+      // Event listeners
+      if (resendOtpButton) {
+        resendOtpButton.addEventListener('click', resendOTP);
+      }
+
+      if (backToLoginButton) {
+        backToLoginButton.addEventListener('click', function() {
+          showLoginForm();
+          hideNotification();
+          // Reset CAPTCHA when going back
+          grecaptcha.reset();
+        });
+      }
+
+      // OTP input formatting
+      if (otpInput) {
+        otpInput.addEventListener('input', function() {
+          // Only allow numbers
+          this.value = this.value.replace(/[^0-9]/g, '');
+
+          // Clear error when user starts typing
+          if (this.classList.contains('is-invalid')) {
+            this.classList.remove('is-invalid');
+            otpError.style.display = 'none';
+          }
+
+          // Auto-submit when 6 digits are entered
+          if (this.value.length === 6) {
+            setTimeout(() => {
+              otpForm.dispatchEvent(new Event('submit'));
+            }, 500);
+          }
         });
       }
 
@@ -267,7 +824,7 @@
 
       // Auto-refresh CSRF token every 30 minutes
       setInterval(function() {
-        fetch('/csrf-token')
+        fetch('/admin/csrf-token')
           .then(response => response.json())
           .then(data => {
             const csrfInput = document.querySelector('input[name="_token"]');
@@ -281,53 +838,19 @@
           })
           .catch(error => {
             console.log('CSRF token refresh failed:', error);
-            // Show SweetAlert for CSRF refresh failure
-            Swal.fire({
-              icon: 'warning',
-              title: 'Session Warning',
-              text: 'Unable to refresh security token. Please refresh the page if you encounter issues.',
-              toast: true,
-              position: 'top-end',
-              showConfirmButton: false,
-              timer: 5000,
-              timerProgressBar: true
-            });
+            // Silently handle CSRF token refresh failure
           });
       }, 30 * 60 * 1000); // 30 minutes
 
-      // Welcome message on page load (optional)
-      setTimeout(() => {
-        Swal.fire({
-          title: 'Welcome to Jetlouge Travels',
-          text: 'Admin Portal - Please sign in to continue',
-          icon: 'info',
-          toast: true,
-          position: 'top-end',
-          showConfirmButton: false,
-          timer: 3000,
-          timerProgressBar: true,
-          showClass: {
-            popup: 'animate__animated animate__slideInRight'
-          },
-          hideClass: {
-            popup: 'animate__animated animate__slideOutRight'
-          }
-        });
-      }, 1000);
+      // Welcome message removed (was using SweetAlert)
 
       // Show lockout alert if present from server
       const lockoutAlert = document.getElementById('lockoutAlert');
       if (lockoutAlert && !lockoutAlert.classList.contains('d-none')) {
         const lockoutMessage = lockoutAlert.textContent.trim();
         if (lockoutMessage) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Account Locked',
-            text: lockoutMessage,
-            confirmButtonColor: '#dc3545',
-            allowOutsideClick: false,
-            allowEscapeKey: false
-          });
+          // Keep the existing Bootstrap alert visible
+          lockoutAlert.style.display = 'block';
         }
       }
 
@@ -336,12 +859,8 @@
       if (attemptsAlert && !attemptsAlert.classList.contains('d-none')) {
         const attemptsMessage = attemptsAlert.textContent.trim();
         if (attemptsMessage) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'Login Attempts Warning',
-            text: attemptsMessage,
-            confirmButtonColor: '#ffc107'
-          });
+          // Keep the existing Bootstrap alert visible
+          attemptsAlert.style.display = 'block';
         }
       }
     });

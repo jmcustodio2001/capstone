@@ -145,11 +145,11 @@
         flex-direction: column;
         gap: 4px;
       }
-      
+
       .pagination-controls span {
         min-width: auto;
       }
-      
+
       .d-flex.gap-2 {
         flex-direction: column;
         gap: 8px !important;
@@ -190,7 +190,7 @@
             <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels" class="logo-img">
           </div>
           <div>
-            <h2 class="fw-bold mb-1">Customer Service Sales Skills Training</h2>
+            <h2 class="fw-bold mb-1">Customer Service & Sales Skills Training</h2>
             <p class="text-muted mb-0">
               Welcome back,
               @if(Auth::check())
@@ -198,7 +198,7 @@
               @else
                 Admin
               @endif
-              ! Manage training records for customer service sales skills.
+              ! Manage training records for customer service & sales skills.
             </p>
           </div>
         </div>
@@ -223,7 +223,7 @@
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Employees Needing Customer Service & Sales Skills Training</h4>
         <div class="d-flex gap-2">
-          <div class="pagination-controls me-3">
+          <div class="pagination-controls">
             <button class="btn btn-outline-secondary btn-sm" onclick="previousPage('gaps')" id="gaps-prev-btn">
               <i class="bi bi-chevron-left"></i> Previous
             </button>
@@ -232,43 +232,42 @@
               Next <i class="bi bi-chevron-right"></i>
             </button>
           </div>
-          <button class="btn btn-success btn-sm" onclick="syncTrainingProgressWithConfirmation()">
-            <i class="bi bi-arrow-repeat me-1"></i> Sync Training Progress
-          </button>
         </div>
       </div>
       <div class="card-body">
         <div id="gaps-container">
         @forelse($gaps as $gap)
           @php
-            $firstName = $gap->employee->first_name ?? 'Unknown';
-            $lastName = $gap->employee->last_name ?? 'Employee';
+            // Add null check for employee relationship
+            $employee = $gap->employee ?? null;
+            $firstName = $employee->first_name ?? 'Unknown';
+            $lastName = $employee->last_name ?? 'Employee';
             $fullName = $firstName . ' ' . $lastName;
-            
+
             // Check if profile picture exists - simplified approach
             $profilePicUrl = null;
-            if ($gap->employee->profile_picture) {
+            if ($employee && $employee->profile_picture) {
                 // Direct asset URL generation - Laravel handles the storage symlink
-                $profilePicUrl = asset('storage/' . $gap->employee->profile_picture);
+                $profilePicUrl = asset('storage/' . $employee->profile_picture);
             }
-            
+
             // Generate consistent color based on employee name for fallback
             $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-            $employeeId = $gap->employee->employee_id ?? 'default';
+            $employeeId = $employee->employee_id ?? 'default';
             $colorIndex = abs(crc32($employeeId)) % count($colors);
             $bgColor = $colors[$colorIndex];
-            
+
             // Fallback to UI Avatars if no profile picture found
             if (!$profilePicUrl) {
-                $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) . 
+                $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
             }
-            
+
             // Convert levels to 1-5 scale for display
             $displayRequiredLevel = $gap->required_level > 5 ? 5 : ($gap->required_level < 1 ? round($gap->required_level * 20) : $gap->required_level);
             $displayCurrentLevel = $gap->current_level > 5 ? 5 : ($gap->current_level < 1 ? round($gap->current_level * 20) : $gap->current_level);
             $displayGap = max(0, $displayRequiredLevel - $displayCurrentLevel);
-            
+
             // Dynamic row color based on gap severity
             $rowClass = '';
             if ($displayGap >= 4) {
@@ -279,7 +278,7 @@
                 $rowClass = 'table-info';
             }
           @endphp
-          
+
           @if($loop->first)
           <div class="table-responsive">
             <table class="table table-hover align-middle">
@@ -296,17 +295,17 @@
               </thead>
               <tbody>
           @endif
-          
+
                 <tr class="{{ $rowClass }}">
                   <td>
                     <div class="d-flex align-items-center">
-                      <img src="{{ $profilePicUrl }}" 
-                           alt="{{ $firstName }} {{ $lastName }}" 
-                           class="rounded-circle me-2" 
+                      <img src="{{ $profilePicUrl }}"
+                           alt="{{ $firstName }} {{ $lastName }}"
+                           class="rounded-circle me-2"
                            style="width: 40px; height: 40px; object-fit: cover;">
                       <div>
                         <div class="fw-semibold">{{ $firstName }} {{ $lastName }}</div>
-                        <small class="text-muted">ID: {{ $gap->employee->employee_id }}</small>
+                        <small class="text-muted">ID: {{ $employee->employee_id ?? 'N/A' }}</small>
                       </div>
                     </div>
                   </td>
@@ -314,7 +313,7 @@
                     <div class="d-flex align-items-center">
                       <i class="bi bi-award text-primary me-2"></i>
                       <div>
-                        <div class="fw-semibold">{{ $gap->competency->competency_name }}</div>
+                        <div class="fw-semibold">{{ $gap->competency->competency_name ?? 'Unknown Competency' }}</div>
                         <small class="text-muted">Core skill needed</small>
                       </div>
                     </div>
@@ -344,11 +343,11 @@
                   <td>
                     <div class="d-flex align-items-center">
                       <div class="progress flex-grow-1 me-2" style="height: 8px;">
-                        <div class="progress-bar progress-bar-striped" 
-                             role="progressbar" 
-                             style="width: {{ min(($displayCurrentLevel / $displayRequiredLevel) * 100, 100) }}%; background: linear-gradient(45deg, #007bff, #0056b3);" 
-                             aria-valuenow="{{ ($displayCurrentLevel / $displayRequiredLevel) * 100 }}" 
-                             aria-valuemin="0" 
+                        <div class="progress-bar progress-bar-striped"
+                             role="progressbar"
+                             style="width: {{ min(($displayCurrentLevel / $displayRequiredLevel) * 100, 100) }}%; background: linear-gradient(45deg, #007bff, #0056b3);"
+                             aria-valuenow="{{ ($displayCurrentLevel / $displayRequiredLevel) * 100 }}"
+                             aria-valuemin="0"
                              aria-valuemax="100">
                         </div>
                       </div>
@@ -356,13 +355,13 @@
                     </div>
                   </td>
                 </tr>
-          
+
           @if($loop->last)
               </tbody>
             </table>
           </div>
           @endif
-          
+
         @empty
           <div class="text-center py-5">
             <i class="bi bi-check-circle text-success" style="font-size: 4rem;"></i>
@@ -374,147 +373,175 @@
       </div>
     </div>
 
-    <!-- Skills Reference -->
+
+    <!-- Skills Overview Table -->
     <div class="card shadow-sm border-0 mb-4">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h4 class="fw-bold mb-0">Customer Service & Sales Skills Reference</h4>
-        <div class="pagination-controls">
-          <button class="btn btn-outline-secondary btn-sm" onclick="previousPage('skills')" id="skills-prev-btn">
-            <i class="bi bi-chevron-left"></i> Previous
-          </button>
-          <span class="mx-2 text-muted" id="skills-page-info">Page 1</span>
-          <button class="btn btn-outline-secondary btn-sm" onclick="nextPage('skills')" id="skills-next-btn">
-            Next <i class="bi bi-chevron-right"></i>
-          </button>
+        <h4 class="fw-bold mb-0">Overall Rating - Customer Service & Sales Skills</h4>
+        <div class="d-flex gap-2">
+          <input type="text" id="skillsSearch" class="form-control form-control-sm" placeholder="Search skills..." style="max-width: 200px;">
+          <select id="skillsFilter" class="form-select form-select-sm" style="max-width: 150px;">
+            <option value="">All Levels</option>
+            <option value="expert">Expert (4.5+)</option>
+            <option value="advanced">Advanced (3.5+)</option>
+            <option value="intermediate">Intermediate (2.5+)</option>
+            <option value="needs-improvement">Needs Improvement</option>
+          </select>
         </div>
       </div>
       <div class="card-body">
-        <div class="row g-4" id="skills-container">
-        @forelse($skills as $skill)
-          @php
-            $skillPercentage = min(($skill->rate * 20), 100);
-            $skillLevel = $skill->rate;
-            
-            // Dynamic color based on skill level
-            $headerClass = 'bg-primary';
-            $progressClass = 'bg-primary';
-            if ($skillLevel >= 4.5) {
-                $headerClass = 'bg-success';
-                $progressClass = 'bg-success';
-            } elseif ($skillLevel >= 3.5) {
-                $headerClass = 'bg-info';
-                $progressClass = 'bg-info';
-            } elseif ($skillLevel >= 2.5) {
-                $headerClass = 'bg-warning';
-                $progressClass = 'bg-warning';
-            } elseif ($skillLevel < 2.5) {
-                $headerClass = 'bg-danger';
-                $progressClass = 'bg-danger';
-            }
-            
-            // Generate star rating
-            $fullStars = floor($skillLevel);
-            $hasHalfStar = ($skillLevel - $fullStars) >= 0.5;
-            $emptyStars = 5 - $fullStars - ($hasHalfStar ? 1 : 0);
-          @endphp
-          
-          <div class="col-lg-4 col-md-6 mb-4">
-            <div class="card h-100 shadow-sm border-0 skill-card" style="transition: all 0.3s ease; cursor: pointer;">
-              <!-- Skill Header -->
-              <div class="card-header {{ $headerClass }} text-white" style="border-radius: 12px 12px 0 0 !important;">
-                <div class="d-flex align-items-center justify-content-between">
-                  <div>
-                    <h5 class="mb-1 fw-bold">{{ $skill->competency_name }}</h5>
-                    <small class="opacity-75">Proficiency Level</small>
-                  </div>
-                  <div class="text-end">
-                    <i class="bi bi-award fs-3"></i>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Card Body -->
-              <div class="card-body p-4 text-center">
-                <!-- Star Rating Display -->
-                <div class="mb-3">
-                  <div class="star-rating fs-4" style="color: #ffc107;">
-                    @for($i = 0; $i < $fullStars; $i++)
-                      <i class="bi bi-star-fill"></i>
-                    @endfor
-                    @if($hasHalfStar)
-                      <i class="bi bi-star-half"></i>
-                    @endif
-                    @for($i = 0; $i < $emptyStars; $i++)
-                      <i class="bi bi-star"></i>
-                    @endfor
-                  </div>
-                  <div class="mt-2">
-                    <span class="fs-5 fw-bold text-primary">{{ number_format($skillLevel, 1) }}/5.0</span>
-                  </div>
-                </div>
-                
-                <!-- Progress Circle -->
-                <div class="position-relative d-inline-block mb-3">
-                  <svg width="120" height="120" class="progress-ring">
-                    <circle cx="60" cy="60" r="50" 
-                            fill="transparent" 
-                            stroke="#e9ecef" 
-                            stroke-width="8"/>
-                    <circle cx="60" cy="60" r="50" 
-                            fill="transparent" 
-                            stroke="{{ $skillLevel >= 4.5 ? '#28a745' : ($skillLevel >= 3.5 ? '#17a2b8' : ($skillLevel >= 2.5 ? '#ffc107' : '#dc3545')) }}" 
-                            stroke-width="8"
-                            stroke-linecap="round"
-                            stroke-dasharray="{{ 2 * pi() * 50 }}"
-                            stroke-dashoffset="{{ 2 * pi() * 50 * (1 - $skillPercentage / 100) }}"
-                            style="transition: stroke-dashoffset 0.5s ease-in-out; transform: rotate(-90deg); transform-origin: 50% 50%;"/>
-                  </svg>
-                  <div class="position-absolute top-50 start-50 translate-middle text-center">
-                    <div class="fs-4 fw-bold text-primary">{{ round($skillPercentage) }}%</div>
-                    <small class="text-muted">Proficiency</small>
-                  </div>
-                </div>
-                
-                <!-- Skill Level Badge -->
-                <div class="mt-3">
-                  @if($skillLevel >= 4.5)
-                    <span class="badge bg-success bg-opacity-10 text-success fs-6 px-3 py-2">Expert Level</span>
-                  @elseif($skillLevel >= 3.5)
-                    <span class="badge bg-info bg-opacity-10 text-info fs-6 px-3 py-2">Advanced</span>
-                  @elseif($skillLevel >= 2.5)
-                    <span class="badge bg-warning bg-opacity-10 text-warning fs-6 px-3 py-2">Intermediate</span>
-                  @else
-                    <span class="badge bg-danger bg-opacity-10 text-danger fs-6 px-3 py-2">Needs Improvement</span>
-                  @endif
-                </div>
-                
-                <!-- Linear Progress Bar -->
-                <div class="mt-4">
-                  <div class="progress" style="height: 8px; border-radius: 10px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated {{ $progressClass }}" 
-                         role="progressbar" 
-                         style="width: {{ $skillPercentage }}%;" 
-                         aria-valuenow="{{ $skillPercentage }}" 
-                         aria-valuemin="0" 
-                         aria-valuemax="100">
-                    </div>
-                  </div>
-                  <div class="d-flex justify-content-between mt-2">
-                    <small class="text-muted">Beginner</small>
-                    <small class="text-muted">Expert</small>
-                  </div>
-                </div>
-              </div>
-            </div>
+        @if($skills->count() > 0)
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width: 40%;">Skill Name</th>
+                  <th style="width: 20%;">Rating</th>
+                  <th style="width: 20%;">Progress</th>
+                  <th style="width: 20%;">Level</th>
+                </tr>
+              </thead>
+              <tbody id="skillsTableBody">
+                @php
+                    // Get all skills from competency library
+                    $competencySkills = App\Models\CompetencyLibrary::where(function($query) {
+                        $query->where('category', 'Sales')
+                              ->orWhere('category', 'Customer Service')
+                              ->orWhere('category', 'Communication')
+                              ->orWhere('category', 'Leadership')
+                              ->orWhere('category', 'Technical')
+                              ->orWhere('category', 'Interpersonal')
+                              ->orWhere('competency_name', 'LIKE', '%service%')
+                              ->orWhere('competency_name', 'LIKE', '%sales%')
+                              ->orWhere('competency_name', 'LIKE', '%customer%')
+                              ->orWhere('competency_name', 'LIKE', '%communication%')
+                              ->orWhere('competency_name', 'LIKE', '%leadership%');
+                    })
+                    ->orderBy('category')
+                    ->orderBy('competency_name')
+                    ->get();
+                @endphp
+
+                @foreach($competencySkills as $skill)
+                  @php
+                    // Get the skill level from rate or default to average for the category
+                    $skillLevel = $skill->rate;
+                    if (!$skillLevel) {
+                        // Calculate category average if rate is not set
+                        $categoryAvg = App\Models\CompetencyLibrary::where('category', $skill->category)
+                            ->whereNotNull('rate')
+                            ->avg('rate') ?? 3; // Default to 3 if no category average
+                        $skillLevel = $categoryAvg;
+                    }
+
+                    // Calculate training progress based on skill level and any additional factors
+                    $baseProgress = $skillLevel * 20; // Convert 0-5 scale to percentage
+
+                    // Add bonuses for specific categories
+                    $categoryBonus = 0;
+                    if (in_array($skill->category, ['Sales', 'Customer Service'])) {
+                        $categoryBonus = 10; // Add 10% bonus for core skills
+                    } elseif (in_array($skill->category, ['Communication', 'Leadership'])) {
+                        $categoryBonus = 5; // Add 5% bonus for important soft skills
+                    }
+
+                    $trainingProgress = min(100, $baseProgress + $categoryBonus); // Cap at 100%
+
+                    // Calculate overall skill level and percentage
+                    $skillLevel = max($skillLevel, ($trainingProgress / 100 * 5));
+                    $skillPercentage = min(($skillLevel / 5) * 100, 100);
+
+                    // Generate star rating
+                    $fullStars = floor($skillLevel);
+                    $hasHalfStar = ($skillLevel - $fullStars) >= 0.5;
+                    $emptyStars = 5 - $fullStars - ($hasHalfStar ? 1 : 0);
+
+                    // Determine level class and text
+                    if ($skillLevel >= 4.5) {
+                        $levelClass = 'bg-success';
+                        $levelText = 'Expert';
+                        $progressClass = 'bg-success';
+                    } elseif ($skillLevel >= 3.5) {
+                        $levelClass = 'bg-info';
+                        $levelText = 'Advanced';
+                        $progressClass = 'bg-info';
+                    } elseif ($skillLevel >= 2.5) {
+                        $levelClass = 'bg-warning';
+                        $levelText = 'Intermediate';
+                        $progressClass = 'bg-warning';
+                    } else {
+                        $levelClass = 'bg-danger';
+                        $levelText = 'Needs Improvement';
+                        $progressClass = 'bg-danger';
+                    }
+                  @endphp
+                  <tr class="skill-row" data-skill-level="{{ strtolower(str_replace(' ', '-', $levelText)) }}">
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-award text-primary me-2"></i>
+                        <div>
+                          <strong>{{ $skill->competency_name }}</strong>
+                          <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-primary">{{ $skill->category }}</span>
+                          </div>
+                          <small class="text-muted d-block">{{ $skill->description }}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="star-rating me-2" style="color: #ffc107; font-size: 0.9rem;">
+                          @for($i = 0; $i < $fullStars; $i++)
+                            <i class="bi bi-star-fill"></i>
+                          @endfor
+                          @if($hasHalfStar)
+                            <i class="bi bi-star-half"></i>
+                          @endif
+                          @for($i = 0; $i < $emptyStars; $i++)
+                            <i class="bi bi-star"></i>
+                          @endfor
+                        </div>
+                        <span class="fw-bold text-primary">{{ number_format($skillLevel, 0) }}/5</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="flex-grow-1">
+                          <div class="progress-container" style="height: 8px; background-color: #e9ecef; border-radius: 4px;">
+                            <div class="{{ $progressClass }}"
+                                 style="width: {{ $skillPercentage }}%; height: 100%; border-radius: 4px; transition: width 0.6s ease;">
+                              <progress value="{{ $skillPercentage }}" max="100" class="visually-hidden">
+                                {{ $skillPercentage }}%
+                              </progress>
+                            </div>
+                          </div>
+                          <div class="d-flex justify-content-between align-items-center mt-1">
+                            <small class="text-muted">Progress</small>
+                            <small class="text-{{ str_replace('bg-', '', $progressClass) }} fw-bold">{{ round($skillPercentage) }}%</small>
+                          </div>
+                        </div>
+                        <div class="text-center" style="min-width: 70px;">
+                          <span class="badge bg-{{ str_replace('bg-', '', $progressClass) }} bg-opacity-10 text-{{ str_replace('bg-', '', $progressClass) }}">
+                            {{ number_format($skillLevel, 0) }}/5
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="badge {{ $levelClass }} bg-opacity-10 text-{{ str_replace('bg-', '', $levelClass) }}">{{ $levelText }}</span>
+                    </td>
+                  </tr>
+                @endforeach
+              </tbody>
+            </table>
           </div>
-        @empty
+        @else
           <div class="text-center py-5">
             <i class="bi bi-book text-primary" style="font-size: 4rem;"></i>
             <h4 class="mt-3 text-primary">No Skills Defined</h4>
             <p class="text-muted">No skills are currently defined in the competency library.</p>
           </div>
-        @endforelse
-        </div>
+        @endif
       </div>
     </div>
 
@@ -523,7 +550,7 @@
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Employee Training Dashboard</h4>
         <div class="d-flex gap-2">
-          <div class="pagination-controls me-3">
+          <div class="pagination-controls">
             <button class="btn btn-outline-secondary btn-sm" onclick="previousPage('records')" id="records-prev-btn">
               <i class="bi bi-chevron-left"></i> Previous
             </button>
@@ -532,42 +559,41 @@
               Next <i class="bi bi-chevron-right"></i>
             </button>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="addRecordWithConfirmation()">
-            <i class="bi bi-plus-lg me-1"></i> Add Record
-          </button>
         </div>
       </div>
       <div class="card-body">
         <div class="row g-4" id="records-container">
         @forelse($records as $record)
           @php
-            $firstName = $record->employee->first_name ?? 'Unknown';
-            $lastName = $record->employee->last_name ?? 'Employee';
+            // Add null check for employee relationship
+            $employee = $record->employee ?? null;
+            $firstName = $employee->first_name ?? 'Unknown';
+            $lastName = $employee->last_name ?? 'Employee';
             $fullName = $firstName . ' ' . $lastName;
-            
+
             // Check if profile picture exists - simplified approach
             $profilePicUrl = null;
-            if ($record->employee->profile_picture) {
+            if ($employee && $employee->profile_picture) {
                 // Direct asset URL generation - Laravel handles the storage symlink
-                $profilePicUrl = asset('storage/' . $record->employee->profile_picture);
+                $profilePicUrl = asset('storage/' . $employee->profile_picture);
             }
-            
+
             // Generate consistent color based on employee name for fallback
             $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-            $employeeId = $record->employee->employee_id ?? 'default';
+            $employeeId = $employee->employee_id ?? 'default';
             $colorIndex = abs(crc32($employeeId)) % count($colors);
             $bgColor = $colors[$colorIndex];
-            
+
             // Fallback to UI Avatars if no profile picture found
             if (!$profilePicUrl) {
-                $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) . 
+                $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
             }
-            
+
             // Use the EXACT same calculation as main Employee Training Dashboard
-            $employee = $record->employee;
+            // $employee is already defined above with null check
             $employeeId = $employee->employee_id ?? null;
-            
+
             if ($employeeId) {
               // Call the same controller method that succession planning uses (EXACT same as main dashboard)
               $controller = new \App\Http\Controllers\SuccessionReadinessRatingController();
@@ -575,16 +601,16 @@
             } else {
               $readiness = 0;
             }
-            
+
             // Enhanced progress calculation with multiple fallback strategies
             $courseId = $record->course_id ?? $record->training_id;
             $combinedProgress = 0;
-            
+
             // Strategy 1: Try with the course_id we have
             if ($courseId) {
                 $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseId);
             }
-            
+
             // Strategy 2: If no progress found, try to find by course title
             if ($combinedProgress == 0 && isset($record->training) && isset($record->training->course_title)) {
                 $courseTitle = $record->training->course_title;
@@ -594,7 +620,7 @@
                     $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseByTitle->course_id);
                 }
             }
-            
+
             // Strategy 3: If still no progress, try Communication Skills specifically
             if ($combinedProgress == 0 && (stripos($record->training->course_title ?? '', 'Communication') !== false)) {
                 $commSkillsCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Communication Skills%')->first();
@@ -602,7 +628,7 @@
                     $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $commSkillsCourse->course_id);
                 }
             }
-            
+
             // Strategy 4: Check EmployeeCompetencyProfile table when no exam/training progress found
             if ($combinedProgress == 0) {
                 $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
@@ -611,16 +637,16 @@
                         $q->where('competency_name', $trainingTitle)
                           ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
                     })->where('employee_id', $record->employee_id)->first();
-                    
+
                     if ($competencyProfile && $competencyProfile->proficiency_level) {
                         // Convert competency proficiency levels (1-5 scale) to percentages (0-100%)
                         $combinedProgress = round(($competencyProfile->proficiency_level / 5) * 100);
                     }
                 }
             }
-            
+
             $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
-            
+
             // Dynamic header color based on progress
             $headerClass = 'bg-primary';
             if ($displayProgress >= 100) {
@@ -633,19 +659,19 @@
                 $headerClass = 'bg-danger';
             }
           @endphp
-          
+
           <div class="col-lg-6 col-xl-4 mb-4">
             <div class="card h-100 shadow-sm border-0 training-record-card" style="transition: all 0.3s ease;">
               <!-- Dynamic Header with Employee Info -->
               <div class="card-header {{ $headerClass }} text-white" style="border-radius: 12px 12px 0 0 !important;">
                 <div class="d-flex align-items-center">
-                  <img src="{{ $profilePicUrl }}" 
-                       alt="{{ $firstName }} {{ $lastName }}" 
-                       class="rounded-circle me-3" 
+                  <img src="{{ $profilePicUrl }}"
+                       alt="{{ $firstName }} {{ $lastName }}"
+                       class="rounded-circle me-3"
                        style="width: 50px; height: 50px; object-fit: cover; border: 3px solid rgba(255,255,255,0.3);">
                   <div class="flex-grow-1">
                     <h5 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h5>
-                    <small class="opacity-75">ID: {{ $record->employee->employee_id }} • Record #{{ $loop->iteration }}</small>
+                    <small class="opacity-75">ID: {{ $employee->employee_id ?? 'N/A' }} • Record #{{ $loop->iteration }}</small>
                   </div>
                   <div class="text-end">
                     <div class="fs-6 fw-bold">{{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}</div>
@@ -653,7 +679,7 @@
                   </div>
                 </div>
               </div>
-              
+
               <!-- Card Body with Training Details -->
               <div class="card-body p-4">
                 <!-- Training Information -->
@@ -676,7 +702,7 @@
                     @endif
                   </p>
                 </div>
-                
+
                 <!-- Completion Date -->
                 <div class="mb-3">
                   <div class="d-flex align-items-center mb-2">
@@ -691,7 +717,7 @@
                     @endif
                   </p>
                 </div>
-                
+
                 <!-- Progress Section -->
                 <div class="mb-4">
                   <div class="d-flex justify-content-between align-items-center mb-2">
@@ -699,22 +725,22 @@
                     <span class="fw-bold text-primary">{{ $displayProgress }}%</span>
                   </div>
                   <div class="progress mb-2" style="height: 12px; border-radius: 10px;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                         role="progressbar" 
-                         style="width: {{ $displayProgress }}%; background: linear-gradient(45deg, {{ $displayProgress >= 100 ? '#28a745, #20c997' : ($displayProgress >= 75 ? '#17a2b8, #20c997' : ($displayProgress >= 50 ? '#ffc107, #fd7e14' : '#dc3545, #e74c3c')) }});" 
-                         aria-valuenow="{{ $displayProgress }}" 
-                         aria-valuemin="0" 
+                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar"
+                         style="width: {{ $displayProgress }}%; background: linear-gradient(45deg, {{ $displayProgress >= 100 ? '#28a745, #20c997' : ($displayProgress >= 75 ? '#17a2b8, #20c997' : ($displayProgress >= 50 ? '#ffc107, #fd7e14' : '#dc3545, #e74c3c')) }});"
+                         aria-valuenow="{{ $displayProgress }}"
+                         aria-valuemin="0"
                          aria-valuemax="100">
                     </div>
                   </div>
-                  
+
                   @if($combinedProgress > 0)
                     @php
                       $breakdown = \App\Models\ExamAttempt::getScoreBreakdown($record->employee_id, $courseId);
                     @endphp
-                    <small class="text-muted" 
-                           data-bs-toggle="tooltip" 
-                           data-bs-placement="top" 
+                    <small class="text-muted"
+                           data-bs-toggle="tooltip"
+                           data-bs-placement="top"
                            title="Exam Score: {{ $breakdown['exam_score'] }}% = {{ $breakdown['combined_progress'] }}% total progress">
                       @if($breakdown['exam_score'] > 0)
                         <i class="bi bi-mortarboard me-1"></i>Exam: {{ $breakdown['exam_score'] }}%
@@ -722,7 +748,7 @@
                       <i class="bi bi-info-circle ms-1" style="cursor: help;"></i>
                     </small>
                   @endif
-                  
+
                   <div class="mt-2">
                     @if($displayProgress >= 100)
                       <span class="badge bg-success bg-opacity-10 text-success fs-6 px-3 py-2">Completed</span>
@@ -733,7 +759,7 @@
                     @endif
                   </div>
                 </div>
-                
+
                 <!-- Action Buttons -->
                 <div class="d-grid gap-2">
                   <div class="btn-group" role="group">
@@ -787,8 +813,8 @@
           @csrf
           <div class="modal-body">
             <div class="mb-3">
-              <label class="form-label">Employee*</label>
-              <select class="form-control" name="employee_id" required>
+              <label for="employee_id" class="form-label">Employee*</label>
+              <select class="form-control" id="employee_id" name="employee_id" required>
                 <option value="">Select Employee</option>
                 @foreach($employees as $emp)
                   <option value="{{ $emp->employee_id }}">{{ $emp->first_name }} {{ $emp->last_name }} ({{ $emp->employee_id }})</option>
@@ -796,8 +822,8 @@
               </select>
             </div>
             <div class="mb-3">
-              <label class="form-label">Training*</label>
-              <select class="form-control" name="training_id" required>
+              <label for="training_id" class="form-label">Training*</label>
+              <select class="form-control" id="training_id" name="training_id" required>
                 <option value="">Select Training</option>
                 @foreach($trainings as $training)
                   <option value="{{ $training->id }}">
@@ -813,8 +839,8 @@
               </select>
             </div>
             <div class="mb-3">
-              <label class="form-label">Date Completed*</label>
-              <input type="date" class="form-control" name="date_completed" required>
+              <label for="date_completed" class="form-label">Date Completed*</label>
+              <input type="date" class="form-control" id="date_completed" name="date_completed" required>
             </div>
           </div>
           <div class="modal-footer">
@@ -868,12 +894,12 @@
               // Enhanced progress calculation with multiple fallback strategies
               $courseId = $record->course_id ?? $record->training_id;
               $combinedProgress = 0;
-              
+
               // Strategy 1: Try with the course_id we have
               if ($courseId) {
                   $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseId);
               }
-              
+
               // Strategy 2: If no progress found, try to find by course title
               if ($combinedProgress == 0 && isset($record->training) && isset($record->training->course_title)) {
                   $courseTitle = $record->training->course_title;
@@ -883,7 +909,7 @@
                       $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseByTitle->course_id);
                   }
               }
-              
+
               // Strategy 3: If still no progress, try Communication Skills specifically
               if ($combinedProgress == 0 && (stripos($record->training->course_title ?? '', 'Communication') !== false)) {
                   $commSkillsCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Communication Skills%')->first();
@@ -891,14 +917,14 @@
                       $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $commSkillsCourse->course_id);
                   }
               }
-              
+
               $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
             @endphp
             <div class="d-flex align-items-center">
               <progress class="flex-grow-1 me-2" value="{{ $displayProgress }}" max="100" style="height: 8px; width: 100%;"></progress>
               <span class="fw-semibold">{{ $displayProgress }}%</span>
             </div>
-            
+
             @if($combinedProgress > 0)
               @php
                 $breakdown = \App\Models\ExamAttempt::getScoreBreakdown($record->employee_id, $courseId);
@@ -909,7 +935,7 @@
                 @endif
               </small>
             @endif
-            
+
             <div class="mt-2">
               @if($displayProgress >= 100)
                 <span class="badge bg-success bg-opacity-10 text-success fs-6">Completed</span>
@@ -988,12 +1014,12 @@
       // Enhanced progress calculation with multiple fallback strategies
       $courseId = $record->course_id ?? $record->training_id;
       $combinedProgress = 0;
-      
+
       // Strategy 1: Try with the course_id we have
       if ($courseId) {
           $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseId);
       }
-      
+
       // Strategy 2: If no progress found, try to find by course title
       if ($combinedProgress == 0 && isset($record->training) && isset($record->training->course_title)) {
           $courseTitle = $record->training->course_title;
@@ -1003,7 +1029,7 @@
               $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseByTitle->course_id);
           }
       }
-      
+
       // Strategy 3: If still no progress, try Communication Skills specifically
       if ($combinedProgress == 0 && (stripos($record->training->course_title ?? '', 'Communication') !== false)) {
           $commSkillsCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Communication Skills%')->first();
@@ -1011,7 +1037,7 @@
               $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $commSkillsCourse->course_id);
           }
       }
-      
+
       // Strategy 4: Check EmployeeCompetencyProfile table when no exam/training progress found
       if ($combinedProgress == 0) {
           $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
@@ -1020,23 +1046,23 @@
                   $q->where('competency_name', $trainingTitle)
                     ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
               })->where('employee_id', $record->employee_id)->first();
-              
+
               if ($competencyProfile && $competencyProfile->proficiency_level) {
                   // Convert competency proficiency levels (1-5 scale) to percentages (0-100%)
                   $combinedProgress = round(($competencyProfile->proficiency_level / 5) * 100);
               }
           }
       }
-      
+
       $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
-      
+
       // Get exam score breakdown if available
       $examScore = 0;
       if ($combinedProgress > 0) {
           $breakdown = \App\Models\ExamAttempt::getScoreBreakdown($record->employee_id, $courseId);
           $examScore = $breakdown['exam_score'] ?? 0;
       }
-      
+
       // Get training title with multiple fallback strategies
       $trainingTitle = 'No training assigned';
       if (isset($record->training) && isset($record->training->course_title)) {
@@ -1078,50 +1104,79 @@
     const recordProgressData = @json($recordProgressData);
 
     // Initialize tooltips and pagination
-    $(document).ready(function() {
-      $('[data-bs-toggle="tooltip"]').tooltip();
-      initializePagination();
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize Bootstrap tooltips
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+
+      // Initialize pagination after a short delay to ensure DOM is ready
+      setTimeout(initializePagination, 100);
     });
 
     // Initialize pagination for all sections
     function initializePagination() {
-      updatePagination('gaps');
-      updatePagination('skills');
-      updatePagination('records');
+      // Check if elements exist before updating pagination
+      if (document.getElementById('gaps-container')) {
+        updatePagination('gaps');
+      }
+      if (document.getElementById('skills-container')) {
+        updatePagination('skills');
+      }
+      if (document.getElementById('records-container')) {
+        updatePagination('records');
+      }
     }
 
     // Pagination Functions
     function previousPage(section) {
-      if (currentPages[section] > 1) {
+      const container = document.getElementById(`${section}-container`);
+      if (container && currentPages[section] > 1) {
         currentPages[section]--;
         updatePagination(section);
       }
     }
 
     function nextPage(section) {
-      const totalPages = Math.ceil(allData[section].length / itemsPerPage);
-      if (currentPages[section] < totalPages) {
-        currentPages[section]++;
-        updatePagination(section);
+      const container = document.getElementById(`${section}-container`);
+      if (container) {
+        const totalPages = Math.ceil(allData[section].length / itemsPerPage);
+        if (currentPages[section] < totalPages) {
+          currentPages[section]++;
+          updatePagination(section);
+        }
       }
     }
 
     function updatePagination(section) {
+      const container = document.getElementById(`${section}-container`);
+      if (!container) return;
+
       const data = allData[section];
       const totalPages = Math.ceil(data.length / itemsPerPage);
       const currentPage = currentPages[section];
-      
-      // Update page info
-      document.getElementById(`${section}-page-info`).textContent = `Page ${currentPage} of ${totalPages}`;
-      
-      // Update button states
-      document.getElementById(`${section}-prev-btn`).disabled = currentPage === 1;
-      document.getElementById(`${section}-next-btn`).disabled = currentPage === totalPages || totalPages === 0;
-      
+
+      // Get elements
+      const pageInfo = document.getElementById(`${section}-page-info`);
+      const prevBtn = document.getElementById(`${section}-prev-btn`);
+      const nextBtn = document.getElementById(`${section}-next-btn`);
+
+      // Update elements if they exist
+      if (pageInfo) {
+        pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+      }
+      if (prevBtn) {
+        prevBtn.disabled = currentPage === 1;
+      }
+      if (nextBtn) {
+        nextBtn.disabled = currentPage === totalPages || totalPages === 0;
+      }
+
       // Show/hide items based on current page
       const startIndex = (currentPage - 1) * itemsPerPage;
       const endIndex = startIndex + itemsPerPage;
-      
+
       if (section === 'gaps') {
         updateGapsDisplay(data, startIndex, endIndex);
       } else if (section === 'skills') {
@@ -1134,7 +1189,7 @@
     function updateGapsDisplay(data, startIndex, endIndex) {
       const container = document.getElementById('gaps-container');
       const visibleData = data.slice(startIndex, endIndex);
-      
+
       // Hide all gap items first
       const allGapItems = container.querySelectorAll('.col-12');
       allGapItems.forEach((item, index) => {
@@ -1148,7 +1203,7 @@
 
     function updateSkillsDisplay(data, startIndex, endIndex) {
       const container = document.getElementById('skills-container');
-      
+
       // Hide all skill items first
       const allSkillItems = container.querySelectorAll('.col-lg-4');
       allSkillItems.forEach((item, index) => {
@@ -1162,7 +1217,7 @@
 
     function updateRecordsDisplay(data, startIndex, endIndex) {
       const container = document.getElementById('records-container');
-      
+
       // Hide all record items first
       const allRecordItems = container.querySelectorAll('.col-lg-6');
       allRecordItems.forEach((item, index) => {
@@ -1209,7 +1264,7 @@
       const recordData = @json($records->keyBy('id'));
       const employeeData = @json($employees->keyBy('employee_id'));
       const trainingData = @json($trainings->keyBy('id'));
-      
+
       const record = recordData[recordId];
       if (!record) {
         Swal.fire('Error', 'Record not found', 'error');
@@ -1224,10 +1279,10 @@
 
       // Get pre-calculated progress data
       const progressInfo = recordProgressData[recordId];
-      
+
       // Use pre-calculated training title or fallback to manual extraction
       let trainingTitle = progressInfo && progressInfo.training_title ? progressInfo.training_title : 'No training assigned';
-      
+
       // If still no title, try manual extraction as fallback
       if (trainingTitle === 'No training assigned') {
         if (training && training.course && training.course.course_title) {
@@ -1287,8 +1342,8 @@
             <div class="mb-3 p-3 bg-light rounded">
               <h6 class="text-warning mb-2"><i class="bi bi-graph-up"></i> Progress Status</h6>
               <div class="progress mb-2" style="height: 20px; border-radius: 10px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                     role="progressbar" 
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar"
                      style="width: ${displayProgress}%; background-color: ${progressBarColor}; color: white; font-weight: 600;">
                   ${displayProgress}%
                 </div>
@@ -1296,14 +1351,14 @@
               ${hasExamData && examScore > 0 ? `
                 <div class="mb-2">
                   <small class="text-muted">
-                    <i class="bi bi-mortarboard me-1"></i>Exam Score: ${examScore}% 
+                    <i class="bi bi-mortarboard me-1"></i>Exam Score: ${examScore}%
                     <span class="badge bg-info bg-opacity-10 text-info ms-1">Exam Progress</span>
                   </small>
                 </div>
               ` : displayProgress > 0 && !hasExamData ? `
                 <div class="mb-2">
                   <small class="text-muted">
-                    <i class="bi bi-database me-1"></i>Progress Source: 
+                    <i class="bi bi-database me-1"></i>Progress Source:
                     <span class="badge bg-secondary bg-opacity-10 text-secondary ms-1">System Data</span>
                   </small>
                 </div>
@@ -1328,7 +1383,7 @@
         html: `
           <div class="text-start mb-3">
             <div class="alert alert-warning">
-              <i class="bi bi-exclamation-triangle"></i> 
+              <i class="bi bi-exclamation-triangle"></i>
               <strong>Admin Password Required</strong><br>
               Please enter your admin password to add a new training record.
             </div>
@@ -1363,7 +1418,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           showAddRecordForm(password);
         } else {
@@ -1430,7 +1485,7 @@
         preConfirm: () => {
           const form = document.getElementById('addRecordForm');
           const formData = new FormData(form);
-          
+
           if (!formData.get('employee_id')) {
             Swal.showValidationMessage('Please select an employee');
             return false;
@@ -1443,7 +1498,7 @@
             Swal.showValidationMessage('Please select completion date');
             return false;
           }
-          
+
           return formData;
         }
       }).then((result) => {
@@ -1505,7 +1560,7 @@
         html: `
           <div class="text-start mb-3">
             <div class="alert alert-warning">
-              <i class="bi bi-exclamation-triangle"></i> 
+              <i class="bi bi-exclamation-triangle"></i>
               <strong>Admin Password Required</strong><br>
               Please enter your admin password to edit this training record.
             </div>
@@ -1540,7 +1595,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           showEditRecordForm(recordId, password);
         } else {
@@ -1559,7 +1614,7 @@
       const recordData = @json($records->keyBy('id'));
       const employees = @json($employees);
       const trainings = @json($trainings);
-      
+
       const record = recordData[recordId];
       if (!record) {
         Swal.fire('Error', 'Record not found', 'error');
@@ -1617,7 +1672,7 @@
         preConfirm: () => {
           const form = document.getElementById('editRecordForm');
           const formData = new FormData(form);
-          
+
           if (!formData.get('employee_id')) {
             Swal.showValidationMessage('Please select an employee');
             return false;
@@ -1630,7 +1685,7 @@
             Swal.showValidationMessage('Please select completion date');
             return false;
           }
-          
+
           return formData;
         }
       }).then((result) => {
@@ -1692,7 +1747,7 @@
         html: `
           <div class="text-start">
             <div class="alert alert-danger">
-              <i class="bi bi-exclamation-triangle"></i> 
+              <i class="bi bi-exclamation-triangle"></i>
               <strong>Warning!</strong><br>
               This action will permanently delete the training record and cannot be undone.
             </div>
@@ -1713,7 +1768,7 @@
           html: `
             <div class="text-start mb-3">
               <div class="alert alert-danger">
-                <i class="bi bi-shield-exclamation"></i> 
+                <i class="bi bi-shield-exclamation"></i>
                 <strong>Admin Password Required</strong><br>
                 Please enter your admin password to confirm deletion of this training record.
               </div>
@@ -1748,7 +1803,7 @@
           });
 
           const isValid = await verifyAdminPassword(password);
-          
+
           if (isValid) {
             submitDeleteRecord(recordId);
           } else {
@@ -1815,12 +1870,12 @@
         html: `
           <div class="text-start mb-3">
             <div class="alert alert-info">
-              <i class="bi bi-info-circle"></i> 
+              <i class="bi bi-info-circle"></i>
               <strong>Sync Training Progress</strong><br>
               This will update competency gaps based on completed training records and synchronize progress across the system.
             </div>
             <div class="alert alert-warning">
-              <i class="bi bi-shield-lock"></i> 
+              <i class="bi bi-shield-lock"></i>
               <strong>Admin Password Required</strong><br>
               Please enter your admin password to perform this system operation.
             </div>
@@ -1855,7 +1910,7 @@
         });
 
         const isValid = await verifyAdminPassword(password);
-        
+
         if (isValid) {
           submitSyncProgress();
         } else {
@@ -1913,6 +1968,65 @@
         });
       }
     }
+
+    // Skills table search and filter functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const skillsSearch = document.getElementById('skillsSearch');
+      const skillsFilter = document.getElementById('skillsFilter');
+      const skillsTableBody = document.getElementById('skillsTableBody');
+
+      function filterSkills() {
+        const searchTerm = skillsSearch.value.toLowerCase();
+        const filterValue = skillsFilter.value;
+        const rows = skillsTableBody.querySelectorAll('.skill-row');
+
+        rows.forEach(row => {
+          const skillName = row.querySelector('strong').textContent.toLowerCase();
+          const skillLevel = row.getAttribute('data-skill-level');
+
+          let showRow = true;
+
+          // Apply search filter
+          if (searchTerm && !skillName.includes(searchTerm)) {
+            showRow = false;
+          }
+
+          // Apply level filter
+          if (filterValue && skillLevel !== filterValue) {
+            showRow = false;
+          }
+
+          row.style.display = showRow ? '' : 'none';
+        });
+
+        // Show/hide empty message
+        const visibleRows = Array.from(rows).filter(row => row.style.display !== 'none');
+        const emptyMessage = document.getElementById('skillsEmptyMessage');
+
+        if (visibleRows.length === 0 && !emptyMessage) {
+          const tbody = document.getElementById('skillsTableBody');
+          const emptyRow = document.createElement('tr');
+          emptyRow.id = 'skillsEmptyMessage';
+          emptyRow.innerHTML = `
+            <td colspan="4" class="text-center py-4">
+              <i class="bi bi-search text-muted" style="font-size: 2rem;"></i>
+              <p class="text-muted mt-2 mb-0">No skills match your search criteria</p>
+            </td>
+          `;
+          tbody.appendChild(emptyRow);
+        } else if (visibleRows.length > 0 && emptyMessage) {
+          emptyMessage.remove();
+        }
+      }
+
+      if (skillsSearch) {
+        skillsSearch.addEventListener('input', filterSkills);
+      }
+
+      if (skillsFilter) {
+        skillsFilter.addEventListener('change', filterSkills);
+      }
+    });
   </script>
 </body>
 </html>

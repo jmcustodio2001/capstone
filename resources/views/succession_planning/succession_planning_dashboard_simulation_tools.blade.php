@@ -470,7 +470,7 @@
           @if($ceoPositions->count() > 0)
             <div class="row justify-content-center mb-4">
               <div class="col-md-6">
-                <div class="role-node leader" data-position-id="1" style="background-color: #ffffff;">
+                <div class="role-node leader" data-position-id="1" onclick="showCandidates('1')" style="background-color: #ffffff;">
                   <div class="readiness-score">{{ isset($readinessScores[1]) ? $readinessScores[1] : '0' }}%</div>
                   <h5 class="mb-2" style="color: #000;">General Manager / CEO</h5>
                   <p class="mb-2 badge text-bg-light border" style="color: #000;">Executive Level</p>
@@ -483,7 +483,7 @@
           <!-- Management Level -->
           <div class="row justify-content-center g-4 mb-4">
             <div class="col-lg-3 col-md-6">
-              <div class="role-node manager" data-position-id="2">
+              <div class="role-node manager" data-position-id="2" onclick="showCandidates('2')">
                 <div class="readiness-score">{{ isset($readinessScores[2]) ? $readinessScores[2] : '0' }}%</div>
                 <h6 class="mb-2">Operations Manager</h6>
                 <p class="mb-2 badge text-bg-light border">Operations</p>
@@ -519,7 +519,7 @@
           <!-- Supervisory Level -->
           <div class="row justify-content-center g-4 mb-4">
             <div class="col-md-5">
-              <div class="role-node successor" data-position-id="6">
+              <div class="role-node successor" data-position-id="6" onclick="showCandidates('6')">
                 <div class="readiness-score">{{ isset($readinessScores[6]) ? $readinessScores[6] : '0' }}%</div>
                 <h6 class="mb-2">Tour Coordinator</h6>
                 <p class="mb-2 badge text-bg-light border">Supervisory</p>
@@ -527,7 +527,7 @@
               </div>
             </div>
             <div class="col-md-5">
-              <div class="role-node successor" data-position-id="7">
+              <div class="role-node successor" data-position-id="7" onclick="showCandidates('7')">
                 <div class="readiness-score">{{ isset($readinessScores[7]) ? $readinessScores[7] : '0' }}%</div>
                 <h6 class="mb-2">Customer Service Supervisor</h6>
                 <p class="mb-2 badge text-bg-light border">Supervisory</p>
@@ -592,11 +592,8 @@
 
     <!-- Candidate Details and Comparison -->
     <div class="simulation-card card mb-4">
-      <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+      <div class="card-header card-header-custom">
         <h4 class="fw-bold mb-0"><i class="bi bi-person-check me-2"></i>Candidate Details & Comparison</h4>
-        <button class="btn btn-primary btn-sm" onclick="addCandidateWithConfirmation()">
-          <i class="bi bi-plus-lg me-1"></i>Add Candidate
-        </button>
       </div>
       <div class="card-body">
         <div class="row" id="candidatesList">
@@ -3437,20 +3434,86 @@
       const positions = @json($positions ?? []);
       const topCandidates = @json($topCandidates ?? []);
 
-      const position = positions.find(p => p.id == positionId);
-      const candidates = topCandidates[positionId] || [];
+      // Try to find position in database first
+      let position = positions.find(p => p.id == positionId);
+      
+      // Try multiple ways to get candidates data
+      let candidates = [];
+      
+      // Method 1: Direct position ID lookup
+      if (topCandidates[positionId]) {
+        candidates = topCandidates[positionId];
+      }
+      // Method 2: String position ID lookup
+      else if (topCandidates[positionId.toString()]) {
+        candidates = topCandidates[positionId.toString()];
+      }
+      // Method 3: Check if topCandidates is an array and find by position
+      else if (Array.isArray(topCandidates)) {
+        candidates = topCandidates.filter(candidate => 
+          candidate.position_id == positionId || 
+          candidate.target_position_id == positionId
+        );
+      }
+      
+      // Ensure candidates is always an array
+      if (!Array.isArray(candidates)) {
+        candidates = [];
+      }
+      
+      // Also try to fetch candidates from API as fallback
+      if (candidates.length === 0) {
+        try {
+          const apiCandidates = await fetchCandidatesFromAPI(positionId);
+          if (apiCandidates && apiCandidates.length > 0) {
+            candidates = apiCandidates;
+          }
+        } catch (error) {
+          console.warn('Failed to fetch candidates from API:', error);
+        }
+      }
+      
+      // Note: Sample candidates removed - now using real data from controller for all positions 1-12
 
+      console.log('=== DEBUGGING CANDIDATES DATA ===');
+      console.log('Position ID requested:', positionId, typeof positionId);
       console.log('Position found:', position);
-      console.log('Candidates found:', candidates);
+      console.log('topCandidates structure:', topCandidates);
+      console.log('topCandidates keys:', Object.keys(topCandidates || {}));
+      console.log('Direct lookup [positionId]:', topCandidates[positionId]);
+      console.log('String lookup [positionId.toString()]:', topCandidates[positionId.toString()]);
+      console.log('Final candidates found:', candidates);
+      console.log('Final candidates count:', candidates.length);
+      console.log('=== END DEBUGGING ===');
 
+      // If position not found in database, create fallback position info
       if (!position) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Position Not Found',
-          text: 'Could not find position information.',
-          confirmButtonColor: '#dc3545'
-        });
-        return;
+        const fallbackPositions = {
+          '1': { id: 1, position_title: 'General Manager / CEO', department: 'Executive', level: 1 },
+          '2': { id: 2, position_title: 'Operations Manager', department: 'Operations', level: 2 },
+          '3': { id: 3, position_title: 'Sales & Marketing Manager', department: 'Sales & Marketing', level: 2 },
+          '4': { id: 4, position_title: 'Finance Manager', department: 'Finance', level: 2 },
+          '5': { id: 5, position_title: 'HR Manager', department: 'Human Resources', level: 2 },
+          '6': { id: 6, position_title: 'Tour Coordinator', department: 'Operations', level: 3 },
+          '7': { id: 7, position_title: 'Customer Service Supervisor', department: 'Customer Service', level: 3 },
+          '8': { id: 8, position_title: 'Tour Guide', department: 'Operations', level: 4 },
+          '9': { id: 9, position_title: 'Travel Agent', department: 'Operations', level: 4 },
+          '10': { id: 10, position_title: 'Reservation Officer', department: 'Operations', level: 4 },
+          '11': { id: 11, position_title: 'Ticketing Officer', department: 'Operations', level: 4 },
+          '12': { id: 12, position_title: 'Transport Coordinator', department: 'Operations', level: 4 }
+        };
+        
+        position = fallbackPositions[positionId.toString()];
+        
+        if (!position) {
+          Swal.fire({
+            icon: 'warning',
+            title: 'Position Information Unavailable',
+            text: `Position ID ${positionId} is not configured in the system. Please contact your administrator to set up this position.`,
+            confirmButtonColor: '#ffc107'
+          });
+          return;
+        }
       }
 
       // Build candidates HTML for SweetAlert
@@ -3477,30 +3540,82 @@
             </div>
           </div>
         `).join('') :
-        '<div class="text-center py-4"><i class="bi bi-people display-4 text-muted mb-3"></i><h5 class="text-muted">No candidates available</h5><p class="text-muted">No succession candidates found for this position.</p></div>';
+        `<div class="text-center py-4">
+          <i class="bi bi-people display-4 text-muted mb-3"></i>
+          <h5 class="text-muted">No Succession Candidates Available</h5>
+          <p class="text-muted mb-3">No succession candidates have been identified for the <strong>${position.position_title}</strong> position.</p>
+          <div class="alert alert-info text-start">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Next Steps:</strong>
+            <ul class="mb-0 mt-2">
+              <li>Run succession planning evaluation to identify potential candidates</li>
+              <li>Review employee competencies and performance ratings</li>
+              <li>Consider cross-training opportunities for current staff</li>
+              <li>Evaluate external recruitment needs</li>
+            </ul>
+          </div>
+        </div>`;
 
       // Show in SweetAlert
       Swal.fire({
-        title: `<i class="bi bi-people me-2"></i>${position.position_title} Candidates`,
+        title: `<i class="bi bi-people me-2"></i>${position.position_title} - Succession Candidates`,
         html: `
           <div class="text-start">
-            <div class="alert alert-info mb-3">
-              <i class="bi bi-info-circle me-2"></i>
+            <div class="alert ${candidates.length > 0 ? 'alert-info' : 'alert-warning'} mb-3">
+              <i class="bi bi-${candidates.length > 0 ? 'info-circle' : 'exclamation-triangle'} me-2"></i>
               <strong>Department:</strong> ${position.department || 'General'}<br>
-              <strong>Total Candidates:</strong> ${candidates.length}
+              <strong>Position Level:</strong> ${position.level ? `Level ${position.level}` : 'Not specified'}<br>
+              <strong>Available Candidates:</strong> ${candidates.length}
+              ${candidates.length === 0 ? '<br><strong>Status:</strong> <span class="text-warning">Needs Attention</span>' : '<br><strong>Status:</strong> <span class="text-success">Candidates Available</span>'}
             </div>
             <div style="max-height: 400px; overflow-y: auto;">
               ${candidatesHtml}
             </div>
           </div>
         `,
-        width: '700px',
+        width: '750px',
         showCloseButton: true,
-        showConfirmButton: false,
+        showConfirmButton: candidates.length === 0,
+        confirmButtonText: candidates.length === 0 ? '<i class="bi bi-plus-lg me-1"></i>Add Candidates' : undefined,
+        confirmButtonColor: candidates.length === 0 ? '#198754' : undefined,
+        showCancelButton: candidates.length > 0,
+        cancelButtonText: candidates.length > 0 ? 'Close' : undefined,
         customClass: {
           popup: 'text-start'
         }
+      }).then((result) => {
+        if (result.isConfirmed && candidates.length === 0) {
+          // Redirect to add candidates or show add candidate form
+          addCandidateWithConfirmation();
+        }
       });
+      
+      // Debug: Log the final state
+      console.log(`Final state for position ${positionId}: ${candidates.length} candidates, button will ${candidates.length === 0 ? 'show' : 'hide'}`);
+    }
+
+    // Enhanced error handling for API calls
+    async function fetchCandidatesFromAPI(positionId) {
+      try {
+        const response = await fetch(`/admin/succession-simulations/candidates/${positionId}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+          }
+        });
+
+        if (!response.ok) {
+          console.warn(`API call failed for position ${positionId}: ${response.status}`);
+          return [];
+        }
+
+        const data = await response.json();
+        return data.candidates || [];
+      } catch (error) {
+        console.warn(`Error fetching candidates for position ${positionId}:`, error);
+        return [];
+      }
     }
 
     async function getCandidatesForPosition(positionType) {

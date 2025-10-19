@@ -495,16 +495,13 @@
             <div class="card-body">
               <div class="d-grid gap-2">
                 <a href="{{ route('admin.employee_trainings_dashboard.create') }}" class="btn btn-primary">
-                  <i class="bi bi-plus-circle me-2"></i>New Training
+                  <i class="bi bi-eye me-2"></i>View Training
                 </a>
                 <a href="{{ route('employee.list') }}" class="btn btn-outline-primary">
                   <i class="bi bi-person-plus me-2"></i>View Employees
                 </a>
                 <a href="{{ route('admin.course_management.index') }}" class="btn btn-outline-primary">
                   <i class="bi bi-bookmark-plus me-2"></i>Manage Courses
-                </a>
-                <a href="{{ route('activity_logs.index') }}" class="btn btn-outline-secondary">
-                  <i class="bi bi-file-earmark-text me-2"></i>Activity Reports
                 </a>
               </div>
             </div>

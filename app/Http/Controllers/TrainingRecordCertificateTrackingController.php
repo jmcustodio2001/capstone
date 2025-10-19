@@ -24,8 +24,59 @@ class TrainingRecordCertificateTrackingController extends Controller
                 $this->ensureTableStructure();
             }
             
-            // Fetch certificates with relationships - enhanced error handling
+            // Get all completed trainings from various sources (same logic as MyTrainingController)
+            $completedTrainingEmployees = $this->getCompletedTrainingEmployees();
+            
+            // Only fetch certificates that have exact matches with completed trainings
+            $validCertificateIds = collect();
+            
+            // For each employee with completed trainings, find matching certificates
+            foreach ($completedTrainingEmployees as $employeeId => $completedTrainings) {
+                $employeeCertificates = TrainingRecordCertificateTracking::where('employee_id', $employeeId)->get();
+                
+                foreach ($employeeCertificates as $certificate) {
+                    $isValidCertificate = false;
+                    
+                    // Check if this certificate matches any completed training
+                    foreach ($completedTrainings as $completedTraining) {
+                        // Match by course_id (most reliable)
+                        if ($certificate->course_id && $completedTraining->course_id && 
+                            $certificate->course_id == $completedTraining->course_id) {
+                            $isValidCertificate = true;
+                            break;
+                        }
+                        
+                        // Match by training title (fallback for trainings without course_id)
+                        if (!$isValidCertificate && $certificate->course && $completedTraining->training_title) {
+                            $certificateTitle = strtolower(trim($certificate->course->course_title ?? ''));
+                            $completedTitle = strtolower(trim($completedTraining->training_title));
+                            
+                            // Normalize titles for comparison
+                            $normalizedCertTitle = preg_replace('/\b(training|course|program|skills|knowledge)\b/i', '', $certificateTitle);
+                            $normalizedCompletedTitle = preg_replace('/\b(training|course|program|skills|knowledge)\b/i', '', $completedTitle);
+                            
+                            $normalizedCertTitle = trim(preg_replace('/\s+/', ' ', $normalizedCertTitle));
+                            $normalizedCompletedTitle = trim(preg_replace('/\s+/', ' ', $normalizedCompletedTitle));
+                            
+                            // Check for exact match or contains match
+                            if ($normalizedCertTitle === $normalizedCompletedTitle || 
+                                (strlen($normalizedCertTitle) > 3 && strpos($normalizedCompletedTitle, $normalizedCertTitle) !== false) ||
+                                (strlen($normalizedCompletedTitle) > 3 && strpos($normalizedCertTitle, $normalizedCompletedTitle) !== false)) {
+                                $isValidCertificate = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if ($isValidCertificate) {
+                        $validCertificateIds->push($certificate->id);
+                    }
+                }
+            }
+            
+            // Fetch only the valid certificates
             $certificates = TrainingRecordCertificateTracking::with(['employee', 'course'])
+                ->whereIn('id', $validCertificateIds->toArray())
                 ->orderBy('created_at', 'desc')
                 ->get();
             
@@ -46,9 +97,25 @@ class TrainingRecordCertificateTrackingController extends Controller
             }
             
             // Debug logging with safe counts
-            Log::info('Certificate tracking - Records found: ' . $certificates->count());
+            Log::info('Certificate tracking - Completed training employees: ' . $completedTrainingEmployees->count());
+            Log::info('Certificate tracking - Valid certificate IDs found: ' . $validCertificateIds->count());
+            Log::info('Certificate tracking - Filtered certificates: ' . $certificates->count());
             Log::info('Certificate tracking - Employees available: ' . $employees->count());
             Log::info('Certificate tracking - Courses available: ' . $courses->count());
+            
+            // Debug: Log details of completed trainings for each employee
+            foreach ($completedTrainingEmployees as $employeeId => $completedTrainings) {
+                Log::info("Employee {$employeeId} completed trainings:", $completedTrainings->map(function($training) {
+                    return [
+                        'title' => $training->training_title,
+                        'course_id' => $training->course_id,
+                        'source' => $training->source
+                    ];
+                })->toArray());
+            }
+            
+            // Debug: Log which certificates were found valid
+            Log::info('Valid certificate IDs: ' . $validCertificateIds->implode(', '));
             
             // Check for orphaned records (certificates without valid employee/course relationships)
             $orphanedCount = 0;
@@ -1257,6 +1324,151 @@ class TrainingRecordCertificateTrackingController extends Controller
                 'message' => 'Error fixing training_date column: ' . $e->getMessage(),
                 'action' => 'error'
             ], 500);
+        }
+    }
+
+    /**
+     * Get all employees who have completed trainings from various sources
+     * This method replicates the logic from MyTrainingController to identify completed trainings
+     */
+    private function getCompletedTrainingEmployees()
+    {
+        $completedEmployees = collect();
+
+        try {
+            // Get all employees
+            $allEmployees = \App\Models\Employee::all();
+
+            foreach ($allEmployees as $employee) {
+                $employeeId = $employee->employee_id;
+                $employeeCompletedTrainings = collect();
+
+                // 1. Get manually added completed trainings
+                $manualCompleted = \App\Models\CompletedTraining::where('employee_id', $employeeId)->get();
+                foreach ($manualCompleted as $completed) {
+                    $employeeCompletedTrainings->push((object)[
+                        'training_title' => $completed->training_title,
+                        'course_id' => $completed->course_id,
+                        'completion_date' => $completed->completion_date,
+                        'source' => 'manual_completed'
+                    ]);
+                }
+
+                // 2. Get system-completed trainings from EmployeeTrainingDashboard (100% progress)
+                $systemCompleted = \App\Models\EmployeeTrainingDashboard::with('course')
+                    ->where('employee_id', $employeeId)
+                    ->where(function($query) {
+                        $query->where('status', 'Completed')
+                              ->orWhere('progress', '>=', 100);
+                    })
+                    ->get();
+                
+                foreach ($systemCompleted as $completed) {
+                    $employeeCompletedTrainings->push((object)[
+                        'training_title' => $completed->course->course_title ?? 'Unknown Course',
+                        'course_id' => $completed->course_id,
+                        'completion_date' => $completed->updated_at,
+                        'source' => 'system_completed'
+                    ]);
+                }
+
+                // 3. Get completed competency-based course assignments
+                $competencyCompleted = \App\Models\CompetencyCourseAssignment::with('course')
+                    ->where('employee_id', $employeeId)
+                    ->where(function($query) {
+                        $query->where('status', 'Completed')
+                              ->orWhere('progress', '>=', 100);
+                    })
+                    ->get();
+
+                foreach ($competencyCompleted as $completed) {
+                    $employeeCompletedTrainings->push((object)[
+                        'training_title' => $completed->course->course_title ?? 'Unknown Course',
+                        'course_id' => $completed->course_id,
+                        'completion_date' => $completed->updated_at,
+                        'source' => 'competency_completed'
+                    ]);
+                }
+
+                // 4. Get completed destination knowledge training
+                $destinationCompleted = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
+                    ->where('status', 'completed')
+                    ->get();
+
+                foreach ($destinationCompleted as $completed) {
+                    $employeeCompletedTrainings->push((object)[
+                        'training_title' => $completed->destination_name,
+                        'course_id' => null, // Destination trainings may not have course_id
+                        'completion_date' => $completed->date_completed ?: $completed->updated_at,
+                        'source' => 'destination_completed'
+                    ]);
+                }
+
+                // 5. Get completed Customer Service Sales Skills Training
+                try {
+                    $customerServiceCompleted = \App\Models\CustomerServiceSalesSkillsTraining::where('employee_id', $employeeId)
+                        ->whereNotNull('date_completed')
+                        ->where('date_completed', '!=', '1970-01-01')
+                        ->get();
+
+                    foreach ($customerServiceCompleted as $completed) {
+                        $employeeCompletedTrainings->push((object)[
+                            'training_title' => $completed->skill_topic,
+                            'course_id' => $completed->training_id,
+                            'completion_date' => $completed->date_completed,
+                            'source' => 'customer_service_completed'
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    // Table may not exist, skip
+                    Log::info("Customer Service table not found for employee {$employeeId}: " . $e->getMessage());
+                }
+
+                // 6. Get completed training requests (approved with 100% progress)
+                $completedRequests = \App\Models\TrainingRequest::where('employee_id', $employeeId)
+                    ->where('status', 'Approved')
+                    ->get()
+                    ->filter(function($request) use ($employeeId) {
+                        // Check if there's a corresponding training dashboard record with 100% progress
+                        $dashboardRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                            ->where('course_id', $request->course_id)
+                            ->first();
+
+                        if ($dashboardRecord) {
+                            try {
+                                $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $request->course_id);
+                                $actualProgress = $combinedProgress > 0 ? $combinedProgress : ($dashboardRecord->progress ?? 0);
+                                return $actualProgress >= 100;
+                            } catch (\Exception $e) {
+                                // If ExamAttempt calculation fails, fall back to dashboard progress
+                                return ($dashboardRecord->progress ?? 0) >= 100;
+                            }
+                        }
+                        return false;
+                    });
+
+                foreach ($completedRequests as $completed) {
+                    $employeeCompletedTrainings->push((object)[
+                        'training_title' => $completed->training_title,
+                        'course_id' => $completed->course_id,
+                        'completion_date' => now(),
+                        'source' => 'request_completed'
+                    ]);
+                }
+
+                // Only add employee to the list if they have completed trainings
+                if ($employeeCompletedTrainings->isNotEmpty()) {
+                    $completedEmployees->put($employeeId, $employeeCompletedTrainings);
+                }
+            }
+
+            Log::info('Certificate tracking - Found employees with completed trainings: ' . $completedEmployees->count());
+            
+            return $completedEmployees;
+
+        } catch (\Exception $e) {
+            Log::error('Error getting completed training employees: ' . $e->getMessage());
+            return collect();
         }
     }
 }

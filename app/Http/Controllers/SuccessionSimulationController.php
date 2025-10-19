@@ -24,6 +24,7 @@ class SuccessionSimulationController extends Controller
         $certificateStatuses = $this->getCertificateStatuses($simulations);
         $positions = $this->getOrganizationalPositions();
         $topCandidates = $this->getTopCandidatesForPositions($positions);
+        $readinessScores = $this->calculateReadinessScoresForPositions($topCandidates);
         $dashboardMetrics = $this->calculateDashboardMetrics();
         $scenarioData = $this->generateScenarioData($positions, $topCandidates, $dashboardMetrics);
 
@@ -33,6 +34,7 @@ class SuccessionSimulationController extends Controller
             'certificateStatuses' => $certificateStatuses,
             'positions' => $positions,
             'topCandidates' => $topCandidates,
+            'readinessScores' => $readinessScores,
             'totalCandidates' => $dashboardMetrics['totalCandidates'],
             'readyLeaders' => $dashboardMetrics['readyLeaders'],
             'inDevelopment' => $dashboardMetrics['inDevelopment'],
@@ -172,14 +174,25 @@ class SuccessionSimulationController extends Controller
     private function getOrganizationalPositions(): Collection
     {
         return collect([
-            (object)['id' => 1, 'position_title' => 'Chief Executive Officer', 'department' => 'Executive', 'level' => 1],
-            (object)['id' => 2, 'position_title' => 'Chief Technology Officer', 'department' => 'Technology', 'level' => 2],
-            (object)['id' => 3, 'position_title' => 'Chief Human Resources Officer', 'department' => 'Human Resources', 'level' => 2],
-            (object)['id' => 4, 'position_title' => 'Chief Financial Officer', 'department' => 'Finance', 'level' => 2],
-            (object)['id' => 5, 'position_title' => 'Software Development Manager', 'department' => 'Technology', 'level' => 3],
-            (object)['id' => 6, 'position_title' => 'HR Manager', 'department' => 'Human Resources', 'level' => 3],
-            (object)['id' => 7, 'position_title' => 'Finance Manager', 'department' => 'Finance', 'level' => 3],
-            (object)['id' => 8, 'position_title' => 'Operations Manager', 'department' => 'Operations', 'level' => 3]
+            // Executive Level
+            (object)['id' => 1, 'position_title' => 'General Manager / CEO', 'department' => 'Executive', 'level' => 1],
+            
+            // Management Level
+            (object)['id' => 2, 'position_title' => 'Operations Manager', 'department' => 'Operations', 'level' => 2],
+            (object)['id' => 3, 'position_title' => 'Sales & Marketing Manager', 'department' => 'Sales & Marketing', 'level' => 2],
+            (object)['id' => 4, 'position_title' => 'Finance Manager', 'department' => 'Finance', 'level' => 2],
+            (object)['id' => 5, 'position_title' => 'HR Manager', 'department' => 'Human Resources', 'level' => 2],
+            
+            // Supervisory Level
+            (object)['id' => 6, 'position_title' => 'Tour Coordinator', 'department' => 'Operations', 'level' => 3],
+            (object)['id' => 7, 'position_title' => 'Customer Service Supervisor', 'department' => 'Customer Service', 'level' => 3],
+            (object)['id' => 8, 'position_title' => 'Tour Guide', 'department' => 'Operations', 'level' => 4],
+            
+            // Operational Level - These were missing!
+            (object)['id' => 9, 'position_title' => 'Travel Agent', 'department' => 'Operations', 'level' => 4],
+            (object)['id' => 10, 'position_title' => 'Reservation Officer', 'department' => 'Operations', 'level' => 4],
+            (object)['id' => 11, 'position_title' => 'Ticketing Officer', 'department' => 'Operations', 'level' => 4],
+            (object)['id' => 12, 'position_title' => 'Transport Coordinator', 'department' => 'Operations', 'level' => 4]
         ]);
     }
 
@@ -225,6 +238,23 @@ class SuccessionSimulationController extends Controller
         }
         
         return $topCandidates;
+    }
+
+    private function calculateReadinessScoresForPositions(array $topCandidates): array
+    {
+        $readinessScores = [];
+        
+        foreach ($topCandidates as $positionId => $candidates) {
+            // Get the highest readiness score for this position (top candidate)
+            if ($candidates->isNotEmpty()) {
+                $topCandidate = $candidates->first();
+                $readinessScores[$positionId] = round($topCandidate['readiness_score']);
+            } else {
+                $readinessScores[$positionId] = 0;
+            }
+        }
+        
+        return $readinessScores;
     }
 
     private function calculateDashboardMetrics(): array

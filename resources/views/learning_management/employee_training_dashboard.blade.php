@@ -310,23 +310,29 @@
 
     <!-- Training Cards Grid -->
     <div class="card-grid">
-      @forelse($trainingRecords as $record)
+      @php
+        // Group records by employee
+        $groupedRecords = $trainingRecords->groupBy('employee_id');
+      @endphp
+      
+      @forelse($groupedRecords as $employeeId => $employeeRecords)
         @php
-          $firstName = $record->employee->first_name ?? 'Unknown';
-          $lastName = $record->employee->last_name ?? 'Employee';
+          // Get employee info from first record
+          $firstRecord = $employeeRecords->first();
+          $employee = $firstRecord->employee ?? null;
+          $firstName = $employee->first_name ?? 'Unknown';
+          $lastName = $employee->last_name ?? 'Employee';
           $fullName = $firstName . ' ' . $lastName;
-          $initials = strtoupper(substr($firstName, 0, 1)) . strtoupper(substr($lastName, 0, 1));
 
           // Check if profile picture exists - simplified approach
           $profilePicUrl = null;
-          if ($record->employee->profile_picture) {
+          if ($employee && $employee->profile_picture) {
               // Direct asset URL generation - Laravel handles the storage symlink
-              $profilePicUrl = asset('storage/' . $record->employee->profile_picture);
+              $profilePicUrl = asset('storage/' . $employee->profile_picture);
           }
 
           // Generate consistent color based on employee name for fallback
           $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-          $employeeId = $record->employee->employee_id ?? 'default';
           $colorIndex = abs(crc32($employeeId)) % count($colors);
           $bgColor = $colors[$colorIndex];
 
@@ -335,6 +341,76 @@
               $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                              "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
           }
+
+          // Calculate readiness score
+          $hideInput = request()->has('hide_input');
+          if ($hideInput) {
+              $readiness = 'N/A';
+          } else {
+              if ($employeeId) {
+                  $controller = new \App\Http\Controllers\SuccessionReadinessRatingController();
+                  $readiness = round($controller->calculateEmployeeReadinessScore($employeeId));
+              } else {
+                  $readiness = 0;
+              }
+          }
+
+          // Calculate overall progress for this employee
+          $totalProgress = 0;
+          $completedTrainings = 0;
+          $inProgressTrainings = 0;
+          $expiredTrainings = 0;
+          
+          foreach ($employeeRecords as $record) {
+              // Calculate progress for each record
+              $isApprovedRequest = isset($record->source) && $record->source == 'Training Request (Approved)';
+              $combinedProgress = 0;
+              
+              if ($isApprovedRequest) {
+                  $displayProgress = $record->progress ?? 0;
+              } else {
+                  $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $record->course_id);
+                  $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+              }
+
+              // Enhanced progress calculation with competency profile fallback
+              if ($displayProgress == 0) {
+                  $trainingTitle = $record->training_title ?? ($record->course->course_title ?? '');
+                  $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
+                      $q->where('competency_name', $trainingTitle)
+                        ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+                  })->where('employee_id', $record->employee_id)->first();
+                  
+                  if ($competencyProfile && $competencyProfile->proficiency_level) {
+                      $displayProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+                  }
+              }
+
+              $displayProgress = max(0, min(100, (int)$displayProgress));
+              
+              // Store the calculated progress in the record for JavaScript access
+              $record->calculated_progress = $displayProgress;
+              
+              // Check if expired
+              $finalExpiredDate = $record->expired_date ?? ($record->course->expired_date ?? null);
+              $isExpired = false;
+              if ($finalExpiredDate) {
+                  $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
+                  $isExpired = \Carbon\Carbon::now()->gt($expiredDate);
+              }
+
+              $totalProgress += $displayProgress;
+              if ($isExpired && $displayProgress < 100) {
+                  $expiredTrainings++;
+              } elseif ($displayProgress >= 100) {
+                  $completedTrainings++;
+              } elseif ($displayProgress > 0) {
+                  $inProgressTrainings++;
+              }
+          }
+          
+          $averageProgress = $employeeRecords->count() > 0 ? round($totalProgress / $employeeRecords->count()) : 0;
+          $notStartedTrainings = $employeeRecords->count() - $completedTrainings - $inProgressTrainings - $expiredTrainings;
         @endphp
 
         <div class="card training-card">
@@ -347,157 +423,58 @@
                      class="employee-avatar me-3">
                 <div>
                   <h6 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
-                  <small class="text-muted">Employee ID: {{ $record->employee->employee_id ?? 'N/A' }}</small>
+                  <small class="text-muted">Employee ID: {{ $employee->employee_id ?? 'N/A' }} • {{ $employeeRecords->count() }} Training(s)</small>
                 </div>
               </div>
-              @php
-                // Check if we should hide direct input data (when coming from auto-assign)
-                $hideInput = request()->has('hide_input');
-
-                if ($hideInput) {
-                  // Use simplified readiness calculation when coming from auto-assign
-                  $readiness = 'N/A';
-                } else {
-                  // Use the same backend calculation as succession planning system
-                  $employee = $record->employee;
-                  $employeeId = $employee->employee_id ?? null;
-                  
-                  if ($employeeId) {
-                    // Call the same controller method that succession planning uses
-                    $controller = new \App\Http\Controllers\SuccessionReadinessRatingController();
-                    $readiness = round($controller->calculateEmployeeReadinessScore($employeeId));
-                  } else {
-                    $readiness = 0;
-                  }
-                }
-              @endphp
               <div class="readiness-score">
                 {{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}
               </div>
             </div>
           </div>
 
-          <!-- Card Body with Course Information -->
+          <!-- Card Body with Training Summary -->
           <div class="card-body">
-            @php
-              // Priority system for course title: training_title > course->course_title > fallback
-              $displayTitle = '';
-              $displayDescription = '';
-              
-              if (!empty($record->training_title)) {
-                // Use training_title from the record (highest priority)
-                $displayTitle = $record->training_title;
-                $displayDescription = $record->course->description ?? 'Training course: ' . $record->training_title;
-              } elseif ($record->course && !empty($record->course->course_title)) {
-                // Use course relationship title
-                $displayTitle = $record->course->course_title;
-                $displayDescription = $record->course->description ?? 'Course: ' . $record->course->course_title;
-              } else {
-                // Fallback - check if this is a training request
-                $isTrainingRequest = str_starts_with($record->id, 'request_');
-                if ($isTrainingRequest && !empty($record->course_title)) {
-                  $displayTitle = $record->course_title;
-                  $displayDescription = 'Training requested by employee';
-                } else {
-                  $displayTitle = 'Unknown Training';
-                  $displayDescription = 'No course information available';
-                }
-              }
-            @endphp
-
-            <!-- Course Title and Badges -->
+            <!-- Training Summary -->
             <div class="mb-3">
-              <h5 class="card-title mb-2">{{ $displayTitle }}</h5>
-              
-              @php
-                $isDestinationCourse = false;
-                $courseTitle = strtolower($displayTitle);
-                $courseDescription = strtolower($displayDescription);
-
-                $destinationKeywords = [
-                  'destination', 'location', 'place', 'city', 'terminal', 'station',
-                  'baesa', 'quezon', 'cubao', 'baguio', 'boracay', 'cebu', 'davao',
-                  'manila', 'geography', 'route', 'travel', 'area knowledge'
-                ];
-
-                foreach($destinationKeywords as $keyword) {
-                  if(strpos($courseTitle, $keyword) !== false || strpos($courseDescription, $keyword) !== false) {
-                    $isDestinationCourse = true;
-                    break;
-                  }
-                }
-              @endphp
-
-              <div class="d-flex flex-wrap gap-2">
-                @if($isDestinationCourse)
-                  <span class="course-badge bg-success" title="Exam and Quiz Available">
-                    <i class="bi bi-mortarboard me-1"></i> Exam Enabled
-                  </span>
-                @else
-                  <span class="course-badge bg-info" title="Announcement Only - No Exam/Quiz">
-                    <i class="bi bi-megaphone me-1"></i> Announcement Only
-                  </span>
-                @endif
+              <div class="d-flex align-items-center mb-2">
+                <i class="bi bi-collection text-primary fs-5 me-2"></i>
+                <h6 class="mb-0 fw-bold text-primary">Training Summary</h6>
               </div>
-              
-              <p class="text-muted small mt-2 mb-0">{{ Str::limit($displayDescription, 80) }}</p>
+              <div class="row text-center">
+                <div class="col-3">
+                  <div class="text-success fw-bold fs-5">{{ $completedTrainings }}</div>
+                  <small class="text-muted">Completed</small>
+                </div>
+                <div class="col-3">
+                  <div class="text-primary fw-bold fs-5">{{ $inProgressTrainings }}</div>
+                  <small class="text-muted">In Progress</small>
+                </div>
+                <div class="col-3">
+                  <div class="text-danger fw-bold fs-5">{{ $expiredTrainings }}</div>
+                  <small class="text-muted">Expired</small>
+                </div>
+                <div class="col-3">
+                  <div class="text-secondary fw-bold fs-5">{{ $notStartedTrainings }}</div>
+                  <small class="text-muted">Not Started</small>
+                </div>
+              </div>
             </div>
 
-            @php
-              // Check if this is an approved request record (from pseudo record)
-              $isApprovedRequest = isset($record->source) && $record->source == 'Training Request (Approved)';
-              
-              // Initialize combinedProgress for all cases
-              $combinedProgress = 0;
-              
-              if ($isApprovedRequest) {
-                  // For approved requests, use the progress calculated in the controller
-                  $displayProgress = $record->progress ?? 0;
-                  $progressSource = 'approved_request';
-              } else {
-                  // Use exam progress instead of raw progress to match employee view
-                  $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $record->course_id);
-                  $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
-                  $progressSource = $combinedProgress > 0 ? 'exam' : 'training';
-              }
-
-              // Enhanced progress calculation with competency profile fallback
-              if ($displayProgress == 0) {
-                  $trainingTitle = $record->training_title ?? ($record->course->course_title ?? '');
-                  
-                  // Check competency profiles for proficiency levels
-                  $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
-                      $q->where('competency_name', $trainingTitle)
-                        ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
-                  })->where('employee_id', $record->employee_id)->first();
-                  
-                  if ($competencyProfile && $competencyProfile->proficiency_level) {
-                      $displayProgress = round(($competencyProfile->proficiency_level / 5) * 100);
-                      $progressSource = 'competency_profile';
-                  }
-              }
-
-              // Ensure progress is never negative and is properly formatted
-              $displayProgress = max(0, min(100, (int)$displayProgress));
-            @endphp
-
-            <!-- Progress Section -->
-            <div class="progress-container">
+            <!-- Overall Progress -->
+            <div class="mb-4">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-semibold">Training Progress</span>
-                <span class="fw-bold text-primary">{{ $displayProgress }}%</span>
+                <span class="fw-semibold">Average Progress</span>
+                <span class="fw-bold text-primary">{{ $averageProgress }}%</span>
               </div>
-              
-              <!-- Bootstrap Progress Bar -->
               @php
                 // Dynamic color based on progress percentage
-                if ($displayProgress == 0) {
+                if ($averageProgress == 0) {
                   $progressColor = '#6c757d'; // Gray for 0%
-                } elseif ($displayProgress < 40) {
+                } elseif ($averageProgress < 40) {
                   $progressColor = 'linear-gradient(90deg, #dc3545, #fd7e14)'; // Red to Orange for low progress
-                } elseif ($displayProgress < 70) {
+                } elseif ($averageProgress < 70) {
                   $progressColor = 'linear-gradient(90deg, #fd7e14, #ffc107)'; // Orange to Yellow for medium progress
-                } elseif ($displayProgress < 90) {
+                } elseif ($averageProgress < 90) {
                   $progressColor = 'linear-gradient(90deg, #ffc107, #20c997)'; // Yellow to Teal for good progress
                 } else {
                   $progressColor = 'linear-gradient(90deg, #20c997, #28a745)'; // Teal to Green for excellent progress
@@ -506,192 +483,33 @@
               <div class="progress mb-2" style="height: 12px; background-color: #e9ecef; border-radius: 6px;">
                 <div class="progress-bar" 
                      role="progressbar" 
-                     style="width: {{ $displayProgress }}%; background: {{ $progressColor }} !important; border-radius: 6px;" 
-                     aria-valuenow="{{ $displayProgress }}" 
+                     style="width: {{ $averageProgress }}%; background: {{ $progressColor }} !important; border-radius: 6px;" 
+                     aria-valuenow="{{ $averageProgress }}" 
                      aria-valuemin="0" 
                      aria-valuemax="100">
                 </div>
               </div>
               
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex flex-wrap gap-1">
-                  @if($progressSource === 'manual')
-                    <small class="badge bg-warning" title="Manual proficiency level">Manual</small>
-                  @elseif($progressSource === 'destination' || $progressSource === 'destination_training')
-                    <small class="badge bg-success" title="From destination knowledge training">Destination</small>
-                  @elseif($progressSource === 'training')
-                    <small class="badge bg-primary" title="From employee training dashboard">Training</small>
-                  @elseif($progressSource === 'competency_profile')
-                    <small class="badge bg-info" title="From competency profile">Competency</small>
-                  @elseif($progressSource === 'exam')
-                    <small class="badge bg-success" title="From exam results">Exam</small>
-                  @elseif($progressSource === 'approved_request')
-                    <small class="badge bg-warning" title="From approved training request">Request</small>
-                  @else
-                    <small class="badge bg-secondary" title="No data found">No Data</small>
-                  @endif
-                </div>
-                
-                @if($combinedProgress > 0)
-                  @php
-                    $breakdown = \App\Models\ExamAttempt::getScoreBreakdown($record->employee_id, $record->course_id);
-                  @endphp
-                  @if($breakdown['exam_score'] > 0)
-                    <small class="text-success" title="Exam Score: {{ $breakdown['exam_score'] }}%">
-                      <i class="bi bi-mortarboard me-1"></i>{{ $breakdown['exam_score'] }}%
-                    </small>
-                  @endif
+              <div class="mt-2">
+                @if($expiredTrainings > 0)
+                  <span class="badge bg-danger bg-opacity-10 text-danger fs-6 px-3 py-2">Has Expired Trainings</span>
+                @elseif($averageProgress >= 100)
+                  <span class="badge bg-success bg-opacity-10 text-success fs-6 px-3 py-2">All Completed</span>
+                @elseif($averageProgress >= 75)
+                  <span class="badge bg-info bg-opacity-10 text-info fs-6 px-3 py-2">Nearly Complete</span>
+                @elseif($averageProgress > 0)
+                  <span class="badge bg-primary bg-opacity-10 text-primary fs-6 px-3 py-2">In Progress</span>
+                @else
+                  <span class="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-3 py-2">Not Started</span>
                 @endif
               </div>
             </div>
 
-            @php
-              // Get expired date from multiple sources - check both systems
-              $finalExpiredDate = null;
-
-              // First check: Employee Training Dashboard record itself
-              if (isset($record->expired_date) && $record->expired_date) {
-                $finalExpiredDate = $record->expired_date;
-              }
-
-              // Second check: Course Management table
-              if (!$finalExpiredDate && $record->course && isset($record->course->expired_date) && $record->course->expired_date) {
-                $finalExpiredDate = $record->course->expired_date;
-              }
-
-              // Determine accurate status based on progress and expiry date
-              $currentProgress = $displayProgress;
-
-              // Check if expired using the calculated expired date
-              $isExpired = false;
-              if ($finalExpiredDate) {
-                $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
-                $isExpired = \Carbon\Carbon::now()->gt($expiredDate);
-              }
-
-              // Determine final status
-              if ($isExpired && $currentProgress < 100) {
-                $statusBadgeClass = 'bg-danger';
-                $statusTextClass = 'text-dark';
-                $statusText = 'Expired';
-              } elseif ($currentProgress >= 100) {
-                $statusBadgeClass = 'bg-success';
-                $statusTextClass = 'text-dark';
-                $statusText = 'Completed';
-              } elseif ($currentProgress > 0) {
-                $statusBadgeClass = 'bg-primary';
-                $statusTextClass = 'text-dark';
-                $statusText = 'In Progress';
-              } else {
-                $statusBadgeClass = 'bg-secondary';
-                $statusTextClass = 'text-dark';
-                $statusText = 'Not Started';
-              }
-            @endphp
-
-            <!-- Status and Dates Information -->
-            <div class="row g-2 mb-3">
-              <div class="col-12 col-md-4 mb-2">
-                <div class="d-flex align-items-center">
-                  <i class="bi bi-flag-fill me-2 text-muted"></i>
-                  <div class="flex-grow-1">
-                    <small class="text-muted d-block mb-1">Status</small>
-                    <span class="badge {{ $statusBadgeClass }} {{ $statusTextClass }} px-2 py-1">{{ $statusText }}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div class="col-12 col-md-4 mb-2">
-                <div class="d-flex align-items-center">
-                  <i class="bi bi-calendar-x-fill me-2 text-muted"></i>
-                  <div class="flex-grow-1">
-                    <small class="text-muted d-block mb-1">Expires</small>
-                    @if($finalExpiredDate)
-                      @php
-                        $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
-                        $now = \Carbon\Carbon::now();
-                        $daysUntilExpiry = $now->diffInDays($expiredDate, false);
-
-                        if ($daysUntilExpiry < 0) {
-                          $dateClass = 'text-danger fw-bold';
-                          $statusBadge = 'bg-danger text-white';
-                          $statusLabel = 'EXPIRED';
-                        } elseif ($daysUntilExpiry <= 7) {
-                          $dateClass = 'text-warning fw-bold';
-                          $statusBadge = 'bg-warning text-dark';
-                          $statusLabel = 'URGENT';
-                        } elseif ($daysUntilExpiry <= 30) {
-                          $dateClass = 'text-info fw-bold';
-                          $statusBadge = 'bg-info text-white';
-                          $statusLabel = 'SOON';
-                        } else {
-                          $dateClass = 'text-success fw-bold';
-                          $statusBadge = 'bg-success text-white';
-                          $statusLabel = 'ACTIVE';
-                        }
-                      @endphp
-                      <div class="d-flex align-items-center flex-wrap">
-                        <span class="{{ $dateClass }} me-1">{{ $expiredDate->format('M d, Y') }}</span>
-                        <small class="badge {{ $statusBadge }}">{{ $statusLabel }}</small>
-                      </div>
-                    @else
-                      <span class="text-muted">Not Set</span>
-                    @endif
-                  </div>
-                </div>
-              </div>
-              
-              <div class="col-12 col-md-4 mb-2">
-                <div class="d-flex align-items-center">
-                  <i class="bi bi-clock-history me-2 text-muted"></i>
-                  <div class="flex-grow-1">
-                    <small class="text-muted d-block mb-1">Last Accessed</small>
-                    <span class="fw-semibold">
-                      @if(isset($record->last_accessed) && $record->last_accessed)
-                        {{ \Carbon\Carbon::parse($record->last_accessed)->format('M d, Y') }}
-                      @else
-                        <span class="text-muted">Never</span>
-                      @endif
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <!-- Action Buttons -->
-            @php
-              $isTrainingRequest = str_starts_with($record->id, 'request_');
-            @endphp
-            
-            @if(!$isTrainingRequest)
-              <div class="action-buttons">
-                <button class="btn btn-outline-primary btn-action" 
-                        onclick="viewTrainingDetails('{{ $record->id }}', '{{ ($record->employee->first_name ?? 'Unknown') }} {{ ($record->employee->last_name ?? 'Employee') }}', '{{ $displayTitle }}', '{{ $displayProgress }}', '{{ $statusText }}', '{{ $finalExpiredDate ? \Carbon\Carbon::parse($finalExpiredDate)->format('Y-m-d') : 'Not Set' }}', '{{ $record->last_accessed ? \Carbon\Carbon::parse($record->last_accessed)->format('Y-m-d') : 'Never' }}')"
-                        data-bs-toggle="tooltip" title="View Details">
-                  <i class="bi bi-eye"></i>
-                </button>
-                <button class="btn btn-outline-success btn-action certificate-btn" 
-                        onclick="alert('Button clicked!'); window.open('/admin/training-record-certificate-tracking?employee_id={{ $record->employee->employee_id ?? '' }}&employee_name={{ urlencode(($record->employee->first_name ?? 'Unknown') . ' ' . ($record->employee->last_name ?? 'Employee')) }}', '_blank');"
-                        data-bs-toggle="tooltip" title="View Certificates"
-                        style="display: none;">
-                  <i class="bi bi-award"></i>
-                </button>
-              </div>
-            @else
-              <div class="text-center">
-                <span class="badge bg-info text-dark fs-6">
-                  <i class="bi bi-file-earmark-text me-1"></i> Training Request
-                </span>
-                <small class="text-muted d-block mt-1">Manage in Training Requests</small>
-              </div>
-            @endif
-
-            <!-- Expired Indicator -->
-            @if($isExpired && $currentProgress < 100)
-              <div class="expired-indicator">
-                <i class="bi bi-exclamation-triangle me-1"></i>EXPIRED
-              </div>
-            @endif
+            <div class="action-buttons">
+              <button class="btn btn-sm btn-outline-primary w-100" onclick="viewAllEmployeeTrainings('{{ $employeeId }}')">
+                <i class="bi bi-eye me-1"></i> View All Trainings ({{ $employeeRecords->count() }})
+              </button>
           </div>
         </div>
       @empty
@@ -1661,6 +1479,116 @@
         icon: 'error',
         confirmButtonText: 'OK'
       });
+    });
+  }
+
+  // View All Employee Trainings Function
+  function viewAllEmployeeTrainings(employeeId) {
+    // Get employee records from the PHP data
+    const groupedRecords = @json($trainingRecords->groupBy('employee_id'));
+    const records = groupedRecords[employeeId] || [];
+    
+    if (records.length === 0) {
+      Swal.fire({
+        icon: 'info',
+        title: 'No Trainings Found',
+        text: 'No training records found for this employee.',
+        confirmButtonColor: '#0d6efd'
+      });
+      return;
+    }
+
+    // Get employee info
+    const firstRecord = records[0];
+    const employee = firstRecord.employee;
+    const employeeName = employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown Employee';
+
+    // Build training list HTML
+    let trainingsHtml = '';
+    records.forEach((record, index) => {
+      // Get training title with priority system
+      const trainingTitle = record.training_title || 
+                           (record.course && record.course.course_title) || 
+                           record.course_title || 
+                           'Unknown Training';
+      
+      // Use the calculated progress from the record (this should include exam scores)
+      let progress = 0;
+      
+      // Try to get the calculated progress from different sources
+      if (record.calculated_progress !== undefined) {
+        progress = record.calculated_progress;
+        console.log(`Using calculated_progress for ${trainingTitle}: ${progress}%`);
+      } else if (record.display_progress !== undefined) {
+        progress = record.display_progress;
+        console.log(`Using display_progress for ${trainingTitle}: ${progress}%`);
+      } else if (record.exam_progress !== undefined) {
+        progress = record.exam_progress;
+        console.log(`Using exam_progress for ${trainingTitle}: ${progress}%`);
+      } else {
+        progress = record.progress || 0;
+        console.log(`Using fallback progress for ${trainingTitle}: ${progress}%`);
+      }
+      
+      progress = Math.max(0, Math.min(100, parseInt(progress) || 0));
+      const progressColor = progress >= 100 ? 'success' : progress > 0 ? 'primary' : 'secondary';
+      const statusText = progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started';
+
+      // Check if expired
+      const expiredDate = record.expired_date || (record.course && record.course.expired_date);
+      let isExpired = false;
+      let expiredText = 'Not Set';
+      if (expiredDate) {
+        const expDate = new Date(expiredDate);
+        const now = new Date();
+        isExpired = now > expDate && progress < 100;
+        expiredText = expDate.toLocaleDateString();
+      }
+
+      const finalStatus = isExpired ? 'Expired' : statusText;
+      const finalColor = isExpired ? 'danger' : progressColor;
+
+      trainingsHtml += `
+        <div class="card mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="flex-grow-1">
+                <h6 class="card-title mb-1">${trainingTitle}</h6>
+                <small class="text-muted">Expires: ${expiredText}</small>
+              </div>
+              <div class="text-end">
+                <div class="progress mb-1" style="width: 100px; height: 8px;">
+                  <div class="progress-bar bg-${finalColor}" style="width: ${progress}%"></div>
+                </div>
+                <small class="text-${finalColor}">${progress}%</small>
+              </div>
+            </div>
+            <div class="mt-2 d-flex justify-content-between align-items-center">
+              <span class="badge bg-${finalColor} bg-opacity-10 text-${finalColor}">${finalStatus}</span>
+              ${record.source ? `<small class="text-muted">${record.source}</small>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    Swal.fire({
+      title: `<i class="bi bi-person-circle me-2"></i>${employeeName}`,
+      html: `
+        <div class="text-start">
+          <h6 class="mb-3 text-primary">Training Records (${records.length})</h6>
+          <div style="max-height: 400px; overflow-y: auto;">
+            ${trainingsHtml}
+          </div>
+        </div>
+      `,
+      width: 700,
+      showConfirmButton: true,
+      confirmButtonText: '<i class="bi bi-check"></i> Close',
+      confirmButtonColor: '#0d6efd',
+      customClass: {
+        htmlContainer: 'text-start'
+      }
     });
   }
   </script>

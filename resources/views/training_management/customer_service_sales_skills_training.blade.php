@@ -343,15 +343,21 @@
                   <td>
                     <div class="d-flex align-items-center">
                       <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                        @php
+                          // Calculate progress as current level percentage (20%, 40%, 60%, 80%, 100%)
+                          $currentLevelPercentage = ($displayCurrentLevel / 5) * 100;
+                          // Calculate progress bar width relative to required level
+                          $progressBarWidth = min(($displayCurrentLevel / $displayRequiredLevel) * 100, 100);
+                        @endphp
                         <div class="progress-bar progress-bar-striped"
                              role="progressbar"
-                             style="width: {{ min(($displayCurrentLevel / $displayRequiredLevel) * 100, 100) }}%; background: linear-gradient(45deg, #007bff, #0056b3);"
-                             aria-valuenow="{{ ($displayCurrentLevel / $displayRequiredLevel) * 100 }}"
+                             style="width: {{ $progressBarWidth }}%; background: linear-gradient(45deg, #007bff, #0056b3);"
+                             aria-valuenow="{{ $currentLevelPercentage }}"
                              aria-valuemin="0"
                              aria-valuemax="100">
                         </div>
                       </div>
-                      <small class="text-muted">{{ round(($displayCurrentLevel / $displayRequiredLevel) * 100) }}%</small>
+                      <small class="text-muted">{{ round($currentLevelPercentage) }}%</small>
                     </div>
                   </td>
                 </tr>
@@ -563,10 +569,16 @@
       </div>
       <div class="card-body">
         <div class="row g-4" id="records-container">
-        @forelse($records as $record)
+        @php
+          // Group records by employee
+          $groupedRecords = $records->groupBy('employee_id');
+        @endphp
+        
+        @forelse($groupedRecords as $employeeId => $employeeRecords)
           @php
-            // Add null check for employee relationship
-            $employee = $record->employee ?? null;
+            // Get employee info from first record
+            $firstRecord = $employeeRecords->first();
+            $employee = $firstRecord->employee ?? null;
             $firstName = $employee->first_name ?? 'Unknown';
             $lastName = $employee->last_name ?? 'Employee';
             $fullName = $firstName . ' ' . $lastName;
@@ -580,7 +592,6 @@
 
             // Generate consistent color based on employee name for fallback
             $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-            $employeeId = $employee->employee_id ?? 'default';
             $colorIndex = abs(crc32($employeeId)) % count($colors);
             $bgColor = $colors[$colorIndex];
 
@@ -590,169 +601,157 @@
                                "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
             }
 
-            // Use the EXACT same calculation as main Employee Training Dashboard
-            // $employee is already defined above with null check
-            $employeeId = $employee->employee_id ?? null;
-
+            // Calculate readiness score
             if ($employeeId) {
-              // Call the same controller method that succession planning uses (EXACT same as main dashboard)
               $controller = new \App\Http\Controllers\SuccessionReadinessRatingController();
               $readiness = round($controller->calculateEmployeeReadinessScore($employeeId));
             } else {
               $readiness = 0;
             }
 
-            // Enhanced progress calculation with multiple fallback strategies
-            $courseId = $record->course_id ?? $record->training_id;
-            $combinedProgress = 0;
+            // Calculate overall progress for this employee
+            $totalProgress = 0;
+            $completedTrainings = 0;
+            $inProgressTrainings = 0;
+            
+            foreach ($employeeRecords as $record) {
+                // Enhanced progress calculation with multiple fallback strategies
+                $courseId = $record->course_id ?? $record->training_id;
+                $combinedProgress = 0;
 
-            // Strategy 1: Try with the course_id we have
-            if ($courseId) {
-                $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseId);
-            }
-
-            // Strategy 2: If no progress found, try to find by course title
-            if ($combinedProgress == 0 && isset($record->training) && isset($record->training->course_title)) {
-                $courseTitle = $record->training->course_title;
-                // Find course by title
-                $courseByTitle = \App\Models\CourseManagement::where('course_title', $courseTitle)->first();
-                if ($courseByTitle) {
-                    $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseByTitle->course_id);
+                // Strategy 1: Try with the course_id we have
+                if ($courseId) {
+                    $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseId);
                 }
-            }
 
-            // Strategy 3: If still no progress, try Communication Skills specifically
-            if ($combinedProgress == 0 && (stripos($record->training->course_title ?? '', 'Communication') !== false)) {
-                $commSkillsCourse = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Communication Skills%')->first();
-                if ($commSkillsCourse) {
-                    $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $commSkillsCourse->course_id);
-                }
-            }
-
-            // Strategy 4: Check EmployeeCompetencyProfile table when no exam/training progress found
-            if ($combinedProgress == 0) {
-                $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
-                if ($trainingTitle) {
-                    $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
-                        $q->where('competency_name', $trainingTitle)
-                          ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
-                    })->where('employee_id', $record->employee_id)->first();
-
-                    if ($competencyProfile && $competencyProfile->proficiency_level) {
-                        // Convert competency proficiency levels (1-5 scale) to percentages (0-100%)
-                        $combinedProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+                // Strategy 2: If no progress found, try to find by course title
+                if ($combinedProgress == 0 && isset($record->training) && isset($record->training->course_title)) {
+                    $courseTitle = $record->training->course_title;
+                    $courseByTitle = \App\Models\CourseManagement::where('course_title', $courseTitle)->first();
+                    if ($courseByTitle) {
+                        $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseByTitle->course_id);
                     }
                 }
-            }
 
-            $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+                // Strategy 3: Check EmployeeCompetencyProfile table when no exam/training progress found
+                if ($combinedProgress == 0) {
+                    $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
+                    if ($trainingTitle) {
+                        $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
+                            $q->where('competency_name', $trainingTitle)
+                              ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+                        })->where('employee_id', $record->employee_id)->first();
 
-            // Dynamic header color based on progress
-            $headerClass = 'bg-primary';
-            if ($displayProgress >= 100) {
-                $headerClass = 'bg-success';
-            } elseif ($displayProgress >= 75) {
-                $headerClass = 'bg-info';
-            } elseif ($displayProgress >= 50) {
-                $headerClass = 'bg-warning';
-            } elseif ($displayProgress < 25) {
-                $headerClass = 'bg-danger';
+                        if ($competencyProfile && $competencyProfile->proficiency_level) {
+                            $combinedProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+                        }
+                    }
+                }
+
+                // Get the required level and cap progress
+                $requiredLevel = null;
+                $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
+                if ($trainingTitle) {
+                    $competencyGap = \App\Models\CompetencyGap::where('employee_id', $record->employee_id)
+                        ->whereHas('competency', function($q) use ($trainingTitle) {
+                            $q->where('competency_name', $trainingTitle)
+                              ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+                        })->first();
+                    
+                    if ($competencyGap) {
+                        $requiredLevel = $competencyGap->required_level;
+                    }
+                }
+
+                $rawProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+                
+                if ($requiredLevel && $requiredLevel > 0) {
+                    $maxAllowedProgress = min(($requiredLevel / 5) * 100, 100);
+                    $displayProgress = min($rawProgress, $maxAllowedProgress);
+                } else {
+                    $displayProgress = $rawProgress;
+                }
+
+                // Store the calculated progress in the record for JavaScript access
+                $record->calculated_progress = $displayProgress;
+                
+                $totalProgress += $displayProgress;
+                if ($displayProgress >= 100) {
+                    $completedTrainings++;
+                } elseif ($displayProgress > 0) {
+                    $inProgressTrainings++;
+                }
             }
+            
+            $averageProgress = $employeeRecords->count() > 0 ? round($totalProgress / $employeeRecords->count()) : 0;
           @endphp
 
           <div class="col-lg-6 col-xl-4 mb-4">
             <div class="card h-100 shadow-sm border-0 training-record-card" style="transition: all 0.3s ease;">
-              <!-- Dynamic Header with Employee Info -->
-              <div class="card-header {{ $headerClass }} text-white" style="border-radius: 12px 12px 0 0 !important;">
+              <!-- Employee Header -->
+              <div class="card-header bg-light text-dark" style="border-radius: 12px 12px 0 0 !important;">
                 <div class="d-flex align-items-center">
                   <img src="{{ $profilePicUrl }}"
                        alt="{{ $firstName }} {{ $lastName }}"
                        class="rounded-circle me-3"
-                       style="width: 50px; height: 50px; object-fit: cover; border: 3px solid rgba(255,255,255,0.3);">
+                       style="width: 50px; height: 50px; object-fit: cover; border: 3px solid rgba(0,0,0,0.1);">
                   <div class="flex-grow-1">
-                    <h5 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h5>
-                    <small class="opacity-75">ID: {{ $employee->employee_id ?? 'N/A' }} • Record #{{ $loop->iteration }}</small>
+                    <h5 class="mb-1 fw-bold text-dark">{{ $firstName }} {{ $lastName }}</h5>
+                    <small class="text-muted">ID: {{ $employee->employee_id ?? 'N/A' }} • {{ $employeeRecords->count() }} Training(s)</small>
                   </div>
                   <div class="text-end">
-                    <div class="fs-6 fw-bold">{{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}</div>
-                    <small class="opacity-75">Readiness</small>
+                    <div class="fs-6 fw-bold text-primary">{{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}</div>
+                    <small class="text-muted">Readiness</small>
                   </div>
                 </div>
               </div>
 
-              <!-- Card Body with Training Details -->
+              <!-- Card Body with Training Summary -->
               <div class="card-body p-4">
-                <!-- Training Information -->
+                <!-- Training Summary -->
                 <div class="mb-3">
                   <div class="d-flex align-items-center mb-2">
-                    <i class="bi bi-book text-primary fs-5 me-2"></i>
-                    <h6 class="mb-0 fw-bold text-primary">Training Course</h6>
+                    <i class="bi bi-collection text-primary fs-5 me-2"></i>
+                    <h6 class="mb-0 fw-bold text-primary">Training Summary</h6>
                   </div>
-                  <p class="mb-0 ms-4">
-                    @if(isset($record->training))
-                      @if(isset($record->training->course))
-                        {{ $record->training->course->course_title }}
-                      @elseif(isset($record->training->title))
-                        {{ $record->training->title }}
-                      @else
-                        <span class="text-muted">No training assigned</span>
-                      @endif
-                    @else
-                      <span class="text-muted">No training assigned</span>
-                    @endif
-                  </p>
+                  <div class="row text-center">
+                    <div class="col-4">
+                      <div class="text-success fw-bold fs-5">{{ $completedTrainings }}</div>
+                      <small class="text-muted">Completed</small>
+                    </div>
+                    <div class="col-4">
+                      <div class="text-primary fw-bold fs-5">{{ $inProgressTrainings }}</div>
+                      <small class="text-muted">In Progress</small>
+                    </div>
+                    <div class="col-4">
+                      <div class="text-secondary fw-bold fs-5">{{ $employeeRecords->count() - $completedTrainings - $inProgressTrainings }}</div>
+                      <small class="text-muted">Not Started</small>
+                    </div>
+                  </div>
                 </div>
 
-                <!-- Completion Date -->
-                <div class="mb-3">
-                  <div class="d-flex align-items-center mb-2">
-                    <i class="bi bi-calendar-check text-success fs-5 me-2"></i>
-                    <h6 class="mb-0 fw-bold text-success">Date Completed</h6>
-                  </div>
-                  <p class="mb-0 ms-4">
-                    @if(!empty($record->date_completed) && $record->date_completed != '1970-01-01')
-                      {{ \Carbon\Carbon::parse($record->date_completed)->format('d/m/Y') }}
-                    @else
-                      <span class="text-muted">Not completed</span>
-                    @endif
-                  </p>
-                </div>
-
-                <!-- Progress Section -->
+                <!-- Overall Progress -->
                 <div class="mb-4">
                   <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="fw-semibold">Training Progress</span>
-                    <span class="fw-bold text-primary">{{ $displayProgress }}%</span>
+                    <span class="fw-semibold">Average Progress</span>
+                    <span class="fw-bold text-primary">{{ $averageProgress }}%</span>
                   </div>
                   <div class="progress mb-2" style="height: 12px; border-radius: 10px;">
                     <div class="progress-bar progress-bar-striped progress-bar-animated"
                          role="progressbar"
-                         style="width: {{ $displayProgress }}%; background: linear-gradient(45deg, {{ $displayProgress >= 100 ? '#28a745, #20c997' : ($displayProgress >= 75 ? '#17a2b8, #20c997' : ($displayProgress >= 50 ? '#ffc107, #fd7e14' : '#dc3545, #e74c3c')) }});"
-                         aria-valuenow="{{ $displayProgress }}"
+                         style="width: {{ $averageProgress }}%; background: linear-gradient(45deg, {{ $averageProgress >= 100 ? '#28a745, #20c997' : ($averageProgress >= 75 ? '#17a2b8, #20c997' : ($averageProgress >= 50 ? '#ffc107, #fd7e14' : '#dc3545, #e74c3c')) }});"
+                         aria-valuenow="{{ $averageProgress }}"
                          aria-valuemin="0"
                          aria-valuemax="100">
                     </div>
                   </div>
-
-                  @if($combinedProgress > 0)
-                    @php
-                      $breakdown = \App\Models\ExamAttempt::getScoreBreakdown($record->employee_id, $courseId);
-                    @endphp
-                    <small class="text-muted"
-                           data-bs-toggle="tooltip"
-                           data-bs-placement="top"
-                           title="Exam Score: {{ $breakdown['exam_score'] }}% = {{ $breakdown['combined_progress'] }}% total progress">
-                      @if($breakdown['exam_score'] > 0)
-                        <i class="bi bi-mortarboard me-1"></i>Exam: {{ $breakdown['exam_score'] }}%
-                      @endif
-                      <i class="bi bi-info-circle ms-1" style="cursor: help;"></i>
-                    </small>
-                  @endif
-
+                  
                   <div class="mt-2">
-                    @if($displayProgress >= 100)
-                      <span class="badge bg-success bg-opacity-10 text-success fs-6 px-3 py-2">Completed</span>
-                    @elseif($displayProgress > 0)
+                    @if($averageProgress >= 100)
+                      <span class="badge bg-success bg-opacity-10 text-success fs-6 px-3 py-2">All Completed</span>
+                    @elseif($averageProgress >= 75)
+                      <span class="badge bg-info bg-opacity-10 text-info fs-6 px-3 py-2">Nearly Complete</span>
+                    @elseif($averageProgress > 0)
                       <span class="badge bg-primary bg-opacity-10 text-primary fs-6 px-3 py-2">In Progress</span>
                     @else
                       <span class="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-3 py-2">Not Started</span>
@@ -762,17 +761,9 @@
 
                 <!-- Action Buttons -->
                 <div class="d-grid gap-2">
-                  <div class="btn-group" role="group">
-                    <button class="btn btn-outline-info btn-sm" title="View Details" onclick="viewRecordDetails({{ $record->id }})">
-                      <i class="bi bi-eye me-1"></i> View
-                    </button>
-                    <button class="btn btn-outline-warning btn-sm" title="Edit Record" onclick="editRecordWithConfirmation({{ $record->id }})">
-                      <i class="bi bi-pencil me-1"></i> Edit
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" title="Delete Record" onclick="deleteRecordWithConfirmation({{ $record->id }})">
-                      <i class="bi bi-trash me-1"></i> Delete
-                    </button>
-                  </div>
+                  <button class="btn btn-outline-primary btn-sm" title="View All Trainings" onclick="viewEmployeeTrainings('{{ $employeeId }}')">
+                    <i class="bi bi-eye me-1"></i> View All Trainings ({{ $employeeRecords->count() }})
+                  </button>
                 </div>
               </div>
             </div>
@@ -918,7 +909,31 @@
                   }
               }
 
-              $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+              // Get the required level for this employee-training combination from competency gaps
+              $requiredLevel = null;
+              $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
+              if ($trainingTitle) {
+                  $competencyGap = \App\Models\CompetencyGap::where('employee_id', $record->employee_id)
+                      ->whereHas('competency', function($q) use ($trainingTitle) {
+                          $q->where('competency_name', $trainingTitle)
+                            ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+                      })->first();
+                  
+                  if ($competencyGap) {
+                      $requiredLevel = $competencyGap->required_level;
+                  }
+              }
+
+              $rawProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+              
+              // Cap progress at required level if available
+              if ($requiredLevel && $requiredLevel > 0) {
+                  // Convert required level (1-5 scale) to percentage (20%, 40%, 60%, 80%, 100%)
+                  $maxAllowedProgress = min(($requiredLevel / 5) * 100, 100);
+                  $displayProgress = min($rawProgress, $maxAllowedProgress);
+              } else {
+                  $displayProgress = $rawProgress;
+              }
             @endphp
             <div class="d-flex align-items-center">
               <progress class="flex-grow-1 me-2" value="{{ $displayProgress }}" max="100" style="height: 8px; width: 100%;"></progress>
@@ -1054,7 +1069,31 @@
           }
       }
 
-      $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+      // Get the required level for this employee-training combination from competency gaps
+      $requiredLevel = null;
+      $trainingTitle = $record->training->course_title ?? ($record->course->course_title ?? '');
+      if ($trainingTitle) {
+          $competencyGap = \App\Models\CompetencyGap::where('employee_id', $record->employee_id)
+              ->whereHas('competency', function($q) use ($trainingTitle) {
+                  $q->where('competency_name', $trainingTitle)
+                    ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
+              })->first();
+          
+          if ($competencyGap) {
+              $requiredLevel = $competencyGap->required_level;
+          }
+      }
+
+      $rawProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+      
+      // Cap progress at required level if available
+      if ($requiredLevel && $requiredLevel > 0) {
+          // Convert required level (1-5 scale) to percentage (20%, 40%, 60%, 80%, 100%)
+          $maxAllowedProgress = min(($requiredLevel / 5) * 100, 100);
+          $displayProgress = min($rawProgress, $maxAllowedProgress);
+      } else {
+          $displayProgress = $rawProgress;
+      }
 
       // Get exam score breakdown if available
       $examScore = 0;
@@ -2027,6 +2066,97 @@
         skillsFilter.addEventListener('change', filterSkills);
       }
     });
+
+    // View Employee Trainings Function
+    function viewEmployeeTrainings(employeeId) {
+      // Get employee records from the PHP data
+      const employeeRecords = @json($records->groupBy('employee_id'));
+      const records = employeeRecords[employeeId] || [];
+      
+      if (records.length === 0) {
+        Swal.fire({
+          icon: 'info',
+          title: 'No Trainings Found',
+          text: 'No training records found for this employee.',
+          confirmButtonColor: '#0d6efd'
+        });
+        return;
+      }
+
+      // Get employee info
+      const firstRecord = records[0];
+      const employee = firstRecord.employee;
+      const employeeName = employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown Employee';
+
+      // Build training list HTML
+      let trainingsHtml = '';
+      records.forEach((record, index) => {
+        const trainingTitle = record.training?.course_title || record.training?.title || 'Unknown Training';
+        const dateCompleted = record.date_completed && record.date_completed !== '1970-01-01' 
+          ? new Date(record.date_completed).toLocaleDateString() 
+          : 'Not completed';
+        
+        // Use the calculated progress from the record (includes exam scores and competency profiles)
+        let progress = 0;
+        
+        // Try to get the calculated progress from different sources
+        if (record.calculated_progress !== undefined) {
+          progress = record.calculated_progress;
+          console.log(`Using calculated_progress for ${trainingTitle}: ${progress}%`);
+        } else if (record.display_progress !== undefined) {
+          progress = record.display_progress;
+          console.log(`Using display_progress for ${trainingTitle}: ${progress}%`);
+        } else {
+          progress = record.progress || 0;
+          console.log(`Using fallback progress for ${trainingTitle}: ${progress}%`);
+        }
+        
+        progress = Math.max(0, Math.min(100, parseInt(progress) || 0));
+        const progressColor = progress >= 100 ? 'success' : progress > 0 ? 'primary' : 'secondary';
+        const statusText = progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started';
+
+        trainingsHtml += `
+          <div class="card mb-3">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                  <h6 class="card-title mb-1">${trainingTitle}</h6>
+                  <small class="text-muted">Date Completed: ${dateCompleted}</small>
+                </div>
+                <div class="text-end">
+                  <div class="progress mb-1" style="width: 100px; height: 8px;">
+                    <div class="progress-bar bg-${progressColor}" style="width: ${progress}%"></div>
+                  </div>
+                  <small class="text-${progressColor}">${progress}%</small>
+                </div>
+              </div>
+              <div class="mt-2">
+                <span class="badge bg-${progressColor} bg-opacity-10 text-${progressColor}">${statusText}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      Swal.fire({
+        title: `<i class="bi bi-person-circle me-2"></i>${employeeName}`,
+        html: `
+          <div class="text-start">
+            <h6 class="mb-3 text-primary">Training Records (${records.length})</h6>
+            <div style="max-height: 400px; overflow-y: auto;">
+              ${trainingsHtml}
+            </div>
+          </div>
+        `,
+        width: 700,
+        showConfirmButton: true,
+        confirmButtonText: '<i class="bi bi-check"></i> Close',
+        confirmButtonColor: '#0d6efd',
+        customClass: {
+          htmlContainer: 'text-start'
+        }
+      });
+    }
   </script>
 </body>
 </html>

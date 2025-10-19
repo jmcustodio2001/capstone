@@ -19,14 +19,7 @@
     
     /* Professional list styling */
     .competency-row {
-      transition: all 0.3s ease !important;
       border-left: 3px solid transparent;
-    }
-    
-    .competency-row:hover {
-      background-color: #f8f9fa !important;
-      border-left-color: #007bff;
-      box-shadow: 0 2px 8px rgba(0,123,255,0.1);
     }
     
     /* Custom category colors */
@@ -204,10 +197,6 @@
       position: relative !important;
     }
 
-    .btn-close:hover {
-      background: rgba(44,82,130,0.3) !important;
-      transform: scale(1.1) !important;
-    }
 
     .btn-close:focus {
       box-shadow: 0 0 0 3px rgba(44,82,130,0.3) !important;
@@ -291,9 +280,6 @@
       transition: left 0.5s;
     }
 
-    .btn-modern:hover::before {
-      left: 100%;
-    }
 
     .btn-primary.btn-modern {
       background: linear-gradient(135deg, #a8d0f0 0%, #d6e8f5 100%);
@@ -305,10 +291,6 @@
       color: #4a5568;
     }
 
-    .btn-modern:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
-    }
   </style>
 </head>
 <body style="background-color: #f8f9fa !important;">

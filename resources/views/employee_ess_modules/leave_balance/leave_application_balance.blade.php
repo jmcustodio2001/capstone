@@ -9,8 +9,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/employee_dashboard-style.css') }}">
-  <!-- SweetAlert2 -->
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.32/dist/sweetalert2.min.css">
   <style>
     :root {
       --primary-color: #4361ee;
@@ -47,11 +46,9 @@
     }
 
     .badge-simulation {
-  color: #fff !important;
-
-  border: 2px solid #3f37c9;
-  box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(67, 97, 238, 0.10);
-
+      color: #fff !important;
+      border: 2px solid #3f37c9;
+      box-shadow: 0 0 0 2px #fff, 0 2px 8px rgba(67, 97, 238, 0.10);
       padding: 0.5em 0.8em;
       font-weight: 500;
       letter-spacing: 0.5px;
@@ -59,14 +56,10 @@
     }
 
     .table th {
-  border-bottom: 3px solid #3f37c9 !important;
-  background-color: #f8f9fa;
-  font-weight: 700;
-  color: #3f37c9;
-
+      border-bottom: 3px solid #3f37c9 !important;
       background-color: #f8f9fa;
-      font-weight: 600;
-      color: #495057;
+      font-weight: 700;
+      color: #3f37c9;
     }
 
     .leave-balance-container {
@@ -344,37 +337,6 @@
       }
     }
 
-    /* Custom SweetAlert2 Styles */
-    .swal2-popup-custom {
-      border-radius: 12px;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
-
-    .swal2-popup-custom .swal2-title {
-      color: #4361ee;
-      font-weight: 600;
-    }
-
-    .swal2-popup-custom .swal2-input {
-      border-radius: 8px;
-      border: 1px solid #ced4da;
-      padding: 0.75rem 1rem;
-      width: 100% !important;
-      max-width: 300px;
-      font-size: 16px;
-      background-color: #fff;
-    }
-
-    .swal2-popup-custom .swal2-input:focus {
-      box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
-      border-color: #4361ee;
-      outline: none;
-    }
-
-    .swal2-popup-custom .swal2-input::placeholder {
-      color: #6c757d;
-      opacity: 1;
-    }
   </style>
 </head>
 <body>
@@ -411,6 +373,10 @@
 }
 </style>
 <script>
+// Global date variables
+const today = new Date();
+const formattedToday = today.toISOString().split('T')[0];
+
 // Sidebar toggle logic to expand/collapse main content
 document.addEventListener('DOMContentLoaded', function() {
   const sidebar = document.querySelector('.sidebar, #sidebar');
@@ -701,14 +667,14 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="col-md-6 mb-3">
               <label for="leave_days" class="form-label">Number of Days</label>
-              <input type="number" class="form-control" id="leave_days" name="leave_days" required min="1" onchange="calculateEndDate()">
+              <input type="number" class="form-control" id="leave_days" name="leave_days" required min="1" onchange="calculateEndDate();" oninput="calculateEndDate();">
             </div>
           </div>
 
           <div class="row">
             <div class="col-md-6 mb-3">
               <label for="start_date" class="form-label">Start Date</label>
-              <input type="date" class="form-control" id="start_date" name="start_date" required onchange="calculateEndDate()">
+              <input type="date" class="form-control" id="start_date" name="start_date" required onchange="calculateEndDate();">
             </div>
             <div class="col-md-6 mb-3">
               <label for="end_date" class="form-label">End Date</label>
@@ -864,6 +830,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.32/dist/sweetalert2.all.min.js"></script>
 <script>
   // Leave balance data from backend
   const leaveBalances = {!! json_encode($leave_balances ?? []) !!} || {
@@ -899,27 +866,71 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Calculate end date based on start date and number of days
   function calculateEndDate() {
+    console.log('calculateEndDate called');
     const startDateElement = document.getElementById('start_date');
     const leaveDaysElement = document.getElementById('leave_days');
     const endDateElement = document.getElementById('end_date');
-    
+
+    console.log('Elements found:', {
+      startDateElement: !!startDateElement,
+      leaveDaysElement: !!leaveDaysElement,
+      endDateElement: !!endDateElement
+    });
+
     if (!startDateElement || !leaveDaysElement || !endDateElement) {
+      console.log('Missing required elements, exiting');
       return; // Exit if any required elements are missing
     }
-    
+
     const startDate = startDateElement.value;
     const days = parseInt(leaveDaysElement.value) || 0;
 
+    console.log('Raw values:', {
+      startDate,
+      days,
+      startDateType: typeof startDate,
+      daysType: typeof days
+    });
+
     if (startDate && days > 0) {
-      const start = new Date(startDate);
-      const end = new Date(start);
+      try {
+        const start = new Date(startDate);
+        console.log('Start date parsed:', start);
 
-      // Subtract 1 day because the start day counts as 1
-      end.setDate(start.getDate() + days - 1);
+        // Check if date is valid
+        if (isNaN(start.getTime())) {
+          console.log('Invalid start date');
+          return;
+        }
 
-      // Format date as YYYY-MM-DD
-      const endFormatted = end.toISOString().split('T')[0];
-      endDateElement.value = endFormatted;
+        const end = new Date(start);
+        // Add days - 1 because start day counts as day 1
+        end.setDate(start.getDate() + days - 1);
+
+        console.log('End date calculated (Date object):', end);
+
+        // Format date as YYYY-MM-DD for input[type="date"]
+        const endFormatted = end.toISOString().split('T')[0];
+        endDateElement.value = endFormatted;
+
+        console.log('End date set to input:', endFormatted);
+
+        // Trigger change event to notify other listeners
+        endDateElement.dispatchEvent(new Event('change'));
+
+      } catch (error) {
+        console.error('Error calculating end date:', error);
+      }
+    } else {
+      console.log('Invalid conditions:', {
+        hasStartDate: !!startDate,
+        daysGreaterThanZero: days > 0,
+        startDate,
+        days
+      });
+
+      // Clear end date if conditions not met
+      endDateElement.value = '';
     }
   }
 
@@ -996,7 +1007,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('current-month').textContent = `${monthNames[month]} ${year}`;
   }
 
-  // Initialize calendar with current month
+  // Initialize calendar with current month for the whole script
   const currentDate = new Date();
   let currentYear = currentDate.getFullYear();
   let currentMonth = currentDate.getMonth();
@@ -1071,8 +1082,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // AJAX Form submission for new leave application with SweetAlert and Password Verification
   const leaveFormElement = document.getElementById('leaveForm');
   if (leaveFormElement) {
+    console.log('Leave form found, adding event listener');
     leaveFormElement.addEventListener('submit', function(e) {
     e.preventDefault();
+    console.log('Leave form submitted, processing...');
 
     const form = this;
     const formData = new FormData(form);
@@ -1084,107 +1097,31 @@ document.addEventListener('DOMContentLoaded', function() {
     const endDate = form.querySelector('#end_date').value;
     const reason = form.querySelector('#reason').value;
 
-    // Step 1: Show SweetAlert confirmation
-    Swal.fire({
-      title: 'Confirm Leave Application',
-      html: `
-        <div class="text-start">
-          <p><strong>Leave Type:</strong> ${leaveType}</p>
-          <p><strong>Number of Days:</strong> ${leaveDays}</p>
-          <p><strong>Start Date:</strong> ${startDate}</p>
-          <p><strong>End Date:</strong> ${endDate}</p>
-          <p><strong>Reason:</strong> ${reason}</p>
-        </div>
-        <hr>
-        <p class="text-warning"><i class="bi bi-exclamation-triangle"></i> Are you sure you want to submit this leave request?</p>
-      `,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#4361ee',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Yes, Continue',
-      cancelButtonText: 'Cancel',
-      customClass: {
-        popup: 'swal2-popup-custom'
-      }
-    }).then((result) => {
-      if (result.isConfirmed) {
-        // Step 2: Close the modal first to prevent conflicts
+    // Simple confirmation dialog
+    const confirmMessage = `Please confirm your leave application:\n\nLeave Type: ${leaveType}\nNumber of Days: ${leaveDays}\nStart Date: ${startDate}\nEnd Date: ${endDate}\nReason: ${reason}\n\nDo you want to submit this leave request?`;
+
+    if (confirm(confirmMessage)) {
+      // Get password for verification
+      const password = prompt('Please enter your password to verify this request:');
+      if (password && password.length >= 6) {
+        // Close the modal first
         const modal = bootstrap.Modal.getInstance(document.getElementById('applyLeaveModal'));
         if (modal) {
           modal.hide();
         }
 
-        // Wait for modal to close then show password verification
-        setTimeout(() => {
-          Swal.fire({
-            title: 'Verify Your Password',
-            html: `
-              <div class="text-start mb-3">
-                <p class="text-muted">Please enter your password to confirm this leave application:</p>
-                <p class="text-warning small"><i class="bi bi-shield-lock"></i> This is required for security purposes to verify your identity.</p>
-              </div>
-              <input type="password" id="swal-password" class="swal2-input" placeholder="Enter your password" autocomplete="current-password" style="margin: 0 auto; display: block;">
-            `,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#4361ee',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Verify & Submit',
-            cancelButtonText: 'Cancel',
-            focusConfirm: false,
-            allowOutsideClick: false,
-            didOpen: () => {
-              // Focus on the password input when modal opens
-              const passwordInput = document.getElementById('swal-password');
-              if (passwordInput) {
-                setTimeout(() => {
-                  passwordInput.focus();
-                }, 100);
-              }
-            },
-            preConfirm: () => {
-              const password = document.getElementById('swal-password').value;
-              if (!password) {
-                Swal.showValidationMessage('Please enter your password');
-                return false;
-              }
-              if (password.length < 6) {
-                Swal.showValidationMessage('Password must be at least 6 characters long');
-                return false;
-              }
-              return password;
-            },
-            customClass: {
-              popup: 'swal2-popup-custom'
-            }
-          }).then((passwordResult) => {
-            if (passwordResult.isConfirmed) {
-              // Step 3: Verify password first, then submit the form
-              const password = passwordResult.value;
-              verifyEmployeePassword(password, form, formData);
-            }
-          });
-        }, 300);
+        // Verify password and submit
+        verifyEmployeePassword(password, form, formData);
+      } else if (password !== null) {
+        alert('Password must be at least 6 characters long.');
       }
-    });
+    }
   });
   }
 
   // Function to verify employee password before form submission
   function verifyEmployeePassword(password, form, formData) {
-    // Show loading state
-    Swal.fire({
-      title: 'Verifying Password',
-      text: 'Please wait while we verify your password...',
-      icon: 'info',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+    console.log('Verifying password...', {password: password ? 'PROVIDED' : 'MISSING', formData: formData});
 
     // Call the password verification endpoint
     fetch('{{ route("employee.verify_password") }}', {
@@ -1205,63 +1142,36 @@ document.addEventListener('DOMContentLoaded', function() {
       return response.json();
     })
     .then(data => {
-      Swal.close(); // Close loading alert
-
       if (data.success) {
         // Password verified successfully, now submit the form
         formData.append('password_verification', password);
         submitLeaveApplication(form, formData);
       } else {
         // Password verification failed
-        Swal.fire({
-          title: 'Password Verification Failed',
-          text: data.message || 'The password you entered is incorrect. Please try again.',
-          icon: 'error',
-          confirmButtonColor: '#dc3545',
-          confirmButtonText: 'Try Again'
-        }).then(() => {
-          // Show password dialog again
-          setTimeout(() => {
-            document.getElementById('leaveForm').dispatchEvent(new Event('submit'));
-          }, 300);
-        });
+        alert(data.message || 'The password you entered is incorrect. Please try again.');
       }
     })
     .catch(error => {
       console.error('Password verification error:', error);
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
-      Swal.fire({
-        title: 'Verification Error',
-        text: 'An error occurred while verifying your password. Please try again.',
-        icon: 'error',
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'OK'
-      });
+      alert('An error occurred while verifying your password. Please try again.');
     });
   }
 
   // Function to handle the actual form submission
   function submitLeaveApplication(form, formData) {
+    console.log('submitLeaveApplication called', {form: form, formData: formData});
     const submitBtn = form.querySelector('button[type="submit"]');
-    const originalText = submitBtn.textContent;
+    const originalText = submitBtn ? submitBtn.textContent : 'Submit';
 
     // Show loading state
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
+    }
 
-    // Show loading SweetAlert
-    Swal.fire({
-      title: 'Submitting Leave Request',
-      text: 'Please wait while we process your application...',
-      icon: 'info',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+    console.log('Submitting leave request to:', '{{ route("employee.leave_applications.store") }}');
 
     fetch('{{ route("employee.leave_applications.store") }}', {
       method: 'POST',
@@ -1287,24 +1197,15 @@ document.addEventListener('DOMContentLoaded', function() {
     })
     .then(data => {
       console.log('Response data:', data);
-      Swal.close(); // Close loading alert
 
       if (data.success) {
-        // Show success SweetAlert
-        Swal.fire({
-          title: 'Success!',
-          text: data.message || 'Your leave application has been submitted successfully.',
-          icon: 'success',
-          confirmButtonColor: '#4361ee',
-          confirmButtonText: 'OK'
-        }).then(() => {
-          // Close modal and reset form
-          bootstrap.Modal.getInstance(document.getElementById('applyLeaveModal')).hide();
-          form.reset();
-
-          // Reload page to show updated data
-          window.location.reload();
-        });
+        // Show success message
+        alert(data.message || 'Your leave application has been submitted successfully.');
+        // Close modal and reset form
+        bootstrap.Modal.getInstance(document.getElementById('applyLeaveModal')).hide();
+        form.reset();
+        // Reload page to show updated data
+        window.location.reload();
       } else {
         // Handle validation errors
         let errorMessage = 'Failed to submit leave application';
@@ -1313,27 +1214,12 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (data.error || data.message) {
           errorMessage = data.error || data.message;
         }
-
-        Swal.fire({
-          title: 'Error!',
-          text: errorMessage,
-          icon: 'error',
-          confirmButtonColor: '#dc3545',
-          confirmButtonText: 'OK'
-        });
+        alert(errorMessage);
       }
     })
     .catch(error => {
       console.error('Full error details:', error);
-      Swal.close(); // Close loading alert
-
-      Swal.fire({
-        title: 'Error!',
-        text: 'An error occurred while submitting your application: ' + error.message,
-        icon: 'error',
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'OK'
-      });
+      alert('An error occurred while submitting your application: ' + error.message);
     })
     .finally(() => {
       // Reset button state
@@ -1344,18 +1230,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Function to verify employee password before edit form submission
   function verifyEmployeePasswordForEdit(password, form, formData) {
-    // Show loading state
-    Swal.fire({
-      title: 'Verifying Password',
-      text: 'Please wait while we verify your password...',
-      icon: 'info',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+    console.log('Verifying password for edit...');
 
     // Call the password verification endpoint
     fetch('{{ route("employee.verify_password") }}', {
@@ -1376,7 +1251,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return response.json();
     })
     .then(data => {
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
       if (data.success) {
         // Password verified successfully, now submit the edit form
@@ -1384,31 +1259,14 @@ document.addEventListener('DOMContentLoaded', function() {
         submitEditLeaveApplication(form, formData);
       } else {
         // Password verification failed
-        Swal.fire({
-          title: 'Password Verification Failed',
-          text: data.message || 'The password you entered is incorrect. Please try again.',
-          icon: 'error',
-          confirmButtonColor: '#dc3545',
-          confirmButtonText: 'Try Again'
-        }).then(() => {
-          // Show password dialog again
-          setTimeout(() => {
-            document.getElementById('editLeaveForm').dispatchEvent(new Event('submit'));
-          }, 300);
-        });
+        alert(data.message || 'The password you entered is incorrect. Please try again.');
       }
     })
     .catch(error => {
       console.error('Password verification error:', error);
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
-      Swal.fire({
-        title: 'Verification Error',
-        text: 'An error occurred while verifying your password. Please try again.',
-        icon: 'error',
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'OK'
-      });
+      alert('An error occurred while verifying your password. Please try again.');
     });
   }
 
@@ -1422,18 +1280,7 @@ document.addEventListener('DOMContentLoaded', function() {
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Updating...';
 
-    // Show loading SweetAlert
-    Swal.fire({
-      title: 'Updating Leave Request',
-      text: 'Please wait while we process your update...',
-      icon: 'info',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+    console.log('Updating leave request...');
 
     fetch(`{{ url('employee/leave-applications') }}/${leaveId}`, {
       method: 'POST',
@@ -1445,21 +1292,14 @@ document.addEventListener('DOMContentLoaded', function() {
     })
     .then(response => response.json())
     .then(data => {
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
       if (data.success) {
-        // Show success SweetAlert
-        Swal.fire({
-          title: 'Success!',
-          text: data.message || 'Your leave application has been updated successfully.',
-          icon: 'success',
-          confirmButtonColor: '#4361ee',
-          confirmButtonText: 'OK'
-        }).then(() => {
-          // Close modal and reload page
-          bootstrap.Modal.getInstance(document.getElementById('editLeaveModal')).hide();
-          window.location.reload();
-        });
+        // Show success message
+        alert(data.message || 'Your leave application has been updated successfully.');
+        // Close modal and reload page
+        bootstrap.Modal.getInstance(document.getElementById('editLeaveModal')).hide();
+        window.location.reload();
       } else {
         // Handle validation errors
         let errorMessage = 'Failed to update leave application';
@@ -1468,27 +1308,14 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (data.error || data.message) {
           errorMessage = data.error || data.message;
         }
-
-        Swal.fire({
-          title: 'Error!',
-          text: errorMessage,
-          icon: 'error',
-          confirmButtonColor: '#dc3545',
-          confirmButtonText: 'OK'
-        });
+        alert(errorMessage);
       }
     })
     .catch(error => {
       console.error('Error:', error);
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
-      Swal.fire({
-        title: 'Error!',
-        text: 'An error occurred while updating your application: ' + error.message,
-        icon: 'error',
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'OK'
-      });
+      alert('An error occurred while updating your application: ' + error.message);
     })
     .finally(() => {
       // Reset button state
@@ -1513,90 +1340,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const endDate = form.querySelector('#edit_end_date').value;
     const reason = form.querySelector('#edit_reason').value;
 
-    // Step 1: Show SweetAlert confirmation
-    Swal.fire({
-      title: 'Confirm Leave Update',
-      html: `
-        <div class="text-start">
-          <p><strong>Leave Type:</strong> ${leaveType}</p>
-          <p><strong>Number of Days:</strong> ${leaveDays}</p>
-          <p><strong>Start Date:</strong> ${startDate}</p>
-          <p><strong>End Date:</strong> ${endDate}</p>
-          <p><strong>Reason:</strong> ${reason}</p>
-        </div>
-        <hr>
-        <p class="text-warning"><i class="bi bi-exclamation-triangle"></i> Are you sure you want to update this leave request?</p>
-      `,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#4361ee',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: 'Yes, Continue',
-      cancelButtonText: 'Cancel',
-      customClass: {
-        popup: 'swal2-popup-custom'
-      }
-    }).then((result) => {
-      if (result.isConfirmed) {
-        // Step 2: Close the modal first to prevent conflicts
+    // Simple confirmation dialog
+    const confirmMessage = `Please confirm your leave update:\n\nLeave Type: ${leaveType}\nNumber of Days: ${leaveDays}\nStart Date: ${startDate}\nEnd Date: ${endDate}\nReason: ${reason}\n\nDo you want to update this leave request?`;
+
+    if (confirm(confirmMessage)) {
+      // Get password for verification
+      const password = prompt('Please enter your password to verify this update:');
+      if (password && password.length >= 6) {
+        // Close the modal first
         const modal = bootstrap.Modal.getInstance(document.getElementById('editLeaveModal'));
         if (modal) {
           modal.hide();
         }
 
-        // Wait for modal to close then show password verification
-        setTimeout(() => {
-          Swal.fire({
-            title: 'Verify Your Password',
-            html: `
-              <div class="text-start mb-3">
-                <p class="text-muted">Please enter your password to confirm this leave update:</p>
-                <p class="text-warning small"><i class="bi bi-shield-lock"></i> This is required for security purposes to verify your identity.</p>
-              </div>
-              <input type="password" id="swal-edit-password" class="swal2-input" placeholder="Enter your password" autocomplete="current-password" style="margin: 0 auto; display: block;">
-            `,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#4361ee',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Verify & Update',
-            cancelButtonText: 'Cancel',
-            focusConfirm: false,
-            allowOutsideClick: false,
-            didOpen: () => {
-              // Focus on the password input when modal opens
-              const passwordInput = document.getElementById('swal-edit-password');
-              if (passwordInput) {
-                setTimeout(() => {
-                  passwordInput.focus();
-                }, 100);
-              }
-            },
-            preConfirm: () => {
-              const password = document.getElementById('swal-edit-password').value;
-              if (!password) {
-                Swal.showValidationMessage('Please enter your password');
-                return false;
-              }
-              if (password.length < 6) {
-                Swal.showValidationMessage('Password must be at least 6 characters long');
-                return false;
-              }
-              return password;
-            },
-            customClass: {
-              popup: 'swal2-popup-custom'
-            }
-          }).then((passwordResult) => {
-            if (passwordResult.isConfirmed) {
-              // Step 3: Verify password first, then submit the form
-              const password = passwordResult.value;
-              verifyEmployeePasswordForEdit(password, form, formData);
-            }
-          });
-        }, 300);
+        // Verify password and submit
+        verifyEmployeePasswordForEdit(password, form, formData);
+      } else if (password !== null) {
+        alert('Password must be at least 6 characters long.');
       }
-    });
+    }
   });
   }
 
@@ -1736,9 +1498,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // Set minimum start date to today for edit form
-  const today = new Date();
-  const formattedToday = today.toISOString().split('T')[0];
+  // Set minimum start date for edit form
   const editStartDateElement = document.getElementById('edit_start_date');
   if (editStartDateElement) {
     editStartDateElement.setAttribute('min', formattedToday);
@@ -1792,94 +1552,25 @@ document.addEventListener('DOMContentLoaded', function() {
       const leaveIdDisplay = this.getAttribute('data-leave-id');
 
       // Step 1: Show confirmation dialog
-      Swal.fire({
-        title: 'Cancel Leave Application',
-        html: `
-          <div class="text-start">
-            <p><strong>Leave ID:</strong> ${leaveIdDisplay}</p>
-            <p class="text-danger"><i class="bi bi-exclamation-triangle"></i> This action cannot be undone.</p>
-            <p class="text-muted">Are you sure you want to cancel this leave application?</p>
-          </div>
-        `,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc3545',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: 'Yes, Continue',
-        cancelButtonText: 'No, Keep It',
-        customClass: {
-          popup: 'swal2-popup-custom'
+      const confirmMessage = `Cancel Leave Application\n\nLeave ID: ${leaveIdDisplay}\n\nThis action cannot be undone. Are you sure you want to cancel this leave application?`;
+
+      if (confirm(confirmMessage)) {
+        // Step 2: Get password for verification
+        const password = prompt('Please enter your password to confirm the cancellation:');
+        if (password && password.length >= 6) {
+          verifyEmployeePasswordForCancel(password, leaveId);
+        } else if (password !== null) {
+          alert('Password must be at least 6 characters long.');
         }
-      }).then((result) => {
-        if (result.isConfirmed) {
-          // Step 2: Show password verification
-          Swal.fire({
-            title: 'Verify Your Password',
-            html: `
-              <div class="text-start mb-3">
-                <p class="text-muted">Please enter your password to confirm the cancellation:</p>
-                <p class="text-warning small"><i class="bi bi-shield-lock"></i> This is required for security purposes to verify your identity.</p>
-              </div>
-              <input type="password" id="swal-cancel-password" class="swal2-input" placeholder="Enter your password" autocomplete="current-password" style="margin: 0 auto; display: block;">
-            `,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#dc3545',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: 'Verify & Cancel',
-            cancelButtonText: 'Cancel',
-            focusConfirm: false,
-            allowOutsideClick: false,
-            didOpen: () => {
-              // Focus on the password input when modal opens
-              const passwordInput = document.getElementById('swal-cancel-password');
-              if (passwordInput) {
-                setTimeout(() => {
-                  passwordInput.focus();
-                }, 100);
-              }
-            },
-            preConfirm: () => {
-              const password = document.getElementById('swal-cancel-password').value;
-              if (!password) {
-                Swal.showValidationMessage('Please enter your password');
-                return false;
-              }
-              if (password.length < 6) {
-                Swal.showValidationMessage('Password must be at least 6 characters long');
-                return false;
-              }
-              return password;
-            },
-            customClass: {
-              popup: 'swal2-popup-custom'
-            }
-          }).then((passwordResult) => {
-            if (passwordResult.isConfirmed) {
-              // Step 3: Verify password first, then cancel the leave
-              const password = passwordResult.value;
-              verifyEmployeePasswordForCancel(password, leaveId);
-            }
-          });
-        }
-      });
+      }
     });
   });
 
   // Function to verify employee password before cancel operation
   function verifyEmployeePasswordForCancel(password, leaveId) {
     // Show loading state
-    Swal.fire({
-      title: 'Verifying Password',
-      text: 'Please wait while we verify your password...',
-      icon: 'info',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+    // Removed SweetAlert - using standard alert instead
+    console.log('Verifying password for cancel...');
 
     // Call the password verification endpoint
     fetch('{{ route("employee.verify_password") }}', {
@@ -1900,50 +1591,28 @@ document.addEventListener('DOMContentLoaded', function() {
       return response.json();
     })
     .then(data => {
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
       if (data.success) {
         // Password verified successfully, now cancel the leave
         cancelLeaveApplication(leaveId, password);
       } else {
         // Password verification failed
-        Swal.fire({
-          title: 'Password Verification Failed',
-          text: data.message || 'The password you entered is incorrect. Please try again.',
-          icon: 'error',
-          confirmButtonColor: '#dc3545',
-          confirmButtonText: 'Try Again'
-        });
+        alert(data.message || 'The password you entered is incorrect. Please try again.');
       }
     })
     .catch(error => {
       console.error('Password verification error:', error);
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
-      Swal.fire({
-        title: 'Verification Error',
-        text: 'An error occurred while verifying your password. Please try again.',
-        icon: 'error',
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'OK'
-      });
+      alert('An error occurred while verifying your password. Please try again.');
     });
   }
 
   // Function to handle the actual leave cancellation
   function cancelLeaveApplication(leaveId, password) {
-    // Show loading SweetAlert
-    Swal.fire({
-      title: 'Cancelling Leave Request',
-      text: 'Please wait while we process your cancellation...',
-      icon: 'info',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
+    // Show loading state
+    console.log('Cancelling leave request...');
 
     // Create form data with password verification
     const formData = new FormData();
@@ -1960,20 +1629,13 @@ document.addEventListener('DOMContentLoaded', function() {
     })
     .then(response => response.json())
     .then(data => {
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
       if (data.success) {
-        // Show success SweetAlert
-        Swal.fire({
-          title: 'Success!',
-          text: data.message || 'Your leave application has been cancelled successfully.',
-          icon: 'success',
-          confirmButtonColor: '#4361ee',
-          confirmButtonText: 'OK'
-        }).then(() => {
-          // Reload page to show updated data
-          window.location.reload();
-        });
+        // Show success message
+        alert(data.message || 'Your leave application has been cancelled successfully.');
+        // Reload page to show updated data
+        window.location.reload();
       } else {
         // Handle errors
         let errorMessage = 'Failed to cancel leave application';
@@ -1983,197 +1645,79 @@ document.addEventListener('DOMContentLoaded', function() {
           errorMessage = data.error || data.message;
         }
 
-        Swal.fire({
-          title: 'Error!',
-          text: errorMessage,
-          icon: 'error',
-          confirmButtonColor: '#dc3545',
-          confirmButtonText: 'OK'
-        });
+        alert(errorMessage);
       }
     })
     .catch(error => {
       console.error('Error:', error);
-      Swal.close(); // Close loading alert
+       // Close loading alert
 
-      Swal.fire({
-        title: 'Error!',
-        text: 'An error occurred while cancelling your application: ' + error.message,
-        icon: 'error',
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'OK'
-      });
+      alert('An error occurred while cancelling your application: ' + error.message);
     });
   }
 
-  // Set minimum start date to today
+  // Set minimum start date and add event listeners for date calculation
   const startDateElement = document.getElementById('start_date');
   if (startDateElement) {
     startDateElement.setAttribute('min', formattedToday);
   }
 
-  // API Integration Functions
-  window.LeaveAPI = {
-    // Check leave status via API
-    checkLeaveStatus: function(leaveId) {
-      const apiKey = 'hr2ess_api_key_2025'; // In production, get this securely
-      
-      fetch(`/api/v1/leave/status/${leaveId}?api_key=${apiKey}`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            Swal.fire({
-              title: 'Leave Status',
-              html: `
-                <div class="text-start">
-                  <p><strong>Leave ID:</strong> ${data.data.leave_id}</p>
-                  <p><strong>Status:</strong> <span class="badge status-${data.data.status.toLowerCase()}">${data.data.status}</span></p>
-                  <p><strong>Employee:</strong> ${data.data.employee_name}</p>
-                  <p><strong>Leave Type:</strong> ${data.data.leave_type}</p>
-                  <p><strong>Days:</strong> ${data.data.days_requested}</p>
-                  <p><strong>Period:</strong> ${data.data.start_date} to ${data.data.end_date}</p>
-                  <p><strong>Submitted:</strong> ${new Date(data.data.submitted_at).toLocaleString()}</p>
-                  ${data.data.approved_by ? `<p><strong>Approved By:</strong> ${data.data.approved_by}</p>` : ''}
-                  ${data.data.approved_date ? `<p><strong>Approved Date:</strong> ${new Date(data.data.approved_date).toLocaleString()}</p>` : ''}
-                  ${data.data.remarks ? `<p><strong>Remarks:</strong> ${data.data.remarks}</p>` : ''}
-                </div>
-              `,
-              icon: 'info',
-              confirmButtonColor: '#4361ee'
-            });
-          } else {
-            Swal.fire('Error', data.message, 'error');
-          }
-        })
-        .catch(error => {
-          console.error('API Error:', error);
-          Swal.fire('Error', 'Failed to fetch leave status', 'error');
-        });
-    },
+  // Add event listeners for date calculation as backup
+  const leaveDaysElement = document.getElementById('leave_days');
+  const endDateElement = document.getElementById('end_date');
 
-    // Get employee leave balance via API
-    getLeaveBalance: function(employeeId) {
-      const apiKey = 'hr2ess_api_key_2025'; // In production, get this securely
-      
-      fetch(`/api/v1/leave/balance/${employeeId}?api_key=${apiKey}`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            const balances = data.data.leave_balances;
-            let balanceHtml = '<div class="text-start">';
-            
-            Object.keys(balances).forEach(type => {
-              const balance = balances[type];
-              balanceHtml += `
-                <div class="mb-3">
-                  <h6>${type} Leave</h6>
-                  <div class="progress mb-1" style="height: 20px;">
-                    <div class="progress-bar" style="width: ${balance.percentage}%">${balance.available}/${balance.total}</div>
-                  </div>
-                  <small class="text-muted">Used: ${balance.used} | Available: ${balance.available}</small>
-                </div>
-              `;
-            });
-            
-            balanceHtml += '</div>';
-            
-            Swal.fire({
-              title: `Leave Balance - ${data.data.employee_name}`,
-              html: balanceHtml,
-              icon: 'info',
-              confirmButtonColor: '#4361ee',
-              width: 600
-            });
-          } else {
-            Swal.fire('Error', data.message, 'error');
-          }
-        })
-        .catch(error => {
-          console.error('API Error:', error);
-          Swal.fire('Error', 'Failed to fetch leave balance', 'error');
-        });
-    },
+  if (startDateElement && leaveDaysElement) {
+    startDateElement.addEventListener('change', function() {
+      calculateEndDate();
+      if (window.simpleCalculateEndDate) window.simpleCalculateEndDate();
+    });
+    leaveDaysElement.addEventListener('input', function() {
+      calculateEndDate();
+      if (window.simpleCalculateEndDate) window.simpleCalculateEndDate();
+    });
+    leaveDaysElement.addEventListener('change', function() {
+      calculateEndDate();
+      if (window.simpleCalculateEndDate) window.simpleCalculateEndDate();
+    });
+  }
 
-    // Submit leave request via API (alternative method)
-    submitViaAPI: function(formData) {
-      const apiKey = 'hr2ess_api_key_2025'; // In production, get this securely
-      
-      const requestData = {
-        employee_id: '{{ Auth::guard("employee")->user()->employee_id ?? "EMP001" }}',
-        leave_type: formData.get('leave_type'),
-        leave_days: parseInt(formData.get('leave_days')),
-        start_date: formData.get('start_date'),
-        end_date: formData.get('end_date'),
-        reason: formData.get('reason'),
-        contact_info: formData.get('contact_info'),
-        api_key: apiKey
-      };
+  console.log('Date calculation event listeners added');
 
-      return fetch('/api/v1/leave/submit', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData)
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          Swal.fire({
-            title: 'Success!',
-            html: `
-              <div class="text-start">
-                <p>Leave application submitted successfully via API!</p>
-                <p><strong>Leave ID:</strong> ${data.data.leave_id}</p>
-                <p><strong>Status:</strong> ${data.data.status}</p>
-                <p><strong>Remaining Balance:</strong> ${data.data.remaining_balance} days</p>
-              </div>
-            `,
-            icon: 'success',
-            confirmButtonColor: '#4361ee'
-          }).then(() => {
-            window.location.reload();
-          });
-        } else {
-          throw new Error(data.message);
-        }
-      });
+  // Test the function immediately
+  console.log('Testing calculateEndDate function...');
+  setTimeout(() => {
+    calculateEndDate();
+  }, 1000);
+
+  // Create a simple backup function that definitely works
+  window.simpleCalculateEndDate = function() {
+    console.log('Simple calculate end date called');
+    const startInput = document.getElementById('start_date');
+    const daysInput = document.getElementById('leave_days');
+    const endInput = document.getElementById('end_date');
+
+    if (startInput && daysInput && endInput) {
+      const startValue = startInput.value;
+      const daysValue = parseInt(daysInput.value);
+
+      console.log('Simple function - Start:', startValue, 'Days:', daysValue);
+
+      if (startValue && daysValue > 0) {
+        const startDate = new Date(startValue);
+        startDate.setDate(startDate.getDate() + daysValue - 1);
+        const endDate = startDate.toISOString().split('T')[0];
+        endInput.value = endDate;
+        console.log('Simple function - End date set to:', endDate);
+      }
     }
   };
 
-  // Add API status check buttons to existing leave records
-  document.addEventListener('DOMContentLoaded', function() {
-    // Add API check buttons to leave records table
-    const leaveRows = document.querySelectorAll('#leave-table tbody tr');
-    leaveRows.forEach(row => {
-      const leaveIdCell = row.cells[0];
-      if (leaveIdCell && leaveIdCell.textContent.trim() !== '') {
-        const leaveId = leaveIdCell.textContent.trim();
-        
-        // Add API status check button
-        const actionsCell = row.cells[row.cells.length - 1];
-        if (actionsCell) {
-          const apiButton = document.createElement('button');
-          apiButton.className = 'btn btn-sm btn-info me-1';
-          apiButton.innerHTML = '<i class="bi bi-cloud-check"></i> API Status';
-          apiButton.onclick = () => LeaveAPI.checkLeaveStatus(leaveId);
-          
-          actionsCell.appendChild(apiButton);
-        }
-      }
-    });
+  // Test the simple function too
+  setTimeout(() => {
+    window.simpleCalculateEndDate();
+  }, 1500);
 
-    // Add API balance check button to header
-    const headerActions = document.querySelector('.card-header .btn-apply-leave').parentNode;
-    if (headerActions) {
-      const balanceButton = document.createElement('button');
-      balanceButton.className = 'btn btn-outline-info me-2';
-      balanceButton.innerHTML = '<i class="bi bi-cloud-download"></i> API Balance';
-      balanceButton.onclick = () => LeaveAPI.getLeaveBalance('{{ Auth::guard("employee")->user()->employee_id ?? "EMP001" }}');
-      
-      headerActions.insertBefore(balanceButton, headerActions.firstChild);
-    }
-  });
+
 </script>
 </body>
 </html>

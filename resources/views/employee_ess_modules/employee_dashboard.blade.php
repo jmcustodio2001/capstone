@@ -6,6 +6,35 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>Jetlouge Travels - Employee Portal</title>
   <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
+  
+  <!-- Initialize critical global objects IMMEDIATELY to prevent undefined errors -->
+  <script>
+    // CRITICAL: Initialize translation service FIRST before any other scripts
+    (function() {
+      try {
+        if (typeof window.translationService === 'undefined') {
+          window.translationService = {
+            translate: function(key, params) { return key; },
+            get: function(key, params) { return key; },
+            trans: function(key, params) { return key; },
+            choice: function(key, count, params) { return key; }
+          };
+        }
+
+        if (typeof window.trans === 'undefined') {
+          window.trans = function(key, params) { return key; };
+        }
+
+        if (typeof window.app === 'undefined') {
+          window.app = {};
+        }
+
+        console.log('Critical global objects initialized in head - v3.0 - HTML entities fixed');
+      } catch (error) {
+        console.error('Critical error initializing global objects:', error);
+      }
+    })();
+  </script>
 
   <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -257,8 +286,8 @@
                     <td>
                       <div class="announcement-message">
                         {{ Str::limit($announcement->message ?? $announcement->content ?? 'No message content', 100) }}
-                        @if(strlen($announcement->message ?? $announcement->content ?? '') > 100)
-                          <a href="#" class="text-primary text-decoration-none" onclick="viewAnnouncementDetails('{{ $announcement->id }}')">
+                        @if(strlen($announcement->message ?? $announcement->content ?? '') > 100 && isset($announcement->id))
+                          <a href="#" class="text-primary text-decoration-none" onclick="viewAnnouncementDetails({{ json_encode($announcement->id) }})">
                             <small>Read more...</small>
                           </a>
                         @endif
@@ -285,11 +314,15 @@
                       </span>
                     </td>
                     <td class="text-center">
-                      <button class="btn btn-outline-primary btn-sm"
-                              onclick="viewAnnouncementDetails('{{ $announcement->id }}')"
-                              title="View full announcement">
-                        <i class="bi bi-eye"></i>
-                      </button>
+                      @if(isset($announcement->id))
+                        <button class="btn btn-outline-primary btn-sm"
+                                onclick="viewAnnouncementDetails({{ json_encode($announcement->id) }})"
+                                title="View full announcement">
+                          <i class="bi bi-eye"></i>
+                        </button>
+                      @else
+                        <span class="text-muted">-</span>
+                      @endif
                     </td>
                   </tr>
                 @endforeach
@@ -581,16 +614,16 @@
                       $needsResponse = is_array($u) ? ($u['needs_response'] ?? false) : ($u->needs_response ?? false);
                     @endphp
 
-                    @if($sourceCheck === 'destination_assigned' && $needsResponse)
+                    @if($sourceCheck === 'destination_assigned' && $needsResponse && $destinationTrainingId)
                       {{-- Show Accept/Decline buttons for destination training that needs response --}}
                       <div class="d-flex gap-1 justify-content-center">
                         <button class="btn btn-success btn-sm"
-                                onclick="respondToDestinationTraining('{{ $destinationTrainingId }}', 'accept', this)"
+                                onclick="respondToDestinationTraining({{ json_encode($destinationTrainingId) }}, 'accept', this)"
                                 title="Accept this destination training">
                           <i class="bi bi-check me-1"></i>Accept
                         </button>
                         <button class="btn btn-danger btn-sm"
-                                onclick="respondToDestinationTraining('{{ $destinationTrainingId }}', 'decline', this)"
+                                onclick="respondToDestinationTraining({{ json_encode($destinationTrainingId) }}, 'decline', this)"
                                 title="Decline this destination training">
                           <i class="bi bi-x me-1"></i>Decline
                         </button>
@@ -645,27 +678,43 @@
                 <td>{{ $request['date'] }}</td>
                 <td>
                   @php
-                    $badgeClass = match(strtolower($request['status'])) {
-                      'approved', 'confirmed', 'completed' => 'bg-success text-white',
-                      'pending', 'waiting' => 'bg-warning text-dark',
-                      'processing', 'in progress', 'ongoing' => 'bg-info text-white',
-                      'rejected', 'denied', 'cancelled' => 'bg-danger text-white',
-                      'on hold', 'paused' => 'bg-secondary text-white',
-                      'review', 'under review' => 'bg-primary text-white',
-                      default => 'bg-light text-dark border'
-                    };
+                    $status = strtolower($request['status']);
+                    if (in_array($status, ['approved', 'confirmed', 'completed'])) {
+                      $badgeClass = 'bg-success text-white';
+                    } elseif (in_array($status, ['pending', 'waiting'])) {
+                      $badgeClass = 'bg-warning text-dark';
+                    } elseif (in_array($status, ['processing', 'in progress', 'ongoing'])) {
+                      $badgeClass = 'bg-info text-white';
+                    } elseif (in_array($status, ['rejected', 'denied', 'cancelled'])) {
+                      $badgeClass = 'bg-danger text-white';
+                    } elseif (in_array($status, ['on hold', 'paused'])) {
+                      $badgeClass = 'bg-secondary text-white';
+                    } elseif (in_array($status, ['review', 'under review'])) {
+                      $badgeClass = 'bg-primary text-white';
+                    } else {
+                      $badgeClass = 'bg-light text-dark border';
+                    }
+                  @endphp
+                  @php
+                    if (in_array($status, ['approved', 'confirmed', 'completed'])) {
+                      $iconClass = 'bi-check-circle';
+                    } elseif (in_array($status, ['pending', 'waiting'])) {
+                      $iconClass = 'bi-clock';
+                    } elseif (in_array($status, ['processing', 'in progress', 'ongoing'])) {
+                      $iconClass = 'bi-arrow-clockwise';
+                    } elseif (in_array($status, ['rejected', 'denied', 'cancelled'])) {
+                      $iconClass = 'bi-x-circle';
+                    } elseif (in_array($status, ['on hold', 'paused'])) {
+                      $iconClass = 'bi-pause-circle';
+                    } elseif (in_array($status, ['review', 'under review'])) {
+                      $iconClass = 'bi-eye';
+                    } else {
+                      $iconClass = 'bi-question-circle';
+                    }
                   @endphp
                   <span class="badge {{ $badgeClass }} px-3 py-2" style="font-size: 0.75rem; font-weight: 600;">
-                    <i class="bi {{ match(strtolower($request['status'])) {
-                      'approved', 'confirmed', 'completed' => 'bi-check-circle',
-                      'pending', 'waiting' => 'bi-clock',
-                      'processing', 'in progress', 'ongoing' => 'bi-arrow-clockwise',
-                      'rejected', 'denied', 'cancelled' => 'bi-x-circle',
-                      'on hold', 'paused' => 'bi-pause-circle',
-                      'review', 'under review' => 'bi-eye',
-                      default => 'bi-question-circle'
-                    } }} me-1"></i>
-                    {{ $request['status'] }}
+                    <i class="bi {{ $iconClass }} me-1"></i>
+                    {{ ucfirst($request['status']) }}
                   </span>
                 </td>
                 <td>{{ $request['remarks'] }}</td>
@@ -821,7 +870,7 @@
                       $colors = ['FF6B6B', '4ECDC4', '45B7D1', '96CEB4', 'FFEAA7', 'DDA0DD', 'FFB347', '87CEEB'];
                       $colorIndex = crc32($employeeId) % count($colors);
                       $bgColor = $colors[$colorIndex];
-                      $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background={$bgColor}&color=ffffff&size=128&bold=true";
+                      $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&amp;background={$bgColor}&amp;color=ffffff&amp;size=128&amp;bold=true";
                     }
                   @endphp
                   <img id="profilePreview"
@@ -912,11 +961,133 @@
     </div>
   </div>
 
+  <!-- Global objects already initialized in head section -->
+  <script>
+    // Missing function for destination training response
+    function respondToDestinationTraining(trainingId, action, buttonElement) {
+      if (!trainingId) {
+        console.error('Training ID is required');
+        return;
+      }
+
+      const metaElement = document.querySelector('meta[name="csrf-token"]');
+      const csrfToken = metaElement ? metaElement.getAttribute('content') : null;
+      if (!csrfToken) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Security Error',
+          text: 'Security token not found. Please refresh the page and try again.'
+        });
+        return;
+      }
+
+      // Disable button to prevent double clicks
+      if (buttonElement) {
+        buttonElement.disabled = true;
+      }
+
+      const actionText = action === 'accept' ? 'Accept' : 'Decline';
+      
+      Swal.fire({
+        title: actionText + ' Training?',
+        text: 'Are you sure you want to ' + action.toLowerCase() + ' this destination training?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, ' + actionText,
+        cancelButtonText: 'Cancel'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          fetch('/employee/destination-training/respond', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': csrfToken,
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              training_id: trainingId,
+              action: action
+            })
+          })
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              Swal.fire({
+                icon: 'success',
+                title: 'Success!',
+                text: data.message || 'Training ' + action + 'ed successfully.'
+              }).then(() => {
+                location.reload();
+              });
+            } else {
+              Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: data.message || 'Failed to ' + action + ' training.'
+              });
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            Swal.fire({
+              icon: 'error',
+              title: 'Error',
+              text: 'An error occurred while trying to ' + action + ' the training.'
+            });
+          })
+          .finally(() => {
+            // Re-enable button
+            if (buttonElement) {
+              buttonElement.disabled = false;
+            }
+          });
+        } else {
+          // Re-enable button if cancelled
+          if (buttonElement) {
+            buttonElement.disabled = false;
+          }
+        }
+      });
+    }
+
+    // Safe script loading function
+    function loadOptionalScript(src, callback) {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = function() {
+        console.log('Script loaded successfully:', src);
+        if (callback) callback();
+      };
+      script.onerror = function() {
+        // Silently handle optional script loading failures
+        if (callback) callback();
+      };
+      document.head.appendChild(script);
+    }
+
+    // Load optional agent portal script safely
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        loadOptionalScript({{ json_encode(asset('js/agent-portal-script.js')) }});
+      } catch (error) {
+        // Silently handle script initialization failures
+      }
+      
+      // Also load CSRF refresh script safely
+      try {
+        loadOptionalScript({{ json_encode(asset('js/csrf-refresh.js')) }}, function() {
+          console.log('CSRF refresh system loaded');
+        });
+      } catch (error) {
+        // Silently handle script initialization failures
+      }
+    });
+  </script>
+
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <!-- SweetAlert2 -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <script src="agent-portal-script.js"></script>
 
   <script>
     // CSRF Token Management to prevent 419 Page Expired errors
@@ -940,62 +1111,122 @@
 
       // Refresh CSRF token every 30 minutes to prevent expiration
       setInterval(function() {
-        fetch('/csrf-token', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+        // Try multiple endpoints for CSRF token refresh
+        const endpoints = [
+          '/employee/csrf-token',
+          '/csrf-token',
+          '/api/csrf-token'
+        ];
+        
+        function tryEndpoint(index) {
+          if (index >= endpoints.length) {
+            console.warn('All CSRF refresh endpoints failed');
+            return;
           }
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.csrf_token) {
-            // Update meta tag
-            const metaTag = document.querySelector('meta[name="csrf-token"]');
-            if (metaTag) {
-              metaTag.setAttribute('content', data.csrf_token);
+          
+          fetch(endpoints[index], {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'
             }
-
-            // Update Laravel object
-            if (window.Laravel) {
-              window.Laravel.csrfToken = data.csrf_token;
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error('HTTP ' + response.status);
             }
+            return response.json();
+          })
+          .then(data => {
+            if (data.csrf_token) {
+              // Update meta tag
+              const metaTag = document.querySelector('meta[name="csrf-token"]');
+              if (metaTag) {
+                metaTag.setAttribute('content', data.csrf_token);
+              }
 
-            // Update jQuery AJAX setup if available
-            if (typeof $ !== 'undefined') {
-              $.ajaxSetup({
-                headers: {
-                  'X-CSRF-TOKEN': data.csrf_token
-                }
-              });
+              // Update Laravel object
+              if (window.Laravel) {
+                window.Laravel.csrfToken = data.csrf_token;
+              }
+
+              // Update jQuery AJAX setup if available
+              if (typeof $ !== 'undefined') {
+                $.ajaxSetup({
+                  headers: {
+                    'X-CSRF-TOKEN': data.csrf_token
+                  }
+                });
+              }
+
+              console.log('CSRF token refreshed successfully from:', endpoints[index]);
             }
-
-            console.log('CSRF token refreshed successfully');
-          }
-        })
-        .catch(error => {
-          console.warn('Failed to refresh CSRF token:', error);
-        });
+          })
+          .catch(error => {
+            console.warn('CSRF refresh failed for ' + endpoints[index] + ':', error);
+            tryEndpoint(index + 1);
+          });
+        }
+        
+        tryEndpoint(0);
       }, 30 * 60 * 1000); // 30 minutes
     });
+
+    // HTML escape function to prevent XSS and HTML entity issues
+    function escapeHtml(text) {
+      if (!text) return '';
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    }
+
+    // Enhanced CSRF token getter with error handling
+    function getCSRFToken() {
+      const metaTag = document.querySelector('meta[name="csrf-token"]');
+      if (!metaTag) {
+        console.error('CSRF token meta tag not found');
+        return null;
+      }
+      const token = metaTag.getAttribute('content');
+      if (!token) {
+        console.error('CSRF token content is empty');
+        return null;
+      }
+      return token;
+    }
 
     // Quick Actions Functions
     function logAttendance() {
       const now = new Date();
       const timeString = now.toLocaleTimeString();
       Swal.fire({
-        title: `Log attendance at ${timeString}?`,
+        title: 'Log attendance at ' + timeString + '?',
         icon: 'question',
         showCancelButton: true,
         confirmButtonText: 'Yes, log it!',
         cancelButtonText: 'Cancel'
       }).then((result) => {
         if (result.isConfirmed) {
+          const csrfToken = getCSRFToken();
+          if (!csrfToken) {
+            Swal.fire({
+              icon: 'error',
+              title: 'Security Error',
+              text: 'Security token not found. Please refresh the page and try again.'
+            });
+            return;
+          }
+          
           fetch('/employee/attendance/log', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+              'X-CSRF-TOKEN': csrfToken
             },
             body: JSON.stringify({
               timestamp: now.toISOString()
@@ -1038,24 +1269,36 @@
         cancelButtonText: 'Cancel'
       }).then((result) => {
         if (result.isConfirmed) {
-          window.location.href = '{{ route("employee.payslips.index") }}';
+          window.location.href = {{ json_encode(route("employee.payslips.index")) }};
         }
       });
     }
 
-    // Form Submissions
-    document.getElementById('leaveApplicationForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      const formData = new FormData(this);
-      const data = Object.fromEntries(formData);
-      fetch('/employee/leave-application', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify(data)
-      })
+    // Form Submissions with enhanced error handling
+    const leaveForm = document.getElementById('leaveApplicationForm');
+    if (leaveForm) {
+      leaveForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Security Error',
+            text: 'Security token not found. Please refresh the page and try again.'
+          });
+          return;
+        }
+        
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        fetch('/employee/leave-application', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+          },
+          body: JSON.stringify(data)
+        })
       .then(response => response.json())
       .then(data => {
         if (data.success) {
@@ -1064,7 +1307,13 @@
             title: 'Leave Application Submitted!',
             text: 'Your leave application was submitted successfully.'
           }).then(() => {
-            bootstrap.Modal.getInstance(document.getElementById('leaveApplicationModal')).hide();
+            const modalElement = document.getElementById('leaveApplicationModal');
+            if (modalElement) {
+              const modalInstance = bootstrap.Modal.getInstance(modalElement);
+              if (modalInstance) {
+                modalInstance.hide();
+              }
+            }
             this.reset();
             location.reload();
           });
@@ -1084,41 +1333,62 @@
           text: 'Error submitting application. Please try again.'
         });
       });
-    });
+    } else {
+      console.warn('Leave application form not found');
+    }
 
-    // Profile picture preview
-    document.getElementById('profilePicture').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          document.getElementById('profilePreview').src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-      }
-    });
+    // Profile picture preview with null checks
+    const profilePictureInput = document.getElementById('profilePicture');
+    if (profilePictureInput) {
+      profilePictureInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const previewElement = document.getElementById('profilePreview');
+            if (previewElement) {
+              previewElement.src = e.target.result;
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+    }
 
-    // Profile update form submission
-    document.getElementById('profileUpdateForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      const formData = new FormData(this);
-      // Add password verification
-      const password = formData.get('verify_password');
-      if (!password) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Password Required',
-          text: 'Please enter your current password to update your profile.'
-        });
-        return;
-      }
-      fetch('/employee/profile/update', {
-        method: 'POST',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: formData
-      })
+    // Profile update form submission with enhanced error handling
+    const profileForm = document.getElementById('profileUpdateForm');
+    if (profileForm) {
+      profileForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        // Add password verification
+        const password = formData.get('verify_password');
+        if (!password) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Password Required',
+            text: 'Please enter your current password to update your profile.'
+          });
+          return;
+        }
+        
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Security Error',
+            text: 'Security token not found. Please refresh the page and try again.'
+          });
+          return;
+        }
+        
+        fetch('/employee/profile/update', {
+          method: 'POST',
+          headers: {
+            'X-CSRF-TOKEN': csrfToken
+          },
+          body: formData
+        })
       .then(response => response.json())
       .then(data => {
         if (data.success) {
@@ -1127,7 +1397,13 @@
             title: 'Profile Updated',
             text: 'Your profile has been updated successfully!'
           }).then(() => {
-            bootstrap.Modal.getInstance(document.getElementById('profileUpdateModal')).hide();
+            const modalElement = document.getElementById('profileUpdateModal');
+            if (modalElement) {
+              const modalInstance = bootstrap.Modal.getInstance(modalElement);
+              if (modalInstance) {
+                modalInstance.hide();
+              }
+            }
             location.reload();
           });
         } else if (data.error === 'invalid_password') {
@@ -1152,33 +1428,58 @@
           text: 'Error updating profile. Please try again.'
         });
       });
-    });
+    } else {
+      console.warn('Profile update form not found');
+    }
 
 
 
-    // Announcement Details Function
+    // Announcement Details Function with enhanced error handling
     function viewAnnouncementDetails(announcementId) {
-      const modal = new bootstrap.Modal(document.getElementById('announcementDetailsModal'));
+      // Validate announcement ID
+      if (!announcementId) {
+        console.error('Announcement ID is required');
+        return;
+      }
+      
+      const modalElement = document.getElementById('announcementDetailsModal');
       const contentDiv = document.getElementById('announcementDetailsContent');
+      
+      if (!modalElement || !contentDiv) {
+        console.error('Announcement modal elements not found');
+        return;
+      }
+      
+      const modal = new bootstrap.Modal(modalElement);
 
       // Show loading state
-      contentDiv.innerHTML = `
-        <div class="text-center py-4">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-          </div>
-          <p class="text-muted mt-2">Loading announcement details...</p>
-        </div>
-      `;
+      contentDiv.innerHTML = 
+        '<div class="text-center py-4">' +
+          '<div class="spinner-border text-primary" role="status">' +
+            '<span class="visually-hidden">Loading...</span>' +
+          '</div>' +
+          '<p class="text-muted mt-2">Loading announcement details...</p>' +
+        '</div>';
 
       modal.show();
 
       // Fetch announcement details
+      const csrfToken = getCSRFToken();
+      if (!csrfToken) {
+        contentDiv.innerHTML = 
+          '<div class="text-center py-4">' +
+            '<i class="bi bi-shield-exclamation text-warning" style="font-size: 3rem;"></i>' +
+            '<h6 class="text-muted mt-2">Security Error</h6>' +
+            '<p class="text-muted small mb-0">Security token not found. Please refresh the page and try again.</p>' +
+          '</div>';
+        return;
+      }
+      
       fetch('/employee/announcements/' + announcementId, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+          'X-CSRF-TOKEN': csrfToken
         }
       })
       .then(response => response.json())
@@ -1214,64 +1515,57 @@
             minute: '2-digit'
           });
 
-          contentDiv.innerHTML = `
-            <div class="announcement-details">
-              <div class="d-flex justify-content-between align-items-start mb-3">
-                <div>
-                  <h4 class="fw-bold text-primary mb-2">
-                    <i class="bi ${priorityIcon} me-2"></i>${announcement.title || 'Company Update'}
-                  </h4>
-                  <div class="d-flex align-items-center gap-3">
-                    <span class="badge ${priorityBadgeClass}">
-                      <i class="bi ${priorityIcon} me-1"></i>${priority.charAt(0).toUpperCase() + priority.slice(1)} Priority
-                    </span>
-                    <small class="text-muted">
-                      <i class="bi bi-calendar me-1"></i>${formattedDate} at ${formattedTime}
-                    </small>
-                  </div>
-                </div>
-              </div>
-
-              <div class="announcement-content">
-                <div class="card bg-light border-0 p-3">
-                  <p class="mb-0" style="line-height: 1.6; white-space: pre-wrap;">${announcement.message || announcement.content || 'No message content available.'}</p>
-                </div>
-              </div>
-
-              ${announcement.author ? `
-                <div class="mt-3 pt-3 border-top">
-                  <small class="text-muted">
-                    <i class="bi bi-person me-1"></i>Posted by: <strong>${announcement.author}</strong>
-                  </small>
-                </div>
-              ` : ''}
-            </div>
-          `;
+          contentDiv.innerHTML = 
+            '<div class="announcement-details">' +
+              '<div class="d-flex justify-content-between align-items-start mb-3">' +
+                '<div>' +
+                  '<h4 class="fw-bold text-primary mb-2">' +
+                    '<i class="bi ' + priorityIcon + ' me-2"></i>' + escapeHtml(announcement.title || 'Company Update') +
+                  '</h4>' +
+                  '<div class="d-flex align-items-center gap-3">' +
+                    '<span class="badge ' + priorityBadgeClass + '">' +
+                      '<i class="bi ' + priorityIcon + ' me-1"></i>' + (priority.charAt(0).toUpperCase() + priority.slice(1)) + ' Priority' +
+                    '</span>' +
+                    '<small class="text-muted">' +
+                      '<i class="bi bi-calendar me-1"></i>' + formattedDate + ' at ' + formattedTime +
+                    '</small>' +
+                  '</div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="announcement-content">' +
+                '<div class="card bg-light border-0 p-3">' +
+                  '<p class="mb-0" style="line-height: 1.6; white-space: pre-wrap;">' + escapeHtml(announcement.message || announcement.content || 'No message content available.') + '</p>' +
+                '</div>' +
+              '</div>' +
+              (announcement.author ? 
+                '<div class="mt-3 pt-3 border-top">' +
+                  '<small class="text-muted">' +
+                    '<i class="bi bi-person me-1"></i>Posted by: <strong>' + escapeHtml(announcement.author) + '</strong>' +
+                  '</small>' +
+                '</div>' : '') +
+            '</div>';
         } else {
-          contentDiv.innerHTML = `
-            <div class="text-center py-4">
-              <i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
-              <h6 class="text-muted mt-2">Unable to Load Announcement</h6>
-              <p class="text-muted small mb-0">${data.message || 'The announcement details could not be loaded at this time.'}</p>
-            </div>
-          `;
+          contentDiv.innerHTML = 
+            '<div class="text-center py-4">' +
+              '<i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>' +
+              '<h6 class="text-muted mt-2">Unable to Load Announcement</h6>' +
+              '<p class="text-muted small mb-0">' + (data.message || 'The announcement details could not be loaded at this time.') + '</p>' +
+            '</div>';
         }
       })
       .catch(error => {
         console.error('Error fetching announcement:', error);
-        contentDiv.innerHTML = `
-          <div class="text-center py-4">
-            <i class="bi bi-wifi-off text-danger" style="font-size: 3rem;"></i>
-            <h6 class="text-muted mt-2">Connection Error</h6>
-            <p class="text-muted small mb-0">Unable to connect to the server. Please check your internet connection and try again.</p>
-          </div>
-        `;
+        contentDiv.innerHTML = 
+          '<div class="text-center py-4">' +
+            '<i class="bi bi-wifi-off text-danger" style="font-size: 3rem;"></i>' +
+            '<h6 class="text-muted mt-2">Connection Error</h6>' +
+            '<p class="text-muted small mb-0">Unable to connect to the server. Please check your internet connection and try again.</p>' +
+          '</div>';
       });
     }
   </script>
 
-  <!-- CSRF Token Refresh System -->
-  <script src="{{ asset('js/csrf-refresh.js') }}"></script>
+  <!-- CSRF refresh script loading moved to main script block -->
 
 </body>
 </html>

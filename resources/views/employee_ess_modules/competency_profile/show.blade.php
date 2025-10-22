@@ -52,10 +52,11 @@
       color: #e0e0e0;
     }
     .feedback-card {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      color: white;
-      border-radius: 12px;
-      padding: 1.5rem;
+      background: #f8f9fa;
+      color: #333;
+      border-radius: 0;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid #dee2e6;
     }
     .training-card {
       background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
@@ -221,19 +222,22 @@
 
     <!-- Manager Feedback & Training Recommendations -->
     <div class="row mb-4">
-      <div class="col-md-6">
-        <div class="card-header feedback-card">
-          <h5 class="mb-3"><i class="bi bi-chat-quote me-2"></i>Manager Feedback</h5>
-          <div data-training-content>
-            @if($competencyTracker['manager_feedback'] ?? null)
-              <p class="mb-0">{{ $competencyTracker['manager_feedback'] ?? '' }}</p>
-            @else
-              <p class="mb-0 opacity-75">No feedback provided yet. Your manager will provide feedback during your next review.</p>
-            @endif
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header feedback-card">
+            <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Manager Feedback</h5>
+          </div>
+          <div class="card-body">
+            <div data-training-content>
+              @if($competencyTracker['manager_feedback'] ?? null)
+                <p class="mb-0">{{ $competencyTracker['manager_feedback'] ?? '' }}</p>
+              @else
+                <p class="mb-0 text-muted">No feedback provided yet. Your manager will provide feedback during your next review.</p>
+              @endif
+            </div>
           </div>
         </div>
       </div>
-      
     </div>
 
     <!-- Timeline & Deadlines -->
@@ -293,12 +297,9 @@
 
     <!-- Action Buttons -->
     <div class="text-center mt-4">
-      <a href="{{ route('employee.competency_profile.index') }}" class="btn btn-outline-primary me-2">
+      <a href="{{ route('employee.competency_profile.index') }}" class="btn btn-outline-primary">
         <i class="bi bi-arrow-left me-1"></i>Back to Tracker
       </a>
-      <button class="btn btn-primary me-2" onclick="requestFeedback()">
-        <i class="bi bi-chat-dots me-1"></i>Request Feedback
-      </button>
     </div>
   </main>
 
@@ -308,125 +309,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.1/dist/sweetalert2.all.min.js"></script>
   
   <script>
-    function requestFeedback() {
-      const competencyName = '{{ $competencyTracker['competency_name'] ?? 'this competency' }}';
-      
-      // Show SweetAlert confirmation
-      Swal.fire({
-        title: 'Request Feedback',
-        html: `Do you want to request feedback from your manager about your progress in <strong>"${competencyName}"</strong>?`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: '<i class="bi bi-send me-1"></i>Send Request',
-        cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
-        customClass: {
-          confirmButton: 'btn btn-primary me-2',
-          cancelButton: 'btn btn-secondary'
-        },
-        buttonsStyling: false
-      }).then((result) => {
-        if (result.isConfirmed) {
-          // Show loading state
-          const btn = event.target;
-          const originalText = btn.innerHTML;
-          btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Sending...';
-          btn.disabled = true;
-          
-          // Show loading alert
-          Swal.fire({
-            title: 'Sending Request...',
-            html: 'Please wait while we send your feedback request.',
-            icon: 'info',
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
-          
-          // Send API call to create feedback request
-          fetch('/employee/competency-profile/request-feedback', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            },
-            body: JSON.stringify({
-              competency_id: {{ $competencyTracker['competency_id'] ?? 'null' }},
-              employee_id: '{{ $competencyTracker['employee_id'] ?? '' }}',
-              request_message: `Employee has requested feedback on their progress in "${competencyName}".`
-            })
-          })
-          .then(response => {
-            console.log('Response status:', response.status);
-            return response.json();
-          })
-          .then(data => {
-            console.log('Response data:', data);
-            if (data.success) {
-              btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Request Sent';
-              btn.classList.remove('btn-primary');
-              btn.classList.add('btn-success');
-              
-              // Show success message with SweetAlert
-              Swal.fire({
-                title: 'Request Sent Successfully!',
-                html: `
-                  <div class="text-start">
-                    <p><i class="bi bi-check-circle-fill text-success me-2"></i>Your feedback request has been sent to your manager.</p>
-                    <p><i class="bi bi-info-circle-fill text-info me-2"></i>Competency: <strong>${competencyName}</strong></p>
-                    <p><i class="bi bi-clock-fill text-warning me-2"></i>You will be notified when your manager responds.</p>
-                    <p><i class="bi bi-eye-fill text-primary me-2"></i>You can check the status in the admin feedback section.</p>
-                  </div>
-                `,
-                icon: 'success',
-                confirmButtonText: '<i class="bi bi-check me-1"></i>Got it!',
-                customClass: {
-                  confirmButton: 'btn btn-success'
-                },
-                buttonsStyling: false
-              });
-              
-              setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.classList.remove('btn-success');
-                btn.classList.add('btn-primary');
-                btn.disabled = false;
-              }, 5000);
-            } else {
-              throw new Error(data.message || 'Failed to send request');
-            }
-          })
-          .catch(error => {
-            console.error('Error sending feedback request:', error);
-            
-            // Show error message with SweetAlert
-            Swal.fire({
-              title: 'Request Failed',
-              html: `
-                <div class="text-start">
-                  <p><i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Failed to send feedback request.</p>
-                  <p><i class="bi bi-info-circle-fill text-info me-2"></i>Error: ${error.message}</p>
-                  <p><i class="bi bi-arrow-clockwise text-primary me-2"></i>Please try again or contact support if the problem persists.</p>
-                </div>
-              `,
-              icon: 'error',
-              confirmButtonText: '<i class="bi bi-arrow-clockwise me-1"></i>Try Again',
-              customClass: {
-                confirmButton: 'btn btn-danger'
-              },
-              buttonsStyling: false
-            });
-            
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-          });
-        }
-      });
-    }
+    // JavaScript functions can be added here if needed
   </script>
 </body>
 </html>

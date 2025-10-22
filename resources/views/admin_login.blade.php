@@ -111,12 +111,12 @@
       @endif
       @if(session('lockout'))
             <div class="alert alert-danger" id="lockoutAlert">
-              Account is temporarily locked. Please try again after {{ session('lockout') }}.
+              Account is temporarily locked. Please try again later.
             </div>
       @endif
       @if(session('attempts'))
             <div class="alert alert-warning" id="attemptsAlert">
-              Warning: {{ 3 - session('attempts') }} login attempts remaining.
+              Too many failed attempts. Please try again later.
             </div>
       @endif
               <!-- Notification Area -->
@@ -594,56 +594,22 @@
         lockoutDiv.innerHTML = `
           <h5>Account Temporarily Locked</h5>
           <p>Account temporarily locked due to too many failed attempts.</p>
-          <p><strong>Lockout #${lockoutCount}</strong></p>
-          <div style="font-size: 2rem; font-weight: bold; color: #dc3545; margin: 20px 0;">
-            <span id="lockout-timer">${minutes}:${seconds.toString().padStart(2, '0')}</span>
-          </div>
-          <p>Please try again when the timer reaches zero.</p>
-          <small>Progressive lockout: Each lockout doubles the wait time.</small>
+          <p>Please try again later.</p>
         `;
         
         document.body.appendChild(lockoutDiv);
-        startLockoutCountdown(Math.floor(remainingSeconds));
+        
+        // Auto-remove lockout message after the lockout period
+        setTimeout(() => {
+          const lockoutMessage = document.getElementById('lockout-message');
+          if (lockoutMessage) {
+            lockoutMessage.remove();
+          }
+          showNotification('You can now try logging in again.', 'info', 5000);
+        }, remainingSeconds * 1000);
       }
       
-      function startLockoutCountdown(totalSeconds) {
-        let timeLeft = Math.floor(totalSeconds);
-        const timerElement = document.getElementById('lockout-timer');
-        
-        lockoutTimer = setInterval(() => {
-          timeLeft--;
-          
-          const minutes = Math.floor(timeLeft / 60);
-          const seconds = Math.floor(timeLeft % 60);
-          
-          if (timerElement) {
-            timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            
-            // Change color based on time remaining
-            if (timeLeft <= 30) {
-              timerElement.style.color = '#dc3545'; // Red
-              timerElement.classList.add('timer-warning');
-            } else if (timeLeft <= 60) {
-              timerElement.style.color = '#fd7e14'; // Orange
-            } else {
-              timerElement.style.color = '#6f42c1'; // Purple
-            }
-          }
-          
-          if (timeLeft <= 0) {
-            clearInterval(lockoutTimer);
-            
-            // Remove lockout message
-            const lockoutMessage = document.getElementById('lockout-message');
-            if (lockoutMessage) {
-              lockoutMessage.remove();
-            }
-            
-            // Show message that they can try again
-            showNotification('Lockout Expired: You can now try logging in again. Please be careful with your credentials.', 'info', 8000);
-          }
-        }, 1000);
-      }
+      // Lockout countdown function removed for security
 
       // OTP form submission
       if (otpForm && verifyOtpButton) {

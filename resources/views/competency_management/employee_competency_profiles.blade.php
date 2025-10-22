@@ -698,7 +698,10 @@
           const selectedEmployeeName = this.options[this.selectedIndex].text;
           
           if (selectedEmployeeId) {
-            document.getElementById('selectedEmployeeName').textContent = selectedEmployeeName;
+            const selectedEmployeeNameElement = document.getElementById('selectedEmployeeName');
+            if (selectedEmployeeNameElement) {
+              selectedEmployeeNameElement.textContent = selectedEmployeeName;
+            }
             
             // Show employee's existing skills first
             showEmployeeSkills(selectedEmployeeId, selectedEmployeeName);
@@ -829,8 +832,16 @@
 
         pendingAction = callback;
         passwordConfirmForm.reset();
-        document.getElementById('passwordError').textContent = '';
-        document.getElementById('confirmPassword').classList.remove('is-invalid');
+        
+        const passwordError = document.getElementById('passwordError');
+        const confirmPassword = document.getElementById('confirmPassword');
+        
+        if (passwordError) {
+          passwordError.textContent = '';
+        }
+        if (confirmPassword) {
+          confirmPassword.classList.remove('is-invalid');
+        }
 
         passwordConfirmModal.show();
       }
@@ -839,19 +850,27 @@
       if (passwordConfirmForm) {
         passwordConfirmForm.addEventListener('submit', function(e) {
           e.preventDefault();
-          const password = document.getElementById('confirmPassword').value;
+          const confirmPasswordElement = document.getElementById('confirmPassword');
+          const passwordErrorElement = document.getElementById('passwordError');
+          
+          if (!confirmPasswordElement || !passwordErrorElement) {
+            console.error('Password confirmation elements not found');
+            return;
+          }
+          
+          const password = confirmPasswordElement.value;
           const submitBtn = this.querySelector('button[type="submit"]');
           const originalText = submitBtn.innerHTML;
 
           if (!password) {
-            document.getElementById('confirmPassword').classList.add('is-invalid');
-            document.getElementById('passwordError').textContent = 'Password is required';
+            confirmPasswordElement.classList.add('is-invalid');
+            passwordErrorElement.textContent = 'Password is required';
             return;
           }
 
           // Clear previous errors
-          document.getElementById('confirmPassword').classList.remove('is-invalid');
-          document.getElementById('passwordError').textContent = '';
+          confirmPasswordElement.classList.remove('is-invalid');
+          passwordErrorElement.textContent = '';
 
           // Show loading state
           submitBtn.disabled = true;
@@ -869,8 +888,12 @@
             }
           }).catch(error => {
             // Error
-            document.getElementById('confirmPassword').classList.add('is-invalid');
-            document.getElementById('passwordError').textContent = error.message || 'Invalid password';
+            if (confirmPasswordElement) {
+              confirmPasswordElement.classList.add('is-invalid');
+            }
+            if (passwordErrorElement) {
+              passwordErrorElement.textContent = error.message || 'Invalid password';
+            }
           }).finally(() => {
             // Reset button state
             submitBtn.disabled = false;
@@ -1688,7 +1711,13 @@
       // Function to detect skill gaps for selected employee
       function detectSkillGaps(employeeId, employeeName) {
         const skillGapSection = document.getElementById('skillGapSection');
-        const skillGapContent = document.getElementById('skillGapContent');
+        const skillGapContent = document.getElementById('skillGapsList');
+        
+        // Check if elements exist
+        if (!skillGapSection || !skillGapContent) {
+          console.error('Skill gap elements not found');
+          return;
+        }
         
         // Show loading state
         skillGapContent.innerHTML = `
@@ -1734,7 +1763,13 @@
 
       // Function to display skill gaps
       function displaySkillGaps(skillGaps, totalGaps, employeeId, employeeName) {
-        const skillGapContent = document.getElementById('skillGapContent');
+        const skillGapContent = document.getElementById('skillGapsList');
+        
+        // Check if element exists
+        if (!skillGapContent) {
+          console.error('skillGapsList element not found');
+          return;
+        }
         
         if (skillGaps.length === 0) {
           skillGapContent.innerHTML = `
@@ -1948,7 +1983,9 @@
       const awardsEmptyState = document.getElementById('awardsEmptyState');
 
       // Load awards automatically when page loads (since section is visible by default)
-      loadAllAwards();
+      if (awardsTableBody) {
+        loadAllAwards();
+      }
 
       // Toggle awards section
       if (toggleAwardsBtn && awardsSection) {
@@ -2251,9 +2288,15 @@
           `;
         });
 
-        awardsTableBody.innerHTML = html;
-        awardsTable.style.display = 'table';
-        awardsEmptyState.style.display = 'none';
+        if (awardsTableBody) {
+          awardsTableBody.innerHTML = html;
+        }
+        if (awardsTable) {
+          awardsTable.style.display = 'table';
+        }
+        if (awardsEmptyState) {
+          awardsEmptyState.style.display = 'none';
+        }
       }
 
       // Helper function to get status badge class

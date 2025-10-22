@@ -49,40 +49,33 @@
       font-size: 0.85em;
       font-weight: 500;
     }
-    .gap-strong { background-color: #e8f5e8; color: #2e7d32; }
-    .gap-moderate { background-color: #fff3e0; color: #ef6c00; }
-    .gap-needs-development { background-color: #ffebee; color: #c62828; }
+    .gap-strong { background-color: transparent; color: #2e7d32; }
+    .gap-moderate { background-color: transparent; color: #ef6c00; }
+    .gap-needs-development { background-color: transparent; color: #c62828; }
 
-    /* Category Badge Colors */
-    .category-leadership {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-    }
-    .category-technical {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      color: white;
-      border: none;
-    }
-    .category-behavioral {
-      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-      color: white;
-      border: none;
-    }
-    .category-destination-knowledge {
-      background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-      color: white;
-      border: none;
-    }
-    .category-communication {
-      background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
-      color: white;
-      border: none;
-    }
-    .category-general {
-      background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
-      color: #333;
-      border: none;
+    /* Category Badge Colors - Simple Card Header Style */
+    .category-leadership,
+    .category-technical,
+    .category-behavioral,
+    .category-destination-knowledge,
+    .category-communication,
+    .category-general,
+    .category-interpersonal,
+    .category-cognitive,
+    .category-analytical,
+    .category-creative,
+    .category-problem-solving,
+    .category-decision-making,
+    .category-emotional-intelligence,
+    .category-adaptability,
+    .category-teamwork,
+    .category-management,
+    .category-strategic-thinking,
+    .category-innovation,
+    .category-organizational {
+      background: #f8f9fa !important;
+      color: black !important;
+      border: 1px solid #dee2e6 !important;
     }
 
     /* Deadline Status Colors */

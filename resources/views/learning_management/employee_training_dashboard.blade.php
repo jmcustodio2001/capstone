@@ -9,7 +9,15 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
-  <link rel="stylesheet" href="{{ asset('resources/css/responsive.css') }}">
+  
+  <!-- Load optional CSS files with error handling -->
+  <style>
+    /* Responsive styles fallback */
+    @media (max-width: 768px) {
+      .mobile-hidden { display: none !important; }
+      .card-grid { grid-template-columns: 1fr !important; }
+    }
+  </style>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- jQuery for AJAX functionality -->
@@ -542,15 +550,30 @@
 
   <!-- SweetAlert Integration - No modal needed -->
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
   <script>
   // Initialize tooltips and basic functionality
   document.addEventListener('DOMContentLoaded', function() {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-      return new bootstrap.Tooltip(tooltipTriggerEl);
-    });
+    // Safe tooltip initialization
+    try {
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+      console.log('Tooltips initialized:', tooltipList.length);
+    } catch (error) {
+      console.warn('Tooltip initialization failed:', error);
+    }
+    
+    // Safe dropdown initialization
+    try {
+      const dropdownElements = document.querySelectorAll('[data-bs-toggle="dropdown"]');
+      dropdownElements.forEach(function(element) {
+        new bootstrap.Dropdown(element);
+      });
+      console.log('Dropdowns initialized:', dropdownElements.length);
+    } catch (error) {
+      console.warn('Dropdown initialization failed:', error);
+    }
 
     // Animate Bootstrap progress bars
     document.querySelectorAll('.progress-bar').forEach((bar, index) => {
@@ -571,27 +594,40 @@
       }, 100);
     });
 
-    // Filter functionality
-    document.getElementById('applyFilters').addEventListener('click', function() {
-      const employeeFilter = document.getElementById('filterEmployee').value;
-      const courseFilter = document.getElementById('filterCourse').value;
-      const statusFilter = document.getElementById('filterStatus').value;
+    // Filter functionality with null checks
+    const applyFiltersBtn = document.getElementById('applyFilters');
+    if (applyFiltersBtn) {
+      applyFiltersBtn.addEventListener('click', function() {
+        const employeeFilterEl = document.getElementById('filterEmployee');
+        const courseFilterEl = document.getElementById('filterCourse');
+        const statusFilterEl = document.getElementById('filterStatus');
+        
+        const employeeFilter = employeeFilterEl ? employeeFilterEl.value : '';
+        const courseFilter = courseFilterEl ? courseFilterEl.value : '';
+        const statusFilter = statusFilterEl ? statusFilterEl.value : '';
 
-      Swal.fire({
-        title: 'Filters Applied',
-        html: `<strong>Employee:</strong> ${employeeFilter || 'All'}<br>
-               <strong>Course:</strong> ${courseFilter || 'All'}<br>
-               <strong>Status:</strong> ${statusFilter || 'All'}`,
-        icon: 'info',
-        confirmButtonText: 'OK'
+        Swal.fire({
+          title: 'Filters Applied',
+          html: `<strong>Employee:</strong> ${employeeFilter || 'All'}<br>
+                 <strong>Course:</strong> ${courseFilter || 'All'}<br>
+                 <strong>Status:</strong> ${statusFilter || 'All'}`,
+          icon: 'info',
+          confirmButtonText: 'OK'
+        });
       });
-    });
+    }
   });
 
   // Password verification function
   async function verifyAdminPassword(password) {
     try {
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+      
+      if (!csrfToken) {
+        console.error('CSRF token not found');
+        return false;
+      }
+      
       const response = await fetch('/admin/verify-password', {
         method: 'POST',
         headers: {
@@ -821,6 +857,16 @@
     });
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    
+    if (!csrfToken) {
+      Swal.fire({
+        title: 'Error!',
+        text: 'Security token not found. Please refresh the page.',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
 
     fetch(`{{ url('/admin/employee-trainings-dashboard') }}/${id}`, {
       method: 'PUT',
@@ -942,6 +988,16 @@
     });
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    
+    if (!csrfToken) {
+      Swal.fire({
+        title: 'Error!',
+        text: 'Security token not found. Please refresh the page.',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
 
     fetch(`{{ url('/admin/employee-trainings-dashboard') }}/${id}`, {
       method: 'DELETE',
@@ -1049,6 +1105,16 @@
     });
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    
+    if (!csrfToken) {
+      Swal.fire({
+        title: 'Error!',
+        text: 'Security token not found. Please refresh the page.',
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
+      return;
+    }
 
     // Use GET method with password as query parameter since route only supports GET
     console.log('Making GET request to create missing entries with password verification');
@@ -1597,6 +1663,42 @@
 
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="{{ asset('resources/js/responsive.js') }}"></script>
+  
+  <!-- Initialize global objects to prevent undefined errors -->
+  <script>
+    // Prevent translation service errors
+    if (typeof window.translationService === 'undefined') {
+      window.translationService = {
+        translate: function(key) { return key; },
+        get: function(key) { return key; }
+      };
+    }
+    
+    // Add any other global objects that might be missing
+    if (typeof window.app === 'undefined') {
+      window.app = {};
+    }
+    
+    // Prevent sidebar toggle errors
+    if (typeof window.toggleSidebar === 'undefined') {
+      window.toggleSidebar = function() {
+        console.log('Sidebar toggle called (fallback)');
+      };
+    }
+    
+    // Prevent any Array.find errors for older browsers
+    if (!Array.prototype.find) {
+      Array.prototype.find = function(predicate) {
+        for (let i = 0; i < this.length; i++) {
+          if (predicate(this[i], i, this)) {
+            return this[i];
+          }
+        }
+        return undefined;
+      };
+    }
+    
+    console.log('Global objects and polyfills initialized to prevent undefined errors');
+  </script>
 </body>
 </html>

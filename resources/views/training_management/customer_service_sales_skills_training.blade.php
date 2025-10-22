@@ -1009,7 +1009,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Date Completed*</label>
-              <input type="date" class="form-control" name="date_completed" value="{{ $record->date_completed }}" required>
+              <input type="date" class="form-control" name="date_completed" value="{{ $record->date_completed ? \Carbon\Carbon::parse($record->date_completed)->format('Y-m-d') : '' }}" required>
             </div>
           </div>
           <div class="modal-footer">
@@ -1123,6 +1123,57 @@
   @endphp
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <!-- Initialize global objects to prevent undefined errors -->
+  <script>
+    // Prevent translation service errors
+    if (typeof window.translationService === 'undefined') {
+      window.translationService = {
+        translate: function(key) { return key; },
+        get: function(key) { return key; }
+      };
+    }
+    
+    // Add any other global objects that might be missing
+    if (typeof window.app === 'undefined') {
+      window.app = {};
+    }
+    
+    // Prevent sidebar toggle errors
+    if (typeof window.toggleSidebar === 'undefined') {
+      window.toggleSidebar = function() {
+        console.log('Sidebar toggle called (fallback)');
+      };
+    }
+    
+    // Safe Bootstrap initialization
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Initialize tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+          return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+        console.log('Tooltips initialized:', tooltipList.length);
+      } catch (error) {
+        console.warn('Tooltip initialization failed:', error);
+      }
+      
+      try {
+        // Initialize dropdowns
+        const dropdownElements = document.querySelectorAll('[data-bs-toggle="dropdown"]');
+        dropdownElements.forEach(function(element) {
+          new bootstrap.Dropdown(element);
+        });
+        console.log('Dropdowns initialized:', dropdownElements.length);
+      } catch (error) {
+        console.warn('Dropdown initialization failed:', error);
+      }
+    });
+    
+    console.log('Global objects and Bootstrap components initialized safely');
+  </script>
+  
   <script>
     // Pagination variables
     const itemsPerPage = 5; // Show 5 items per page
@@ -1268,19 +1319,34 @@
       });
     }
 
-    // Get CSRF Token
+    // Get CSRF Token with error handling
     function getCSRFToken() {
-      return document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+      const metaTag = document.querySelector('meta[name="csrf-token"]');
+      if (!metaTag) {
+        console.error('CSRF token meta tag not found');
+        return null;
+      }
+      const token = metaTag.getAttribute('content');
+      if (!token) {
+        console.error('CSRF token content is empty');
+        return null;
+      }
+      return token;
     }
 
     // Verify Admin Password
     async function verifyAdminPassword(password) {
       try {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          throw new Error('CSRF token not available');
+        }
+        
         const response = await fetch('/admin/verify-password', {
           method: 'POST',
           headers: {
             'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': getCSRFToken(),
+            'X-CSRF-TOKEN': csrfToken,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ password: password })
@@ -1696,7 +1762,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label fw-bold">Date Completed *</label>
-              <input type="date" class="form-control" name="date_completed" value="${record.date_completed}" required>
+              <input type="date" class="form-control" name="date_completed" value="${record.date_completed ? new Date(record.date_completed).toISOString().split('T')[0] : ''}" required>
             </div>
             <input type="hidden" name="password_verification" value="${password}">
             <input type="hidden" name="_method" value="PUT">

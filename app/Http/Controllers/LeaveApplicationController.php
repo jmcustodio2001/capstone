@@ -38,10 +38,15 @@ class LeaveApplicationController extends Controller
     public function store(Request $request)
     {
         try {
+            Log::info('Leave application submission started', ['request_data' => $request->all()]);
+            
             $employee = Auth::guard('employee')->user();
             if (!$employee) {
+                Log::error('Employee not authenticated in leave application');
                 return response()->json(['error' => 'Employee not authenticated.'], 401);
             }
+            
+            Log::info('Employee authenticated', ['employee_id' => $employee->employee_id]);
 
             $request->validate([
                 'leave_type' => 'required|in:Vacation,Sick,Emergency',
@@ -83,7 +88,9 @@ class LeaveApplicationController extends Controller
 
             try {
                 $leaveApplication = LeaveApplication::create($leaveData);
+                Log::info('Leave application created successfully', ['leave_id' => $leaveId, 'application_id' => $leaveApplication->id]);
             } catch (\Exception $e) {
+                Log::error('Failed to create leave application with full data: ' . $e->getMessage());
                 // If full creation fails, try with minimal columns
                 $minimalData = [
                     'employee_id' => $employee->employee_id,

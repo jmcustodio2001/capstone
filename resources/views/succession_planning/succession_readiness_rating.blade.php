@@ -119,14 +119,14 @@
           @endif
           <div class="row">
             <div class="col-md-4">
-              <input type="text" name="employee_display" class="form-control" placeholder="Use AI Analysis to select employee" readonly 
+              <input type="text" name="employee_display" class="form-control" placeholder="Select Employee" readonly 
                 @if(isset($rating) && $rating->employee) value="{{ $rating->employee->first_name }} {{ $rating->employee->last_name }} ({{ $rating->employee_id }})" @endif
                 @if(isset($showMode)) disabled @endif>
               <input type="hidden" name="employee_id" required
                 @if(isset($rating)) value="{{ $rating->employee_id }}" @endif>
             </div>
             <div class="col-md-3">
-              <input type="text" name="readiness_level" class="form-control" placeholder="Use AI Analysis to set level" readonly required 
+              <input type="text" name="readiness_level" class="form-control" placeholder="Readiness Level" readonly required 
                 @if(isset($rating)) value="{{ $rating->readiness_level }}" @endif
                 @if(isset($showMode)) disabled @endif>
             </div>

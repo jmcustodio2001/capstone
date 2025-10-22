@@ -131,18 +131,18 @@ class AdminController extends Controller
         }
 
         // Failed login - increment attempts counter
-        $this->handleFailedLoginAttempt($request, 'The provided credentials do not match our records.');
+        $this->handleFailedLoginAttempt($request, 'Invalid credentials');
         
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => false,
-                'message' => 'The provided credentials do not match our records.',
+                'message' => 'Invalid credentials',
                 'step' => 'invalid_credentials'
             ], 401);
         }
         
         return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
+            'email' => 'Invalid credentials',
         ]);
     }
 

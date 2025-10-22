@@ -16,6 +16,59 @@
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
   <script>
+    // Prevent translation service errors
+    if (typeof window.translationService === 'undefined') {
+      window.translationService = {
+        translate: function(key, params) { 
+          console.log('Translation fallback - translate:', key);
+          return key; 
+        },
+        get: function(key, params) { 
+          console.log('Translation fallback - get:', key);
+          return key; 
+        },
+        trans: function(key, params) { 
+          console.log('Translation fallback - trans:', key);
+          return key; 
+        },
+        choice: function(key, count, params) { 
+          console.log('Translation fallback - choice:', key);
+          return key; 
+        },
+        setTranslations: function(translations) {
+          console.log('Translation fallback - setTranslations:', translations);
+          // Store translations in a simple object
+          this._translations = translations || {};
+          return this;
+        },
+        getTranslations: function() {
+          console.log('Translation fallback - getTranslations');
+          return this._translations || {};
+        },
+        has: function(key) {
+          console.log('Translation fallback - has:', key);
+          return false; // Always return false for fallback
+        },
+        locale: function(locale) {
+          console.log('Translation fallback - locale:', locale);
+          return locale || 'en';
+        }
+      };
+    }
+    
+    // Also ensure the global trans function exists
+    if (typeof window.trans === 'undefined') {
+      window.trans = function(key, params) {
+        console.log('Global trans fallback:', key);
+        return key;
+      };
+    }
+    
+    // Add any other global objects that might be missing
+    if (typeof window.app === 'undefined') {
+      window.app = {};
+    }
+    
     // Initialize static text content
     window.messages = {
       loading: 'Loading...',
@@ -738,13 +791,14 @@
         <script>
         document.addEventListener('DOMContentLoaded', function() {
           const form = document.querySelector('form.mb-4');
-          form.addEventListener('submit', function(e) {
+          if (form) {
+            form.addEventListener('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(form);
             fetch("{{ route('succession_simulations.store') }}", {
               method: 'POST',
               headers: {
-                'X-CSRF-TOKEN': document.querySelector('input[name=_token]').value,
+                'X-CSRF-TOKEN': document.querySelector('input[name=_token]')?.value || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
                 'Accept': 'application/json',
               },
               body: formData
@@ -761,6 +815,9 @@
               alert('Error adding simulation entry. Please check your input.');
             });
           });
+          } else {
+            console.warn('Form with class mb-4 not found');
+          }
         });
         </script>
       </div>
@@ -2374,6 +2431,10 @@
     // Display Advanced AI Scenarios
     function displayAdvancedScenarios(scenarios) {
       const container = document.getElementById('scenarioResults');
+      if (!container) {
+        console.warn('scenarioResults element not found');
+        return;
+      }
       let html = '';
 
       scenarios.forEach((scenario, index) => {
@@ -2575,6 +2636,10 @@
 
     function generateAIScenarios(type, severity, timeline) {
       const container = document.getElementById('scenarioResults');
+      if (!container) {
+        console.warn('scenarioResults element not found');
+        return;
+      }
 
       container.innerHTML = `
         <div class="col-12 mb-3">
@@ -3266,6 +3331,10 @@
 
     function displayGeneratedScenarios(scenario) {
       const container = document.getElementById('scenarioResults');
+      if (!container) {
+        console.warn('scenarioResults element not found');
+        return;
+      }
 
       const riskColor = scenario.riskScore >= 80 ? 'danger' : scenario.riskScore >= 60 ? 'warning' : 'success';
       const impactColor = scenario.impactLevel === 'critical' ? 'danger' : scenario.impactLevel === 'high' ? 'warning' : 'primary';
@@ -3682,6 +3751,10 @@
 
     function displayCandidatesInModal(candidates) {
       const container = document.getElementById('candidatesContainer');
+      if (!container) {
+        console.warn('candidatesContainer element not found');
+        return;
+      }
       container.innerHTML = '';
 
       candidates.forEach(candidate => {
@@ -3837,7 +3910,12 @@
     function simulateScenario(scenarioIndex) {
       console.log('Simulate scenario called with index:', scenarioIndex);
 
-      const modal = new bootstrap.Modal(document.getElementById('scenarioResultsModal'));
+      const modalElement = document.getElementById('scenarioResultsModal');
+      if (!modalElement) {
+        console.warn('scenarioResultsModal element not found');
+        return;
+      }
+      const modal = new bootstrap.Modal(modalElement);
 
       // Get scenario data from the page
       const scenarioCards = document.querySelectorAll('.scenario-card');
@@ -3853,7 +3931,10 @@
       const scenarioTitle = scenarioCard.querySelector('.card-title').textContent.trim();
       const impactLevel = scenarioCard.querySelector('.badge').textContent.trim();
 
-      document.getElementById('scenarioTitle').textContent = scenarioTitle + ' - Simulation Results';
+      const scenarioTitleElement = document.getElementById('scenarioTitle');
+      if (scenarioTitleElement) {
+        scenarioTitleElement.textContent = scenarioTitle + ' - Simulation Results';
+      }
 
       // Run simulation
       const results = runScenarioSimulation(scenarioIndex, scenarioTitle, impactLevel);
@@ -3974,6 +4055,10 @@
 
     function displayScenarioResults(results) {
       const container = document.getElementById('scenarioResultsContainer');
+      if (!container) {
+        console.warn('scenarioResultsContainer element not found');
+        return;
+      }
       let html = '<div class="simulation-results">';
 
       // Add real data indicator
@@ -4091,57 +4176,84 @@
       }, 2000);
     }
 
-    // Add Candidate Form Submission
-    document.getElementById('addCandidateForm').addEventListener('submit', function(e) {
-      e.preventDefault();
+    // Initialize Add Candidate Form when modal is ready
+    function initializeAddCandidateForm() {
+      const addCandidateForm = document.getElementById('addCandidateForm');
+      if (addCandidateForm && !addCandidateForm.hasAttribute('data-initialized')) {
+        addCandidateForm.setAttribute('data-initialized', 'true');
+        addCandidateForm.addEventListener('submit', function(e) {
+          e.preventDefault();
 
-      const formData = new FormData(this);
-      const data = Object.fromEntries(formData);
+          const formData = new FormData(this);
+          const data = Object.fromEntries(formData);
 
-      // Show loading state
-      const submitBtn = this.querySelector('button[type="submit"]');
-      const originalText = submitBtn.innerHTML;
-      submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Adding...';
-      submitBtn.disabled = true;
+          // Show loading state
+          const submitBtn = this.querySelector('button[type="submit"]');
+          const originalText = submitBtn.innerHTML;
+          submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Adding...';
+          submitBtn.disabled = true;
 
-      // Send to backend
-      fetch('/api/succession-planning/candidates', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify(data)
-      })
-      .then(response => response.json())
-      .then(result => {
-        if (result.success) {
-          // Close modal
-          const modal = bootstrap.Modal.getInstance(document.getElementById('addCandidateModal'));
-          modal.hide();
-
-          // Reset form
-          this.reset();
-
-          // Show success message
-          showNotification('Candidate added successfully!', 'success');
-
-          // Reload candidates list
-          location.reload();
-        } else {
-          showNotification('Error adding candidate: ' + (result.message || 'Unknown error'), 'error');
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        showNotification('Error adding candidate. Please try again.', 'error');
-      })
-      .finally(() => {
-        // Reset button
-        submitBtn.innerHTML = originalText;
-        submitBtn.disabled = false;
-      });
+          // Send to backend
+          fetch('/api/succession-planning/candidates', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': getCSRFToken(),
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify(data)
+          })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(result => {
+            if (result.success) {
+              showNotification('Candidate added successfully!', 'success');
+              // Close modal
+              const modal = bootstrap.Modal.getInstance(document.getElementById('addCandidateModal'));
+              if (modal) {
+                modal.hide();
+              }
+              // Refresh the page or update the display
+              setTimeout(() => {
+                location.reload();
+              }, 1500);
+            } else {
+              throw new Error(result.message || 'Failed to add candidate');
+            }
+          })
+          .catch(error => {
+            console.error('Error:', error);
+            showNotification('Error adding candidate. Please try again.', 'error');
+          })
+          .finally(() => {
+            // Reset button
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+          });
+        });
+        console.log('addCandidateForm event listener attached successfully');
+      }
+    }
+    
+    // Try to initialize the form immediately
+    initializeAddCandidateForm();
+    
+    // Also try to initialize when DOM is fully loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeAddCandidateForm();
     });
+    
+    // Initialize when modal is shown (if modal exists)
+    const addCandidateModal = document.getElementById('addCandidateModal');
+    if (addCandidateModal) {
+      addCandidateModal.addEventListener('shown.bs.modal', function() {
+        initializeAddCandidateForm();
+      });
+    }
 
     function showNotification(message, type = 'info') {
       // Create notification element

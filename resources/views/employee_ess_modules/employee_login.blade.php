@@ -11,8 +11,6 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <!-- Bootstrap Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-  <!-- SweetAlert2 CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <!-- Login Page Styles -->
   <link rel="stylesheet" href="{{ asset('assets/css/admin_login-style.css') }}">
   <!-- Google reCAPTCHA -->
@@ -124,6 +122,7 @@
               @error('email')
                 <div class="invalid-feedback">{{ $message }}</div>
               @enderror
+              <div class="invalid-feedback" id="emailError" style="display: none;"></div>
             </div>
           </div>
 
@@ -145,6 +144,7 @@
               @error('password')
                 <div class="invalid-feedback">{{ $message }}</div>
               @enderror
+              <div class="invalid-feedback" id="passwordError" style="display: none;"></div>
             </div>
           </div>
 
@@ -159,7 +159,16 @@
           <div class="mb-3 d-flex justify-content-center">
             <div class="g-recaptcha" data-sitekey="{{ env('RECAPTCHA_SITE_KEY') }}" id="recaptcha-widget"></div>
           </div>
+          
+          <!-- CAPTCHA error display -->
+          <div class="alert alert-warning" id="captchaError" style="display: none;"></div>
 
+          <!-- Success notification display -->
+          <div class="alert alert-success" id="successMessage" style="display: none;"></div>
+
+          <!-- General login error display -->
+          <div class="alert alert-danger" id="loginError" style="display: none;"></div>
+          
           <button type="submit" class="btn btn-login mb-3" id="loginButton">
             <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
           </button>
@@ -225,8 +234,6 @@
 
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- SweetAlert2 JS -->
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -346,17 +353,10 @@
       }
 
       function showExpiredMessage() {
-        Swal.fire({
-          icon: 'warning',
-          title: 'Code Expired',
-          text: 'Your verification code has expired. Please request a new one.',
-          confirmButtonText: 'Request New Code',
-          confirmButtonColor: '#667eea'
-        }).then((result) => {
-          if (result.isConfirmed) {
-            resendOTP();
-          }
-        });
+        const requestNew = confirm('Your verification code has expired. Please request a new one.\n\nClick OK to request a new code.');
+        if (requestNew) {
+          resendOTP();
+        }
       }
 
       // Show OTP form
@@ -403,90 +403,74 @@
           clearInterval(lockoutTimer);
         }
         
-        // Show initial lockout message
-        Swal.fire({
-          icon: 'error',
-          title: 'Account Temporarily Locked',
-          html: `
-            <div style="text-align: center;">
-              <p>Account temporarily locked due to too many failed attempts.</p>
-              <p><strong>Lockout #${lockoutCount}</strong></p>
-              <div style="font-size: 2rem; font-weight: bold; color: #dc3545; margin: 20px 0;">
-                <span id="lockout-timer">${minutes}:${seconds.toString().padStart(2, '0')}</span>
-              </div>
-              <p>Please try again when the timer reaches zero.</p>
-              <small style="color: #6c757d;">Progressive lockout: Each lockout doubles the wait time.</small>
-            </div>
-          `,
-          confirmButtonColor: '#667eea',
-          width: '500px',
-          allowOutsideClick: false,
-          allowEscapeKey: false,
-          showConfirmButton: false,
-          didOpen: () => {
-            startLockoutCountdown(remainingSeconds);
-          },
-          willClose: () => {
-            if (lockoutTimer) {
-              clearInterval(lockoutTimer);
-            }
-          }
-        });
+        // Show lockout message
+        alert('Account temporarily locked due to too many failed attempts.\n\nPlease try again later.');
+        
+        // Auto-unlock after lockout period
+        setTimeout(() => {
+          alert('You can now try logging in again.');
+        }, remainingSeconds * 1000);
       }
       
-      function startLockoutCountdown(totalSeconds) {
-        let timeLeft = totalSeconds;
-        const timerElement = document.getElementById('lockout-timer');
-        
-        lockoutTimer = setInterval(() => {
-          timeLeft--;
-          
-          const minutes = Math.floor(timeLeft / 60);
-          const seconds = timeLeft % 60;
-          
-          if (timerElement) {
-            timerElement.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            
-            // Change color based on time remaining
-            if (timeLeft <= 30) {
-              timerElement.style.color = '#dc3545'; // Red
-              timerElement.classList.add('timer-warning');
-            } else if (timeLeft <= 60) {
-              timerElement.style.color = '#fd7e14'; // Orange
-            } else {
-              timerElement.style.color = '#6f42c1'; // Purple
-            }
-          }
-          
-          if (timeLeft <= 0) {
-            clearInterval(lockoutTimer);
-            Swal.close();
-            
-            // Show message that they can try again
-            Swal.fire({
-              icon: 'info',
-              title: 'Lockout Expired',
-              text: 'You can now try logging in again. Please be careful with your credentials.',
-              confirmButtonColor: '#667eea',
-              timer: 3000
-            });
-          }
-        }, 1000);
-      }
+      // Lockout countdown function removed for security
 
       // CAPTCHA validation function
       function validateCaptcha() {
         const captchaResponse = grecaptcha.getResponse();
         if (!captchaResponse) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'CAPTCHA Required',
-            text: 'Please complete the CAPTCHA verification before proceeding.',
-            confirmButtonColor: '#667eea'
-          });
+          showCaptchaError('Please complete the CAPTCHA verification before proceeding.');
           return false;
         }
         return true;
+      }
+
+      // Function to show CAPTCHA errors
+      function showCaptchaError(message) {
+        const captchaErrorDiv = document.getElementById('captchaError');
+        captchaErrorDiv.textContent = message;
+        captchaErrorDiv.style.display = 'block';
+        
+        // Hide after 5 seconds
+        setTimeout(() => {
+          captchaErrorDiv.style.display = 'none';
+        }, 5000);
+      }
+
+      // Function to show success messages
+      function showSuccessMessage(message) {
+        const successDiv = document.getElementById('successMessage');
+        successDiv.textContent = message;
+        successDiv.style.display = 'block';
+        
+        // Hide after 3 seconds
+        setTimeout(() => {
+          successDiv.style.display = 'none';
+        }, 3000);
+      }
+
+      // Function to show login errors inline
+      function showLoginError(message) {
+        const loginErrorDiv = document.getElementById('loginError');
+        loginErrorDiv.textContent = message;
+        loginErrorDiv.style.display = 'block';
+        
+        // Hide after 5 seconds
+        setTimeout(() => {
+          loginErrorDiv.style.display = 'none';
+        }, 5000);
+      }
+
+      // Function to clear all error displays
+      function clearLoginErrors() {
+        document.getElementById('loginError').style.display = 'none';
+        document.getElementById('emailError').style.display = 'none';
+        document.getElementById('passwordError').style.display = 'none';
+        document.getElementById('captchaError').style.display = 'none';
+        document.getElementById('successMessage').style.display = 'none';
+        
+        // Remove invalid classes
+        document.getElementById('email').classList.remove('is-invalid');
+        document.getElementById('password').classList.remove('is-invalid');
       }
 
       // Reset CAPTCHA function
@@ -499,6 +483,9 @@
       // Login form submission
       loginForm.addEventListener('submit', async function(e) {
         e.preventDefault();
+
+        // Clear previous errors
+        clearLoginErrors();
 
         // Validate CAPTCHA first
         if (!validateCaptcha()) {
@@ -553,13 +540,7 @@
                 message = `Verification code sent to your email. Use code: ${data.dev_otp}`;
               }
 
-              Swal.fire({
-                icon: 'success',
-                title: 'Verification Code Sent!',
-                text: message,
-                timer: 3000,
-                showConfirmButton: false
-              });
+              showSuccessMessage(message);
               showOTPForm(document.getElementById('email').value);
             } else if (data.step === 'login_complete') {
               // Direct login successful (if OTP is not required)
@@ -573,19 +554,28 @@
               // Reset CAPTCHA on error
               resetCaptcha();
               
-              // Show error message (server already includes remaining attempts)
+              // Show error message inline
               let errorText = data.message || 'An unknown error occurred.';
-              if (data.debug_info) {
-                errorText += '\n\nDebug Info: ' + data.debug_info;
+              
+              // Check if it's an email or password specific error
+              if (errorText.toLowerCase().includes('email') || errorText.toLowerCase().includes('account') || errorText.toLowerCase().includes('no account found')) {
+                document.getElementById('email').classList.add('is-invalid');
+                document.getElementById('emailError').textContent = errorText;
+                document.getElementById('emailError').style.display = 'block';
+              } else if (errorText.toLowerCase().includes('password') || 
+                         errorText.toLowerCase().includes('credential') || 
+                         errorText.toLowerCase().includes('incorrect') || 
+                         errorText.toLowerCase().includes('wrong') ||
+                         errorText.toLowerCase().includes('invalid') ||
+                         errorText.toLowerCase().includes('failed') ||
+                         errorText.toLowerCase().includes('login')) {
+                // Most login failures are password-related, show in password field
+                document.getElementById('password').classList.add('is-invalid');
+                document.getElementById('passwordError').textContent = errorText;
+                document.getElementById('passwordError').style.display = 'block';
+              } else {
+                showLoginError(errorText);
               }
-
-              Swal.fire({
-                icon: 'error',
-                title: 'Login Failed',
-                text: errorText,
-                confirmButtonColor: '#667eea',
-                width: '500px'
-              });
             }
           }
         } catch (error) {
@@ -593,12 +583,7 @@
           // Reset CAPTCHA on connection error
           resetCaptcha();
           
-          Swal.fire({
-            icon: 'error',
-            title: 'Connection Error',
-            text: 'Unable to connect to the server. Please check your internet connection and try again.',
-            confirmButtonColor: '#667eea'
-          });
+          showLoginError('Unable to connect to the server. Please check your internet connection and try again.');
         } finally {
           // Restore button state
           submitButton.disabled = false;
@@ -671,16 +656,8 @@
               clearInterval(otpTimer);
             }
 
-            // Show success message and redirect
-            Swal.fire({
-              icon: 'success',
-              title: 'Login Successful!',
-              text: data.message,
-              timer: 2000,
-              showConfirmButton: false
-            }).then(() => {
-              window.location.href = data.redirect_url;
-            });
+            // Redirect directly without showing success message
+            window.location.href = data.redirect_url;
           } else {
             showOTPError(data.message);
             if (data.remaining_attempts !== undefined) {
@@ -710,12 +687,7 @@
         const csrfToken = getCSRFToken();
         
         if (!csrfToken) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Session Error',
-            text: 'Please refresh the page and try again.',
-            confirmButtonColor: '#667eea'
-          });
+          alert('Session Error\n\nPlease refresh the page and try again.');
           submitButton.disabled = false;
           submitButton.innerHTML = originalText;
           return;
@@ -737,33 +709,17 @@
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Code Resent!',
-              text: data.message,
-              timer: 2000,
-              showConfirmButton: false
-            });
+            alert('Code Resent!\n\n' + data.message);
 
             // Restart timer
             startOTPTimer();
           } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Resend Failed',
-              text: data.message,
-              confirmButtonColor: '#667eea'
-            });
+            alert('Resend Failed\n\n' + data.message);
           }
         })
         .catch(error => {
           console.error('Resend OTP error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Connection Error',
-            text: 'Unable to resend code. Please try again.',
-            confirmButtonColor: '#667eea'
-          });
+          alert('Connection Error\n\nUnable to resend code. Please try again.');
         })
         .finally(() => {
           // Restore button state
@@ -783,21 +739,12 @@
       resendOtpButton.addEventListener('click', resendOTP);
 
       backToLoginButton.addEventListener('click', function() {
-        Swal.fire({
-          title: 'Cancel Login?',
-          text: 'Are you sure you want to go back to the login form?',
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: 'Yes, go back',
-          cancelButtonText: 'Continue with OTP',
-          confirmButtonColor: '#667eea'
-        }).then((result) => {
-          if (result.isConfirmed) {
-            // Reset CAPTCHA when going back to login
-            resetCaptcha();
-            showLoginForm();
-          }
-        });
+        const goBack = confirm('Cancel Login?\n\nAre you sure you want to go back to the login form?');
+        if (goBack) {
+          // Reset CAPTCHA when going back to login
+          resetCaptcha();
+          showLoginForm();
+        }
       });
 
       // OTP input formatting

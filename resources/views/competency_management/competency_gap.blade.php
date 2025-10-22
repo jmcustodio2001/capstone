@@ -948,8 +948,28 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
-  <script src="{{ asset('assets/js/admin_dashboard-script.js') }}"></script>
-  <script src="{{ asset('js/csrf-refresh.js') }}"></script>
+  
+  <!-- Load optional JavaScript files with error handling -->
+  <script>
+    // Function to safely load optional scripts
+    function loadOptionalScript(src, callback) {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = function() {
+        console.log('Successfully loaded:', src);
+        if (callback) callback();
+      };
+      script.onerror = function() {
+        console.warn('Failed to load optional script:', src);
+        if (callback) callback();
+      };
+      document.head.appendChild(script);
+    }
+    
+    // Load optional scripts
+    loadOptionalScript('{{ asset('assets/js/admin_dashboard-script.js') }}');
+    loadOptionalScript('{{ asset('js/csrf-refresh.js') }}');
+  </script>
   <script>
 // Sweet Alert confirmation for competency delete
 function confirmDeleteCompetency() {
@@ -966,19 +986,8 @@ function confirmDeleteCompetency() {
   });
 }
 
-// Auto-refresh CSRF token every 10 minutes to prevent 419 errors
-setInterval(function() {
-  fetch('/csrf-token')
-    .then(response => response.json())
-    .then(data => {
-      const newToken = data.token || data.csrf_token;
-      if (newToken) {
-        document.querySelector('meta[name="csrf-token"]').setAttribute('content', newToken);
-        console.log('CSRF token auto-refreshed');
-      }
-    })
-    .catch(error => console.error('CSRF token refresh failed:', error));
-}, 10 * 60 * 1000); // 10 minutes
+// Note: CSRF token auto-refresh removed to prevent 404 errors
+// The token should be refreshed by the server on page load or through other means
 
 // Enhanced Toast Notification Functions using SweetAlert2
 function showSuccessToast(message, duration = 3000) {
@@ -1108,7 +1117,12 @@ document.addEventListener('DOMContentLoaded', function () {
             }, 1500);
           } else {
             // Refresh the current view if no courses were assigned
-            refreshGapTable();
+            if (typeof refreshGapTable === 'function') {
+              refreshGapTable();
+            } else {
+              // Fallback: reload the page
+              window.location.reload();
+            }
           }
         })
         .catch(error => {
@@ -2010,25 +2024,25 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.disabled = true;
         btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Fixing...';
 
-        // Refresh CSRF token before making request
-        fetch('/csrf-token')
-          .then(response => response.json())
-          .then(tokenData => {
-            const newToken = tokenData.token || tokenData.csrf_token;
-            if (newToken) {
-              // Update meta tag
-              document.querySelector('meta[name="csrf-token"]').setAttribute('content', newToken);
-            }
+        // Get current CSRF token and make the request
+        const currentToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        
+        if (!currentToken) {
+          console.error('CSRF token not found');
+          btn.disabled = false;
+          btn.innerHTML = originalText;
+          showToast('❌ Security token not found. Please refresh the page.');
+          return;
+        }
 
-            // Make the actual request with fresh token
-            return fetch('{{ route("competency_gap_analysis.fix_expired_dates") }}', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': newToken || document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-              }
-            });
-          })
+        // Make the request with current token
+        fetch('{{ route("competency_gap_analysis.fix_expired_dates") }}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': currentToken
+          }
+        })
         .then(response => response.json())
         .then(data => {
           // Reset button state
@@ -2590,11 +2604,27 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         
         // Re-attach other button listeners as needed
-        setupAutoAssignButtons();
+        if (typeof setupAutoAssignButtons === 'function') {
+          setupAutoAssignButtons();
+        }
+      }
+      
+      // Function to refresh gap table (placeholder)
+      function refreshGapTable() {
+        console.log('Refreshing gap table...');
+        // Simple page reload as fallback
+        window.location.reload();
       }
       
       // Function to refresh dashboard counts via AJAX
       function refreshDashboardCounts() {
+        // Check if CSRF token exists
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (!csrfToken) {
+          console.warn('CSRF token not found, skipping dashboard refresh');
+          return Promise.resolve();
+        }
+        
         // Try both endpoints to ensure counts are updated
         const endpoints = [
           '/employee/my-trainings/get-counts',
@@ -2605,11 +2635,17 @@ document.addEventListener('DOMContentLoaded', function () {
           fetch(endpoint, {
             method: 'GET',
             headers: {
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'X-CSRF-TOKEN': csrfToken,
               'Accept': 'application/json'
             }
           })
-          .then(response => response.json())
+          .then(response => {
+            if (!response.ok) {
+              console.warn(`Endpoint ${endpoint} returned ${response.status}`);
+              return null;
+            }
+            return response.json();
+          })
           .catch(error => {
             console.warn(`Error fetching from ${endpoint}:`, error);
             return null;

@@ -92,11 +92,8 @@
     </div>
 
     <div class="simulation-card card">
-      <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+      <div class="card-header card-header-custom">
         <h4 class="fw-bold mb-0">Employee Profile Updates</h4>
-        <button class="btn btn-warning btn-sm" onclick="fixOldValuesWithConfirmation()" title="Fix missing current values in existing records">
-          <i class="bi bi-wrench"></i> Fix Old Values
-        </button>
       </div>
       <div class="card-body">
         <div class="table-responsive">

@@ -1136,12 +1136,7 @@
                     <label class="form-label" for="status">Status</label>
                     <select class="form-select" name="status" id="status">
                       <option value="not-started" selected>Not Started</option>
-                      <option value="in-progress">In Progress</option>
-                      <option value="completed">Completed</option>
                     </select>
-                    <small class="text-info">
-                      <i class="bi bi-info-circle"></i> Status will be automatically set: 0% = Not Started, 1-99% = In Progress, 100% = Completed
-                    </small>
                   </div>
                 </div>
                 <!-- Removed Active field -->
@@ -1797,6 +1792,35 @@
   }
 
   // (Deprecated duplicate) Sync Missing Records handler removed. Use setupSyncButton() below.
+  
+  // Initialize admin topbar dropdowns to fix Tools and Jetlouge Admin clickability
+  setTimeout(function() {
+    try {
+      // Initialize Bootstrap dropdowns for admin topbar
+      const dropdownElementList = document.querySelectorAll('.dropdown-toggle');
+      
+      dropdownElementList.forEach(function (dropdownToggleEl) {
+        try {
+          // Check if already initialized
+          if (!bootstrap.Dropdown.getInstance(dropdownToggleEl)) {
+            new bootstrap.Dropdown(dropdownToggleEl, {
+              boundary: 'viewport',
+              display: 'dynamic',
+              autoClose: true
+            });
+            console.log('Initialized dropdown:', dropdownToggleEl.id);
+          }
+        } catch (e) {
+          console.warn('Failed to initialize dropdown:', dropdownToggleEl.id, e);
+        }
+      });
+      
+      console.log('Admin topbar dropdowns initialized successfully');
+    } catch (error) {
+      console.error('Error initializing admin topbar dropdowns:', error);
+    }
+  }, 500); // Small delay to ensure Bootstrap is fully loaded
+  
   </script>
   <script>
   // Remove all .modal-backdrop elements on page load and after any modal event
@@ -2600,7 +2624,6 @@
         </div>
       </div>
 
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
       <script>
         let pendingAction = null;

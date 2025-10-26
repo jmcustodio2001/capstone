@@ -105,8 +105,7 @@ class AdminController extends Controller
                     return response()->json([
                         'success' => true,
                         'step' => 'otp_required',
-                        'message' => 'Verification code sent to your email address.',
-                        // Remove OTP from response for security - only log it
+                        // No message for security - don't reveal OTP was sent
                     ]);
                 }
                 
@@ -417,12 +416,11 @@ class AdminController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
-                'message' => 'New verification code sent to your email.',
-                // OTP is only logged for security - not exposed in response
+                // No message for security - don't reveal OTP was sent
             ]);
         }
 
-        return back()->with('success', 'New verification code sent to your email.');
+        return back();
     }
 
     /**

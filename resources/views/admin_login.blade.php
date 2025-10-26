@@ -530,18 +530,11 @@
 
             if (data.success) {
               if (data.step === 'otp_required') {
-                // Show success message and switch to OTP form
-                let message = data.message;
-                showNotification('Verification Code Sent! ' + message, 'success', 3000);
-                setTimeout(() => {
-                  showOTPForm(email);
-                }, 1000);
+                // Switch to OTP form without revealing details
+                showOTPForm(email);
               } else if (data.step === 'login_complete') {
-                // Direct login successful
-                showNotification('Login successful! Redirecting...', 'success', 2000);
-                setTimeout(() => {
-                  window.location.href = data.redirect_url || '{{ route("admin.dashboard") }}';
-                }, 1000);
+                // Direct login successful - redirect without notification for security
+                window.location.href = data.redirect_url || '{{ route("admin.dashboard") }}';
               }
             } else {
               // Handle server-side error responses
@@ -671,11 +664,8 @@
                 clearInterval(otpTimer);
               }
 
-              // Show success message and redirect
-              showNotification('Login Successful! ' + data.message, 'success', 2000);
-              setTimeout(() => {
-                window.location.href = data.redirect_url || '{{ route("admin.dashboard") }}';
-              }, 1000);
+              // Redirect without notification for security
+              window.location.href = data.redirect_url || '{{ route("admin.dashboard") }}';
             } else {
               showOTPError(data.message);
               if (data.remaining_attempts !== undefined) {
@@ -723,11 +713,10 @@
         .then(response => response.json())
         .then(data => {
           if (data.success) {
-            showNotification('Code Resent! ' + data.message, 'success');
-            // Restart timer
+            // Restart timer without notification for security
             startOTPTimer();
           } else {
-            showNotification('Resend Failed: ' + data.message, 'error');
+            showNotification('Unable to resend code. Please try again.', 'error');
           }
         })
         .catch(error => {

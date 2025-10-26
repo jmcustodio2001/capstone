@@ -393,6 +393,15 @@
             <option value="intermediate">Intermediate (2.5+)</option>
             <option value="needs-improvement">Needs Improvement</option>
           </select>
+          <div class="pagination-controls">
+            <button class="btn btn-outline-secondary btn-sm" onclick="previousPage('skills')" id="skills-prev-btn">
+              <i class="bi bi-chevron-left"></i> Previous
+            </button>
+            <span class="mx-2 text-muted" id="skills-page-info">Page 1</span>
+            <button class="btn btn-outline-secondary btn-sm" onclick="nextPage('skills')" id="skills-next-btn">
+              Next <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
         </div>
       </div>
       <div class="card-body">
@@ -408,27 +417,7 @@
                 </tr>
               </thead>
               <tbody id="skillsTableBody">
-                @php
-                    // Get all skills from competency library
-                    $competencySkills = App\Models\CompetencyLibrary::where(function($query) {
-                        $query->where('category', 'Sales')
-                              ->orWhere('category', 'Customer Service')
-                              ->orWhere('category', 'Communication')
-                              ->orWhere('category', 'Leadership')
-                              ->orWhere('category', 'Technical')
-                              ->orWhere('category', 'Interpersonal')
-                              ->orWhere('competency_name', 'LIKE', '%service%')
-                              ->orWhere('competency_name', 'LIKE', '%sales%')
-                              ->orWhere('competency_name', 'LIKE', '%customer%')
-                              ->orWhere('competency_name', 'LIKE', '%communication%')
-                              ->orWhere('competency_name', 'LIKE', '%leadership%');
-                    })
-                    ->orderBy('category')
-                    ->orderBy('competency_name')
-                    ->get();
-                @endphp
-
-                @foreach($competencySkills as $skill)
+                @foreach($skills as $skill)
                   @php
                     // Get the skill level from rate or default to average for the category
                     $skillLevel = $skill->rate;
@@ -1176,7 +1165,7 @@
   
   <script>
     // Pagination variables
-    const itemsPerPage = 5; // Show 5 items per page
+    const itemsPerPage = 15; // Show 15 items per page for better viewing
     let currentPages = {
       gaps: 1,
       skills: 1,
@@ -1211,7 +1200,7 @@
       if (document.getElementById('gaps-container')) {
         updatePagination('gaps');
       }
-      if (document.getElementById('skills-container')) {
+      if (document.getElementById('skillsTableBody')) {
         updatePagination('skills');
       }
       if (document.getElementById('records-container')) {
@@ -1221,7 +1210,13 @@
 
     // Pagination Functions
     function previousPage(section) {
-      const container = document.getElementById(`${section}-container`);
+      let container;
+      if (section === 'skills') {
+        container = document.getElementById('skillsTableBody');
+      } else {
+        container = document.getElementById(`${section}-container`);
+      }
+      
       if (container && currentPages[section] > 1) {
         currentPages[section]--;
         updatePagination(section);
@@ -1229,7 +1224,13 @@
     }
 
     function nextPage(section) {
-      const container = document.getElementById(`${section}-container`);
+      let container;
+      if (section === 'skills') {
+        container = document.getElementById('skillsTableBody');
+      } else {
+        container = document.getElementById(`${section}-container`);
+      }
+      
       if (container) {
         const totalPages = Math.ceil(allData[section].length / itemsPerPage);
         if (currentPages[section] < totalPages) {
@@ -1240,7 +1241,12 @@
     }
 
     function updatePagination(section) {
-      const container = document.getElementById(`${section}-container`);
+      let container;
+      if (section === 'skills') {
+        container = document.getElementById('skillsTableBody');
+      } else {
+        container = document.getElementById(`${section}-container`);
+      }
       if (!container) return;
 
       const data = allData[section];
@@ -1292,15 +1298,16 @@
     }
 
     function updateSkillsDisplay(data, startIndex, endIndex) {
-      const container = document.getElementById('skills-container');
+      const tableBody = document.getElementById('skillsTableBody');
+      if (!tableBody) return;
 
-      // Hide all skill items first
-      const allSkillItems = container.querySelectorAll('.col-lg-4');
-      allSkillItems.forEach((item, index) => {
+      // Hide all skill rows first
+      const allSkillRows = tableBody.querySelectorAll('.skill-row');
+      allSkillRows.forEach((row, index) => {
         if (index < startIndex || index >= endIndex) {
-          item.style.display = 'none';
+          row.style.display = 'none';
         } else {
-          item.style.display = 'block';
+          row.style.display = 'table-row';
         }
       });
     }

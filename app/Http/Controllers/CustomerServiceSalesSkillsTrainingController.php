@@ -10,6 +10,7 @@ use App\Models\CompetencyLibrary;
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class CustomerServiceSalesSkillsTrainingController extends Controller
 {
@@ -54,16 +55,13 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                 ];
             });
 
-        // Content Reference: List of skills from competency library for training assignment
-        // Exclude destination training related competencies from the skills reference table
-        $skills = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
-            ->where('category', '!=', 'General')
-            ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-            ->where('competency_name', 'NOT LIKE', '%ITALY%')
-            ->where('competency_name', 'NOT LIKE', '%destination%')
-            ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
-            ->orderBy('id', 'desc')
+        // Content Reference: Get ALL competency records to show complete overview
+        // Show ALL competencies for complete skills overview (30 records total)
+        $skills = CompetencyLibrary::orderBy('category')
+            ->orderBy('competency_name')
             ->get();
+
+        Log::info('Total skills count in controller: ' . $skills->count());
 
         // SYNC WITH MAIN EMPLOYEE TRAINING DASHBOARD DATA
         // Instead of using separate CustomerServiceSalesSkillsTraining table,

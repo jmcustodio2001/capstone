@@ -788,35 +788,22 @@
     // Add Certificate with Password Confirmation
     async function addCertificateWithConfirmation() {
       const { value: password } = await Swal.fire({
-        title: '🔐 Admin Verification Required',
-        html: `
-          <div class="text-start">
-            <p class="mb-3"><i class="bi bi-shield-check text-primary"></i> <strong>Security Notice:</strong></p>
-            <p class="text-muted small mb-3">Adding certificate records requires admin verification to ensure data integrity and prevent unauthorized access to training records.</p>
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Enter Admin Password:</label>
-              <input type="password" id="admin-password" class="form-control" placeholder="Your admin password" minlength="3">
-              <div class="form-text">Password must be at least 3 characters long</div>
-            </div>
-          </div>
-        `,
+        title: 'Security Verification Required',
+        text: 'Please enter your password to continue.',
+        input: 'password',
+        inputPlaceholder: 'Enter your password',
         showCancelButton: true,
-        confirmButtonText: 'Verify & Continue',
+        confirmButtonText: 'Continue',
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#0d6efd',
         cancelButtonColor: '#6c757d',
-        width: '500px',
-        preConfirm: () => {
-          const password = document.getElementById('admin-password').value;
-          if (!password) {
-            Swal.showValidationMessage('Please enter your admin password');
-            return false;
+        inputValidator: (value) => {
+          if (!value) {
+            return 'Password is required';
           }
-          if (password.length < 3) {
-            Swal.showValidationMessage('Password must be at least 3 characters long');
-            return false;
+          if (value.length < 3) {
+            return 'Password must be at least 3 characters long';
           }
-          return password;
         }
       });
 
@@ -1016,35 +1003,22 @@
     // Edit Certificate with Password Confirmation
     async function editCertificateWithConfirmation(certificateId) {
       const { value: password } = await Swal.fire({
-        title: '🔐 Admin Verification Required',
-        html: `
-          <div class="text-start">
-            <p class="mb-3"><i class="bi bi-shield-check text-primary"></i> <strong>Security Notice:</strong></p>
-            <p class="text-muted small mb-3">Editing certificate records requires admin verification to ensure data integrity and prevent unauthorized modifications.</p>
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Enter Admin Password:</label>
-              <input type="password" id="admin-password" class="form-control" placeholder="Your admin password" minlength="3">
-              <div class="form-text">Password must be at least 3 characters long</div>
-            </div>
-          </div>
-        `,
+        title: 'Security Verification Required',
+        text: 'Please enter your password to continue.',
+        input: 'password',
+        inputPlaceholder: 'Enter your password',
         showCancelButton: true,
-        confirmButtonText: 'Verify & Continue',
+        confirmButtonText: 'Continue',
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#0d6efd',
         cancelButtonColor: '#6c757d',
-        width: '500px',
-        preConfirm: () => {
-          const password = document.getElementById('admin-password').value;
-          if (!password) {
-            Swal.showValidationMessage('Please enter your admin password');
-            return false;
+        inputValidator: (value) => {
+          if (!value) {
+            return 'Password is required';
           }
-          if (password.length < 3) {
-            Swal.showValidationMessage('Password must be at least 3 characters long');
-            return false;
+          if (value.length < 3) {
+            return 'Password must be at least 3 characters long';
           }
-          return password;
         }
       });
 
@@ -1364,37 +1338,22 @@
     // Auto-Generate with Password Confirmation
     async function autoGenerateWithConfirmation() {
       const { value: password } = await Swal.fire({
-        title: '🔐 Admin Verification Required',
-        html: `
-          <div class="text-start">
-            <p class="mb-3"><i class="bi bi-magic text-success"></i> <strong>Auto-Generate Certificates:</strong></p>
-            <p class="text-muted mb-3">This will create certificate tracking records for all completed trainings from all employees. This is a bulk operation that may take some time.</p>
-            <p class="mb-3"><i class="bi bi-shield-check text-primary"></i> <strong>Security Notice:</strong></p>
-            <p class="text-muted small mb-3">Bulk certificate generation requires admin verification to ensure data integrity.</p>
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Enter Admin Password:</label>
-              <input type="password" id="admin-password" class="form-control" placeholder="Your admin password" minlength="3">
-              <div class="form-text">Password must be at least 3 characters long</div>
-            </div>
-          </div>
-        `,
+        title: 'Security Verification Required',
+        text: 'Please enter your password to continue.',
+        input: 'password',
+        inputPlaceholder: 'Enter your password',
         showCancelButton: true,
-        confirmButtonText: 'Verify & Generate',
+        confirmButtonText: 'Continue',
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#198754',
         cancelButtonColor: '#6c757d',
-        width: '500px',
-        preConfirm: () => {
-          const password = document.getElementById('admin-password').value;
-          if (!password) {
-            Swal.showValidationMessage('Please enter your admin password');
-            return false;
+        inputValidator: (value) => {
+          if (!value) {
+            return 'Password is required';
           }
-          if (password.length < 3) {
-            Swal.showValidationMessage('Password must be at least 3 characters long');
-            return false;
+          if (value.length < 3) {
+            return 'Password must be at least 3 characters long';
           }
-          return password;
         }
       });
 

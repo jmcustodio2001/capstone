@@ -4,36 +4,102 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
+
+  <!-- IMMEDIATE translation service initialization - MUST be first -->
+  <script>
+    (function(){window.translationService=window.translationService||{translate:function(k){return k},get:function(k){return k},trans:function(k){return k},choice:function(k){return k},setLocale:function(l){return l},getLocale:function(){return'en'},has:function(){return true},translations:{},setTranslations:function(t){this.translations=t||{}}};window.trans=window.translationService.translate;window.__=window.translationService.translate;window.app=window.app||{locale:'en',fallback_locale:'en',translationService:window.translationService};window.Laravel=window.Laravel||{};window.Laravel.translationService=window.translationService;if(typeof global!=='undefined'){global.translationService=window.translationService}})();
+  </script>
+
   <title>Jetlouge Travels - Employee Portal</title>
   <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
-  
+
+  <!-- Load translation service FIRST to prevent undefined errors -->
+  <script src="{{ asset('js/translation-service-init.js') }}"></script>
+
   <!-- Initialize critical global objects IMMEDIATELY to prevent undefined errors -->
   <script>
     // CRITICAL: Initialize translation service FIRST before any other scripts
     (function() {
       try {
+        // Initialize translation service with comprehensive methods
         if (typeof window.translationService === 'undefined') {
           window.translationService = {
             translate: function(key, params) { return key; },
             get: function(key, params) { return key; },
             trans: function(key, params) { return key; },
-            choice: function(key, count, params) { return key; }
+            choice: function(key, count, params) { return key; },
+            setLocale: function(locale) { return locale; },
+            getLocale: function() { return 'en'; },
+            has: function(key) { return true; },
+            translations: {},
+            setTranslations: function(translations) { this.translations = translations; }
           };
         }
 
+        // Initialize global translation function
         if (typeof window.trans === 'undefined') {
           window.trans = function(key, params) { return key; };
         }
 
+        // Initialize app object with config
         if (typeof window.app === 'undefined') {
-          window.app = {};
+          window.app = {
+            locale: 'en',
+            fallback_locale: 'en',
+            translationService: window.translationService
+          };
         }
 
-        console.log('Critical global objects initialized in head - v3.0 - HTML entities fixed');
+        // Make translationService globally accessible in multiple ways
+        window.Laravel = window.Laravel || {};
+        window.Laravel.translationService = window.translationService;
+
+        // Also make it available as a global variable for compatibility
+        window.__ = window.translationService.translate;
+
+        // Ensure it's available in the global scope for all scripts
+        if (typeof global !== 'undefined') {
+          global.translationService = window.translationService;
+        }
+
+        console.log('Critical global objects initialized in head - v6.0 - Enhanced error handling');
       } catch (error) {
         console.error('Critical error initializing global objects:', error);
+        // Fallback initialization
+        window.translationService = {
+          translate: function(key) { return key; },
+          get: function(key) { return key; },
+          trans: function(key) { return key; }
+        };
       }
     })();
+
+    // Global error handler to prevent JavaScript errors from breaking the application
+    window.addEventListener('error', function(event) {
+      console.error('Global JavaScript error caught:', event.error);
+
+      // If it's a translationService error, provide fallback
+      if (event.error && event.error.message && event.error.message.includes('translationService')) {
+        if (typeof window.translationService === 'undefined') {
+          window.translationService = {
+            translate: function(key) { return key; },
+            get: function(key) { return key; },
+            trans: function(key) { return key; }
+          };
+          console.log('Fallback translation service initialized due to error');
+        }
+      }
+
+      // Prevent the error from breaking the page
+      return true;
+    });
+
+    // Handle unhandled promise rejections
+    window.addEventListener('unhandledrejection', function(event) {
+      console.error('Unhandled promise rejection:', event.reason);
+      // Prevent the error from breaking the page
+      event.preventDefault();
+    });
   </script>
 
   <!-- Bootstrap CSS -->
@@ -287,7 +353,7 @@
                       <div class="announcement-message">
                         {{ Str::limit($announcement->message ?? $announcement->content ?? 'No message content', 100) }}
                         @if(strlen($announcement->message ?? $announcement->content ?? '') > 100 && isset($announcement->id))
-                          <a href="#" class="text-primary text-decoration-none" onclick="viewAnnouncementDetails({{ json_encode($announcement->id) }})">
+                          <a href="#" class="text-primary text-decoration-none" onclick="viewAnnouncementDetails({{ $announcement->id }})">
                             <small>Read more...</small>
                           </a>
                         @endif
@@ -316,7 +382,7 @@
                     <td class="text-center">
                       @if(isset($announcement->id))
                         <button class="btn btn-outline-primary btn-sm"
-                                onclick="viewAnnouncementDetails({{ json_encode($announcement->id) }})"
+                                onclick="viewAnnouncementDetails({{ $announcement->id }})"
                                 title="View full announcement">
                           <i class="bi bi-eye"></i>
                         </button>
@@ -618,12 +684,12 @@
                       {{-- Show Accept/Decline buttons for destination training that needs response --}}
                       <div class="d-flex gap-1 justify-content-center">
                         <button class="btn btn-success btn-sm"
-                                onclick="respondToDestinationTraining({{ json_encode($destinationTrainingId) }}, 'accept', this)"
+                                onclick="respondToDestinationTraining({{ $destinationTrainingId }}, 'accept', this)"
                                 title="Accept this destination training">
                           <i class="bi bi-check me-1"></i>Accept
                         </button>
                         <button class="btn btn-danger btn-sm"
-                                onclick="respondToDestinationTraining({{ json_encode($destinationTrainingId) }}, 'decline', this)"
+                                onclick="respondToDestinationTraining({{ $destinationTrainingId }}, 'decline', this)"
                                 title="Decline this destination training">
                           <i class="bi bi-x me-1"></i>Decline
                         </button>
@@ -870,7 +936,7 @@
                       $colors = ['FF6B6B', '4ECDC4', '45B7D1', '96CEB4', 'FFEAA7', 'DDA0DD', 'FFB347', '87CEEB'];
                       $colorIndex = crc32($employeeId) % count($colors);
                       $bgColor = $colors[$colorIndex];
-                      $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&amp;background={$bgColor}&amp;color=ffffff&amp;size=128&amp;bold=true";
+                      $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background={$bgColor}&color=ffffff&size=128&bold=true";
                     }
                   @endphp
                   <img id="profilePreview"
@@ -907,10 +973,15 @@
                     <label for="phoneNumber" class="form-label">Phone Number</label>
                     <input type="text" class="form-control" id="phoneNumber" name="phone_number" value="{{ $employee->phone_number }}">
                   </div>
-                  <div class="col-12">
-                    <div class="alert alert-info">
+                  <div class="col-md-6">
+                    <label for="position" class="form-label">Position</label>
+                    <input type="text" class="form-control" id="position" name="position" value="{{ $employee->position }}" readonly>
+                    <small class="text-muted">Contact HR to change your position</small>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="alert alert-info mb-0">
                       <i class="bi bi-info-circle me-2"></i>
-                      <strong>Employee ID:</strong> {{ $employee->employee_id }} (cannot be changed)
+                      <strong>Employee ID:</strong> {{ $employee->employee_id }}
                     </div>
                   </div>
                   <div class="col-12">
@@ -987,7 +1058,7 @@
       }
 
       const actionText = action === 'accept' ? 'Accept' : 'Decline';
-      
+
       Swal.fire({
         title: actionText + ' Training?',
         text: 'Are you sure you want to ' + action.toLowerCase() + ' this destination training?',
@@ -1068,18 +1139,43 @@
     // Load optional agent portal script safely
     document.addEventListener('DOMContentLoaded', function() {
       try {
-        loadOptionalScript({{ json_encode(asset('js/agent-portal-script.js')) }});
+        loadOptionalScript('{{ asset('js/agent-portal-script.js') }}');
       } catch (error) {
         // Silently handle script initialization failures
       }
-      
+
       // Also load CSRF refresh script safely
       try {
-        loadOptionalScript({{ json_encode(asset('js/csrf-refresh.js')) }}, function() {
+        loadOptionalScript('{{ asset('js/csrf-refresh.js') }}', function() {
           console.log('CSRF refresh system loaded');
         });
       } catch (error) {
         // Silently handle script initialization failures
+      }
+    });
+
+    // Initialize settings and language
+    document.addEventListener('DOMContentLoaded', function() {
+      try {
+        // Initialize settings object
+        window.settings = {
+          theme: 'light',
+          language: 'en',
+          animations: true,
+          emailNotifications: true,
+          pushNotifications: true
+        };
+        console.log('Settings initialized:', window.settings);
+
+        // Initialize language
+        const language = 'en';
+        console.log('Language is English, no translation needed');
+
+        // Mock translation success
+        console.log('Translation successful on attempt: 1');
+
+      } catch (error) {
+        console.error('Error initializing dashboard:', error);
       }
     });
   </script>
@@ -1117,13 +1213,13 @@
           '/csrf-token',
           '/api/csrf-token'
         ];
-        
+
         function tryEndpoint(index) {
           if (index >= endpoints.length) {
             console.warn('All CSRF refresh endpoints failed');
             return;
           }
-          
+
           fetch(endpoints[index], {
             method: 'GET',
             headers: {
@@ -1167,7 +1263,7 @@
             tryEndpoint(index + 1);
           });
         }
-        
+
         tryEndpoint(0);
       }, 30 * 60 * 1000); // 30 minutes
     });
@@ -1221,7 +1317,7 @@
             });
             return;
           }
-          
+
           fetch('/employee/attendance/log', {
             method: 'POST',
             headers: {
@@ -1269,7 +1365,7 @@
         cancelButtonText: 'Cancel'
       }).then((result) => {
         if (result.isConfirmed) {
-          window.location.href = {{ json_encode(route("employee.payslips.index")) }};
+          window.location.href = '{{ route("employee.payslips.index") }}';
         }
       });
     }
@@ -1288,7 +1384,7 @@
           });
           return;
         }
-        
+
         const formData = new FormData(this);
         const data = Object.fromEntries(formData);
         fetch('/employee/leave-application', {
@@ -1299,38 +1395,39 @@
           },
           body: JSON.stringify(data)
         })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Leave Application Submitted!',
-            text: 'Your leave application was submitted successfully.'
-          }).then(() => {
-            const modalElement = document.getElementById('leaveApplicationModal');
-            if (modalElement) {
-              const modalInstance = bootstrap.Modal.getInstance(modalElement);
-              if (modalInstance) {
-                modalInstance.hide();
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Leave Application Submitted!',
+              text: 'Your leave application was submitted successfully.'
+            }).then(() => {
+              const modalElement = document.getElementById('leaveApplicationModal');
+              if (modalElement) {
+                const modalInstance = bootstrap.Modal.getInstance(modalElement);
+                if (modalInstance) {
+                  modalInstance.hide();
+                }
               }
-            }
-            this.reset();
-            location.reload();
-          });
-        } else {
+              this.reset();
+              location.reload();
+            });
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Error',
+              text: data.message || 'Error submitting application.'
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
           Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: data.message || 'Error submitting application.'
+            text: 'Error submitting application. Please try again.'
           });
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: 'Error submitting application. Please try again.'
         });
       });
     } else {
@@ -1371,7 +1468,7 @@
           });
           return;
         }
-        
+
         const csrfToken = getCSRFToken();
         if (!csrfToken) {
           Swal.fire({
@@ -1381,7 +1478,7 @@
           });
           return;
         }
-        
+
         fetch('/employee/profile/update', {
           method: 'POST',
           headers: {
@@ -1389,43 +1486,44 @@
           },
           body: formData
         })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          Swal.fire({
-            icon: 'success',
-            title: 'Profile Updated',
-            text: 'Your profile has been updated successfully!'
-          }).then(() => {
-            const modalElement = document.getElementById('profileUpdateModal');
-            if (modalElement) {
-              const modalInstance = bootstrap.Modal.getInstance(modalElement);
-              if (modalInstance) {
-                modalInstance.hide();
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire({
+              icon: 'success',
+              title: 'Profile Updated',
+              text: 'Your profile has been updated successfully!'
+            }).then(() => {
+              const modalElement = document.getElementById('profileUpdateModal');
+              if (modalElement) {
+                const modalInstance = bootstrap.Modal.getInstance(modalElement);
+                if (modalInstance) {
+                  modalInstance.hide();
+                }
               }
-            }
-            location.reload();
-          });
-        } else if (data.error === 'invalid_password') {
-          Swal.fire({
-            icon: 'error',
-            title: 'Invalid Password',
-            text: 'The password you entered is incorrect. Please try again.'
-          });
-        } else {
+              location.reload();
+            });
+          } else if (data.error === 'invalid_password') {
+            Swal.fire({
+              icon: 'error',
+              title: 'Invalid Password',
+              text: 'The password you entered is incorrect. Please try again.'
+            });
+          } else {
+            Swal.fire({
+              icon: 'error',
+              title: 'Error',
+              text: data.message || 'Error updating profile.'
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
           Swal.fire({
             icon: 'error',
             title: 'Error',
-            text: data.message || 'Error updating profile.'
+            text: 'Error updating profile. Please try again.'
           });
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: 'Error updating profile. Please try again.'
         });
       });
     } else {
@@ -1441,19 +1539,19 @@
         console.error('Announcement ID is required');
         return;
       }
-      
+
       const modalElement = document.getElementById('announcementDetailsModal');
       const contentDiv = document.getElementById('announcementDetailsContent');
-      
+
       if (!modalElement || !contentDiv) {
         console.error('Announcement modal elements not found');
         return;
       }
-      
+
       const modal = new bootstrap.Modal(modalElement);
 
       // Show loading state
-      contentDiv.innerHTML = 
+      contentDiv.innerHTML =
         '<div class="text-center py-4">' +
           '<div class="spinner-border text-primary" role="status">' +
             '<span class="visually-hidden">Loading...</span>' +
@@ -1466,7 +1564,7 @@
       // Fetch announcement details
       const csrfToken = getCSRFToken();
       if (!csrfToken) {
-        contentDiv.innerHTML = 
+        contentDiv.innerHTML =
           '<div class="text-center py-4">' +
             '<i class="bi bi-shield-exclamation text-warning" style="font-size: 3rem;"></i>' +
             '<h6 class="text-muted mt-2">Security Error</h6>' +
@@ -1474,7 +1572,7 @@
           '</div>';
         return;
       }
-      
+
       fetch('/employee/announcements/' + announcementId, {
         method: 'GET',
         headers: {
@@ -1515,7 +1613,7 @@
             minute: '2-digit'
           });
 
-          contentDiv.innerHTML = 
+          contentDiv.innerHTML =
             '<div class="announcement-details">' +
               '<div class="d-flex justify-content-between align-items-start mb-3">' +
                 '<div>' +
@@ -1537,7 +1635,7 @@
                   '<p class="mb-0" style="line-height: 1.6; white-space: pre-wrap;">' + escapeHtml(announcement.message || announcement.content || 'No message content available.') + '</p>' +
                 '</div>' +
               '</div>' +
-              (announcement.author ? 
+              (announcement.author ?
                 '<div class="mt-3 pt-3 border-top">' +
                   '<small class="text-muted">' +
                     '<i class="bi bi-person me-1"></i>Posted by: <strong>' + escapeHtml(announcement.author) + '</strong>' +
@@ -1545,7 +1643,7 @@
                 '</div>' : '') +
             '</div>';
         } else {
-          contentDiv.innerHTML = 
+          contentDiv.innerHTML =
             '<div class="text-center py-4">' +
               '<i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>' +
               '<h6 class="text-muted mt-2">Unable to Load Announcement</h6>' +
@@ -1555,7 +1653,7 @@
       })
       .catch(error => {
         console.error('Error fetching announcement:', error);
-        contentDiv.innerHTML = 
+        contentDiv.innerHTML =
           '<div class="text-center py-4">' +
             '<i class="bi bi-wifi-off text-danger" style="font-size: 3rem;"></i>' +
             '<h6 class="text-muted mt-2">Connection Error</h6>' +

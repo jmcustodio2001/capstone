@@ -107,8 +107,32 @@ class ProfileUpdateController extends Controller
             'new_value' => $newValue,
             'reason' => $request->reason,
             'status' => 'pending',
-            'requested_at' => now()
+            'requested_at' => now(),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent()
         ]);
+
+        // Send security alert for profile update request
+        try {
+            \App\Http\Controllers\Admin\SecurityAlertsController::sendSecurityAlert(
+                'Employee Profile Update Request',
+                "Employee {$employee->name} ({$employee->email}) requested to update their {$request->field_name}",
+                [
+                    'employee_id' => $employee->employee_id,
+                    'employee_name' => $employee->name,
+                    'employee_email' => $employee->email,
+                    'field_name' => $request->field_name,
+                    'old_value' => $oldValue,
+                    'new_value' => $newValue,
+                    'reason' => $request->reason,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent()
+                ],
+                'info'
+            );
+        } catch (\Exception $e) {
+            \Log::warning('Failed to send security alert for profile update: ' . $e->getMessage());
+        }
 
         return redirect()->route('employee.profile_updates.index')
             ->with('success', 'Profile update request submitted successfully!');

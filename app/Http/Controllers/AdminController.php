@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Models\AdminLoginSession;
 use App\Services\OTPService;
@@ -362,6 +365,13 @@ class AdminController extends Controller
             'last_login_ip' => $request->ip(),
             'last_user_agent' => $request->userAgent(),
         ]);
+
+        // Send login alert if enabled
+        try {
+            \App\Http\Controllers\Admin\SecurityAlertsController::sendLoginAlert($user, $request, 'admin');
+        } catch (\Exception $e) {
+            \Log::warning('Failed to send login alert: ' . $e->getMessage());
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -846,6 +856,52 @@ class AdminController extends Controller
         try {
             $notifications = [];
             
+            // Get recent employee profile updates
+            try {
+                if (Schema::hasTable('profile_updates')) {
+                    $recentProfileUpdates = DB::table('profile_updates')
+                        ->join('users', 'profile_updates.employee_id', '=', 'users.employee_id')
+                        ->where('profile_updates.created_at', '>=', now()->subDays(7))
+                        ->orderBy('profile_updates.created_at', 'desc')
+                        ->limit(5)
+                        ->select('profile_updates.*', 'users.name')
+                        ->get();
+                        
+                    foreach ($recentProfileUpdates as $update) {
+                        // Use IP address from profile update, not user's last login IP
+                        $ipAddress = $update->ip_address ?? 'N/A';
+                        $deviceInfo = 'Unknown Device';
+                        
+                        // Parse user agent from profile update for device info
+                        if ($update->user_agent) {
+                            if (strpos($update->user_agent, 'Mobile') !== false) {
+                                $deviceInfo = 'Mobile Device';
+                            } elseif (strpos($update->user_agent, 'Chrome') !== false) {
+                                $deviceInfo = 'Chrome Browser';
+                            } elseif (strpos($update->user_agent, 'Firefox') !== false) {
+                                $deviceInfo = 'Firefox Browser';
+                            } elseif (strpos($update->user_agent, 'Safari') !== false) {
+                                $deviceInfo = 'Safari Browser';
+                            } else {
+                                $deviceInfo = 'Desktop Browser';
+                            }
+                        }
+                        
+                        $notifications[] = [
+                            'type' => 'profile_update',
+                            'title' => 'Profile Update',
+                            'message' => $update->name . ' updated their profile (IP: ' . $ipAddress . ')',
+                            'time_ago' => \Carbon\Carbon::parse($update->created_at)->diffForHumans(),
+                            'action_url' => '/admin/profile-updates',
+                            'ip_address' => $ipAddress,
+                            'device_info' => $deviceInfo
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                // Profile updates table might not exist, skip silently
+            }
+
             // Get recent employee registrations
             $recentEmployees = \App\Models\Employee::where('created_at', '>=', now()->subDays(7))
                 ->orderBy('created_at', 'desc')
@@ -907,6 +963,57 @@ class AdminController extends Controller
                     'time_ago' => $completion->updated_at->diffForHumans(),
                     'action_url' => '/admin/employee-trainings-dashboard'
                 ];
+            }
+
+            // Get recent security alerts (if table exists) - excluding login alerts to avoid duplication
+            try {
+                if (\Schema::hasTable('security_alerts')) {
+                    $recentAlerts = \App\Models\SecurityAlert::where('created_at', '>=', now()->subDays(7))
+                        ->where('type', '!=', 'login_alert') // Exclude login alerts to avoid duplication
+                        ->orderBy('created_at', 'desc')
+                        ->limit(10)
+                        ->get();
+                        
+                    foreach ($recentAlerts as $alert) {
+                        $ipAddress = 'N/A';
+                        $deviceInfo = 'Unknown Device';
+                        
+                        // Extract IP and device info from alert details
+                        if ($alert->details && is_array($alert->details)) {
+                            $ipAddress = $alert->details['ip_address'] ?? 'N/A';
+                            $userAgent = $alert->details['user_agent'] ?? '';
+                            
+                            // Parse user agent for device info
+                            if ($userAgent) {
+                                if (strpos($userAgent, 'Mobile') !== false) {
+                                    $deviceInfo = 'Mobile Device';
+                                } elseif (strpos($userAgent, 'Chrome') !== false) {
+                                    $deviceInfo = 'Chrome Browser';
+                                } elseif (strpos($userAgent, 'Firefox') !== false) {
+                                    $deviceInfo = 'Firefox Browser';
+                                } elseif (strpos($userAgent, 'Safari') !== false) {
+                                    $deviceInfo = 'Safari Browser';
+                                } else {
+                                    $deviceInfo = 'Desktop Browser';
+                                }
+                            }
+                        }
+                        
+                        $notifications[] = [
+                            'type' => $alert->type,
+                            'title' => $alert->title,
+                            'message' => $alert->message . " (IP: {$ipAddress})",
+                            'time_ago' => $alert->created_at->diffForHumans(),
+                            'action_url' => null,
+                            'severity' => $alert->severity,
+                            'ip_address' => $ipAddress,
+                            'device_info' => $deviceInfo
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                // Security alerts table might not exist yet, skip silently
+                Log::info('Security alerts not available: ' . $e->getMessage());
             }
 
             // Sort by most recent
@@ -1433,48 +1540,148 @@ class AdminController extends Controller
             $activities = [];
             
             // Get recent admin login sessions
-            $adminSessions = AdminLoginSession::with('user')
-                ->where('login_at', '>=', now()->subHours(24))
-                ->orderBy('login_at', 'desc')
-                ->limit(10)
-                ->get();
-                
-            foreach ($adminSessions as $session) {
-                $activities[] = [
-                    'user_name' => $session->user ? $session->user->name : 'Unknown Admin',
-                    'user_type' => 'admin',
-                    'action' => 'Login',
-                    'ip_address' => $session->ip_address,
-                    'time_ago' => $session->login_at->diffForHumans()
-                ];
+            try {
+                $adminSessions = AdminLoginSession::with('user')
+                    ->where('login_at', '>=', now()->subHours(24))
+                    ->orderBy('login_at', 'desc')
+                    ->limit(10)
+                    ->get();
+                    
+                foreach ($adminSessions as $session) {
+                    $activities[] = [
+                        'user_name' => $session->user ? $session->user->name : 'Unknown Admin',
+                        'user_type' => 'admin',
+                        'action' => 'Login',
+                        'ip_address' => $session->ip_address ?? 'N/A',
+                        'time_ago' => $session->login_at ? $session->login_at->diffForHumans() : 'Unknown',
+                        'timestamp' => $session->login_at ? $session->login_at->timestamp : 0
+                    ];
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to get admin login sessions: ' . $e->getMessage());
             }
 
-            // Get recent employee activities (simulated)
-            $recentEmployees = \App\Models\Employee::where('updated_at', '>=', now()->subHours(24))
-                ->orderBy('updated_at', 'desc')
-                ->limit(5)
-                ->get();
-                
-            foreach ($recentEmployees as $employee) {
+            // Get recent employee login activities
+            try {
+                $recentEmployeeLogins = \App\Models\Employee::where('last_login_at', '>=', now()->subHours(24))
+                    ->whereNotNull('last_login_at')
+                    ->orderBy('last_login_at', 'desc')
+                    ->limit(10)
+                    ->get();
+                    
+                foreach ($recentEmployeeLogins as $employee) {
+                    $activities[] = [
+                        'user_name' => ($employee->first_name ?? 'Unknown') . ' ' . ($employee->last_name ?? 'Employee'),
+                        'user_type' => 'employee',
+                        'action' => 'Login',
+                        'ip_address' => $employee->last_login_ip ?? 'N/A',
+                        'time_ago' => $employee->last_login_at ? $employee->last_login_at->diffForHumans() : 'Unknown',
+                        'timestamp' => $employee->last_login_at ? $employee->last_login_at->timestamp : 0
+                    ];
+                }
+            } catch (\Exception $e) {
+                Log::warning('Failed to get employee login activities: ' . $e->getMessage());
+            }
+
+            // Get recent profile update activities
+            try {
+                if (Schema::hasTable('profile_updates')) {
+                    $recentProfileUpdates = DB::table('profile_updates')
+                        ->join('users', 'profile_updates.employee_id', '=', 'users.employee_id')
+                        ->where('profile_updates.created_at', '>=', now()->subHours(24))
+                        ->orderBy('profile_updates.created_at', 'desc')
+                        ->limit(5)
+                        ->select('profile_updates.*', 'users.name')
+                        ->get();
+                        
+                    foreach ($recentProfileUpdates as $update) {
+                        $createdAt = \Carbon\Carbon::parse($update->created_at);
+                        $activities[] = [
+                            'user_name' => $update->name,
+                            'user_type' => 'employee',
+                            'action' => 'Profile Update (' . ucwords(str_replace('_', ' ', $update->field_name)) . ')',
+                            'ip_address' => $update->ip_address ?? 'N/A',
+                            'time_ago' => $createdAt->diffForHumans(),
+                            'timestamp' => $createdAt->timestamp
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                // Profile updates table might not exist, skip silently
+            }
+
+            // Get recent security alerts for failed login attempts
+            try {
+                if (Schema::hasTable('security_alerts')) {
+                    $recentSecurityEvents = \App\Models\SecurityAlert::where('type', 'security_alert')
+                        ->where('created_at', '>=', now()->subHours(24))
+                        ->where('title', 'LIKE', '%Login%')
+                        ->orderBy('created_at', 'desc')
+                        ->limit(5)
+                        ->get();
+                        
+                    foreach ($recentSecurityEvents as $alert) {
+                        $details = is_array($alert->details) ? $alert->details : json_decode($alert->details, true);
+                        $employeeName = $details['employee_name'] ?? $details['email'] ?? 'Unknown User';
+                        
+                        $activities[] = [
+                            'user_name' => $employeeName,
+                            'user_type' => 'employee',
+                            'action' => 'Failed Login Attempt',
+                            'ip_address' => $details['ip_address'] ?? 'N/A',
+                            'time_ago' => $alert->created_at->diffForHumans(),
+                            'timestamp' => $alert->created_at->timestamp
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                // Security alerts table might not exist, skip silently
+            }
+
+            // Sort activities by most recent first using timestamps
+            usort($activities, function($a, $b) {
+                $timestampA = $a['timestamp'] ?? 0;
+                $timestampB = $b['timestamp'] ?? 0;
+                return $timestampB - $timestampA; // Most recent first
+            });
+
+            // Remove timestamp from response (only used for sorting)
+            $activities = array_map(function($activity) {
+                unset($activity['timestamp']);
+                return $activity;
+            }, $activities);
+
+            // If no activities found, add a basic fallback
+            if (empty($activities)) {
                 $activities[] = [
-                    'user_name' => $employee->first_name . ' ' . $employee->last_name,
-                    'user_type' => 'employee',
-                    'action' => 'Profile Update',
+                    'user_name' => 'System',
+                    'user_type' => 'admin',
+                    'action' => 'No recent activity',
                     'ip_address' => 'N/A',
-                    'time_ago' => $employee->updated_at->diffForHumans()
+                    'time_ago' => 'N/A'
                 ];
             }
 
             return response()->json([
                 'success' => true,
-                'activities' => $activities
+                'activities' => array_slice($activities, 0, 15) // Limit to 15 most recent
             ]);
         } catch (\Exception $e) {
             Log::error('Get user activity error: ' . $e->getMessage());
+            
+            // Return a basic fallback response
             return response()->json([
-                'success' => false,
-                'message' => 'Failed to get user activity'
-            ], 500);
+                'success' => true,
+                'activities' => [
+                    [
+                        'user_name' => 'System',
+                        'user_type' => 'admin',
+                        'action' => 'Activity data unavailable',
+                        'ip_address' => 'N/A',
+                        'time_ago' => 'N/A'
+                    ]
+                ]
+            ]);
         }
     }
 

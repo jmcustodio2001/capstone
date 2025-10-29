@@ -1698,67 +1698,28 @@ async function autoCreateTrainingRequest(training) {
 // Handle automatic training requests and modal functionality
 document.getElementById('addTrainingRequestModal')?.addEventListener('show.bs.modal', function () {
   const courseSelect = document.getElementById('courseSelect');
+  if (!courseSelect) return;
 
-  // Process any unprocessed upcoming trainings first and set up course selection
   const upcomingTrainings = @json($upcomingTrainings ?? []);
+  const availableCourses = @json($availableCourses ?? []);
 
-  // Clear existing options first
-  courseSelect.innerHTML = '<option value="">Loading courses...</option>';
-
-  // Process unprocessed trainings with deduplication
-  if (upcomingTrainings && upcomingTrainings.length > 0) {
-    const seenTrainings = new Set();
-    const uniqueTrainings = upcomingTrainings.filter(training => {
-      // Apply deduplication logic
-      const normalizedTitle = training.training_title ? 
-        training.training_title.toLowerCase()
-          .replace(/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/gi, '')
-          .replace(/\s+/g, ' ')
-          .trim() : '';
-      
-      const deduplicationKey = training.course_id ? 
-        `course_${training.course_id}` : 
-        `title_${normalizedTitle}`;
-      
-      if (seenTrainings.has(deduplicationKey)) {
-        return false;
-      }
-      
-      seenTrainings.add(deduplicationKey);
-      return true;
-    });
-
-    uniqueTrainings.forEach(training => {
-      if (!document.querySelector(`tr[data-course-id="${training.course_id}"]`)) {
-        autoCreateTrainingRequest(training);
-      }
-    });
-  }
-
-  // Set up course selection
   courseSelect.innerHTML = '<option value="">Choose a course...</option>';
 
-  // Add assigned upcoming trainings as course options
   if (upcomingTrainings.length > 0) {
     const assignedGroup = document.createElement('optgroup');
     assignedGroup.label = 'Your Assigned Trainings';
 
     upcomingTrainings.forEach(training => {
       const option = document.createElement('option');
-      // Use course_id if available, otherwise use training title
       option.value = training.course_id || training.training_title;
       option.textContent = training.training_title;
       option.setAttribute('data-description', `Assigned by: ${training.assigned_by || 'System'} | Source: ${training.source || 'Unknown'}`);
-      option.setAttribute('data-training-id', training.upcoming_id || '');
-      option.setAttribute('data-source', training.source || '');
       assignedGroup.appendChild(option);
     });
 
     courseSelect.appendChild(assignedGroup);
   }
 
-  // Fallback: Add general courses if no upcoming trainings
-  const availableCourses = @json($availableCourses ?? []);
   if (upcomingTrainings.length === 0 && availableCourses.length > 0) {
     const allCoursesGroup = document.createElement('optgroup');
     allCoursesGroup.label = 'Available Courses';
@@ -1771,37 +1732,18 @@ document.getElementById('addTrainingRequestModal')?.addEventListener('show.bs.mo
       allCoursesGroup.appendChild(option);
     });
 
-    if (allCoursesGroup.children.length > 0) {
-      courseSelect.appendChild(allCoursesGroup);
-    }
+    courseSelect.appendChild(allCoursesGroup);
   }
 
-  // If no courses available
-  if (upcomingTrainings.length === 0 && availableCourses.length === 0) {
-    const option = document.createElement('option');
-    option.value = '';
-    option.textContent = 'No courses available';
-    option.disabled = true;
-    courseSelect.appendChild(option);
-  }
-
-  // Attach course selection handler after options are populated
   courseSelect.addEventListener('change', function() {
     const selectedOption = this.options[this.selectedIndex];
     const trainingTitle = document.getElementById('trainingTitle');
     const courseDescription = document.getElementById('courseDescription');
 
     if (selectedOption.value) {
-      // Remove "(Recommended)" suffix from training title if present
-      let titleText = selectedOption.textContent;
-      titleText = titleText.replace(' (Recommended)', '');
+      let titleText = selectedOption.textContent.replace(' (Recommended)', '');
       trainingTitle.value = titleText;
       courseDescription.value = selectedOption.getAttribute('data-description') || '';
-
-      const competency = selectedOption.getAttribute('data-competency');
-      if (competency) {
-        courseDescription.value += `\n\nRecommended for: ${competency} competency development`;
-      }
     } else {
       trainingTitle.value = '';
       courseDescription.value = '';
@@ -1810,7 +1752,10 @@ document.getElementById('addTrainingRequestModal')?.addEventListener('show.bs.mo
 });
 
 document.getElementById('editTrainingRequestModal')?.addEventListener('show.bs.modal', function (e) {
-  const b = e.relatedTarget, f = document.getElementById('editTrainingRequestForm');
+  const b = e.relatedTarget;
+  const f = document.getElementById('editTrainingRequestForm');
+  if (!b || !f) return;
+  
   const id = b.getAttribute('data-id');
   f.action = "{{ url('employee/my-trainings') }}/" + id;
 
@@ -1821,18 +1766,84 @@ document.getElementById('editTrainingRequestModal')?.addEventListener('show.bs.m
 });
 // Robust handler to always set current_level on course selection
 document.addEventListener('DOMContentLoaded', function() {
-  var courseSelect = document.getElementById('courseSelect');
-  var currentLevelInput = document.getElementById('currentLevelInput');
-  if (courseSelect && currentLevelInput) {
-    courseSelect.addEventListener('change', function() {
-      var selectedOption = this.options[this.selectedIndex];
-      var currentLevel = selectedOption.getAttribute('data-current-level');
-      if (currentLevel !== null) {
-        currentLevelInput.value = currentLevel;
-      } else {
-        currentLevelInput.value = 0;
+  // Ensure translation service is available
+  if (typeof window.translationService === 'undefined') {
+    window.translationService = {
+      translate: function(key) { return key; },
+      get: function(key) { return key; },
+      trans: function(key) { return key; }
+    };
+  }
+  
+  console.log('🔧 Setting up course selection handler...');
+  
+  // Use a more robust element selection with retry
+  function setupCourseHandler() {
+    const courseSelect = document.getElementById('courseSelect');
+    const trainingTitle = document.getElementById('trainingTitle');
+    
+    console.log('Course select element:', courseSelect);
+    console.log('Training title input:', trainingTitle);
+
+    if (courseSelect && trainingTitle) {
+      console.log('✅ Both elements found, adding event listener');
+      
+      // Remove any existing event listeners to prevent duplicates
+      const newCourseSelect = courseSelect.cloneNode(true);
+      courseSelect.parentNode.replaceChild(newCourseSelect, courseSelect);
+      
+      newCourseSelect.addEventListener('change', function() {
+        try {
+          console.log('📝 Course selection changed');
+          const selectedOption = this.options[this.selectedIndex];
+          const courseDescription = document.getElementById('courseDescription');
+          const currentLevelInput = document.getElementById('currentLevelInput');
+          
+          if (selectedOption && selectedOption.value) {
+            let titleText = selectedOption.textContent.replace(' (Recommended)', '');
+            trainingTitle.value = titleText;
+            
+            if (courseDescription) {
+              courseDescription.value = selectedOption.getAttribute('data-description') || '';
+            }
+            
+            if (currentLevelInput) {
+              const currentLevel = selectedOption.getAttribute('data-current-level');
+              currentLevelInput.value = currentLevel !== null ? currentLevel : 0;
+            }
+            
+            console.log('📋 Updated training title:', titleText);
+          } else {
+            trainingTitle.value = '';
+            if (courseDescription) {
+              courseDescription.value = '';
+            }
+            if (currentLevelInput) {
+              currentLevelInput.value = 0;
+            }
+          }
+        } catch (error) {
+          console.error('Error in course selection handler:', error);
+        }
+      });
+      
+      console.log('✅ Event listener added successfully');
+      return true;
+    } else {
+      console.log('❌ Elements not found:', { courseSelect: !!courseSelect, trainingTitle: !!trainingTitle });
+      return false;
+    }
+  }
+  
+  // Try to setup the handler, with retries if elements are not ready
+  if (!setupCourseHandler()) {
+    // Retry after a short delay
+    setTimeout(function() {
+      if (!setupCourseHandler()) {
+        // Final retry after longer delay
+        setTimeout(setupCourseHandler, 2000);
       }
-    });
+    }, 500);
   }
 });
 </script>
@@ -1876,31 +1887,21 @@ async function createOrUpdateProgress(training) {
     }
   });
 
-    // Show initial processing notification
-    try {
-      // Show initial processing notification
-      await Toast.fire({
-        icon: 'info',
-        title: 'Processing',
-        text: 'Initializing progress tracking...',
-        background: '#cff4fc',
-        color: '#055160'
-      });
+  try {
+    // Create FormData object with enhanced error checking
+    const formData = new FormData();
 
-      // Create FormData object with enhanced error checking
-      const formData = new FormData();
+    if (!training || !training.training_title) {
+      throw new Error('Invalid training data provided');
+    }
 
-      if (!training || !training.training_title) {
-        throw new Error('Invalid training data provided');
-      }
-
-      formData.append('employee_id', '{{ Auth::user()->employee_id }}');
-      formData.append('training_title', training.training_title);
-      formData.append('course_id', training.course_id || '');
-      formData.append('status', 'Not Started');
-      formData.append('progress', '0');
-      formData.append('source', training.source || 'auto_request');
-      formData.append('_token', '{{ csrf_token() }}');
+    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+    formData.append('training_title', training.training_title);
+    formData.append('course_id', training.course_id || '');
+    formData.append('status', 'Not Started');
+    formData.append('progress', '0');
+    formData.append('source', training.source || 'auto_request');
+    formData.append('_token', '{{ csrf_token() }}');
 
     // Add additional training info if available
     if (training.start_date) formData.append('start_date', training.start_date);
@@ -1926,131 +1927,18 @@ async function createOrUpdateProgress(training) {
     const data = await response.json();
 
     if (data.success) {
-      // Progress tracking initialized silently
-
       // Update progress data instead of full reload
       if (typeof refreshTrainingData === 'function') {
         setTimeout(() => {
           refreshTrainingData();
         }, 500);
       }
-
       return true;
     } else {
       throw new Error(data.message || 'Failed to update progress');
     }
   } catch (error) {
     console.error('Error in createOrUpdateProgress:', error);
-
-    await Toast.fire({
-      icon: 'error',
-      title: 'Error',
-      text: `Failed to update progress: ${error.message}`,
-      background: '#f8d7da',
-      color: '#842029'
-    });
-
-    return false;
-  }
-      // Progress tracking initialized silently
-
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to update progress');
-      }
-
-      // Update progress data instead of full reload
-      if (typeof refreshTrainingData === 'function') {
-        refreshTrainingData();
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Error in createOrUpdateProgress:', error);
-
-      await Toast.fire({
-        icon: 'error',
-        title: 'Error',
-        text: `Failed to update progress: ${error.message}`,
-        background: '#f8d7da',
-        color: '#842029'
-      });
-
-      return false;
-    }    // First check if progress exists
-    const checkResponse = await fetch(`/employee/training/progress/check/${training.course_id || training.training_title}`, {
-      headers: {
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-        'Accept': 'application/json'
-      }
-    });
-
-    const checkData = await checkResponse.json();
-    const exists = checkData.exists;
-
-    // Prepare form data with enhanced details
-    const formData = new FormData();
-    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
-    formData.append('training_title', training.training_title);
-    formData.append('course_id', training.course_id || '');
-    formData.append('status', exists ? 'In Progress' : 'Not Started');
-    formData.append('progress', exists ? checkData.progress || '0' : '0');
-    formData.append('source', training.source || 'auto_request');
-    formData.append('_token', '{{ csrf_token() }}');
-
-    // Add additional training info if available
-    if (training.start_date) formData.append('start_date', training.start_date);
-    if (training.end_date) formData.append('end_date', training.end_date);
-    if (training.assigned_by) formData.append('assigned_by', training.assigned_by);
-    if (training.current_level) formData.append('current_level', training.current_level);
-
-    // Create or update progress
-    const response = await fetch('/employee/training/progress', {
-      method: 'POST',
-      headers: {
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-        'Accept': 'application/json'
-      },
-      body: formData
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      // Progress updated silently
-
-      // Create notification
-      const notifFormData = new FormData();
-      notifFormData.append('message', `Training progress ${exists ? 'updated' : 'initialized'} for: ${training.training_title}`);
-      notifFormData.append('_token', '{{ csrf_token() }}');
-
-      await fetch('/employee/notifications/create', {
-        method: 'POST',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-          'Accept': 'application/json'
-        },
-        body: notifFormData
-      });
-
-      // Update progress data instead of full reload
-      if (typeof refreshTrainingData === 'function') {
-        setTimeout(() => {
-          refreshTrainingData();
-        }, 1000);
-      }
-
-      return true;
-    } else {
-      throw new Error(data.message || 'Failed to update progress');
-    }
-  } catch (error) {
-    console.error('Error in createOrUpdateProgress:', error);
-
-    await loadingToast.fire({
-      icon: 'error',
-      title: `Failed to update progress: ${error.message}`
-    });
-
     return false;
   }
 }  // Function to refresh training requests (silent refresh without loading popup)

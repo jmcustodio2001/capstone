@@ -373,6 +373,26 @@ class EmployeeController extends Controller
             'message' => $message
         ]);
 
+        // Send security alert for failed login attempts
+        try {
+            $severity = $attempts >= 3 ? 'high' : 'warning';
+            \App\Http\Controllers\Admin\SecurityAlertsController::sendSecurityAlert(
+                'Failed Employee Login Attempt',
+                "Failed login attempt #{$attempts} for employee email: {$email}",
+                [
+                    'email' => $email,
+                    'ip_address' => $ipAddress,
+                    'user_agent' => $request->userAgent(),
+                    'attempts' => $attempts,
+                    'failure_reason' => $message,
+                    'timestamp' => now()->toISOString()
+                ],
+                $severity
+            );
+        } catch (\Exception $e) {
+            \Log::warning('Failed to send security alert for login failure: ' . $e->getMessage());
+        }
+
         if ($attempts >= 3) {
             // Progressive lockout: 3 min, 6 min, 12 min, 24 min, etc.
             $lockoutCount = $request->session()->get($lockoutCountKey, 0) + 1;
@@ -393,6 +413,26 @@ class EmployeeController extends Controller
                 'lockout_minutes' => $lockoutMinutes,
                 'lockout_until' => $lockoutTime->toDateTimeString()
             ]);
+
+            // Send critical security alert for account lockout
+            try {
+                \App\Http\Controllers\Admin\SecurityAlertsController::sendSecurityAlert(
+                    'Employee Account Locked',
+                    "Employee account locked after {$attempts} failed login attempts: {$email}",
+                    [
+                        'email' => $email,
+                        'ip_address' => $ipAddress,
+                        'user_agent' => $request->userAgent(),
+                        'lockout_count' => $lockoutCount,
+                        'lockout_minutes' => $lockoutMinutes,
+                        'lockout_until' => $lockoutTime->toDateTimeString(),
+                        'failed_attempts' => $attempts
+                    ],
+                    'critical'
+                );
+            } catch (\Exception $e) {
+                \Log::warning('Failed to send security alert for account lockout: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => false,
@@ -455,6 +495,20 @@ class EmployeeController extends Controller
                 // Clear OTP session data and any failed attempts
                 $request->session()->forget(['otp_employee_id', 'login_remember']);
 
+                // Update employee's last login info (IP tracking)
+                $employee->update([
+                    'last_login_at' => now(),
+                    'last_login_ip' => $request->ip(),
+                    'last_user_agent' => $request->userAgent(),
+                ]);
+
+                // Send login alert if enabled
+                try {
+                    \App\Http\Controllers\Admin\SecurityAlertsController::sendLoginAlert($employee, $request, 'employee');
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to send employee login alert: ' . $e->getMessage());
+                }
+
                 // Clear any lockout/attempts for this user
                 $ipAddress = $request->ip();
                 $email = $employee->email;
@@ -466,6 +520,8 @@ class EmployeeController extends Controller
                 Log::info('Employee login completed with OTP', [
                     'employee_id' => $employee->employee_id,
                     'email' => $employee->email,
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent(),
                     'remember_me' => $remember
                 ]);
 
@@ -476,6 +532,25 @@ class EmployeeController extends Controller
                     'redirect_url' => route('employee.dashboard')
                 ]);
             } else {
+                // Send security alert for failed OTP attempt
+                try {
+                    \App\Http\Controllers\Admin\SecurityAlertsController::sendSecurityAlert(
+                        'Failed Employee OTP Attempt',
+                        "Failed OTP verification for employee {$employee->name} ({$employee->email})",
+                        [
+                            'employee_id' => $employee->employee_id,
+                            'employee_name' => $employee->name,
+                            'employee_email' => $employee->email,
+                            'ip_address' => $request->ip(),
+                            'user_agent' => $request->userAgent(),
+                            'remaining_attempts' => $result['remaining_attempts'] ?? null
+                        ],
+                        'warning'
+                    );
+                } catch (\Exception $e) {
+                    \Log::warning('Failed to send security alert for OTP failure: ' . $e->getMessage());
+                }
+
                 return response()->json([
                     'success' => false,
                     'message' => $result['message'],

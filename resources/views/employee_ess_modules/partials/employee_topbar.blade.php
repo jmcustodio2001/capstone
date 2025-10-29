@@ -107,11 +107,12 @@ body {
 }
 
 .btn-outline-light {
-  color: var(--text-primary);
+  color: white !important;
   border-color: rgba(255,255,255,0.3);
 }
 
 .btn-outline-light:hover {
+  color: white !important;
   background-color: rgba(255,255,255,0.1);
   border-color: rgba(255,255,255,0.5);
 }
@@ -316,7 +317,6 @@ input:checked + .dark-mode-slider:before {
                style="width: 24px; height: 24px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2);">
           <div class="d-flex flex-column align-items-start d-none d-lg-block">
             <span class="small" style="line-height: 1;">{{ $user ? ($user->first_name . ' ' . $user->last_name) : 'User' }}</span>
-            <span class="small text-light-50" style="line-height: 1;">{{ $user ? $user->employee_id : 'Employee' }}</span>
           </div>
           <i class="bi bi-chevron-down d-none d-lg-inline"></i>
           <i class="bi bi-person d-inline d-lg-none"></i>
@@ -530,14 +530,56 @@ function showAllNotifications(event) {
   });
 }
 
-function showSettings(event) {
+async function showSettings(event) {
   event.preventDefault();
   
-  // Get current settings
-  const currentTheme = localStorage.getItem('theme') || 'light';
-  const emailNotifications = localStorage.getItem('emailNotifications') !== 'false';
-  const pushNotifications = localStorage.getItem('pushNotifications') !== 'false';
-  const currentLanguage = localStorage.getItem('language') || 'en';
+  // Load settings from backend first, fallback to localStorage
+  let settings = {
+    theme: localStorage.getItem('theme') || 'light',
+    emailNotifications: localStorage.getItem('emailNotifications') !== 'false',
+    pushNotifications: localStorage.getItem('pushNotifications') !== 'false',
+    language: localStorage.getItem('language') || 'en',
+    animations: localStorage.getItem('animations') !== 'false'
+  };
+
+  // Try to load from backend
+  try {
+    const response = await fetch('/employee/settings/get', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success && data.settings) {
+        settings = {
+          theme: data.settings.dark_mode ? 'dark' : 'light',
+          emailNotifications: data.settings.email_notifications,
+          pushNotifications: data.settings.push_notifications,
+          language: data.settings.language,
+          animations: data.settings.animations_enabled
+        };
+        
+        // Update localStorage with backend data
+        localStorage.setItem('theme', settings.theme);
+        localStorage.setItem('emailNotifications', settings.emailNotifications);
+        localStorage.setItem('pushNotifications', settings.pushNotifications);
+        localStorage.setItem('language', settings.language);
+        localStorage.setItem('animations', settings.animations);
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load settings from backend, using localStorage:', error);
+  }
+
+  const currentTheme = settings.theme;
+  const emailNotifications = settings.emailNotifications;
+  const pushNotifications = settings.pushNotifications;
+  const currentLanguage = settings.language;
+  const animationsEnabled = settings.animations;
   
   Swal.fire({
     title: '⚙️ Settings',
@@ -576,13 +618,13 @@ function showSettings(event) {
             <h6><i class="bi bi-translate me-2"></i>Language</h6>
             <select class="form-select" id="language">
               <option value="en" ${currentLanguage === 'en' ? 'selected' : ''}>🇺🇸 English</option>
-              <option value="fil" ${currentLanguage === 'fil' ? 'selected' : ''}>🇵🇭 Filipino</option>
+              <option value="fil" ${currentLanguage === 'fil' ? 'selected' : ''}>🇵🇭 Filipino (Tagalog)</option>
             </select>
           </div>
           <div class="col-12">
             <h6><i class="bi bi-speedometer2 me-2"></i>Performance</h6>
             <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" id="animations" checked>
+              <input class="form-check-input" type="checkbox" id="animations" ${animationsEnabled ? 'checked' : ''}>
               <label class="form-check-label" for="animations">
                 <i class="bi bi-magic me-1"></i>Enable Animations
               </label>
@@ -614,12 +656,26 @@ function showSettings(event) {
       const pushNotifs = document.getElementById('pushNotifications').checked;
       const selectedLanguage = document.getElementById('language').value;
       const animationsEnabled = document.getElementById('animations').checked;
+      const darkModeEnabled = document.getElementById('darkModeToggle').checked;
       
       // Save to localStorage
       localStorage.setItem('emailNotifications', emailNotifs);
       localStorage.setItem('pushNotifications', pushNotifs);
       localStorage.setItem('language', selectedLanguage);
       localStorage.setItem('animations', animationsEnabled);
+      localStorage.setItem('theme', darkModeEnabled ? 'dark' : 'light');
+      
+      // Save to backend (optional - for persistent storage across devices)
+      saveSettingsToBackend({
+        email_notifications: emailNotifs,
+        push_notifications: pushNotifs,
+        language: selectedLanguage,
+        animations_enabled: animationsEnabled,
+        dark_mode: darkModeEnabled
+      });
+      
+      // Apply animations setting immediately
+      applyAnimationsSetting(animationsEnabled);
       
       // Show success message
       Swal.fire({
@@ -634,20 +690,28 @@ function showSettings(event) {
       
       // Apply language change if needed
       if (selectedLanguage !== currentLanguage) {
+        // Apply translations immediately with retry
+        translateWithRetry();
+        
+        // Restart translation observer for new language
+        setTimeout(() => {
+          startTranslationObserver();
+        }, 1000);
+        
         setTimeout(() => {
           Swal.fire({
             title: 'Language Changed',
-            text: 'Please refresh the page to apply language changes.',
-            icon: 'info',
-            confirmButtonText: 'Refresh Now',
+            text: `Language changed to ${getLanguageName(selectedLanguage)}. The interface has been translated automatically!`,
+            icon: 'success',
+            confirmButtonText: 'Great!',
             showCancelButton: true,
-            cancelButtonText: 'Later'
+            cancelButtonText: 'Refresh Page'
           }).then((refreshResult) => {
-            if (refreshResult.isConfirmed) {
+            if (refreshResult.isDismissed || refreshResult.dismiss === 'cancel') {
               window.location.reload();
             }
           });
-        }, 2100);
+        }, 1500);
       }
     }
   });
@@ -987,10 +1051,527 @@ function showQuickNavigation() {
   });
 }
 
-// Sidebar functionality
-document.addEventListener('DOMContentLoaded', function() {
-  // Initialize dark mode on page load
+// Helper function to get language name
+function getLanguageName(langCode) {
+  const languages = {
+    'en': 'English',
+    'fil': 'Filipino (Tagalog)'
+  };
+  return languages[langCode] || langCode;
+}
+
+// Save settings to backend
+async function saveSettingsToBackend(settings) {
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (!csrfToken) {
+      console.warn('CSRF token not found, skipping backend save');
+      return;
+    }
+
+    const response = await fetch('/employee/settings/save', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(settings)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Settings saved to backend:', data);
+    } else {
+      console.warn('Failed to save settings to backend:', response.status);
+    }
+  } catch (error) {
+    console.warn('Error saving settings to backend:', error);
+  }
+}
+
+// Apply animations setting
+function applyAnimationsSetting(enabled) {
+  const style = document.getElementById('animations-style') || document.createElement('style');
+  style.id = 'animations-style';
+  
+  if (!enabled) {
+    style.textContent = `
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    `;
+  } else {
+    style.textContent = '';
+  }
+  
+  if (!document.getElementById('animations-style')) {
+    document.head.appendChild(style);
+  }
+  
+  // Save to localStorage
+  localStorage.setItem('animations', enabled);
+}
+
+// Comprehensive Language translations
+const translations = {
+  'en': {
+    // Greetings & Basic
+    'dashboard': 'Dashboard',
+    'good_afternoon': 'Good afternoon',
+    'good_morning': 'Good morning',
+    'good_evening': 'Good evening',
+    'employee_portal': 'Employee Portal',
+    'jetlouge_employee_portal': 'Jetlouge Employee Portal',
+    'home': 'Home',
+    'employee_dashboard': 'Employee Dashboard',
+    
+    // Navigation & Menu
+    'leave_application_balance': 'Leave Application & Balance',
+    'attendance_time_logs': 'Attendance & Time Logs',
+    'payslip_access': 'Payslip Access',
+    'claim_reimbursement': 'Claim & Reimbursement',
+    'my_trainings': 'My Trainings',
+    'competency_profile': 'Competency Profile',
+    'request_forms': 'Request Forms',
+    'profile_updates': 'Profile Updates',
+    'settings': 'Settings',
+    'logout': 'Logout',
+    
+    // Training & Notifications
+    'training_notifications': 'Training Notifications',
+    'you_have_been_assigned_training': 'You have been assigned training',
+    'please_check_your_upcoming_trainings': 'Please check your upcoming trainings',
+    'upcoming_trainings': 'Upcoming Trainings',
+    'starts_next_week': 'Starts next week',
+    'new': 'New',
+    
+    // Dashboard Cards & Stats
+    'pending_leave_requests': 'Pending Leave Requests',
+    'attendance_this_month': 'Attendance This Month',
+    'latest_payslip': 'Latest Payslip',
+    'company_announcements': 'Company Announcements',
+    
+    // Time & Dates
+    'week_ago': 'week ago',
+    'weeks_ago': 'weeks ago',
+    'day_ago': 'day ago',
+    'days_ago': 'days ago',
+    'hour_ago': 'hour ago',
+    'hours_ago': 'hours ago',
+    'minute_ago': 'minute ago',
+    'minutes_ago': 'minutes ago',
+    'october_2024': 'October 2024',
+    
+    // Actions & Buttons
+    'view': 'View',
+    'edit': 'Edit',
+    'delete': 'Delete',
+    'save': 'Save',
+    'cancel': 'Cancel',
+    'submit': 'Submit',
+    'close': 'Close',
+    'actions': 'Actions',
+    'date': 'Date',
+    'title': 'Title',
+    'message': 'Message',
+    'priority': 'Priority',
+    
+    // Training Specific
+    'problem_solving': 'Problem-Solving',
+    'time_management': 'Time Management',
+    'customer_service_excellence': 'Customer Service Excellence',
+    'communication_skills': 'Communication Skills',
+    
+    // Common Interface Elements
+    'employee_id': 'Employee ID',
+    'employee': 'Employee',
+    'status': 'Status',
+    'active': 'Active',
+    'inactive': 'Inactive',
+    'pending': 'Pending',
+    'approved': 'Approved',
+    'rejected': 'Rejected'
+  },
+  'fil': {
+    // Greetings & Basic
+    'dashboard': 'Dashboard',
+    'good_afternoon': 'Magandang hapon',
+    'good_morning': 'Magandang umaga',
+    'good_evening': 'Magandang gabi',
+    'employee_portal': 'Portal ng Empleyado',
+    'jetlouge_employee_portal': 'Jetlouge Portal ng Empleyado',
+    'home': 'Tahanan',
+    'employee_dashboard': 'Dashboard ng Empleyado',
+    
+    // Navigation & Menu
+    'leave_application_balance': 'Aplikasyon at Balanse ng Leave',
+    'attendance_time_logs': 'Pagdalo at Mga Tala ng Oras',
+    'payslip_access': 'Access sa Payslip',
+    'claim_reimbursement': 'Claim at Reimbursement',
+    'my_trainings': 'Aking mga Pagsasanay',
+    'competency_profile': 'Profile ng Kakayahan',
+    'request_forms': 'Mga Form ng Kahilingan',
+    'profile_updates': 'Mga Update sa Profile',
+    'settings': 'Mga Setting',
+    'logout': 'Mag-logout',
+    
+    // Training & Notifications
+    'training_notifications': 'Mga Abiso sa Pagsasanay',
+    'you_have_been_assigned_training': 'Nakatakda ka sa pagsasanay',
+    'please_check_your_upcoming_trainings': 'Pakitingnan ang inyong mga paparating na pagsasanay',
+    'upcoming_trainings': 'Mga Paparating na Pagsasanay',
+    'starts_next_week': 'Magsisimula sa susunod na linggo',
+    'new': 'Bago',
+    
+    // Dashboard Cards & Stats
+    'pending_leave_requests': 'Mga Nakabinbing Kahilingan sa Leave',
+    'attendance_this_month': 'Pagdalo ngayong Buwan',
+    'latest_payslip': 'Pinakabagong Payslip',
+    'company_announcements': 'Mga Pabatid ng Kumpanya',
+    
+    // Time & Dates
+    'week_ago': 'isang linggo na ang nakalipas',
+    'weeks_ago': 'mga linggo na ang nakalipas',
+    'day_ago': 'isang araw na ang nakalipas',
+    'days_ago': 'mga araw na ang nakalipas',
+    'hour_ago': 'isang oras na ang nakalipas',
+    'hours_ago': 'mga oras na ang nakalipas',
+    'minute_ago': 'isang minuto na ang nakalipas',
+    'minutes_ago': 'mga minuto na ang nakalipas',
+    'october_2024': 'Oktubre 2024',
+    
+    // Actions & Buttons
+    'view': 'Tingnan',
+    'edit': 'I-edit',
+    'delete': 'Tanggalin',
+    'save': 'I-save',
+    'cancel': 'Kanselahin',
+    'submit': 'Ipasa',
+    'close': 'Isara',
+    'actions': 'Mga Aksyon',
+    'date': 'Petsa',
+    'title': 'Pamagat',
+    'message': 'Mensahe',
+    'priority': 'Priyoridad',
+    
+    // Training Specific
+    'problem_solving': 'Paglutas ng Problema',
+    'time_management': 'Pamamahala ng Oras',
+    'customer_service_excellence': 'Kahusayan sa Serbisyo sa Customer',
+    'communication_skills': 'Mga Kasanayan sa Komunikasyon',
+    
+    // Common Interface Elements
+    'employee_id': 'ID ng Empleyado',
+    'employee': 'Empleyado',
+    'status': 'Katayuan',
+    'active': 'Aktibo',
+    'inactive': 'Hindi Aktibo',
+    'pending': 'Naghihintay',
+    'approved': 'Aprubado',
+    'rejected': 'Tinanggihan'
+  }
+};
+
+// Translation function
+function translate(key, lang = null) {
+  const currentLang = lang || localStorage.getItem('language') || 'en';
+  return translations[currentLang] && translations[currentLang][key] ? translations[currentLang][key] : key;
+}
+
+// Comprehensive translation function that scans and translates all text
+function applyLanguageTranslations() {
+  const currentLang = localStorage.getItem('language') || 'en';
+  
+  if (currentLang === 'en') {
+    console.log('Language is English, no translation needed');
+    return;
+  }
+  
+  try {
+    // Translation mapping for common phrases and patterns
+    const textMappings = {
+      // Exact matches
+      'Jetlouge Employee Portal': translate('jetlouge_employee_portal', currentLang),
+      'Employee Portal': translate('employee_portal', currentLang),
+      'Training Notifications': translate('training_notifications', currentLang),
+      'Company Announcements': translate('company_announcements', currentLang),
+      'Pending Leave Requests': translate('pending_leave_requests', currentLang),
+      'Attendance This Month': translate('attendance_this_month', currentLang),
+      'Latest Payslip': translate('latest_payslip', currentLang),
+      'Upcoming Trainings': translate('upcoming_trainings', currentLang),
+      'Dashboard': translate('dashboard', currentLang),
+      'Home': translate('home', currentLang),
+      'Employee Dashboard': translate('employee_dashboard', currentLang),
+      
+      // Training names
+      'Problem-Solving': translate('problem_solving', currentLang),
+      'Time Management': translate('time_management', currentLang),
+      'Customer Service Excellence': translate('customer_service_excellence', currentLang),
+      'Communication Skills': translate('communication_skills', currentLang),
+      
+      // Actions and buttons
+      'View': translate('view', currentLang),
+      'Edit': translate('edit', currentLang),
+      'Delete': translate('delete', currentLang),
+      'Save': translate('save', currentLang),
+      'Cancel': translate('cancel', currentLang),
+      'Submit': translate('submit', currentLang),
+      'Close': translate('close', currentLang),
+      'Actions': translate('actions', currentLang),
+      'New': translate('new', currentLang),
+      
+      // Table headers
+      'Date': translate('date', currentLang),
+      'Title': translate('title', currentLang),
+      'Message': translate('message', currentLang),
+      'Priority': translate('priority', currentLang),
+      'Status': translate('status', currentLang),
+      'Employee ID': translate('employee_id', currentLang),
+      'Employee': translate('employee', currentLang),
+      
+      // Status values
+      'Active': translate('active', currentLang),
+      'Inactive': translate('inactive', currentLang),
+      'Pending': translate('pending', currentLang),
+      'Approved': translate('approved', currentLang),
+      'Rejected': translate('rejected', currentLang),
+      
+      // Time expressions
+      'week ago': translate('week_ago', currentLang),
+      'weeks ago': translate('weeks_ago', currentLang),
+      'day ago': translate('day_ago', currentLang),
+      'days ago': translate('days_ago', currentLang),
+      'hour ago': translate('hour_ago', currentLang),
+      'hours ago': translate('hours_ago', currentLang),
+      'minute ago': translate('minute_ago', currentLang),
+      'minutes ago': translate('minutes_ago', currentLang),
+      'October 2024': translate('october_2024', currentLang),
+      
+      // Common phrases
+      'You have been assigned training': translate('you_have_been_assigned_training', currentLang),
+      'Please check your upcoming trainings': translate('please_check_your_upcoming_trainings', currentLang),
+      'Starts next week': translate('starts_next_week', currentLang)
+    };
+    
+    // Update navbar brand
+    const navbarBrand = document.querySelector('.navbar-brand span');
+    if (navbarBrand && navbarBrand.textContent.includes('Employee Portal')) {
+      navbarBrand.textContent = translate('jetlouge_employee_portal', currentLang);
+    }
+    
+    // Handle greetings with time-based logic
+    const greetingElements = document.querySelectorAll('h1, h2, h3');
+    greetingElements.forEach(element => {
+      const text = element.textContent;
+      if (text.includes('Good afternoon') || text.includes('Good morning') || 
+          text.includes('Good evening') || text.includes('Magandang')) {
+        
+        const hour = new Date().getHours();
+        let greetingKey = 'good_afternoon';
+        if (hour < 12) greetingKey = 'good_morning';
+        else if (hour >= 18) greetingKey = 'good_evening';
+        
+        // Extract user name
+        const parts = text.split(', ');
+        const userName = parts.length > 1 ? parts[1].replace('!', '') : '';
+        
+        if (userName) {
+          element.textContent = `${translate(greetingKey, currentLang)}, ${userName}!`;
+        }
+      }
+    });
+    
+    // Comprehensive text replacement function
+    function replaceTextInElement(element) {
+      if (element.nodeType === Node.TEXT_NODE) {
+        let text = element.textContent.trim();
+        if (text && textMappings[text]) {
+          element.textContent = textMappings[text];
+        }
+      } else if (element.nodeType === Node.ELEMENT_NODE) {
+        // Skip script and style elements
+        if (element.tagName === 'SCRIPT' || element.tagName === 'STYLE') {
+          return;
+        }
+        
+        // For elements with only text content (no child elements)
+        if (element.children.length === 0) {
+          const text = element.textContent.trim();
+          if (text && textMappings[text]) {
+            element.textContent = textMappings[text];
+          }
+        } else {
+          // Recursively process child nodes
+          Array.from(element.childNodes).forEach(child => {
+            replaceTextInElement(child);
+          });
+        }
+      }
+    }
+    
+    // Apply translations to the entire document body
+    const elementsToTranslate = document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, div, td, th, button, a, label, .card-title, .card-header, .badge, .btn');
+    
+    elementsToTranslate.forEach(element => {
+      // Skip if element contains other elements (to avoid double translation)
+      if (element.children.length === 0) {
+        const text = element.textContent.trim();
+        if (text && textMappings[text]) {
+          element.textContent = textMappings[text];
+        }
+      }
+    });
+    
+    // Handle breadcrumbs and navigation
+    const breadcrumbs = document.querySelectorAll('.breadcrumb-item, .nav-link');
+    breadcrumbs.forEach(item => {
+      const text = item.textContent.trim();
+      if (textMappings[text]) {
+        item.textContent = textMappings[text];
+      }
+    });
+    
+    // Handle specific training notification content
+    const trainingTexts = document.querySelectorAll('p, div');
+    trainingTexts.forEach(element => {
+      let text = element.textContent;
+      
+      // Replace training assignment text
+      if (text.includes('You have been assigned training')) {
+        text = text.replace('You have been assigned training', translate('you_have_been_assigned_training', currentLang));
+        element.textContent = text;
+      }
+      
+      // Replace check trainings text
+      if (text.includes('Please check your upcoming trainings')) {
+        text = text.replace('Please check your upcoming trainings', translate('please_check_your_upcoming_trainings', currentLang));
+        element.textContent = text;
+      }
+    });
+    
+    console.log('Comprehensive language translation applied:', currentLang);
+  } catch (error) {
+    console.warn('Error applying comprehensive translations:', error);
+  }
+}
+
+// Initialize all settings on page load
+function initializeSettings() {
+  // Initialize dark mode
   initializeDarkMode();
+  
+  // Initialize animations setting
+  const animationsEnabled = localStorage.getItem('animations') !== 'false';
+  applyAnimationsSetting(animationsEnabled);
+  
+  // Initialize notification preferences
+  const emailNotifications = localStorage.getItem('emailNotifications') !== 'false';
+  const pushNotifications = localStorage.getItem('pushNotifications') !== 'false';
+  
+  // Apply language translations with retry
+  translateWithRetry();
+  
+  // Start translation observer for dynamic content
+  setTimeout(() => {
+    startTranslationObserver();
+  }, 1000);
+  
+  // Apply any other settings as needed
+  console.log('Settings initialized:', {
+    theme: localStorage.getItem('theme') || 'light',
+    language: localStorage.getItem('language') || 'en',
+    animations: animationsEnabled,
+    emailNotifications,
+    pushNotifications
+  });
+}
+
+// Manual translation trigger (for testing)
+window.changeLanguage = function(langCode) {
+  localStorage.setItem('language', langCode);
+  applyLanguageTranslations();
+  console.log('Language changed to:', langCode);
+};
+
+// Continuous translation observer for dynamic content
+let translationObserver = null;
+
+function startTranslationObserver() {
+  const currentLang = localStorage.getItem('language') || 'en';
+  
+  if (currentLang === 'en') {
+    return; // No need to observe if language is English
+  }
+  
+  // Stop existing observer
+  if (translationObserver) {
+    translationObserver.disconnect();
+  }
+  
+  // Create new observer
+  translationObserver = new MutationObserver(function(mutations) {
+    let shouldTranslate = false;
+    
+    mutations.forEach(function(mutation) {
+      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+        // Check if new text nodes were added
+        mutation.addedNodes.forEach(function(node) {
+          if (node.nodeType === Node.TEXT_NODE || 
+              (node.nodeType === Node.ELEMENT_NODE && node.textContent.trim())) {
+            shouldTranslate = true;
+          }
+        });
+      }
+    });
+    
+    if (shouldTranslate) {
+      // Debounce translation calls
+      clearTimeout(window.translationTimeout);
+      window.translationTimeout = setTimeout(() => {
+        applyLanguageTranslations();
+      }, 500);
+    }
+  });
+  
+  // Start observing
+  translationObserver.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+  
+  console.log('Translation observer started for language:', currentLang);
+}
+
+// Enhanced translation function with retry mechanism
+function translateWithRetry(maxRetries = 3) {
+  let retryCount = 0;
+  
+  function attemptTranslation() {
+    try {
+      applyLanguageTranslations();
+      console.log('Translation successful on attempt:', retryCount + 1);
+    } catch (error) {
+      retryCount++;
+      if (retryCount < maxRetries) {
+        console.warn(`Translation failed, retrying (${retryCount}/${maxRetries}):`, error);
+        setTimeout(attemptTranslation, 1000 * retryCount);
+      } else {
+        console.error('Translation failed after', maxRetries, 'attempts:', error);
+      }
+    }
+  }
+  
+  attemptTranslation();
+}
+
+// Initialize settings on page load
+document.addEventListener('DOMContentLoaded', function() {
+  initializeSettings();
   
   const menuBtn = document.getElementById('menu-btn');
   const desktopToggle = document.getElementById('desktop-toggle');

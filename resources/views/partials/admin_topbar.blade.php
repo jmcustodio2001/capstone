@@ -119,8 +119,6 @@
         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="adminToolsDropdown" id="adminToolsMenu">
           <li><h6 class="dropdown-header"><i class="bi bi-tools me-1"></i>Admin Tools</h6></li>
           <li><a class="dropdown-item" href="javascript:void(0);" onclick="showUserActivity()"><i class="bi bi-activity me-2"></i>User Activity</a></li>
-          <li><a class="dropdown-item" href="javascript:void(0);" onclick="showSystemLogs()"><i class="bi bi-journal-text me-2"></i>System Logs</a></li>
-          <li><a class="dropdown-item" href="javascript:void(0);" onclick="showDatabaseStatus()"><i class="bi bi-database me-2"></i>Database Status</a></li>
           <li><hr class="dropdown-divider"></li>
           <li><a class="dropdown-item" href="javascript:void(0);" onclick="showSecuritySettings()"><i class="bi bi-shield-check me-2"></i>Security Settings</a></li>
         </ul>
@@ -651,7 +649,7 @@ async function resetSystemUptime() {
     });
   }
 }
-// Notifications Function with Real Data
+// Notifications Function with Real Data (includes Security Alerts)
 async function showNotifications() {
   try {
     Swal.fire({
@@ -662,17 +660,46 @@ async function showNotifications() {
       }
     });
 
-    const response = await fetchWithCSRF('/admin/notifications', {
-      method: 'GET'
-    });
+    // Load both regular notifications and security alerts
+    const [notificationsResponse, alertsResponse] = await Promise.all([
+      fetchWithCSRF('/admin/notifications', { method: 'GET' }),
+      fetchWithCSRF('/admin/security-alerts', { method: 'GET' })
+    ]);
 
-    const data = await response.json();
+    const notificationsData = await notificationsResponse.json();
+    const alertsData = await alertsResponse.json();
 
-    if (data.success) {
+    if (notificationsData.success || alertsData.success) {
       let notificationsHtml = '';
+      let totalItems = 0;
 
-      if (data.notifications && data.notifications.length > 0) {
-        data.notifications.forEach(notification => {
+      // Add security alerts first (higher priority)
+      if (alertsData.success && alertsData.alerts && alertsData.alerts.length > 0) {
+        alertsData.alerts.forEach(alert => {
+          notificationsHtml += `
+            <div class="list-group-item ${alert.is_read ? '' : 'bg-light'}" data-alert-id="${alert.id}">
+              <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">
+                  <i class="${alert.icon} ${alert.severity === 'critical' ? 'text-danger' : alert.severity === 'high' ? 'text-warning' : 'text-info'} me-2"></i>
+                  ${alert.title}
+                  ${alert.severity === 'critical' || alert.severity === 'high' ? '<span class="badge bg-danger ms-2">!</span>' : ''}
+                </h6>
+                <small>${alert.time_ago}</small>
+              </div>
+              <p class="mb-1">${alert.message}</p>
+              <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">Security Alert</small>
+                ${!alert.is_read ? `<button class="btn btn-sm btn-outline-primary" onclick="markAlertAsRead(${alert.id})">Mark Read</button>` : ''}
+              </div>
+            </div>
+          `;
+          totalItems++;
+        });
+      }
+
+      // Add regular notifications
+      if (notificationsData.success && notificationsData.notifications && notificationsData.notifications.length > 0) {
+        notificationsData.notifications.forEach(notification => {
           const iconClass = getNotificationIcon(notification.type);
           notificationsHtml += `
             <div class="list-group-item">
@@ -684,12 +711,16 @@ async function showNotifications() {
               ${notification.action_url ? `<small><a href="${notification.action_url}" class="text-primary">View Details</a></small>` : ''}
             </div>
           `;
+          totalItems++;
         });
-      } else {
+      }
+
+      // Show empty state if no items
+      if (totalItems === 0) {
         notificationsHtml = `
           <div class="text-center py-4">
             <i class="bi bi-bell-slash fs-1 text-muted"></i>
-            <p class="text-muted mt-2">No new notifications</p>
+            <p class="text-muted mt-2">No new notifications or alerts</p>
           </div>
         `;
       }
@@ -702,12 +733,13 @@ async function showNotifications() {
           </div>
         `,
         width: 700,
-        confirmButtonText: data.notifications.length > 0 ? 'Mark All Read' : 'Close',
-        showCancelButton: data.notifications.length > 0,
+        confirmButtonText: totalItems > 0 ? 'Mark All Read' : 'Close',
+        showCancelButton: totalItems > 0,
         cancelButtonText: 'Close'
       }).then(async (result) => {
-        if (result.isConfirmed && data.notifications.length > 0) {
+        if (result.isConfirmed && totalItems > 0) {
           await markAllNotificationsRead();
+          await markAllAlertsAsRead();
         }
       });
     } else {
@@ -750,17 +782,78 @@ async function markAllNotificationsRead() {
     const data = await response.json();
 
     if (data.success) {
-      const notificationBadge = document.getElementById('notification-count');
-      if (notificationBadge) {
-        notificationBadge.style.display = 'none';
-      }
-      Swal.fire('Success!', 'All notifications marked as read', 'success');
+      console.log('All notifications marked as read');
     } else {
       throw new Error(data.message || 'Failed to mark notifications as read');
     }
   } catch (error) {
     console.error('Mark Notifications Error:', error);
-    Swal.fire('Error', 'Failed to mark notifications as read', 'error');
+  }
+}
+
+// Security Alerts Functions
+async function markAlertAsRead(alertId) {
+  try {
+    const response = await fetchWithCSRF(`/admin/security-alerts/${alertId}/read`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Update the alert item visually
+      const alertElement = document.querySelector(`[data-alert-id="${alertId}"]`);
+      if (alertElement) {
+        alertElement.classList.remove('bg-light');
+        const button = alertElement.querySelector('button');
+        if (button) {
+          button.remove();
+        }
+      }
+      
+      // Update notification badge
+      updateNotificationBadge();
+    } else {
+      throw new Error(data.message || 'Failed to mark alert as read');
+    }
+  } catch (error) {
+    console.error('Mark Alert Error:', error);
+    Swal.fire('Error', 'Failed to mark alert as read', 'error');
+  }
+}
+
+async function markAllAlertsAsRead() {
+  try {
+    const response = await fetchWithCSRF('/admin/security-alerts/mark-all-read', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log('All alerts marked as read');
+      updateNotificationBadge();
+    } else {
+      throw new Error(data.message || 'Failed to mark alerts as read');
+    }
+  } catch (error) {
+    console.error('Mark All Alerts Error:', error);
+  }
+}
+
+function updateNotificationBadge() {
+  // Update the notification count badge
+  const notificationBadge = document.getElementById('notification-count');
+  if (notificationBadge) {
+    // You can make an AJAX call here to get the updated count
+    // For now, just hide the badge
+    notificationBadge.style.display = 'none';
   }
 }
 
@@ -791,7 +884,7 @@ async function addEmployeeQuick() {
 
   // Verify password
   try {
-    const verifyResponse = await fetchWithCSRF('/admin/verify-password', {
+    const verifyResponse = await fetchWithCSRF('/admin/security/verify-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -937,7 +1030,7 @@ async function systemBackup() {
 
   try {
     // Verify password first
-    const verifyResponse = await fetchWithCSRF('/admin/verify-password', {
+    const verifyResponse = await fetchWithCSRF('/admin/security/verify-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1435,7 +1528,7 @@ async function showSecuritySettings() {
 
   try {
     // Verify password using enhanced fetch
-    const verifyResponse = await fetchWithCSRF('/admin/verify-password', {
+    const verifyResponse = await fetchWithCSRF('/admin/security/verify-password', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1544,6 +1637,7 @@ async function showSecuritySettings() {
               <div class="mb-3">
                 <label class="form-label">Timeout Duration (minutes)</label>
                 <select class="form-control" id="timeout-duration">
+                  <option value="10" ${settings.timeout_duration == 10 ? 'selected' : ''}>10 minutes</option>
                   <option value="15" ${settings.timeout_duration == 15 ? 'selected' : ''}>15 minutes</option>
                   <option value="30" ${settings.timeout_duration == 30 ? 'selected' : ''}>30 minutes</option>
                   <option value="60" ${settings.timeout_duration == 60 ? 'selected' : ''}>1 hour</option>

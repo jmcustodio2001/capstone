@@ -151,7 +151,7 @@ class OTPService
 
             // Generate new OTP
             $otpCode = $this->generateOTP();
-            $expiresAt = Carbon::now()->addMinutes(10); // OTP expires in 10 minutes
+            $expiresAt = Carbon::now()->addMinutes(2); // OTP expires in 2 minutes
 
             // Update employee with OTP details
             $employee->update([
@@ -476,13 +476,13 @@ class OTPService
                     <div class='otp-code'>
                         <p style='margin: 0; font-size: 14px; color: #666;'>Your Verification Code</p>
                         <div class='otp-number'>{$otpCode}</div>
-                        <p style='margin: 0; font-size: 12px; color: #666;'>Valid for 10 minutes</p>
+                        <p style='margin: 0; font-size: 12px; color: #666;'>Valid for 2 minutes</p>
                     </div>
 
                     <div class='warning'>
                         <strong>⚠️ Security Notice:</strong>
                         <ul style='margin: 10px 0;'>
-                            <li>This code expires in <strong>10 minutes</strong></li>
+                            <li>This code expires in <strong>2 minutes</strong></li>
                             <li>Never share this code with anyone</li>
                             <li>If you didn't request this login, please contact your administrator immediately</li>
                             <li>This code can only be used once</li>
@@ -522,7 +522,7 @@ We received a login request for your {$companyName} Jetlouge Travels account.
 
 Your verification code is: {$otpCode}
 
-This code will expire in 10 minutes.
+This code will expire in 2 minutes.
 
 SECURITY NOTICE:
 - Never share this code with anyone
@@ -646,7 +646,7 @@ This is an automated message from {$companyName}.
                 <div style='background: white; padding: 20px; border-radius: 8px; text-align: center; margin: 25px 0; border: 2px dashed #667eea;'>
                     <p style='margin: 0 0 10px 0; font-size: 16px; color: #666;'>Your Admin Verification Code:</p>
                     <h1 style='font-size: 36px; color: #667eea; margin: 10px 0; letter-spacing: 8px; font-family: monospace;'>{$otpCode}</h1>
-                    <p style='margin: 10px 0 0 0; font-size: 14px; color: #999;'>This code expires in 10 minutes</p>
+                    <p style='margin: 10px 0 0 0; font-size: 14px; color: #999;'>This code expires in 2 minutes</p>
                 </div>
                 
                 <div style='background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;'>
@@ -692,7 +692,7 @@ We received an admin login request for your {$companyName} account.
 
 Your admin verification code is: {$otpCode}
 
-This code will expire in 10 minutes.
+This code will expire in 2 minutes.
 
 SECURITY NOTICE:
 - Never share this code with anyone

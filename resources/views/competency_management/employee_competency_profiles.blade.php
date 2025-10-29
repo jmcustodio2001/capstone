@@ -655,6 +655,46 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
   <script>
+    // Initialize global objects to prevent undefined errors - MUST BE FIRST
+    try {
+      if (typeof window.translationService === 'undefined') {
+        window.translationService = {
+          translate: function(key, params) { return key; },
+          get: function(key, params) { return key; },
+          trans: function(key, params) { return key; },
+          choice: function(key, count, params) { return key; }
+        };
+      }
+
+      // Add global trans function
+      if (typeof window.trans === 'undefined') {
+        window.trans = function(key, params) { return key; };
+      }
+
+      // Add app object if missing
+      if (typeof window.app === 'undefined') {
+        window.app = {};
+      }
+
+      console.log('Global objects initialized successfully');
+    } catch (error) {
+      console.error('Error initializing global objects:', error);
+    }
+
+    // Enhanced CSRF token getter with multiple fallbacks
+    function getCSRFToken() {
+      const metaTag = document.querySelector('meta[name="csrf-token"]');
+      if (!metaTag) {
+        console.error('CSRF token meta tag not found');
+        return null;
+      }
+      const token = metaTag.getAttribute('content');
+      if (!token) {
+        console.error('CSRF token content is empty');
+        return null;
+      }
+      return token;
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
       const editButtons = document.querySelectorAll('.edit-btn');
@@ -717,10 +757,15 @@
       // Function to check if password is already verified
       function checkPasswordVerification() {
         console.log('Checking password verification...');
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          return Promise.reject(new Error('CSRF token not available'));
+        }
+        
         return fetch('{{ route("admin.check_password_verification") }}', {
           method: 'GET',
           headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           }
         })
@@ -765,11 +810,16 @@
 
       // Function to verify password
       function verifyPassword(password) {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          return Promise.reject(new Error('CSRF token not available'));
+        }
+        
         return fetch('{{ route("admin.verify_password") }}', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           },
           body: JSON.stringify({ password: password })
@@ -922,65 +972,53 @@
       });
 
       function editProfileWithConfirmation(profileId, employeeId, competencyId, proficiency, assessmentDate) {
-        // Get employee and competency names for display
-        const employeeSelect = addProfileForm.querySelector('select[name="employee_id"]');
-        const competencySelect = addProfileForm.querySelector('select[name="competency_id"]');
-        
-        let employeeName = 'Unknown Employee';
-        let competencyName = 'Unknown Competency';
-        
-        // Find employee name
-        for (let option of employeeSelect.options) {
-          if (option.value === employeeId) {
-            employeeName = option.text;
-            break;
+        // Check password verification silently in background
+        checkPasswordVerification().then(isVerified => {
+          if (isVerified) {
+            // Password already verified, proceed directly to edit form
+            showEditForm(profileId, employeeId, competencyId, proficiency, assessmentDate);
+          } else {
+            // Password verification required, but handle without showing sensitive details
+            Swal.fire({
+              title: 'Security Verification Required',
+              text: 'Please enter your password to continue.',
+              input: 'password',
+              inputPlaceholder: 'Enter your password',
+              showCancelButton: true,
+              confirmButtonText: 'Continue',
+              cancelButtonText: 'Cancel',
+              inputValidator: (value) => {
+                if (!value) {
+                  return 'Password is required';
+                }
+              }
+            }).then((result) => {
+              if (result.isConfirmed) {
+                verifyPasswordAndEdit(profileId, employeeId, competencyId, proficiency, assessmentDate, result.value);
+              }
+            });
           }
-        }
-        
-        // Find competency name
-        for (let option of competencySelect.options) {
-          if (option.value === competencyId) {
-            competencyName = option.text;
-            break;
-          }
-        }
-
-        Swal.fire({
-          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
-          html: `
-            <div class="text-start mb-3">
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle text-info"></i> 
-                For security purposes, please enter your password to edit this competency profile.
-              </p>
-              <div class="bg-light p-3 rounded mb-3">
-                <strong>Profile to Edit:</strong><br>
-                <strong>Employee:</strong> ${employeeName}<br>
-                <strong>Competency:</strong> ${competencyName}<br>
-                <strong>Current Proficiency:</strong> ${proficiency}/5<br>
-                <strong>Assessment Date:</strong> ${new Date(assessmentDate).toLocaleDateString()}
-              </div>
-            </div>
-            <input type="password" id="swal-edit-password" class="swal2-input" placeholder="Enter your password" required>
-          `,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: '<i class="bi bi-pencil"></i> Edit Profile',
-          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
-          confirmButtonColor: '#ffc107',
-          cancelButtonColor: '#6c757d',
-          preConfirm: () => {
-            const password = document.getElementById('swal-edit-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Password is required');
-              return false;
+        }).catch(error => {
+          console.error('Password verification check failed:', error);
+          // Fallback to password prompt without showing sensitive details
+          Swal.fire({
+            title: 'Security Verification Required',
+            text: 'Please enter your password to continue.',
+            input: 'password',
+            inputPlaceholder: 'Enter your password',
+            showCancelButton: true,
+            confirmButtonText: 'Continue',
+            cancelButtonText: 'Cancel',
+            inputValidator: (value) => {
+              if (!value) {
+                return 'Password is required';
+              }
             }
-            return password;
-          }
-        }).then((result) => {
-          if (result.isConfirmed) {
-            verifyPasswordAndEdit(profileId, employeeId, competencyId, proficiency, assessmentDate, result.value);
-          }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              verifyPasswordAndEdit(profileId, employeeId, competencyId, proficiency, assessmentDate, result.value);
+            }
+          });
         });
       }
 
@@ -1036,8 +1074,9 @@
       });
 
       function deleteProfileWithConfirmation(profileId, employeeName, competencyName) {
+        // First show deletion warning without sensitive details
         Swal.fire({
-          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
+          title: '<i class="bi bi-exclamation-triangle text-warning"></i> Delete Confirmation',
           html: `
             <div class="text-start mb-3">
               <div class="alert alert-warning" role="alert">
@@ -1045,34 +1084,68 @@
                 <strong>Warning:</strong> This action cannot be undone!
               </div>
               <p class="text-muted mb-3">
-                <i class="bi bi-info-circle text-info"></i> 
-                For security purposes, please enter your password to confirm deleting this competency profile.
+                Are you sure you want to delete this competency profile?
               </p>
-              <div class="bg-light p-3 rounded mb-3">
-                <strong>Profile to Delete:</strong><br>
-                <strong>Employee:</strong> ${employeeName}<br>
-                <strong>Competency:</strong> ${competencyName}
-              </div>
             </div>
-            <input type="password" id="swal-delete-password" class="swal2-input" placeholder="Enter your password" required>
           `,
           icon: 'warning',
           showCancelButton: true,
-          confirmButtonText: '<i class="bi bi-trash"></i> Delete Profile',
+          confirmButtonText: '<i class="bi bi-trash"></i> Yes, Delete',
           cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
           confirmButtonColor: '#dc3545',
-          cancelButtonColor: '#6c757d',
-          preConfirm: () => {
-            const password = document.getElementById('swal-delete-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Password is required');
-              return false;
-            }
-            return password;
-          }
+          cancelButtonColor: '#6c757d'
         }).then((result) => {
           if (result.isConfirmed) {
-            submitDeleteProfile(profileId, result.value);
+            // Check password verification silently in background
+            checkPasswordVerification().then(isVerified => {
+              if (isVerified) {
+                // Password already verified, proceed with deletion
+                submitDeleteProfile(profileId, null);
+              } else {
+                // Password verification required
+                Swal.fire({
+                  title: 'Security Verification Required',
+                  text: 'Please enter your password to confirm deletion.',
+                  input: 'password',
+                  inputPlaceholder: 'Enter your password',
+                  showCancelButton: true,
+                  confirmButtonText: 'Delete',
+                  cancelButtonText: 'Cancel',
+                  confirmButtonColor: '#dc3545',
+                  inputValidator: (value) => {
+                    if (!value) {
+                      return 'Password is required';
+                    }
+                  }
+                }).then((passwordResult) => {
+                  if (passwordResult.isConfirmed) {
+                    submitDeleteProfile(profileId, passwordResult.value);
+                  }
+                });
+              }
+            }).catch(error => {
+              console.error('Password verification check failed:', error);
+              // Fallback to password prompt
+              Swal.fire({
+                title: 'Security Verification Required',
+                text: 'Please enter your password to confirm deletion.',
+                input: 'password',
+                inputPlaceholder: 'Enter your password',
+                showCancelButton: true,
+                confirmButtonText: 'Delete',
+                cancelButtonText: 'Cancel',
+                confirmButtonColor: '#dc3545',
+                inputValidator: (value) => {
+                  if (!value) {
+                    return 'Password is required';
+                  }
+                }
+              }).then((passwordResult) => {
+                if (passwordResult.isConfirmed) {
+                  submitDeleteProfile(profileId, passwordResult.value);
+                }
+              });
+            });
           }
         });
       }
@@ -1089,24 +1162,30 @@
           }
         });
 
-        // Verify password first
-        verifyPassword(password).then(() => {
+        // Verify password first (if password provided, otherwise assume already verified)
+        const passwordPromise = password ? verifyPassword(password) : Promise.resolve();
+        passwordPromise.then(() => {
           // Password verified, proceed with deletion
           const form = document.createElement('form');
           form.method = 'POST';
           form.action = `/admin/employee-competency-profiles/${profileId}`;
           
-          const csrfToken = document.createElement('input');
-          csrfToken.type = 'hidden';
-          csrfToken.name = '_token';
-          csrfToken.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+          const csrfToken = getCSRFToken();
+          if (!csrfToken) {
+            throw new Error('CSRF token not available');
+          }
+          
+          const csrfTokenInput = document.createElement('input');
+          csrfTokenInput.type = 'hidden';
+          csrfTokenInput.name = '_token';
+          csrfTokenInput.value = csrfToken;
           
           const methodField = document.createElement('input');
           methodField.type = 'hidden';
           methodField.name = '_method';
           methodField.value = 'DELETE';
           
-          form.appendChild(csrfToken);
+          form.appendChild(csrfTokenInput);
           form.appendChild(methodField);
           document.body.appendChild(form);
           form.submit();
@@ -1118,8 +1197,9 @@
             confirmButtonText: 'Try Again',
             confirmButtonColor: '#dc3545'
           }).then(() => {
-            // Retry the delete process
-            deleteProfileWithConfirmation(profileId, employeeName, competencyName);
+            // Retry the delete process - note: employeeName and competencyName not available here
+            // This is acceptable since we're removing detailed info anyway
+            console.log('Delete failed, user can try again manually');
           });
         });
       }
@@ -1195,10 +1275,21 @@
           timerProgressBar: true
         });
 
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Security Error',
+            text: 'Security token not found. Please refresh the page and try again.',
+            timer: 3000
+          });
+          return;
+        }
+
         fetch(`/admin/employee-awards/employee/${employeeId}`, {
           method: 'GET',
           headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           }
         })
@@ -1303,19 +1394,37 @@
       const addProfileBtn = document.getElementById('addProfileBtn');
       const addProfileForm = document.getElementById('addProfileForm');
 
+      console.log('Add Profile Button:', addProfileBtn);
+      console.log('Add Profile Form:', addProfileForm);
+
       if (addProfileBtn && addProfileForm) {
+        console.log('Adding click event listener to Add Profile button');
         addProfileBtn.addEventListener('click', function(e) {
           e.preventDefault();
+          console.log('Add Profile button clicked!');
           addProfileWithConfirmation();
         });
+      } else {
+        console.error('Add Profile button or form not found!');
+        if (!addProfileBtn) console.error('addProfileBtn element not found');
+        if (!addProfileForm) console.error('addProfileForm element not found');
       }
 
       function addProfileWithConfirmation() {
+        console.log('addProfileWithConfirmation function called');
+        
         // Validate required fields first
         const employeeSelect = addProfileForm.querySelector('select[name="employee_id"]');
         const competencySelect = addProfileForm.querySelector('select[name="competency_id"]');
         const proficiencyInput = addProfileForm.querySelector('input[name="proficiency_level"]');
         const dateInput = addProfileForm.querySelector('input[name="assessment_date"]');
+
+        console.log('Form elements found:', {
+          employeeSelect: employeeSelect,
+          competencySelect: competencySelect,
+          proficiencyInput: proficiencyInput,
+          dateInput: dateInput
+        });
 
         if (!employeeSelect.value || !competencySelect.value || !proficiencyInput.value || !dateInput.value) {
           Swal.fire({
@@ -1327,41 +1436,20 @@
           return;
         }
 
-        // Get selected option texts for display
-        const employeeName = employeeSelect.options[employeeSelect.selectedIndex].text;
-        const competencyName = competencySelect.options[competencySelect.selectedIndex].text;
-
+        // Always show password verification for security
         Swal.fire({
-          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
-          html: `
-            <div class="text-start mb-3">
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle text-info"></i> 
-                For security purposes, please enter your password to confirm adding this competency profile.
-              </p>
-              <div class="bg-light p-3 rounded mb-3">
-                <strong>Profile Details:</strong><br>
-                <strong>Employee:</strong> ${employeeName}<br>
-                <strong>Competency:</strong> ${competencyName}<br>
-                <strong>Proficiency Level:</strong> ${proficiencyInput.value}/5<br>
-                <strong>Assessment Date:</strong> ${new Date(dateInput.value).toLocaleDateString()}
-              </div>
-            </div>
-            <input type="password" id="swal-password" class="swal2-input" placeholder="Enter your password" required>
-          `,
-          icon: 'question',
+          title: 'Security Verification Required',
+          text: 'Please enter your password to add this competency profile.',
+          input: 'password',
+          inputPlaceholder: 'Enter your password',
           showCancelButton: true,
           confirmButtonText: '<i class="bi bi-plus-circle"></i> Add Profile',
-          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
+          cancelButtonText: 'Cancel',
           confirmButtonColor: '#198754',
-          cancelButtonColor: '#6c757d',
-          preConfirm: () => {
-            const password = document.getElementById('swal-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Password is required');
-              return false;
+          inputValidator: (value) => {
+            if (!value) {
+              return 'Password is required';
             }
-            return password;
           }
         }).then((result) => {
           if (result.isConfirmed) {
@@ -1421,46 +1509,68 @@
       });
 
       function notifyCourseManagementWithConfirmation(profileId, competencyId, competencyName, employeeName, proficiency) {
-        Swal.fire({
-          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
-          html: `
-            <div class="text-start mb-3">
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle text-info"></i> 
-                For security purposes, please enter your password to send notification to course management.
-              </p>
-              <div class="bg-light p-3 rounded mb-3">
-                <strong>Notification Details:</strong><br>
-                <strong>Employee:</strong> ${employeeName}<br>
-                <strong>Competency:</strong> ${competencyName}<br>
-                <strong>Current Proficiency:</strong> ${proficiency}/5 (${Math.round((proficiency/5)*100)}%)<br>
-                <strong>Action:</strong> Notify course management about competency status
-              </div>
-              <div class="alert alert-info" role="alert">
-                <i class="bi bi-bell"></i>
-                This will send a notification to course management about the current status of this competency profile.
-              </div>
-            </div>
-            <input type="password" id="swal-notify-password" class="swal2-input" placeholder="Enter your password" required>
-          `,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: '<i class="bi bi-bell"></i> Send Notification',
-          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
-          confirmButtonColor: '#198754',
-          cancelButtonColor: '#6c757d',
-          preConfirm: () => {
-            const password = document.getElementById('swal-notify-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Password is required');
-              return false;
+        // Check password verification silently in background
+        checkPasswordVerification().then(isVerified => {
+          if (isVerified) {
+            // Password already verified, proceed directly with notification
+            Swal.fire({
+              title: 'Send Notification',
+              text: 'Send notification to course management?',
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonText: '<i class="bi bi-bell"></i> Send Notification',
+              cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
+              confirmButtonColor: '#198754',
+              cancelButtonColor: '#6c757d'
+            }).then((result) => {
+              if (result.isConfirmed) {
+                submitNotificationRequest(profileId, competencyId, competencyName, employeeName, proficiency, null);
+              }
+            });
+          } else {
+            // Password verification required, but handle without showing sensitive details
+            Swal.fire({
+              title: 'Security Verification Required',
+              text: 'Please enter your password to send notification.',
+              input: 'password',
+              inputPlaceholder: 'Enter your password',
+              showCancelButton: true,
+              confirmButtonText: 'Send Notification',
+              cancelButtonText: 'Cancel',
+              confirmButtonColor: '#198754',
+              inputValidator: (value) => {
+                if (!value) {
+                  return 'Password is required';
+                }
+              }
+            }).then((result) => {
+              if (result.isConfirmed) {
+                submitNotificationRequest(profileId, competencyId, competencyName, employeeName, proficiency, result.value);
+              }
+            });
+          }
+        }).catch(error => {
+          console.error('Password verification check failed:', error);
+          // Fallback to password prompt without showing sensitive details
+          Swal.fire({
+            title: 'Security Verification Required',
+            text: 'Please enter your password to send notification.',
+            input: 'password',
+            inputPlaceholder: 'Enter your password',
+            showCancelButton: true,
+            confirmButtonText: 'Send Notification',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#198754',
+            inputValidator: (value) => {
+              if (!value) {
+                return 'Password is required';
+              }
             }
-            return password;
-          }
-        }).then((result) => {
-          if (result.isConfirmed) {
-            submitNotificationRequest(profileId, competencyId, competencyName, employeeName, proficiency, result.value);
-          }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              submitNotificationRequest(profileId, competencyId, competencyName, employeeName, proficiency, result.value);
+            }
+          });
         });
       }
 
@@ -1476,14 +1586,20 @@
           }
         });
 
-        // Verify password first
-        verifyPassword(password).then(() => {
+        // Verify password first (if password provided, otherwise assume already verified)
+        const passwordPromise = password ? verifyPassword(password) : Promise.resolve();
+        passwordPromise.then(() => {
           // Password verified, send notification
+          const csrfToken = getCSRFToken();
+          if (!csrfToken) {
+            throw new Error('Security token not available');
+          }
+          
           return fetch(`/admin/employee-competency-profiles/${profileId}/notify-course-management`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'X-CSRF-TOKEN': csrfToken,
               'Accept': 'application/json'
             },
             body: JSON.stringify({
@@ -1557,6 +1673,17 @@
 
       // Function to show employee's existing skills
       function showEmployeeSkills(employeeId, employeeName) {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Security Error',
+            text: 'Security token not found. Please refresh the page and try again.',
+            confirmButtonText: 'OK'
+          });
+          return;
+        }
+
         Swal.fire({
           title: `<i class="bi bi-person-badge text-primary"></i> Current Skills for ${employeeName}`,
           html: '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Loading existing skills...</p></div>',
@@ -1570,30 +1697,51 @@
         fetch(`/admin/employee-competency-profiles/get-employee-skills/${employeeId}`, {
           method: 'GET',
           headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           }
         })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            if (response.status === 404) {
+              throw new Error('Employee skills endpoint not found.');
+            } else if (response.status === 500) {
+              throw new Error('Server error occurred while loading skills.');
+            } else {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+          }
+          return response.json();
+        })
         .then(data => {
           if (data.success) {
             displayEmployeeSkills(data.skills, employeeName, data.total_skills);
           } else {
             Swal.fire({
-              icon: 'error',
-              title: 'Error',
-              text: data.message || 'Failed to load employee skills.',
+              icon: 'info',
+              title: 'No Skills Found',
+              text: data.message || 'This employee has no competency profiles yet.',
+              confirmButtonText: 'OK',
               timer: 3000
             });
           }
         })
         .catch(error => {
-          console.error('Error:', error);
+          console.error('Employee skills loading error:', error);
           Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'Failed to load employee skills. Please try again.',
-            timer: 3000
+            icon: 'warning',
+            title: 'Skills Loading Unavailable',
+            html: `
+              <div class="text-start">
+                <p>${error.message || 'Failed to load employee skills.'}</p>
+                <p class="text-muted small">
+                  <i class="bi bi-lightbulb me-1"></i>
+                  You can still view and manage competency profiles using the main interface.
+                </p>
+              </div>
+            `,
+            confirmButtonText: 'OK',
+            timer: 5000
           });
         });
       }
@@ -1730,32 +1878,67 @@
         `;
         skillGapSection.style.display = 'block';
 
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          skillGapContent.innerHTML = `
+            <div class="alert alert-danger">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              Security token not found. Please refresh the page and try again.
+            </div>
+          `;
+          return;
+        }
+
         fetch(`/admin/employee-competency-profiles/detect-skill-gaps/${employeeId}`, {
           method: 'GET',
           headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           }
         })
-        .then(response => response.json())
+        .then(response => {
+          if (!response.ok) {
+            // Handle different HTTP status codes
+            if (response.status === 404) {
+              throw new Error('Skill gap detection endpoint not found. This feature may not be available.');
+            } else if (response.status === 500) {
+              throw new Error('Server error occurred while detecting skill gaps. Please try again later.');
+            } else {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+          }
+          return response.json();
+        })
         .then(data => {
           if (data.success) {
             displaySkillGaps(data.skill_gaps, data.total_gaps, employeeId, employeeName);
           } else {
             skillGapContent.innerHTML = `
-              <div class="alert alert-danger">
-                <i class="bi bi-exclamation-triangle me-2"></i>
-                Error: ${data.message || 'Failed to detect skill gaps.'}
+              <div class="alert alert-warning">
+                <i class="bi bi-info-circle me-2"></i>
+                ${data.message || 'No skill gaps detected for this employee.'}
               </div>
             `;
           }
         })
         .catch(error => {
-          console.error('Error:', error);
+          console.error('Skill gap detection error:', error);
+          
+          // Show user-friendly error message with fallback option
           skillGapContent.innerHTML = `
-            <div class="alert alert-danger">
+            <div class="alert alert-warning">
               <i class="bi bi-exclamation-triangle me-2"></i>
-              Failed to detect skill gaps. Please try again.
+              <strong>Skill Gap Detection Unavailable</strong><br>
+              ${error.message || 'Failed to detect skill gaps automatically.'}<br>
+              <small class="text-muted mt-2 d-block">
+                <i class="bi bi-lightbulb me-1"></i>
+                You can still manually add competency profiles using the form above.
+              </small>
+            </div>
+            <div class="text-center mt-3">
+              <button type="button" class="btn btn-outline-primary btn-sm" onclick="skillGapSection.style.display='none'">
+                <i class="bi bi-x-circle me-1"></i>Hide This Section
+              </button>
             </div>
           `;
         });
@@ -1840,45 +2023,68 @@
 
       // Function to initialize basic skills for employee
       function initializeBasicSkills(employeeId, employeeName) {
-        Swal.fire({
-          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
-          html: `
-            <div class="text-start mb-3">
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle text-info"></i> 
-                For security purposes, please enter your password to initialize basic skills for this employee.
-              </p>
-              <div class="bg-light p-3 rounded mb-3">
-                <strong>Action:</strong> Initialize Basic Skills<br>
-                <strong>Employee:</strong> ${employeeName}<br>
-                <strong>Skills to Add:</strong> 8 basic competencies<br>
-                <strong>Initial Level:</strong> 1 (Beginner)
-              </div>
-              <div class="alert alert-info" role="alert">
-                <i class="bi bi-magic"></i>
-                This will automatically create competency profiles for common workplace skills.
-              </div>
-            </div>
-            <input type="password" id="swal-init-password" class="swal2-input" placeholder="Enter your password" required>
-          `,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: '<i class="bi bi-magic"></i> Initialize Skills',
-          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
-          confirmButtonColor: '#198754',
-          cancelButtonColor: '#6c757d',
-          preConfirm: () => {
-            const password = document.getElementById('swal-init-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Password is required');
-              return false;
+        // Check password verification silently in background
+        checkPasswordVerification().then(isVerified => {
+          if (isVerified) {
+            // Password already verified, proceed directly with initialization
+            Swal.fire({
+              title: 'Initialize Basic Skills',
+              text: 'Initialize basic competency profiles for this employee?',
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonText: '<i class="bi bi-magic"></i> Initialize Skills',
+              cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
+              confirmButtonColor: '#198754',
+              cancelButtonColor: '#6c757d'
+            }).then((result) => {
+              if (result.isConfirmed) {
+                submitInitializeBasicSkills(employeeId, employeeName, null);
+              }
+            });
+          } else {
+            // Password verification required, but handle without showing sensitive details
+            Swal.fire({
+              title: 'Security Verification Required',
+              text: 'Please enter your password to initialize basic skills.',
+              input: 'password',
+              inputPlaceholder: 'Enter your password',
+              showCancelButton: true,
+              confirmButtonText: 'Initialize Skills',
+              cancelButtonText: 'Cancel',
+              confirmButtonColor: '#198754',
+              inputValidator: (value) => {
+                if (!value) {
+                  return 'Password is required';
+                }
+              }
+            }).then((result) => {
+              if (result.isConfirmed) {
+                submitInitializeBasicSkills(employeeId, employeeName, result.value);
+              }
+            });
+          }
+        }).catch(error => {
+          console.error('Password verification check failed:', error);
+          // Fallback to password prompt without showing sensitive details
+          Swal.fire({
+            title: 'Security Verification Required',
+            text: 'Please enter your password to initialize basic skills.',
+            input: 'password',
+            inputPlaceholder: 'Enter your password',
+            showCancelButton: true,
+            confirmButtonText: 'Initialize Skills',
+            cancelButtonText: 'Cancel',
+            confirmButtonColor: '#198754',
+            inputValidator: (value) => {
+              if (!value) {
+                return 'Password is required';
+              }
             }
-            return password;
-          }
-        }).then((result) => {
-          if (result.isConfirmed) {
-            submitInitializeBasicSkills(employeeId, employeeName, result.value);
-          }
+          }).then((result) => {
+            if (result.isConfirmed) {
+              submitInitializeBasicSkills(employeeId, employeeName, result.value);
+            }
+          });
         });
       }
 
@@ -1895,14 +2101,20 @@
           }
         });
 
-        // Verify password first
-        verifyPassword(password).then(() => {
+        // Verify password first (if password provided, otherwise assume already verified)
+        const passwordPromise = password ? verifyPassword(password) : Promise.resolve();
+        passwordPromise.then(() => {
           // Password verified, proceed with initialization
+          const csrfToken = getCSRFToken();
+          if (!csrfToken) {
+            throw new Error('Security token not available');
+          }
+        
           return fetch(`/admin/employee-competency-profiles/initialize-basic-skills/${employeeId}`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'X-CSRF-TOKEN': csrfToken,
               'Accept': 'application/json'
             }
           });
@@ -2102,11 +2314,16 @@
         };
 
         // Submit request
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          throw new Error('Security token not available');
+        }
+        
         fetch('{{ route("employee_awards.store") }}', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           },
           body: JSON.stringify(requestData)
@@ -2162,11 +2379,18 @@
         console.log('Loading all awards...');
         showAwardsLoading();
 
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          console.error('CSRF token not available for awards loading');
+          showAwardsEmpty();
+          return;
+        }
+        
         // Use the new simplified route to get all awards at once
         fetch('{{ route("employee_awards.all") }}', {
           method: 'GET',
           headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           }
         })
@@ -2208,10 +2432,16 @@
         employees.forEach((employee, index) => {
           console.log(`Loading awards for employee ${index + 1}/${employees.length}:`, employee.employee_id);
           
+          const csrfToken = getCSRFToken();
+          if (!csrfToken) {
+            console.error('CSRF token not available for employee awards');
+            return;
+          }
+          
           fetch(`/admin/employee-awards/employee/${employee.employee_id}`, {
             method: 'GET',
             headers: {
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+              'X-CSRF-TOKEN': csrfToken,
               'Accept': 'application/json'
             }
           })
@@ -2311,21 +2541,21 @@
 
       // Function to show loading state
       function showAwardsLoading() {
-        awardsLoadingState.style.display = 'block';
-        awardsTable.style.display = 'none';
-        awardsEmptyState.style.display = 'none';
+        if (awardsLoadingState) awardsLoadingState.style.display = 'block';
+        if (awardsTable) awardsTable.style.display = 'none';
+        if (awardsEmptyState) awardsEmptyState.style.display = 'none';
       }
 
       // Function to hide loading state
       function hideAwardsLoading() {
-        awardsLoadingState.style.display = 'none';
+        if (awardsLoadingState) awardsLoadingState.style.display = 'none';
       }
 
       // Function to show empty state
       function showAwardsEmpty() {
         hideAwardsLoading();
-        awardsTable.style.display = 'none';
-        awardsEmptyState.style.display = 'block';
+        if (awardsTable) awardsTable.style.display = 'none';
+        if (awardsEmptyState) awardsEmptyState.style.display = 'block';
       }
 
       // Function to view award details
@@ -2346,10 +2576,21 @@
         });
 
         // Find the award details from the current awards data
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          Swal.fire({
+            icon: 'error',
+            title: 'Security Error',
+            text: 'Security token not found. Please refresh the page and try again.',
+            confirmButtonText: 'OK'
+          });
+          return;
+        }
+        
         fetch('{{ route("employee_awards.all") }}', {
           method: 'GET',
           headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           }
         })
@@ -2509,11 +2750,16 @@
           }
         });
 
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          throw new Error('Security token not available');
+        }
+        
         fetch(`/admin/employee-awards/${awardId}/status`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           },
           body: JSON.stringify({
@@ -2638,11 +2884,16 @@
           }
         });
 
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+          throw new Error('Security token not available');
+        }
+        
         fetch(`/admin/employee-awards/${awardId}`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'X-CSRF-TOKEN': csrfToken,
             'Accept': 'application/json'
           },
           body: JSON.stringify({

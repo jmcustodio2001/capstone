@@ -13,7 +13,6 @@
   <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
   
   <!-- Custom Destination Card Styles -->
@@ -323,94 +322,8 @@
     </div>
 
     <div class="card-body">
-      <!-- Notifications -->
-      <!-- Toast Notification Container -->
-      <div aria-live="polite" aria-atomic="true" class="position-relative">
-        <div id="notificationContainer" class="position-fixed end-0 p-3" style="top: 120px; z-index: 1080;"></div>
-      </div>
-      @if(session('success'))
-      <script>
-        document.addEventListener('DOMContentLoaded', function() {
-          var toastEl = document.getElementById('successToast');
-          if (toastEl) {
-            var toast = new bootstrap.Toast(toastEl, { delay: 3500 });
-            toast.show();
-          }
-        });
-      </script>
-      @endif
-      @if(session('error'))
-        <div class="alert alert-danger alert-dismissible fade show" role="alert" id="sessionErrorAlert">
-          {{ session('error') }}
-          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-        <script>
-          // Auto-dismiss session error after 3 seconds if it contains duplicate message
-          document.addEventListener('DOMContentLoaded', function() {
-            const sessionError = document.getElementById('sessionErrorAlert');
-            if (sessionError && (sessionError.textContent.includes('already exists') ||
-                                sessionError.textContent.includes('duplicate') ||
-                                sessionError.textContent.includes('BESTLINK COLLEGE'))) {
-              setTimeout(() => {
-                sessionError.remove();
-              }, 3000);
-            }
-          });
-        </script>
-      @endif
 
-      <!-- Employee Response Notifications -->
-      @if(isset($notifications) && $notifications->count() > 0)
-        <div class="card mb-4">
-          <div class="card-header bg-info text-white">
-            <h5 class="mb-0"><i class="fas fa-bell me-2"></i>Recent Employee Responses</h5>
-          </div>
-          <div class="card-body">
-            @foreach($notifications->take(5) as $notification)
-              @php
-                $message = $notification->message;
-                $isAccepted = stripos($message, 'ACCEPTED') !== false || stripos($message, 'accepted') !== false;
-                $isDeclined = stripos($message, 'DECLINED') !== false || stripos($message, 'declined') !== false || stripos($message, 'REJECTED') !== false || stripos($message, 'rejected') !== false;
-
-                // Determine styling based on status
-                if ($isAccepted) {
-                  $alertClass = 'alert-success border-success';
-                  $iconClass = 'fas fa-check-circle text-success';
-                  $borderColor = 'border-success';
-                } elseif ($isDeclined) {
-                  $alertClass = 'alert-danger border-danger';
-                  $iconClass = 'fas fa-times-circle text-danger';
-                  $borderColor = 'border-danger';
-                } else {
-                  $alertClass = 'alert-light border-info';
-                  $iconClass = 'fas fa-info-circle text-info';
-                  $borderColor = 'border-info';
-                }
-              @endphp
-              <div class="alert {{ $alertClass }} border-start border-4 {{ $borderColor }} mb-2">
-                <div class="d-flex justify-content-between align-items-start">
-                  <div>
-                    <i class="{{ $iconClass }} me-2"></i>
-                    @if($isAccepted)
-                      {!! preg_replace('/(ACCEPTED|accepted)/i', '<span class="badge bg-success text-white px-2 py-1 rounded-pill fw-bold">$1</span>', $message) !!}
-                    @elseif($isDeclined)
-                      {!! preg_replace('/(DECLINED|declined|REJECTED|rejected)/i', '<span class="badge bg-danger text-white px-2 py-1 rounded-pill fw-bold">$1</span>', $message) !!}
-                    @else
-                      {{ $message }}
-                    @endif
-                  </div>
-                  <small class="text-muted">{{ \Carbon\Carbon::parse($notification->sent_at)->diffForHumans() }}</small>
-                </div>
-              </div>
-            @endforeach
-            @if($notifications->count() > 5)
-              <div class="text-center">
-                <small class="text-muted">Showing 5 of {{ $notifications->count() }} notifications</small>
-              </div>
-            @endif
-          </div>
-        </div>
-      @endif  
+  
 
       <!-- Possible Training Destinations Table -->
       <div class="card mb-4">
@@ -1063,14 +976,40 @@
                   </div>
                 @endif
                 <div class="mb-3">
-                  <label class="form-label" for="employee_id">Employee*</label>
-                  <select class="form-select" name="employee_id" id="employee_id" required>
-                    <option value="">Select Employee</option>
-                    @foreach($employees as $employee)
-                      <option value="{{ $employee->employee_id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
-                    @endforeach
+                  <label class="form-label" for="position">Position*</label>
+                  <select class="form-select" name="position" id="position" required onchange="loadEmployeesByPosition()">
+                    <option value="">Select Position</option>
+                    <option value="EMPLOYEE">Employee</option>
+                    <option value="MANAGER">Manager</option>
+                    <option value="STAFF">Staff</option>
+                    <option value="SUPERVISOR">Supervisor</option>
+                    <option value="COORDINATOR">Coordinator</option>
+                    <option value="AGENT">Travel Agent</option>
+                    <option value="CONSULTANT">Travel Consultant</option>
+                    <option value="GUIDE">Tour Guide</option>
+                    <option value="DRIVER">Driver</option>
                   </select>
                 </div>
+                <div class="mb-3" id="employeeListContainer" style="display: none;">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0">Employees in Selected Position</label>
+                    <div>
+                      <button type="button" class="btn btn-outline-primary btn-sm me-1" onclick="selectAllEmployees()">
+                        <i class="bi bi-check-all me-1"></i>Select All
+                      </button>
+                      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="deselectAllEmployees()">
+                        <i class="bi bi-x-square me-1"></i>Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                    <div id="employeeCheckboxList">
+                      <!-- Employee checkboxes will be loaded here -->
+                    </div>
+                  </div>
+                  <small class="text-muted">Select employees to assign training to</small>
+                </div>
+                <input type="hidden" name="employee_ids" id="employee_ids" value="">
                 <div class="mb-3">
                   <label class="form-label" for="destination_name">Destination Name*</label>
                   <select class="form-select" name="destination_name" id="destination_name" required>
@@ -1626,7 +1565,7 @@
               notificationContainer.innerHTML = '';
             }
 
-            showNotification('success', 'Record Saved!', data.message || 'Record saved successfully');
+            alert(data.message || 'Record saved successfully');
 
             // Ensure cards are visible before reload
             ensureCardsVisible();
@@ -1641,7 +1580,7 @@
               formErrors.innerHTML = data.message;
               formErrors.style.display = 'block';
             }
-            showNotification('error', 'Error', data.message || 'Failed to save record');
+            alert(data.message || 'Failed to save record');
           }
 
         } catch (error) {
@@ -1649,7 +1588,7 @@
           // Show error message
           formErrors.innerHTML = 'An error occurred while saving the record.';
           formErrors.style.display = 'block';
-          showNotification('error', 'Error', 'An error occurred while saving the record.');
+          alert('An error occurred while saving the record.');
         } finally {
           saveBtn.disabled = false;
           saveBtn.innerHTML = 'Save Record';
@@ -1821,6 +1760,102 @@
     }
   }, 500); // Small delay to ensure Bootstrap is fully loaded
   
+  // Function to load employees by selected position
+  function loadEmployeesByPosition() {
+    const positionSelect = document.getElementById('position');
+    const employeeListContainer = document.getElementById('employeeListContainer');
+    const employeeCheckboxList = document.getElementById('employeeCheckboxList');
+    const employeeIdsInput = document.getElementById('employee_ids');
+    
+    const selectedPosition = positionSelect.value;
+    
+    if (!selectedPosition) {
+      employeeListContainer.style.display = 'none';
+      employeeCheckboxList.innerHTML = '';
+      employeeIdsInput.value = '';
+      return;
+    }
+    
+    // Show loading state
+    employeeCheckboxList.innerHTML = '<div class="text-center"><i class="bi bi-spinner-border"></i> Loading employees...</div>';
+    employeeListContainer.style.display = 'block';
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    
+    // Fetch employees by position
+    fetch('/admin/destination-knowledge-training/employees-by-position', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        position: selectedPosition
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.employees) {
+        if (data.employees.length === 0) {
+          employeeCheckboxList.innerHTML = '<div class="text-muted text-center">No employees found for this position</div>';
+          return;
+        }
+        
+        // Build checkbox list
+        let checkboxHtml = '';
+        data.employees.forEach(employee => {
+          checkboxHtml += `
+            <div class="form-check mb-2">
+              <input class="form-check-input employee-checkbox" type="checkbox" 
+                     value="${employee.employee_id}" 
+                     id="emp_${employee.employee_id}"
+                     onchange="updateSelectedEmployees()">
+              <label class="form-check-label" for="emp_${employee.employee_id}">
+                <strong>${employee.first_name} ${employee.last_name}</strong>
+                <small class="text-muted d-block">ID: ${employee.employee_id}</small>
+              </label>
+            </div>
+          `;
+        });
+        
+        employeeCheckboxList.innerHTML = checkboxHtml;
+      } else {
+        employeeCheckboxList.innerHTML = '<div class="text-danger">Error loading employees: ' + (data.message || 'Unknown error') + '</div>';
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      employeeCheckboxList.innerHTML = '<div class="text-danger">Error loading employees. Please try again.</div>';
+    });
+  }
+  
+  // Function to update selected employees hidden input
+  function updateSelectedEmployees() {
+    const checkboxes = document.querySelectorAll('.employee-checkbox:checked');
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+    document.getElementById('employee_ids').value = selectedIds.join(',');
+  }
+  
+  // Function to select all employees
+  function selectAllEmployees() {
+    const checkboxes = document.querySelectorAll('.employee-checkbox');
+    checkboxes.forEach(checkbox => {
+      checkbox.checked = true;
+    });
+    updateSelectedEmployees();
+  }
+  
+  // Function to deselect all employees
+  function deselectAllEmployees() {
+    const checkboxes = document.querySelectorAll('.employee-checkbox');
+    checkboxes.forEach(checkbox => {
+      checkbox.checked = false;
+    });
+    updateSelectedEmployees();
+  }
+  
   </script>
   <script>
   // Remove all .modal-backdrop elements on page load and after any modal event
@@ -1898,54 +1933,6 @@
 
   // Request Activation functionality is now handled in attachEventListeners()
 
-  // Notification function
-  function showNotification(type, title, message) {
-    const container = document.getElementById('notificationContainer');
-    const toastId = 'toast-' + Date.now();
-
-    let bgClass = 'text-bg-success';
-    let icon = 'bi-check-circle';
-
-    if (type === 'error') {
-      bgClass = 'text-bg-danger';
-      icon = 'bi-x-circle';
-    } else if (type === 'warning') {
-      bgClass = 'text-bg-warning';
-      icon = 'bi-exclamation-triangle';
-    } else if (type === 'info') {
-      bgClass = 'text-bg-info';
-      icon = 'bi-info-circle';
-    }
-
-    const toastHTML = `
-      <div id="${toastId}" class="toast align-items-center ${bgClass} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
-        <div class="d-flex">
-          <div class="toast-body">
-            <div class="d-flex align-items-center">
-              <i class="bi ${icon} me-2"></i>
-              <div>
-                <strong>${title}</strong><br>
-                <small>${message}</small>
-              </div>
-            </div>
-          </div>
-          <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-        </div>
-      </div>
-    `;
-
-    container.insertAdjacentHTML('beforeend', toastHTML);
-
-    const toastElement = document.getElementById(toastId);
-    const toast = new bootstrap.Toast(toastElement, { delay: 4000 });
-    toast.show();
-
-    // Remove toast element after it's hidden
-    toastElement.addEventListener('hidden.bs.toast', function() {
-      toastElement.remove();
-    });
-  }
-
   // Function to attach event listeners to new elements
   function attachEventListeners() {
 
@@ -1962,7 +1949,7 @@
         // Check if already assigned
         if (alreadyAssigned === 'true') {
           const message = 'This training is already assigned or in upcoming training for this employee.';
-          showNotification('warning', 'Already Assigned', message);
+          alert(message);
           return;
         }
 
@@ -1990,7 +1977,7 @@
 
             if (data.success) {
               const successMessage = `${deliveryMode} request submitted successfully!`;
-              showNotification('success', 'Request Submitted', data.message || successMessage);
+              alert(data.message || successMessage);
 
               // Update button to show pending status
               this.innerHTML = '<i class="bi bi-clock"></i> Request Submitted';
@@ -2007,11 +1994,11 @@
                 }, 3000);
               }
             } else {
-              showNotification('error', 'Request Failed', data.message || 'Request failed.');
+              alert(data.message || 'Request failed.');
             }
           } catch (error) {
             console.error('Request activation error:', error);
-            showNotification('error', 'Request Error', 'Request failed: ' + (error.message || 'Please try again'));
+            alert('Request failed: ' + (error.message || 'Please try again'));
           } finally {
             this.disabled = false;
             const buttonText = 'Request Training';
@@ -2075,7 +2062,7 @@
           const modal = bootstrap.Modal.getInstance(document.getElementById(modalId));
           modal.hide();
 
-          showNotification('success', 'Destination Updated', 'Possible training destination updated successfully!');
+          alert('Possible training destination updated successfully!');
 
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'Update Destination';
@@ -2107,14 +2094,14 @@
             }
           });
 
-          showNotification('success', 'Destination Deleted', data.message);
+          alert(data.message);
         } else {
-          showNotification('error', 'Delete Failed', data.message);
+          alert(data.message);
         }
       })
       .catch(error => {
         console.error('Error:', error);
-        showNotification('error', 'Error', 'Failed to delete destination. Please try again.');
+        alert('Failed to delete destination. Please try again.');
       });
     }
   }
@@ -2181,7 +2168,6 @@
                 deliveryModeSelect.value = deliveryMode;
 
                 foundDestination = true;
-                showNotification('success', 'Auto-populated', 'Destination details loaded from possible destinations!');
               }
             });
           }
@@ -2198,14 +2184,14 @@
                   durationInput.value = data.data.duration;
                   deliveryModeSelect.value = data.data.delivery_mode;
 
-                  showNotification('success', 'Auto-populated', 'Destination details loaded from database!');
+                  alert('Destination details loaded from database!');
                 } else {
-                  showNotification('warning', 'No Details Found', 'Please fill in the details manually.');
+                  alert('Please fill in the details manually.');
                 }
               })
               .catch(error => {
                 console.error('Error fetching destination details:', error);
-                showNotification('info', 'Manual Entry Required', 'Please fill in the destination details manually.');
+                alert('Please fill in the destination details manually.');
               });
           }
         } else {
@@ -2373,7 +2359,7 @@
 
           if (!csrfTokenValue) {
             console.error('CSRF token not found');
-            showNotification('error', 'Error', 'Security token not found. Please refresh the page and try again.');
+            alert('Security token not found. Please refresh the page and try again.');
             this.disabled = false;
             this.innerHTML = '<i class="bi bi-calendar-check"></i> Assign to Upcoming Training';
             return;
@@ -2407,7 +2393,7 @@
 
             if (data.success) {
               // Show success notification
-              showNotification('success', 'Success', data.message);
+              alert(data.message);
 
               // Replace button with success badge
               const parentTd = this.parentElement;
@@ -2421,7 +2407,7 @@
               // Show error notification with detailed message
               const errorMessage = data.message || 'Unknown error occurred';
               console.error('Server error:', errorMessage);
-              showNotification('error', 'Error', errorMessage);
+              alert(errorMessage);
 
               // Reset button
               this.disabled = false;
@@ -2456,11 +2442,11 @@
                   if (window.Laravel) {
                     window.Laravel.csrfToken = data.csrf_token;
                   }
-                  showNotification('info', 'Token Refreshed', 'Security token refreshed. Please try again.');
+                  alert('Security token refreshed. Please try again.');
                 }
               })
               .catch(() => {
-                showNotification('error', 'Token Error', 'Please refresh the page and try again.');
+                alert('Please refresh the page and try again.');
               });
             }
 
@@ -2477,7 +2463,7 @@
             }
             errorMessage += 'Please try again.';
 
-            showNotification('error', 'Error', errorMessage);
+            alert(errorMessage);
 
             // Reset button with dynamic text
             this.disabled = false;
@@ -2556,13 +2542,13 @@
 
     if (exportExcelBtn) {
       exportExcelBtn.addEventListener('click', function() {
-        showNotification('info', 'Export', 'Excel export functionality coming soon...');
+        alert('Excel export functionality coming soon...');
       });
     }
 
     if (exportPdfBtn) {
       exportPdfBtn.addEventListener('click', function() {
-        showNotification('info', 'Export', 'PDF export functionality coming soon...');
+        alert('PDF export functionality coming soon...');
       });
     }
   }
@@ -2624,27 +2610,13 @@
         </div>
       </div>
 
-      <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
       <script>
         let pendingAction = null;
 
         function confirmAction(actionType, title, message, id = null) {
-          const isDestructive = actionType.includes('delete');
-          Swal.fire({
-            title: title,
-            text: message,
-            icon: isDestructive ? 'warning' : 'question',
-            showCancelButton: true,
-            confirmButtonColor: isDestructive ? '#d33' : '#3085d6',
-            cancelButtonColor: '#6c757d',
-            confirmButtonText: isDestructive ? 'Yes, delete it!' : 'Yes, proceed!',
-            cancelButtonText: 'Cancel'
-          }).then((result) => {
-            if (result.isConfirmed) {
-              showPasswordVerification(() => {
-                executeAction(actionType, id);
-              });
-            }
+          // Skip confirmation dialog and go directly to password verification
+          showPasswordVerification(() => {
+            executeAction(actionType, id);
           });
         }
 
@@ -2748,16 +2720,6 @@
 
         // Function to handle training request activation
         function requestTrainingActivation(destinationId) {
-          // Show loading indicator
-          Swal.fire({
-            title: 'Processing Request...',
-            text: 'Submitting training activation request',
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
-
           // Submit the request to the controller
           fetch(`/admin/destination-knowledge-training/${destinationId}/request-activation`, {
             method: 'POST',
@@ -2771,55 +2733,26 @@
           })
           .then(response => response.json())
           .then(data => {
-            Swal.close();
-
             if (data.success) {
-              Swal.fire({
-                icon: 'success',
-                title: 'Request Submitted!',
-                text: data.message || 'Training activation request has been submitted successfully.',
-                confirmButtonText: 'View Course Management'
-              }).then((result) => {
-                if (result.isConfirmed && data.redirect_url) {
-                  window.location.href = data.redirect_url;
-                } else {
-                  // Refresh the page to show updated status
-                  window.location.reload();
-                }
-              });
+              alert(data.message || 'Training activation request has been submitted successfully.');
+              if (data.redirect_url) {
+                window.location.href = data.redirect_url;
+              } else {
+                // Refresh the page to show updated status
+                window.location.reload();
+              }
             } else {
-              Swal.fire({
-                icon: 'error',
-                title: 'Request Failed',
-                text: data.message || 'Failed to submit training activation request.',
-                confirmButtonText: 'OK'
-              });
+              alert(data.message || 'Failed to submit training activation request.');
             }
           })
           .catch(error => {
             console.error('Error:', error);
-            Swal.close();
-            Swal.fire({
-              icon: 'error',
-              title: 'Network Error',
-              text: 'An error occurred while submitting the request. Please try again.',
-              confirmButtonText: 'OK'
-            });
+            alert('An error occurred while submitting the request. Please try again.');
           });
         }
 
         // Function to handle assign to upcoming training
         function assignToUpcomingTraining(destinationId) {
-          // Show loading indicator
-          Swal.fire({
-            title: 'Processing Assignment...',
-            text: 'Assigning training to upcoming training list',
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
-
           // Submit the assignment request to the controller
           const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
           fetch('/admin/destination-knowledge-training/assign-to-upcoming', {
@@ -2835,73 +2768,37 @@
             })
           })
           .then(async response => {
-            Swal.close();
             if (!response.ok) {
               let msg = 'An error occurred while assigning the training. Please try again.';
               try {
                 const data = await response.json();
                 msg = data.message || msg;
               } catch (e) {}
-              Swal.fire({
-                icon: 'error',
-                title: 'Assignment Failed',
-                text: msg,
-                confirmButtonText: 'OK'
-              });
+              alert(msg);
               throw new Error(msg);
             }
             return response.json();
           })
           .then(data => {
             if (data.success) {
-              Swal.fire({
-                icon: 'success',
-                title: 'Assignment Successful!',
-                text: data.message || 'Training has been assigned to upcoming training list successfully.',
-                confirmButtonText: 'OK'
-              }).then(() => {
-                window.location.reload();
-              });
+              alert(data.message || 'Training has been assigned to upcoming training list successfully.');
+              window.location.reload();
             } else {
-              Swal.fire({
-                icon: 'error',
-                title: 'Assignment Failed',
-                text: data.message || 'Failed to assign training to upcoming training list.',
-                confirmButtonText: 'OK'
-              });
+              alert(data.message || 'Failed to assign training to upcoming training list.');
             }
           })
           .catch(error => {
             console.error('Error:', error);
-            // Only show if not already handled
-            if (!Swal.isVisible()) {
-              Swal.fire({
-                icon: 'error',
-                title: 'Network Error',
-                text: 'An error occurred while assigning the training. Please try again.',
-                confirmButtonText: 'OK'
-              });
-            }
+            alert('An error occurred while assigning the training. Please try again.');
           });
         }
 
         @if(session('success'))
-          Swal.fire({
-            icon: 'success',
-            title: 'Success!',
-            text: '{{ session('success') }}',
-            timer: 3000,
-            showConfirmButton: false
-          });
+          alert('{{ session('success') }}');
         @endif
 
         @if(session('error'))
-          Swal.fire({
-            icon: 'error',
-            title: 'Error!',
-            text: '{{ session('error') }}',
-            confirmButtonText: 'OK'
-          });
+          alert('{{ session('error') }}');
         @endif
 
         // Pagination functionality

@@ -233,6 +233,19 @@ Route::post('/admin/change-password', [AdminController::class, 'changePassword']
 Route::get('/admin/refresh-csrf', [AdminController::class, 'refreshCSRF'])->name('admin.refresh_csrf')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/reset-uptime', [AdminController::class, 'resetSystemUptime'])->name('admin.reset_uptime')->middleware(['auth:admin', 'admin.auth']);
 
+// Security Settings Routes
+Route::get('/admin/security-settings', [App\Http\Controllers\Admin\SecuritySettingsController::class, 'getSettings'])->name('admin.security_settings.get')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/security-settings', [App\Http\Controllers\Admin\SecuritySettingsController::class, 'updateSettings'])->name('admin.security_settings.update')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/security/verify-password', [App\Http\Controllers\Admin\SecuritySettingsController::class, 'verifyPassword'])->name('admin.security.verify_password')->middleware(['auth:admin', 'admin.auth']);
+Route::get('/admin/audit-logs', [App\Http\Controllers\Admin\SecuritySettingsController::class, 'getAuditLogs'])->name('admin.audit_logs')->middleware(['auth:admin', 'admin.auth']);
+Route::get('/admin/timeout-settings', [App\Http\Controllers\Admin\SecuritySettingsController::class, 'getTimeoutSettings'])->name('admin.timeout_settings')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/maintenance-mode/toggle', [App\Http\Controllers\Admin\SecuritySettingsController::class, 'toggleMaintenanceMode'])->name('admin.maintenance_mode.toggle')->middleware(['auth:admin', 'admin.auth']);
+
+// Security Alerts Routes
+Route::get('/admin/security-alerts', [App\Http\Controllers\Admin\SecurityAlertsController::class, 'getAlerts'])->name('admin.security_alerts')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/security-alerts/{id}/read', [App\Http\Controllers\Admin\SecurityAlertsController::class, 'markAsRead'])->name('admin.security_alerts.read')->middleware(['auth:admin', 'admin.auth']);
+Route::post('/admin/security-alerts/mark-all-read', [App\Http\Controllers\Admin\SecurityAlertsController::class, 'markAllAsRead'])->name('admin.security_alerts.mark_all_read')->middleware(['auth:admin', 'admin.auth']);
+
 // Test route to manually reset uptime (remove in production)
 Route::get('/admin/test-reset-uptime', function() {
     try {
@@ -545,6 +558,7 @@ Route::delete('/admin/destination-knowledge-training/destroy-possible/{id}', [Ap
 Route::post('/admin/destination-knowledge-training/{id}/request-activation', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'requestActivation'])->name('admin.destination-knowledge-training.request-activation')->middleware('auth:admin');
 Route::post('/admin/destination-knowledge-training/consolidate', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'consolidateDestinationTraining'])->name('admin.destination-knowledge-training.consolidate')->middleware('auth:admin');
 Route::get('/admin/destination-knowledge-training/fix-missing-columns', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'fixMissingColumns'])->name('admin.destination-knowledge-training.fix-missing-columns')->middleware('auth:admin');
+Route::post('/admin/destination-knowledge-training/employees-by-position', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'getEmployeesByPosition'])->name('admin.destination-knowledge-training.employees-by-position')->middleware('auth:admin');
 
 // General resource routes
 Route::get('/admin/destination-knowledge-training', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'index'])->name('admin.destination-knowledge-training.index')->middleware('auth:admin');
@@ -1286,3 +1300,8 @@ Route::get('/debug/customer-service-training/{employeeId}', function($employeeId
     ]);
 });
 
+// Employee Settings Routes
+Route::middleware(['auth:employee'])->group(function () {
+    Route::post('/employee/settings/save', [App\Http\Controllers\EmployeeSettingsController::class, 'saveSettings'])->name('employee.settings.save');
+    Route::get('/employee/settings/get', [App\Http\Controllers\EmployeeSettingsController::class, 'getSettings'])->name('employee.settings.get');
+});

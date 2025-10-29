@@ -19,7 +19,9 @@ class ProfileUpdate extends Model
         'requested_at',
         'approved_at',
         'approved_by',
-        'rejection_reason'
+        'rejection_reason',
+        'ip_address',
+        'user_agent'
     ];
 
     protected $casts = [

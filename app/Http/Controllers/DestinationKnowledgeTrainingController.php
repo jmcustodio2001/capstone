@@ -24,7 +24,8 @@ class DestinationKnowledgeTrainingController extends BaseController
     private const MODULE_NAME = 'Destination Knowledge Training';
 
     private const VALIDATION_RULES_CREATE = [
-        'employee_id' => 'required|exists:employees,employee_id',
+        'employee_ids' => 'required|string', // Comma-separated employee IDs
+        'position' => 'required|string',
         'date_completed' => 'nullable|date',
         'expired_date' => 'nullable|date',
         'progress_level' => 'nullable|integer|min:0|max:5',
@@ -223,6 +224,40 @@ class DestinationKnowledgeTrainingController extends BaseController
         return view('training_management.destination_knowledge_training', compact('destinations', 'employees', 'destinationMasters', 'possibleDestinations', 'notifications'));
     }
 
+    /**
+     * Get employees by position for AJAX request
+     */
+    public function getEmployeesByPosition(Request $request)
+    {
+        try {
+            $request->validate([
+                'position' => 'required|string'
+            ]);
+
+            $position = $request->input('position');
+            
+            // Get employees by position
+            $employees = Employee::where('position', $position)
+                ->select('employee_id', 'first_name', 'last_name', 'position')
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'employees' => $employees,
+                'count' => $employees->count()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching employees by position: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching employees: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     public function store(Request $request)
     {
         try {
@@ -230,164 +265,166 @@ class DestinationKnowledgeTrainingController extends BaseController
 
             $validated = $request->validate(self::VALIDATION_RULES_CREATE);
 
-            Log::info('Validation passed. Creating destination knowledge training record with data:', $validated);
+            Log::info('Validation passed. Creating destination knowledge training records with data:', $validated);
 
-            // Check for existing active record for the SAME EMPLOYEE only (allow same destination for different employees)
-            $existingRecord = DestinationKnowledgeTraining::where('employee_id', $validated['employee_id'])
-                ->where('destination_name', $validated['destination_name'])
-                ->where('delivery_mode', $validated['delivery_mode'])
-                ->where('is_active', true)
-                ->first();
+            // Parse employee IDs from comma-separated string
+            $employeeIds = array_filter(explode(',', $validated['employee_ids']));
+            
+            if (empty($employeeIds)) {
+                throw new \Exception('No employees selected. Please select at least one employee.');
+            }
 
-            if ($existingRecord) {
-                // Only prevent duplicate if it's the SAME employee with SAME destination and delivery mode
-                Log::info('Found existing record for same employee, updating instead of creating duplicate', [
-                    'existing_id' => $existingRecord->id,
-                    'employee_id' => $validated['employee_id'],
-                    'destination_name' => $validated['destination_name']
-                ]);
+            // Validate that all employee IDs exist
+            $validEmployees = Employee::whereIn('employee_id', $employeeIds)->pluck('employee_id')->toArray();
+            $invalidEmployees = array_diff($employeeIds, $validEmployees);
+            
+            if (!empty($invalidEmployees)) {
+                throw new \Exception('Invalid employee IDs: ' . implode(', ', $invalidEmployees));
+            }
 
-                // Update the existing record with new data
-                $existingRecord->update([
-                    'details' => $validated['details'],
-                    'objectives' => $validated['objectives'] ?? $existingRecord->objectives,
-                    'duration' => $validated['duration'] ?? $existingRecord->duration,
-                    'expired_date' => $validated['expired_date'] ?? $existingRecord->expired_date,
-                    'remarks' => $validated['remarks'] ?? $existingRecord->remarks,
-                    'is_active' => true
-                ]);
+            $createdRecords = [];
+            $updatedRecords = [];
+            $skippedRecords = [];
 
-                // Log activity
-                ActivityLog::createLog([
-                    'action' => 'update',
-                    'module' => self::MODULE_NAME,
-                    'description' => 'Updated existing destination knowledge training record (ID: ' . $existingRecord->id . ') for same employee instead of creating duplicate',
-                ]);
+            // Loop through each employee ID and create/update records
+            foreach ($employeeIds as $employeeId) {
+                // Check for existing active record for this specific employee
+                $existingRecord = DestinationKnowledgeTraining::where('employee_id', $employeeId)
+                    ->where('destination_name', $validated['destination_name'])
+                    ->where('delivery_mode', $validated['delivery_mode'])
+                    ->where('is_active', true)
+                    ->first();
 
-                if ($request->wantsJson()) {
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Existing training record updated successfully for this employee.',
-                        'record' => $existingRecord->load('employee')
+                if ($existingRecord) {
+                    // Update existing record
+                    $existingRecord->update([
+                        'details' => $validated['details'],
+                        'objectives' => $validated['objectives'] ?? $existingRecord->objectives,
+                        'duration' => $validated['duration'] ?? $existingRecord->duration,
+                        'expired_date' => $validated['expired_date'] ?? $existingRecord->expired_date,
+                        'remarks' => $validated['remarks'] ?? $existingRecord->remarks,
+                        'is_active' => true
                     ]);
+
+                    $updatedRecords[] = $existingRecord;
+                    Log::info('Updated existing record for employee: ' . $employeeId);
+                    continue;
                 }
 
-                return redirect()
-                    ->route('admin.destination-knowledge-training.index')
-                    ->with('success', 'Existing training record updated successfully for this employee.');
+                // Convert progress level to percentage
+                $progressPercentage = $this->convertLevelToPercentage($validated['progress_level'] ?? 0);
+
+                // Only process progress for Online Training delivery mode
+                if (isset($validated['delivery_mode']) && $validated['delivery_mode'] === 'Online Training') {
+                    // Require progress_level for Online Training
+                    if (!isset($validated['progress_level'])) {
+                        throw new \Exception('Progress level is required for Online Training');
+                    }
+                } else {
+                    // For non-Online Training, set default progress values
+                    $progressPercentage = 0;
+                }
+
+                // Auto-set status based on progress if not provided
+                $status = $validated['status'] ?? 'not-started';
+
+                // Create new record for this employee
+                try {
+                    $recordData = [
+                        'employee_id' => $employeeId,
+                        'destination_name' => $validated['destination_name'],
+                        'details' => $validated['details'],
+                        'objectives' => $validated['objectives'],
+                        'duration' => $validated['duration'],
+                        'delivery_mode' => $validated['delivery_mode'],
+                        'progress' => $progressPercentage,
+                        'status' => $status,
+                        'is_active' => true,
+                        'admin_approved_for_upcoming' => false,
+                        'training_type' => 'destination',
+                        'source' => 'destination_knowledge_training'
+                    ];
+
+                    // Add optional fields
+                    if (isset($validated['date_completed']) && $validated['date_completed']) {
+                        $recordData['date_completed'] = $validated['date_completed'];
+                    }
+                    if (isset($validated['expired_date']) && $validated['expired_date']) {
+                        $recordData['expired_date'] = $validated['expired_date'];
+                    }
+                    if (isset($validated['remarks']) && $validated['remarks']) {
+                        $recordData['remarks'] = $validated['remarks'];
+                    }
+
+                    // Set completion date if status is completed
+                    if ($status === 'completed' && !isset($recordData['date_completed'])) {
+                        $recordData['date_completed'] = now();
+                    }
+
+                    Log::info('Creating record for employee: ' . $employeeId, $recordData);
+                    $record = DestinationKnowledgeTraining::create($recordData);
+
+                    if ($record) {
+                        $createdRecords[] = $record;
+
+                        // Create notification for this employee
+                        TrainingNotification::create([
+                            'employee_id' => $employeeId,
+                            'message' => 'You have been assigned a new ' . self::MODULE_NAME . ': ' . $validated['destination_name'],
+                            'sent_at' => now()
+                        ]);
+
+                        // Create competency profile entry
+                        $this->createCompetencyProfileFromDestination($record);
+
+                        Log::info('Record created successfully for employee: ' . $employeeId . ' with ID: ' . $record->id);
+                    }
+
+                } catch (\Exception $createException) {
+                    Log::error('Database create error for employee ' . $employeeId . ': ' . $createException->getMessage());
+                    $skippedRecords[] = [
+                        'employee_id' => $employeeId,
+                        'error' => $createException->getMessage()
+                    ];
+                }
             }
 
-            // Convert progress level to percentage
-            $progressPercentage = $this->convertLevelToPercentage($validated['progress_level']);
+            // Log activity for all operations
+            $totalCreated = count($createdRecords);
+            $totalUpdated = count($updatedRecords);
+            $totalSkipped = count($skippedRecords);
 
-            // Only process progress for Online Training delivery mode
-            if (isset($validated['delivery_mode']) && $validated['delivery_mode'] === 'Online Training') {
-                // Require progress_level for Online Training
-                if (!isset($validated['progress_level'])) {
-                    throw new \Exception('Progress level is required for Online Training');
-                }
-            } else {
-                // For non-Online Training, set default progress values
-                $validated['progress_level'] = 0;
-                $progressPercentage = 0;
-            }
-
-            // Keep the status as selected by user in the form
-
-            // Auto-set status based on progress if not provided
-            if (!isset($validated['status']) || empty($validated['status'])) {
-                $validated['status'] = 'not-started';
-            }
-
-            // Check if all required fields are present
-            $requiredFields = ['employee_id', 'destination_name', 'details', 'objectives', 'duration', 'delivery_mode'];
-            foreach ($requiredFields as $field) {
-                if (!isset($validated[$field]) || empty($validated[$field])) {
-                    throw new \Exception("Missing required field: $field");
-                }
-            }
-
-            // Try to create with minimal data first to test database connection
-            try {
-                $testData = [
-                    'employee_id' => $validated['employee_id'],
-                    'destination_name' => $validated['destination_name'],
-                    'details' => $validated['details'],
-                    'objectives' => $validated['objectives'],
-                    'duration' => $validated['duration'],
-                    'delivery_mode' => $validated['delivery_mode'],
-                    'progress' => $progressPercentage,
-                    'status' => $validated['status'],
-                    'is_active' => true,
-                    'admin_approved_for_upcoming' => false, // Default to false - requires Auto-Assign button click
-                    'training_type' => 'destination',
-                    'source' => 'destination_knowledge_training'
-                ];
-
-                Log::info('Attempting to create record with test data:', $testData);
-                $record = DestinationKnowledgeTraining::create($testData);
-
-                // Update additional fields for all delivery modes
-                if (isset($validated['date_completed']) && $validated['date_completed']) {
-                    $record->date_completed = $validated['date_completed'];
-                }
-                if (isset($validated['expired_date']) && $validated['expired_date']) {
-                    $record->expired_date = $validated['expired_date'];
-                }
-
-                // Set completion date if status is completed
-                if ($validated['status'] === 'completed' && !$record->date_completed) {
-                    $record->date_completed = now();
-                }
-
-                if (isset($validated['remarks']) && $validated['remarks']) {
-                    $record->remarks = $validated['remarks'];
-                }
-
-                $record->save();
-
-            } catch (\Exception $createException) {
-                Log::error('Database create error: ' . $createException->getMessage());
-                throw new \Exception('Database table error: ' . $createException->getMessage());
-            }
-
-            if (!$record) {
-                Log::error('Failed to create record - create() returned null');
-                throw new \Exception('Failed to create destination knowledge training record');
-            }
-
-            Log::info('Record created successfully with ID: ' . $record->id);
-
-            // Create notification
-            TrainingNotification::create([
-                'employee_id' => $request->employee_id,
-                'message' => 'You have been assigned a new ' . self::MODULE_NAME . ': ' . $request->destination_name,
-                'sent_at' => now()
-            ]);
-
-            // CRITICAL FIX: Create competency profile entry when destination training is created
-            $this->createCompetencyProfileFromDestination($record);
-
-            // DO NOT create upcoming training record automatically - admin must use "Assign to Upcoming Training" button
-
-            // Log activity
             ActivityLog::createLog([
-                'action' => 'create',
+                'action' => 'bulk_create',
                 'module' => self::MODULE_NAME,
-                'description' => 'Added destination knowledge training record (ID: ' . $record->id . ') and created competency profile',
+                'description' => "Bulk destination training assignment: {$totalCreated} created, {$totalUpdated} updated, {$totalSkipped} skipped for position: {$validated['position']}",
             ]);
+
+            // Prepare response message
+            $message = "Training assignment completed: {$totalCreated} created, {$totalUpdated} updated";
+            if ($totalSkipped > 0) {
+                $message .= ", {$totalSkipped} skipped due to errors";
+            }
 
             if ($request->wantsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'Training record added successfully.',
-                    'record' => $record->load('employee')
+                    'message' => $message,
+                    'summary' => [
+                        'created' => $totalCreated,
+                        'updated' => $totalUpdated,
+                        'skipped' => $totalSkipped,
+                        'position' => $validated['position']
+                    ],
+                    'created_records' => $createdRecords,
+                    'updated_records' => $updatedRecords,
+                    'skipped_records' => $skippedRecords
                 ]);
             }
 
             return redirect()
                 ->route('admin.destination-knowledge-training.index')
-                ->with('success', 'Training record added successfully.');
+                ->with('success', $message);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::warning('Validation failed for destination knowledge training creation:', [

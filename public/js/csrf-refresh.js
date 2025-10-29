@@ -1,121 +1,151 @@
-/**
- * CSRF Token Refresh System
- * Automatically refreshes CSRF tokens to prevent 419 Page Expired errors
- */
+// CSRF Token Refresh System
+// Prevents 419 Page Expired errors by automatically refreshing CSRF tokens
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Set up CSRF token for AJAX requests
-    const token = document.querySelector('meta[name="csrf-token"]');
-    
-    if (token) {
-        // Set default CSRF token for all AJAX requests
-        window.Laravel = {
-            csrfToken: token.getAttribute('content')
-        };
-        
-        // Update axios defaults if available
-        if (typeof axios !== 'undefined') {
-            axios.defaults.headers.common['X-CSRF-TOKEN'] = token.getAttribute('content');
-        }
-        
-        // Update jQuery AJAX defaults if available
-        if (typeof $ !== 'undefined') {
-            $.ajaxSetup({
-                headers: {
-                    'X-CSRF-TOKEN': token.getAttribute('content')
+(function() {
+    'use strict';
+
+    let refreshInterval;
+    let isRefreshing = false;
+
+    // Initialize CSRF refresh system
+    function initializeCSRFRefresh() {
+        try {
+            // Start periodic refresh (every 30 minutes)
+            refreshInterval = setInterval(refreshCSRFToken, 30 * 60 * 1000);
+            
+            // Refresh on page visibility change (when user returns to tab)
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden && !isRefreshing) {
+                    refreshCSRFToken();
                 }
             });
+
+            console.log('CSRF refresh system initialized');
+        } catch (error) {
+            console.error('Error initializing CSRF refresh:', error);
         }
     }
-    
-    // Refresh CSRF token every 15 minutes to prevent expiration
-    setInterval(function() {
-        refreshCSRFToken();
-    }, 15 * 60 * 1000); // 15 minutes
-    
-    // Refresh immediately on page load
-    setTimeout(refreshCSRFToken, 2000);
-    
-    // Also refresh on user activity
-    let lastActivity = Date.now();
-    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    
-    activityEvents.forEach(function(event) {
-        document.addEventListener(event, function() {
-            lastActivity = Date.now();
-        }, true);
-    });
-    
-    // Check for inactivity and refresh token if user becomes active again
-    setInterval(function() {
-        const now = Date.now();
-        const timeSinceLastActivity = now - lastActivity;
-        
-        // If user was inactive for more than 10 minutes and is now active
-        if (timeSinceLastActivity < 1000 && timeSinceLastActivity > 0) {
-            refreshCSRFToken();
-        }
-    }, 60 * 1000); // Check every minute
-});
 
-function refreshCSRFToken() {
-    fetch('/csrf-refresh', {
-        method: 'GET',
-        credentials: 'same-origin',
-        headers: {
-            'Accept': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        // Handle both token formats: data.token and data.csrf_token
-        const newToken = data.token || data.csrf_token;
+    // Refresh CSRF token
+    function refreshCSRFToken() {
+        if (isRefreshing) return;
         
-        if (newToken) {
-            // Update meta tag
-            const tokenMeta = document.querySelector('meta[name="csrf-token"]');
-            if (tokenMeta) {
-                tokenMeta.setAttribute('content', newToken);
+        isRefreshing = true;
+        
+        const endpoints = [
+            '/employee/csrf-token',
+            '/csrf-token',
+            '/sanctum/csrf-cookie'
+        ];
+
+        tryRefreshEndpoint(endpoints, 0);
+    }
+
+    // Try refresh endpoint
+    function tryRefreshEndpoint(endpoints, index) {
+        if (index >= endpoints.length) {
+            console.warn('All CSRF refresh endpoints failed');
+            isRefreshing = false;
+            return;
+        }
+
+        fetch(endpoints[index], {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
             }
-            
-            // Update all CSRF input fields
-            const csrfInputs = document.querySelectorAll('input[name="_token"]');
-            csrfInputs.forEach(function(input) {
-                input.value = newToken;
-            });
-            
-            // Update global variables
+            return response.json();
+        })
+        .then(data => {
+            if (data.csrf_token) {
+                updateCSRFToken(data.csrf_token);
+                console.log('CSRF token refreshed from:', endpoints[index]);
+            } else {
+                throw new Error('No CSRF token in response');
+            }
+        })
+        .catch(error => {
+            console.log('CSRF refresh failed for ' + endpoints[index] + ':', error.message);
+            tryRefreshEndpoint(endpoints, index + 1);
+        })
+        .finally(() => {
+            isRefreshing = false;
+        });
+    }
+
+    // Update CSRF token in DOM and global objects
+    function updateCSRFToken(newToken) {
+        try {
+            // Update meta tag
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            if (metaTag) {
+                metaTag.setAttribute('content', newToken);
+            }
+
+            // Update Laravel global object
             if (window.Laravel) {
                 window.Laravel.csrfToken = newToken;
             }
-            
-            // Update axios defaults if available
-            if (typeof axios !== 'undefined') {
-                axios.defaults.headers.common['X-CSRF-TOKEN'] = newToken;
-            }
-            
-            // Update jQuery AJAX defaults if available
-            if (typeof $ !== 'undefined') {
+
+            // Update jQuery AJAX setup if available
+            if (typeof $ !== 'undefined' && $.ajaxSetup) {
                 $.ajaxSetup({
                     headers: {
                         'X-CSRF-TOKEN': newToken
                     }
                 });
             }
-            
-            console.log('CSRF token refreshed successfully');
-        }
-    })
-    .catch(error => {
-        console.error('Failed to refresh CSRF token:', error);
-        // Try to reload the page if CSRF refresh fails repeatedly
-        if (error.message.includes('419') || error.message.includes('expired')) {
-            console.warn('Session expired, reloading page...');
-            window.location.reload();
-        }
-    });
-}
 
-// Export for manual use
-window.refreshCSRFToken = refreshCSRFToken;
+            // Update Axios defaults if available
+            if (typeof axios !== 'undefined') {
+                axios.defaults.headers.common['X-CSRF-TOKEN'] = newToken;
+            }
+
+            // Dispatch custom event for other scripts
+            document.dispatchEvent(new CustomEvent('csrf-token-updated', {
+                detail: { token: newToken }
+            }));
+
+        } catch (error) {
+            console.error('Error updating CSRF token:', error);
+        }
+    }
+
+    // Get current CSRF token
+    function getCurrentCSRFToken() {
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        return metaTag ? metaTag.getAttribute('content') : null;
+    }
+
+    // Cleanup function
+    function cleanup() {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    }
+
+    // Expose public API
+    window.CSRFRefresh = {
+        refresh: refreshCSRFToken,
+        getCurrentToken: getCurrentCSRFToken,
+        cleanup: cleanup
+    };
+
+    // Initialize when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeCSRFRefresh);
+    } else {
+        initializeCSRFRefresh();
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', cleanup);
+
+})();

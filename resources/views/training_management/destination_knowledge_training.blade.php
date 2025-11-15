@@ -5,6 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <script>
+// Robust translationService initialization to prevent undefined errors
+if (typeof window.translationService === 'undefined') {
+  window.translationService = {
+    translate: function(key, params) { return key; },
+    get: function(key, params) { return key; },
+    trans: function(key, params) { return key; },
+    choice: function(key, count, params) { return key; }
+  };
+}
+if (typeof window.trans === 'undefined') {
+  window.trans = function(key, params) { return key; };
+}
     window.Laravel = {
       csrfToken: '{{ csrf_token() }}'
     };
@@ -14,112 +26,112 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
-  
+
   <!-- Custom Destination Card Styles -->
   <style>
     .destination-card {
       transition: all 0.3s ease;
       border: 1px solid #e0e0e0;
-      border-radius: 12px;
+      border-radius: 16px;
       overflow: hidden;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      min-height: 200px;
-      height: auto;
-      width: 100%;
-      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      font-size: 1rem;
+      margin: 18px 0;
+      padding: 0;
+      background: #fff;
     }
-    
+
     .destination-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
       border-color: #007bff;
     }
-    
+
     .info-section {
       transition: all 0.2s ease;
     }
-    
+
     .info-section:hover {
       transform: translateY(-2px);
     }
-    
+
     .info-section .bg-light {
       transition: all 0.2s ease;
       border: 1px solid transparent;
     }
-    
+
     .info-section:hover .bg-light {
       border-color: #dee2e6;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
-    
+
     .destination-card .card-body {
       display: flex;
       flex-direction: column;
       height: 100%;
     }
-    
+
     .destination-card .row.g-3 {
       flex: 1;
     }
-    
+
     .destination-card .row.mt-3 {
       margin-top: auto !important;
     }
-    
+
     /* Full-width maximized layout for all screen sizes */
     .col-12 {
       flex: 0 0 100%;
       max-width: 100%;
     }
-    
+
     /* Responsive adjustments */
     @media (max-width: 768px) {
       .destination-card .card-body {
         padding: 1rem;
       }
-      
+
       .destination-card .card-header {
         padding: 0.75rem 1rem;
       }
-      
+
       .destination-card .row.g-3 > .col-md-6 {
         flex: 0 0 100%;
         max-width: 100%;
       }
     }
-    
+
     @media (min-width: 769px) {
       .destination-card .row.g-3 > .col-md-6 {
         flex: 0 0 50%;
         max-width: 50%;
       }
     }
-      
+
       .destination-card .card-header .d-flex {
         flex-direction: column;
         text-align: center;
       }
-      
+
       .destination-card .card-header .text-end {
         text-align: center !important;
         margin-top: 1rem;
       }
-      
+
       .destination-card .row .col-md-6 {
         margin-bottom: 1rem;
       }
-      
+
       .destination-card .d-flex.justify-content-end {
         justify-content: center !important;
       }
     }
-    
+
     .badge {
       font-size: 0.75rem;
       padding: 0.5rem 0.75rem;
     }
-    
+
     .btn-outline-primary:hover,
     .btn-outline-success:hover,
     .btn-outline-warning:hover,
@@ -128,44 +140,48 @@
       transform: translateY(-1px);
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
-    
+
     /* Enhanced card content layout - Full Width Style */
     .destination-card .card-body {
-      padding: 1.5rem;
+      padding: 18px 24px 18px 24px;
       display: block;
+      background: #fff;
     }
-    
+
     .destination-card .info-section .bg-light {
-      padding: 1rem;
-      border-radius: 6px;
+      padding: 8px 14px;
+      border-radius: 10px;
       border: 1px solid #e9ecef;
       word-wrap: break-word;
       overflow-wrap: break-word;
       background-color: #f8f9fa !important;
     }
-    
+
     .destination-card .card-header {
-      padding: 1rem 1.5rem;
+      padding: 18px 24px 12px 24px;
       min-height: auto;
+      border-radius: 16px 16px 0 0;
+      background: #f3f8ff;
+      border-bottom: none;
     }
-    
+
     /* Horizontal layout for better space utilization */
     .destination-card .row.g-3 {
       margin: 0;
     }
-    
+
     .destination-card .row.g-3 > .col-12,
     .destination-card .row.g-3 > .col-md-6 {
       margin-bottom: 1rem;
       padding: 0 0.75rem;
     }
-    
+
     /* Improved button spacing */
     .destination-card .btn {
       margin: 0.25rem;
       white-space: nowrap;
     }
-    
+
     /* Enhanced responsive design for maximized cards */
     @media (min-width: 1200px) {
       .destination-card .row.g-3 > .col-md-6 {
@@ -173,44 +189,45 @@
         max-width: 50%;
       }
     }
-    
+
     /* Ensure text content is fully visible */
     .destination-card p {
       margin-bottom: 0.75rem;
       line-height: 1.6;
       word-wrap: break-word;
     }
-    
+
     .destination-card .bg-light p {
       margin-bottom: 0.5rem;
     }
-    
+
     .destination-card .bg-light p:last-child {
       margin-bottom: 0;
     }
-    
+
     /* Maximize content visibility */
     .destination-card .info-section h6 {
       margin-bottom: 1rem;
       font-size: 1rem;
     }
-    
+
     /* Better badge and status display */
     .destination-card .badge {
-      font-size: 0.8rem;
-      padding: 0.6rem 1rem;
-      line-height: 1.2;
+      font-size: 0.78rem;
+      padding: 0.35rem 0.7rem;
+      line-height: 1.1;
+      border-radius: 8px;
     }
-    
+
     /* Improve text readability */
     .destination-card .text-muted {
       font-size: 0.9rem;
     }
-    
+
     .destination-card strong {
       font-weight: 600;
     }
-    
+
     /* Full-width maximized card styling like the example */
     .destination-card {
       background: #ffffff;
@@ -218,65 +235,63 @@
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    
+
     .destination-card .card-header {
       border-bottom: 1px solid rgba(255,255,255,0.2);
       background: linear-gradient(135deg, #6c7b95, #8fa4c7) !important;
     }
-    
+
     /* Better section organization */
     .destination-card .info-section {
       margin-bottom: 1rem;
     }
-    
+
     .destination-card .info-section:last-child {
       margin-bottom: 0;
     }
-    
+
     /* Enhanced action button area */
     .destination-card .row.mt-3 {
       border-top: 1px solid #e9ecef;
       padding-top: 1rem;
       margin-top: 1rem !important;
     }
-    
+
     /* Clean, organized layout */
     .destination-card .row.g-3 > .col-12 {
       border-bottom: 1px solid #f1f3f4;
       padding-bottom: 1rem;
       margin-bottom: 1rem;
     }
-    
+
     .destination-card .row.g-3 > .col-12:last-child {
       border-bottom: none;
       margin-bottom: 0;
     }
-    
+
     /* Progress bars and status indicators */
     .destination-card .progress {
       height: 8px;
       border-radius: 4px;
     }
-    
+
     .destination-card .badge {
       font-size: 0.75rem;
       padding: 0.4rem 0.8rem;
       border-radius: 4px;
     }
-    
+
     /* Ensure cards are always visible */
     #destinationTableBody {
-      display: block !important;
       visibility: visible !important;
       opacity: 1 !important;
     }
-    
+
     #destinationTableBody .col-12[data-destination-id] {
-      display: block !important;
       visibility: visible !important;
       opacity: 1 !important;
     }
-    
+
     /* Prevent any JavaScript from hiding the container */
     .row.g-4 {
       display: flex !important;
@@ -323,7 +338,7 @@
 
     <div class="card-body">
 
-  
+
 
       <!-- Possible Training Destinations Table -->
       <div class="card mb-4">
@@ -348,50 +363,50 @@
                 </thead>
                 <tbody id="possibleDestinationsTableBody">
                   @foreach($possibleDestinations as $index => $destination)
-                    <tr class="possible-destination-row" data-index="{{ $index }}">
-                      <td>{{ $loop->iteration }}</td>
-                      <td><strong>{{ $destination->destination_name }}</strong></td>
-                      <td>
-                        <div style="max-width: 200px;">
-                          {{ Str::limit($destination->details, 100) }}
-                        </div>
-                      </td>
-                      <td>
-                        <div style="max-width: 200px;">
-                          {{ Str::limit($destination->objectives, 100) }}
-                        </div>
-                      </td>
-                      <td>{{ $destination->duration }}</td>
-                      <td>
-                        @switch($destination->delivery_mode)
-                          @case('On-Site Training')
-                            <span style="color: #000;">🏢 On-Site Training</span>
-                            @break
-                          @case('Blended Learning')
-                            <span style="color: #000;">🔄 Blended Learning</span>
-                            @break
-                          @case('Workshop')
-                            <span style="color: #000;">🎯 Workshop</span>
-                            @break
-                          @case('Seminar')
-                            <span style="color: #000;">📚 Seminar</span>
-                            @break
-                          @case('Field Training')
-                            <span style="color: #000;">🏃 Field Training</span>
-                            @break
-                          @case('Table Training')
-                            <span style="color: #000;">📋 Table Training</span>
-                            @break
-                          @default
-                            <span style="color: #000;">{{ $destination->delivery_mode }}</span>
-                        @endswitch
-                      </td>
-                    </tr>
-                  @endforeach
+  <tr class="possible-destination-row" data-index="{{ $index }}">
+    <td>{{ $loop->iteration }}</td>
+    <td><strong>{{ $destination->destination_name }}</strong></td>
+    <td>
+      <div style="max-width: 200px;">
+        {{ Str::limit($destination->details, 100) }}
+      </div>
+    </td>
+    <td>
+      <div style="max-width: 200px;">
+        {{ Str::limit($destination->objectives, 100) }}
+      </div>
+    </td>
+    <td>{{ $destination->duration }}</td>
+    <td>
+      @switch($destination->delivery_mode)
+        @case('On-Site Training')
+          <span style="color: #000;">🏢 On-Site Training</span>
+          @break
+        @case('Blended Learning')
+          <span style="color: #000;">🔄 Blended Learning</span>
+          @break
+        @case('Workshop')
+          <span style="color: #000;">🎯 Workshop</span>
+          @break
+        @case('Seminar')
+          <span style="color: #000;">📚 Seminar</span>
+          @break
+        @case('Field Training')
+          <span style="color: #000;">🏃 Field Training</span>
+          @break
+        @case('Table Training')
+          <span style="color: #000;">📋 Table Training</span>
+          @break
+        @default
+          <span style="color: #000;">{{ $destination->delivery_mode }}</span>
+      @endswitch
+    </td>
+  </tr>
+@endforeach
                 </tbody>
               </table>
             </div>
-            
+
             <!-- Pagination for Possible Destinations -->
             <div class="d-flex justify-content-between align-items-center mt-3">
               <div class="text-muted">
@@ -496,7 +511,7 @@
                 $headerColor = $headerColors[$statusKey] ?? 'linear-gradient(135deg, #6c7b95, #8fa4c7)';
               @endphp
 
-              <div class="col-12" data-destination-id="{{ $record->id }}">
+              <div class="col-12 col-md-6 col-lg-4" data-destination-id="{{ $record->id }}">
                 <div class="destination-card h-100">
                   <!-- Card Header with Gradient -->
                   <div class="card-header" style="background: {{ $headerColor }}; color: white; padding: 1rem; position: relative;">
@@ -672,11 +687,11 @@
                                   $badgeClass = 'bg-success';
                                   $textClass = 'text-success';
                                   $displayText = 'Completed';
-                                } elseif ($currentProgress > 0) {
+                                } elseif ($currentStatus === 'in-progress' || $currentProgress > 0) {
                                   $finalStatus = 'in-progress';
                                   $badgeClass = 'bg-primary';
                                   $textClass = 'text-primary';
-                                  $displayText = 'In Progress';
+                                  $displayText = 'On Going';
                                 } else {
                                   $finalStatus = 'not-started';
                                   $badgeClass = 'bg-secondary';
@@ -719,77 +734,6 @@
                             @else
                               <span class="badge bg-secondary bg-opacity-10 text-secondary fs-6">Not Requested</span>
                             @endif
-                          </div>
-                        </div>
-                      </div>
-
-                      <!-- Request Training -->
-                      <div class="col-md-6">
-                        <div class="info-section">
-                          <h6 class="fw-bold text-warning mb-2">
-                            <i class="bi bi-clipboard-check me-2"></i>Request Training
-                          </h6>
-                          <div class="bg-light p-3 rounded text-center">
-                            @php
-                              // Check if course is already assigned in employee training dashboard OR competency gap analysis
-                              $destinationNameClean = str_replace([' Training', 'Training'], '', $record->destination_name);
-
-                              // Check Employee Training Dashboard - ONLY for this specific employee
-                              try {
-                                $isAssignedInTraining = \App\Models\EmployeeTrainingDashboard::where('employee_training_dashboards.employee_id', $record->employee_id)
-                                  ->join('course_management', 'employee_training_dashboards.course_id', '=', 'course_management.course_id')
-                                  ->where('course_management.course_title', 'LIKE', '%' . $destinationNameClean . '%')
-                                  ->exists();
-                              } catch (\Exception $e) {
-                                // Handle missing table gracefully
-                                $isAssignedInTraining = false;
-                              }
-
-                              // Check if this training was actually assigned from Competency Gap Analysis
-                              // Only mark as "From Competency Gap" if the training details explicitly mention it was from competency gap
-                              $isAssignedFromGap = false;
-                              if ($record->details && (strpos($record->details, 'Training assigned from competency gap analysis') !== false ||
-                                                       strpos($record->details, 'from competency gap') !== false)) {
-                                $isAssignedFromGap = true;
-                              }
-
-                              // Check if this training is already in upcoming trainings for this employee
-                              $isInUpcomingTraining = false;
-                              try {
-                                $isInUpcomingTraining = \App\Models\UpcomingTraining::where('employee_id', $record->employee_id)
-                                  ->where('destination_training_id', $record->id)
-                                  ->exists();
-                              } catch (\Exception $e) {
-                                $isInUpcomingTraining = false;
-                              }
-
-                              // Only disable if THIS SPECIFIC employee already has the course assigned or in upcoming training
-                              $isAlreadyAssigned = $isAssignedInTraining || $isAssignedFromGap || $isInUpcomingTraining;
-
-                              // Determine button text and tooltip
-                              $buttonText = 'Request Training';
-                              $tooltipText = $isInUpcomingTraining ? 'Already in Upcoming Training' : ($isAssignedFromGap ? 'Assigned from Competency Gap' : ($isAssignedInTraining ? 'Already in Training Dashboard' : 'Request this training'));
-                            @endphp
-
-                            <button class="btn btn-outline-primary btn-sm request-activation-btn {{ $isAlreadyAssigned ? 'disabled' : '' }}"
-                              data-record-id="{{ $record->id }}"
-                              data-destination-name="{{ $record->destination_name }}"
-                              data-delivery-mode="{{ $record->delivery_mode }}"
-                              data-already-assigned="{{ $isAlreadyAssigned ? 'true' : 'false' }}"
-                              {{ $isAlreadyAssigned ? 'disabled' : '' }}
-                              onclick="{{ $isAlreadyAssigned ? '' : 'confirmAction(\'request-training\', \'Request Training\', \'Request training for ' . ($record->employee ? $record->employee->first_name . ' ' . $record->employee->last_name : 'Employee') . '?\', ' . $record->id . ')' }}"
-                              title="{{ $tooltipText }}">
-                              <i class="bi bi-clipboard-check me-1"></i>
-                              @if($isInUpcomingTraining)
-                                Already in Upcoming
-                              @elseif($isAssignedFromGap)
-                                From Competency Gap
-                              @elseif($isAssignedInTraining)
-                                Already Assigned
-                              @else
-                                {{ $buttonText }}
-                              @endif
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -924,7 +868,7 @@
               </div>
             @endforelse
           </div>
-          
+
           <!-- Pagination for Destination Knowledge Training -->
           @if($destinations->count() > 0)
             <div class="d-flex justify-content-between align-items-center mt-4">
@@ -1105,8 +1049,8 @@
 
                 <div class="row">
                   <div class="col-12 mb-2">
-                    <label class="form-label small" for="employee_id">Employee*</label>
-                    <select class="form-select form-select-sm" name="employee_id" id="employee_id" required>
+                    <label class="form-label small" for="employee_id_{{ $record->id }}">Employee*</label>
+                    <select class="form-select form-select-sm" name="employee_id" id="employee_id_{{ $record->id }}" required>
                       @foreach($employees as $employee)
                         <option value="{{ $employee->employee_id }}" {{ $record->employee_id == $employee->employee_id ? 'selected' : '' }}>{{ $employee->first_name }} {{ $employee->last_name }}</option>
                       @endforeach
@@ -1116,22 +1060,22 @@
 
                 <div class="row">
                   <div class="col-12 mb-2">
-                    <label class="form-label small" for="destination_name">Destination Name*</label>
-                    <input type="text" class="form-control form-control-sm" name="destination_name" id="destination_name" value="{{ $record->destination_name }}" required>
+                    <label class="form-label small" for="destination_name_{{ $record->id }}">Destination Name*</label>
+                    <input type="text" class="form-control form-control-sm" name="destination_name" id="destination_name_{{ $record->id }}" value="{{ $record->destination_name }}" required>
                   </div>
                 </div>
 
                 <div class="row">
                   <div class="col-12 mb-2">
-                    <label class="form-label small" for="details">Details*</label>
-                    <textarea class="form-control form-control-sm" name="details" id="details" rows="2" required>{{ $record->details }}</textarea>
+                    <label class="form-label small" for="details_{{ $record->id }}">Details*</label>
+                    <textarea class="form-control form-control-sm" name="details" id="details_{{ $record->id }}" rows="2" required>{{ $record->details }}</textarea>
                   </div>
                 </div>
 
                 <div class="row">
                   <div class="col-6 mb-2">
-                    <label class="form-label small" for="progress">Progress Level</label>
-                    <select class="form-select form-select-sm" name="progress_level" id="progress_level" required disabled>
+                    <label class="form-label small" for="progress_level_{{ $record->id }}">Progress Level</label>
+                    <select class="form-select form-select-sm" name="progress_level" id="progress_level_{{ $record->id }}" required disabled>
                       @php
                         // Convert current progress percentage to level (0-5)
                         $currentLevel = 0;
@@ -1151,8 +1095,8 @@
                     </select>
                   </div>
                   <div class="col-6 mb-2">
-                    <label class="form-label small" for="status">Status <small class="text-muted">(Auto-calculated)</small></label>
-                    <select class="form-select form-select-sm" name="status" id="status" required disabled>
+                    <label class="form-label small" for="status_{{ $record->id }}">Status <small class="text-muted">(Auto-calculated)</small></label>
+                    <select class="form-select form-select-sm" name="status" id="status_{{ $record->id }}" required disabled>
                       <option value="not-started" {{ ($record->status ?? 'not-started') == 'not-started' ? 'selected' : '' }}>Not Started</option>
                       <option value="in-progress" {{ ($record->status ?? 'in-progress') == 'in-progress' ? 'selected' : '' }}>In Progress</option>
                       <option value="completed" {{ ($record->status ?? 'completed') == 'completed' ? 'selected' : '' }}>Completed</option>
@@ -1165,15 +1109,15 @@
 
                 <div class="row">
                   <div class="col-12 mb-2">
-                    <label class="form-label small" for="expired_date">Expired Date</label>
-                    <input type="date" class="form-control form-control-sm" name="expired_date" id="expired_date" value="{{ $record->expired_date ? $record->expired_date->format('Y-m-d') : '' }}">
+                    <label class="form-label small" for="expired_date_{{ $record->id }}">Expired Date</label>
+                    <input type="date" class="form-control form-control-sm" name="expired_date" id="expired_date_{{ $record->id }}" value="{{ $record->expired_date ? $record->expired_date->format('Y-m-d') : '' }}">
                   </div>
                 </div>
 
                 <div class="row">
                   <div class="col-12 mb-2">
-                    <label class="form-label small" for="remarks">Remarks</label>
-                    <textarea class="form-control form-control-sm" name="remarks" id="remarks" rows="1" placeholder="Optional remarks...">{{ $record->remarks ?? '' }}</textarea>
+                    <label class="form-label small" for="remarks_{{ $record->id }}">Remarks</label>
+                    <textarea class="form-control form-control-sm" name="remarks" id="remarks_{{ $record->id }}" rows="1" placeholder="Optional remarks...">{{ $record->remarks ?? '' }}</textarea>
                   </div>
                 </div>
 
@@ -1201,12 +1145,12 @@
               <form action="{{ route('admin.course_management.assign_destination', ['employeeId' => $record->employee_id]) }}" method="POST">
                 @csrf
                 <div class="mb-3">
-                  <label class="form-label" for="destinationName">Destination Name*</label>
-                  <input type="text" class="form-control" name="destinationName" id="destinationName" value="{{ $record->destination_name }}" readonly required>
+                  <label class="form-label" for="destinationName_{{ $record->id }}">Destination Name*</label>
+                  <input type="text" class="form-control" name="destinationName" id="destinationName_{{ $record->id }}" value="{{ $record->destination_name }}" readonly required>
                 </div>
                 <div class="mb-3">
-                  <label class="form-label" for="request_message">Message*</label>
-                  <textarea class="form-control" name="request_message" id="request_message" rows="3" required></textarea>
+                  <label class="form-label" for="request_message_{{ $record->id }}">Message*</label>
+                  <textarea class="form-control" name="request_message" id="request_message_{{ $record->id }}" rows="3" required></textarea>
                 </div>
                 <div class="modal-footer">
                   <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1392,29 +1336,29 @@
   document.addEventListener('DOMContentLoaded', function() {
     // Ensure cards are visible after page load
     ensureCardsVisible();
-    
+
     const addForm = document.getElementById('addDestinationForm');
     const formErrors = document.getElementById('formErrors');
     const saveBtn = document.getElementById('saveDestinationBtn');
     const modalEl = document.getElementById('addDestinationModal');
     const bsModal = new bootstrap.Modal(modalEl);
-    
+
     // Function to ensure cards are properly displayed
     function ensureCardsVisible() {
       const cardContainer = document.getElementById('destinationTableBody');
       const cards = document.querySelectorAll('#destinationTableBody .col-12[data-destination-id]');
-      
+
       if (cardContainer && cards.length > 0) {
         // Make sure container is visible
         cardContainer.style.display = '';
-        
+
         // Make sure all cards are visible
         cards.forEach(card => {
           card.style.display = '';
           card.style.visibility = 'visible';
           card.style.opacity = '1';
         });
-        
+
         console.log(`Ensured ${cards.length} cards are visible`);
       } else if (cardContainer) {
         console.log('Card container found but no cards detected');
@@ -1471,11 +1415,20 @@
 
     // Function to check for duplicates
     function checkForDuplicates() {
-      const employeeId = document.getElementById('employee_id').value;
-      const destinationName = document.getElementById('destination_name').value;
-      const deliveryMode = document.getElementById('delivery_mode').value;
+      const employeeIdEl = document.getElementById('employee_id');
+      const destinationNameEl = document.getElementById('destination_name');
+      const deliveryModeEl = document.getElementById('delivery_mode');
       const duplicateWarning = document.getElementById('duplicateWarning');
       const saveBtn = document.getElementById('saveDestinationBtn');
+
+      // Null checks for all required elements
+      if (!employeeIdEl || !destinationNameEl || !deliveryModeEl || !duplicateWarning || !saveBtn) {
+        return;
+      }
+
+      const employeeId = employeeIdEl.value;
+      const destinationName = destinationNameEl.value;
+      const deliveryMode = deliveryModeEl.value;
 
       // Always hide warning and enable button initially
       duplicateWarning.classList.add('d-none');
@@ -1565,15 +1518,49 @@
               notificationContainer.innerHTML = '';
             }
 
-            alert(data.message || 'Record saved successfully');
-
-            // Ensure cards are visible before reload
-            ensureCardsVisible();
             
-            // Reload page to show updated data immediately
-            setTimeout(() => {
-              window.location.reload(true);
-            }, 1000);
+            // Automatically assign training from Accredited Training Center
+            if (data.record_ids && data.record_ids.length > 0) {
+              console.log('Auto-assigning trainings for records:', data.record_ids);
+
+              // Auto-assign each record
+              const autoAssignPromises = data.record_ids.map(recordId => {
+                return fetch(`/admin/destination-knowledge-training/${recordId}/request-activation`, {
+                  method: 'POST',
+                  headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    auto_assign: true
+                  })
+                }).catch(err => {
+                  console.error('Auto-assign error for record', recordId, ':', err);
+                });
+              });
+
+              // Wait for all auto-assignments to complete
+              Promise.all(autoAssignPromises).then(() => {
+                console.log('All trainings auto-assigned successfully');
+
+                // Ensure cards are visible before reload
+                ensureCardsVisible();
+
+                // Reload page to show updated data immediately
+                setTimeout(() => {
+                  window.location.reload(true);
+                }, 1500);
+              });
+            } else {
+              // Ensure cards are visible before reload
+              ensureCardsVisible();
+
+              // Reload page to show updated data immediately
+              setTimeout(() => {
+                window.location.reload(true);
+              }, 1000);
+            }
           } else {
             // Error case - show error but don't close modal
             if (data.message) {
@@ -1607,7 +1594,7 @@
     const employeeIdEl = document.getElementById('employee_id');
     const destinationNameEl = document.getElementById('destination_name');
     const deliveryModeEl = document.getElementById('delivery_mode');
-    
+
     if (employeeIdEl) employeeIdEl.addEventListener('change', checkForDuplicates);
     if (destinationNameEl) destinationNameEl.addEventListener('change', checkForDuplicates);
     if (deliveryModeEl) deliveryModeEl.addEventListener('change', checkForDuplicates);
@@ -1659,39 +1646,39 @@
     const progressFilter = document.getElementById('progressFilter').value;
     const dateFilter = document.getElementById('dateFilter').value;
     const cards = document.querySelectorAll('#destinationTableBody .col-12[data-destination-id]');
-    
+
     cards.forEach(cardCol => {
       let show = true;
       const card = cardCol.querySelector('.destination-card');
-      
+
       if (card) {
         // Extract text content from card for filtering
         const cardText = card.textContent.toLowerCase();
         const employeeName = card.querySelector('.card-header h5')?.textContent.toLowerCase() || '';
         const statusBadge = card.querySelector('.badge')?.textContent.toLowerCase() || '';
-        
+
         // Apply filters
         if (search && !cardText.includes(search) && !employeeName.includes(search)) {
           show = false;
         }
-        
+
         if (progressFilter === 'completed' && !statusBadge.includes('completed')) {
           show = false;
         }
-        
+
         if (progressFilter === 'in-progress' && !statusBadge.includes('progress')) {
           show = false;
         }
-        
+
         if (progressFilter === 'not-started' && !statusBadge.includes('not started')) {
           show = false;
         }
-        
+
         if (dateFilter && !cardText.includes(dateFilter)) {
           show = false;
         }
       }
-      
+
       cardCol.style.display = show ? '' : 'none';
     });
     });
@@ -1731,13 +1718,13 @@
   }
 
   // (Deprecated duplicate) Sync Missing Records handler removed. Use setupSyncButton() below.
-  
+
   // Initialize admin topbar dropdowns to fix Tools and Jetlouge Admin clickability
   setTimeout(function() {
     try {
       // Initialize Bootstrap dropdowns for admin topbar
       const dropdownElementList = document.querySelectorAll('.dropdown-toggle');
-      
+
       dropdownElementList.forEach(function (dropdownToggleEl) {
         try {
           // Check if already initialized
@@ -1753,36 +1740,36 @@
           console.warn('Failed to initialize dropdown:', dropdownToggleEl.id, e);
         }
       });
-      
+
       console.log('Admin topbar dropdowns initialized successfully');
     } catch (error) {
       console.error('Error initializing admin topbar dropdowns:', error);
     }
   }, 500); // Small delay to ensure Bootstrap is fully loaded
-  
+
   // Function to load employees by selected position
   function loadEmployeesByPosition() {
     const positionSelect = document.getElementById('position');
     const employeeListContainer = document.getElementById('employeeListContainer');
     const employeeCheckboxList = document.getElementById('employeeCheckboxList');
     const employeeIdsInput = document.getElementById('employee_ids');
-    
+
     const selectedPosition = positionSelect.value;
-    
+
     if (!selectedPosition) {
       employeeListContainer.style.display = 'none';
       employeeCheckboxList.innerHTML = '';
       employeeIdsInput.value = '';
       return;
     }
-    
+
     // Show loading state
     employeeCheckboxList.innerHTML = '<div class="text-center"><i class="bi bi-spinner-border"></i> Loading employees...</div>';
     employeeListContainer.style.display = 'block';
-    
+
     // Get CSRF token
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-    
+
     // Fetch employees by position
     fetch('/admin/destination-knowledge-training/employees-by-position', {
       method: 'POST',
@@ -1802,14 +1789,14 @@
           employeeCheckboxList.innerHTML = '<div class="text-muted text-center">No employees found for this position</div>';
           return;
         }
-        
+
         // Build checkbox list
         let checkboxHtml = '';
         data.employees.forEach(employee => {
           checkboxHtml += `
             <div class="form-check mb-2">
-              <input class="form-check-input employee-checkbox" type="checkbox" 
-                     value="${employee.employee_id}" 
+              <input class="form-check-input employee-checkbox" type="checkbox"
+                     value="${employee.employee_id}"
                      id="emp_${employee.employee_id}"
                      onchange="updateSelectedEmployees()">
               <label class="form-check-label" for="emp_${employee.employee_id}">
@@ -1819,7 +1806,7 @@
             </div>
           `;
         });
-        
+
         employeeCheckboxList.innerHTML = checkboxHtml;
       } else {
         employeeCheckboxList.innerHTML = '<div class="text-danger">Error loading employees: ' + (data.message || 'Unknown error') + '</div>';
@@ -1830,14 +1817,14 @@
       employeeCheckboxList.innerHTML = '<div class="text-danger">Error loading employees. Please try again.</div>';
     });
   }
-  
+
   // Function to update selected employees hidden input
   function updateSelectedEmployees() {
     const checkboxes = document.querySelectorAll('.employee-checkbox:checked');
     const selectedIds = Array.from(checkboxes).map(cb => cb.value);
     document.getElementById('employee_ids').value = selectedIds.join(',');
   }
-  
+
   // Function to select all employees
   function selectAllEmployees() {
     const checkboxes = document.querySelectorAll('.employee-checkbox');
@@ -1846,7 +1833,7 @@
     });
     updateSelectedEmployees();
   }
-  
+
   // Function to deselect all employees
   function deselectAllEmployees() {
     const checkboxes = document.querySelectorAll('.employee-checkbox');
@@ -1855,7 +1842,7 @@
     });
     updateSelectedEmployees();
   }
-  
+
   </script>
   <script>
   // Remove all .modal-backdrop elements on page load and after any modal event
@@ -1867,13 +1854,13 @@
   window.addEventListener('DOMContentLoaded', removeAllModalBackdrops);
   document.addEventListener('shown.bs.modal', removeAllModalBackdrops);
   document.addEventListener('hidden.bs.modal', removeAllModalBackdrops);
-  
+
   // Additional check after window fully loads
   window.addEventListener('load', function() {
     setTimeout(() => {
       const cardContainer = document.getElementById('destinationTableBody');
       const cards = document.querySelectorAll('#destinationTableBody .col-12[data-destination-id]');
-      
+
       if (cardContainer && cards.length > 0) {
         cardContainer.style.display = '';
         cards.forEach(card => {
@@ -1977,8 +1964,7 @@
 
             if (data.success) {
               const successMessage = `${deliveryMode} request submitted successfully!`;
-              alert(data.message || successMessage);
-
+              
               // Update button to show pending status
               this.innerHTML = '<i class="bi bi-clock"></i> Request Submitted';
               this.classList.remove('btn-outline-primary');
@@ -2062,8 +2048,7 @@
           const modal = bootstrap.Modal.getInstance(document.getElementById(modalId));
           modal.hide();
 
-          alert('Possible training destination updated successfully!');
-
+          
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'Update Destination';
         });
@@ -2094,10 +2079,8 @@
             }
           });
 
-          alert(data.message);
-        } else {
-          alert(data.message);
-        }
+                  } else {
+                  }
       })
       .catch(error => {
         console.error('Error:', error);
@@ -2393,8 +2376,7 @@
 
             if (data.success) {
               // Show success notification
-              alert(data.message);
-
+              
               // Replace button with success badge
               const parentTd = this.parentElement;
               parentTd.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Approved for Upcoming</span>';
@@ -2794,8 +2776,7 @@
         }
 
         @if(session('success'))
-          alert('{{ session('success') }}');
-        @endif
+                  @endif
 
         @if(session('error'))
           alert('{{ session('error') }}');
@@ -2817,7 +2798,7 @@
         function initializePossibleDestinationsPagination() {
           const rows = document.querySelectorAll('.possible-destination-row');
           const totalRecords = rows.length;
-          
+
           if (totalRecords <= possibleItemsPerPage) {
             // Hide pagination if not needed
             const possiblePrevBtn = document.querySelector('#possiblePrevBtn');
@@ -2827,7 +2808,7 @@
             }
             return;
           }
-          
+
           showPossibleDestinationsPage(1);
         }
 
@@ -2835,17 +2816,17 @@
           const rows = document.querySelectorAll('.possible-destination-row');
           const totalRecords = rows.length;
           const totalPages = Math.ceil(totalRecords / possibleItemsPerPage);
-          
+
           // Validate page number
           if (page < 1) page = 1;
           if (page > totalPages) page = totalPages;
-          
+
           possibleCurrentPage = page;
-          
+
           // Calculate start and end indices
           const startIndex = (page - 1) * possibleItemsPerPage;
           const endIndex = startIndex + possibleItemsPerPage;
-          
+
           // Show/hide rows
           rows.forEach((row, index) => {
             if (index >= startIndex && index < endIndex) {
@@ -2854,22 +2835,22 @@
               row.style.display = 'none';
             }
           });
-          
+
           // Update pagination info
           const possibleCurrentStart = document.getElementById('possibleCurrentStart');
           const possibleCurrentEnd = document.getElementById('possibleCurrentEnd');
           const possibleTotalRecords = document.getElementById('possibleTotalRecords');
           const possibleCurrentPageEl = document.getElementById('possibleCurrentPage');
-          
+
           if (possibleCurrentStart) possibleCurrentStart.textContent = startIndex + 1;
           if (possibleCurrentEnd) possibleCurrentEnd.textContent = Math.min(endIndex, totalRecords);
           if (possibleTotalRecords) possibleTotalRecords.textContent = totalRecords;
           if (possibleCurrentPageEl) possibleCurrentPageEl.textContent = page;
-          
+
           // Update button states
           const prevBtn = document.getElementById('possiblePrevBtn');
           const nextBtn = document.getElementById('possibleNextBtn');
-          
+
           if (prevBtn) {
             if (page <= 1) {
               prevBtn.classList.add('disabled');
@@ -2877,7 +2858,7 @@
               prevBtn.classList.remove('disabled');
             }
           }
-          
+
           if (nextBtn) {
             if (page >= totalPages) {
               nextBtn.classList.add('disabled');
@@ -2896,7 +2877,7 @@
         function initializeTrainingPagination() {
           const cards = document.querySelectorAll('#destinationTableBody .col-12[data-destination-id]');
           const totalRecords = cards.length;
-          
+
           if (totalRecords <= trainingItemsPerPage) {
             // Hide pagination if not needed
             const trainingPrevBtn = document.querySelector('#trainingPrevBtn');
@@ -2906,7 +2887,7 @@
             }
             return;
           }
-          
+
           showTrainingPage(1);
         }
 
@@ -2914,17 +2895,17 @@
           const cards = document.querySelectorAll('#destinationTableBody .col-12[data-destination-id]');
           const totalRecords = cards.length;
           const totalPages = Math.ceil(totalRecords / trainingItemsPerPage);
-          
+
           // Validate page number
           if (page < 1) page = 1;
           if (page > totalPages) page = totalPages;
-          
+
           trainingCurrentPage = page;
-          
+
           // Calculate start and end indices
           const startIndex = (page - 1) * trainingItemsPerPage;
           const endIndex = startIndex + trainingItemsPerPage;
-          
+
           // Show/hide cards
           cards.forEach((card, index) => {
             if (index >= startIndex && index < endIndex) {
@@ -2933,22 +2914,22 @@
               card.style.display = 'none';
             }
           });
-          
+
           // Update pagination info
           const trainingCurrentStart = document.getElementById('trainingCurrentStart');
           const trainingCurrentEnd = document.getElementById('trainingCurrentEnd');
           const trainingTotalRecords = document.getElementById('trainingTotalRecords');
           const trainingCurrentPageEl = document.getElementById('trainingCurrentPage');
-          
+
           if (trainingCurrentStart) trainingCurrentStart.textContent = startIndex + 1;
           if (trainingCurrentEnd) trainingCurrentEnd.textContent = Math.min(endIndex, totalRecords);
           if (trainingTotalRecords) trainingTotalRecords.textContent = totalRecords;
           if (trainingCurrentPageEl) trainingCurrentPageEl.textContent = page;
-          
+
           // Update button states
           const prevBtn = document.getElementById('trainingPrevBtn');
           const nextBtn = document.getElementById('trainingNextBtn');
-          
+
           if (prevBtn) {
             if (page <= 1) {
               prevBtn.classList.add('disabled');
@@ -2956,7 +2937,7 @@
               prevBtn.classList.remove('disabled');
             }
           }
-          
+
           if (nextBtn) {
             if (page >= totalPages) {
               nextBtn.classList.add('disabled');

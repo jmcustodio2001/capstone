@@ -59,7 +59,16 @@
 
     <div class="fw-bold" style="font-size: 1.1rem;">{{ ($employee->first_name ?? '') . ' ' . ($employee->last_name ?? '') ?: 'Nica A. Casamingo' }}</div>
     <div class="text-secondary" style="font-size: 0.95rem;">{{ $employee->position ?? 'Software Developer' }}</div>
-    <span class="badge bg-info text-white mt-2" style="font-size: 0.85rem;">Active</span>
+    @php
+      $status = $employee->status ?? 'Active';
+      $statusClass = match($status) {
+        'Active' => 'bg-success',
+        'Inactive' => 'bg-secondary',
+        'On Leave' => 'bg-warning text-dark',
+        default => 'bg-info'
+      };
+    @endphp
+    <span id="sidebar-status-badge" class="badge {{ $statusClass }} text-white mt-2" style="font-size: 0.85rem;">{{ $status }}</span>
     <div class="text-muted small mt-1">Employee ID: {{ $employee->employee_id ?? 'EMP001' }}</div>
   </div>
 

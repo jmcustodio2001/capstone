@@ -540,7 +540,6 @@
                       @endphp
                       <div class="d-flex flex-column align-items-start">
                         <div><strong class="{{ $colorClass }}">{{ $expiredDate->format('M d, Y') }}</strong></div>
-                        <div class="text-muted small">{{ $expiredDate->format('h:i A') }}</div>
                         <div class="w-100 mt-1">
                           @if($daysUntilExpiry >= 0)
                             <span class="badge {{ $bgClass }} text-white">

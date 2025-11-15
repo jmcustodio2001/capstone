@@ -163,9 +163,51 @@ document.addEventListener('DOMContentLoaded', function() {
       <i class="bi bi-check-circle me-2"></i>{{ session('success') }}
       <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
+    <script>
+      // Show success message and update sidebar status
+      document.addEventListener('DOMContentLoaded', function() {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: 'Success!',
+            text: '{{ session('success') }}',
+            icon: 'success',
+            confirmButtonColor: '#198754',
+            timer: 3000,
+            timerProgressBar: true
+          });
+        }
+        
+        // Update sidebar status to match saved status
+        const currentStatus = '{{ $employee->status ?? 'Active' }}';
+        console.log('Page loaded with saved status:', currentStatus);
+        
+        // Update sidebar badge to reflect saved status
+        setTimeout(function() {
+          const sidebarStatusBadge = document.getElementById('sidebar-status-badge');
+          if (sidebarStatusBadge) {
+            sidebarStatusBadge.textContent = currentStatus;
+            sidebarStatusBadge.className = 'badge mt-2';
+            switch(currentStatus) {
+              case 'Active':
+                sidebarStatusBadge.classList.add('bg-success', 'text-white');
+                break;
+              case 'Inactive':
+                sidebarStatusBadge.classList.add('bg-secondary', 'text-white');
+                break;
+              case 'On Leave':
+                sidebarStatusBadge.classList.add('bg-warning', 'text-dark');
+                break;
+              default:
+                sidebarStatusBadge.classList.add('bg-info', 'text-white');
+            }
+            sidebarStatusBadge.style.fontSize = '0.85rem';
+          }
+        }, 100);
+      });
+    </script>
   @endif
 
-  @if($errors->any())
+  @if(isset($errors) && is_object($errors) && method_exists($errors, 'any') && $errors->any())
     <div class="alert alert-danger alert-dismissible fade show" role="alert">
       <i class="bi bi-exclamation-triangle me-2"></i>
       @foreach($errors->all() as $error)
@@ -248,16 +290,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
             <div class="settings-field">
               <label class="form-label">Department</label>
-              <input type="text" class="form-control" name="department_id" value="{{ $employee->department_id }}">
+              <input type="text" class="form-control readonly-field" value="{{ $employee->department_id }}" readonly>
             </div>
 
             <div class="settings-field">
               <label class="form-label">Employment Status</label>
-              <select class="form-select" name="status">
-                <option value="Active" {{ $employee->status == 'Active' ? 'selected' : '' }}>Active</option>
-                <option value="Inactive" {{ $employee->status == 'Inactive' ? 'selected' : '' }}>Inactive</option>
-                <option value="On Leave" {{ $employee->status == 'On Leave' ? 'selected' : '' }}>On Leave</option>
+              <select class="form-select" name="status" id="employment-status" required>
+                <option value="Active" {{ ($employee->status ?? 'Active') == 'Active' ? 'selected' : '' }}>Active</option>
+                <option value="Inactive" {{ ($employee->status ?? 'Active') == 'Inactive' ? 'selected' : '' }}>Inactive</option>
+                <option value="On Leave" {{ ($employee->status ?? 'Active') == 'On Leave' ? 'selected' : '' }}>On Leave</option>
               </select>
+              <small class="form-text text-muted">Current status: <strong>{{ $employee->status ?? 'Active' }}</strong></small>
             </div>
 
             <div class="settings-field">
@@ -458,15 +501,130 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Online status - show as online since user is logged in
+  // Dynamic Online Status - checks actual connectivity
   function updateOnlineStatus() {
     const statusElement = document.getElementById('online-status');
-    statusElement.className = 'badge bg-success me-2';
-    statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>Online';
+    
+    if (navigator.onLine) {
+      // Check if we can actually reach the server
+      fetch('/employee/ping', { 
+        method: 'GET',
+        cache: 'no-cache',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          statusElement.className = 'badge bg-success me-2';
+          statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>Online';
+        } else {
+          throw new Error('Server not reachable');
+        }
+      })
+      .catch(() => {
+        statusElement.className = 'badge bg-warning me-2';
+        statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>Connection Issues';
+      });
+    } else {
+      statusElement.className = 'badge bg-danger me-2';
+      statusElement.innerHTML = '<i class="bi bi-circle-fill me-1"></i>Offline';
+    }
   }
 
-  // Set status immediately
+  // Set status immediately and update every 30 seconds
   updateOnlineStatus();
+  setInterval(updateOnlineStatus, 30000);
+
+  // Listen for online/offline events
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+
+  // Employment Status Change Handler
+  const employmentStatusSelect = document.getElementById('employment-status');
+  if (employmentStatusSelect) {
+    console.log('Employment status select found:', employmentStatusSelect);
+    console.log('Current value:', employmentStatusSelect.value);
+    
+    employmentStatusSelect.addEventListener('change', function() {
+      console.log('Status changed to:', this.value);
+      updateSidebarStatus(this.value);
+    });
+  } else {
+    console.error('Employment status select not found!');
+  }
+
+
+  // Function to update sidebar status badge
+  function updateSidebarStatus(newStatus) {
+    const sidebarStatusBadge = document.getElementById('sidebar-status-badge');
+    if (sidebarStatusBadge) {
+      // Update text
+      sidebarStatusBadge.textContent = newStatus;
+      
+      // Update badge color based on status
+      sidebarStatusBadge.className = 'badge mt-2';
+      switch(newStatus) {
+        case 'Active':
+          sidebarStatusBadge.classList.add('bg-success', 'text-white');
+          break;
+        case 'Inactive':
+          sidebarStatusBadge.classList.add('bg-secondary', 'text-white');
+          break;
+        case 'On Leave':
+          sidebarStatusBadge.classList.add('bg-warning', 'text-dark');
+          break;
+        default:
+          sidebarStatusBadge.classList.add('bg-info', 'text-white');
+      }
+      sidebarStatusBadge.style.fontSize = '0.85rem';
+    }
+  }
+
+  // Form submission handler to show success message
+  const settingsForm = document.getElementById('settings-form');
+  if (settingsForm) {
+    settingsForm.addEventListener('submit', function(e) {
+      const employmentStatus = employmentStatusSelect ? employmentStatusSelect.value : null;
+      
+      console.log('Form submitting with status:', employmentStatus);
+      console.log('Form action:', settingsForm.action);
+      console.log('Form method:', settingsForm.method);
+      
+      // Ensure the status field has a value
+      if (employmentStatusSelect && !employmentStatusSelect.value) {
+        e.preventDefault();
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            title: 'Error!',
+            text: 'Please select an employment status.',
+            icon: 'error',
+            confirmButtonColor: '#dc3545'
+          });
+        } else {
+          alert('Please select an employment status.');
+        }
+        return false;
+      }
+      
+      // Show loading message
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: 'Updating Settings...',
+          text: 'Please wait while we save your changes.',
+          icon: 'info',
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          }
+        });
+      }
+      
+      // Let the form submit normally
+      return true;
+    });
+  }
 
 });
 </script>

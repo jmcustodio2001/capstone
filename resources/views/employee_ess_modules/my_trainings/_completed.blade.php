@@ -80,17 +80,27 @@
               </td>
               <td>
                 @php
-                  // Check for certificate in training_record_certificate_tracking table
+                  // Enhanced certificate matching logic - same as auto-generation logic
                   $employeeId = Auth::user()->employee_id;
                   $certificateRecord = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)
                     ->where(function($q) use ($c) {
-                      // Match by course_id if available
-                      if (isset($c->course_id)) {
+                      // Match by course_id if available (most reliable)
+                      if (isset($c->course_id) && $c->course_id) {
                         $q->where('course_id', $c->course_id);
                       } else {
-                        // Match by training title
+                        // Enhanced title matching with multiple strategies
                         $q->whereHas('course', function($subQ) use ($c) {
-                          $subQ->where('course_title', 'LIKE', '%' . trim(str_replace('Training', '', $c->training_title)) . '%');
+                          $trainingTitle = trim($c->training_title);
+                          
+                          // Normalize the training title for better matching
+                          $normalizedTitle = trim(str_replace(['Training', 'Course', 'Program', 'Skills', 'Knowledge', 'Practices', 'Procedures'], '', $trainingTitle));
+                          $normalizedTitle = trim(preg_replace('/\s+/', ' ', $normalizedTitle));
+                          
+                          // Try multiple matching strategies
+                          $subQ->where('course_title', $trainingTitle) // Exact match
+                               ->orWhere('course_title', 'LIKE', '%' . $trainingTitle . '%') // Contains full title
+                               ->orWhere('course_title', 'LIKE', '%' . $normalizedTitle . '%') // Contains normalized title
+                               ->orWhereRaw('? LIKE CONCAT("%", course_title, "%")', [$trainingTitle]); // Reverse contains
                         });
                       }
                     })
@@ -98,7 +108,7 @@
                 @endphp
 
                 @if($certificateRecord && $certificateRecord->certificate_url)
-                  {{-- Show certificate from tracking system --}}
+                  {{-- Show certificate from tracking system with URL --}}
                   <div class="d-flex gap-1 flex-wrap">
                     <a href="{{ route('certificates.view', $certificateRecord->id) }}" target="_blank" class="btn btn-sm btn-success">
                       <i class="bi bi-eye"></i> View
@@ -109,6 +119,16 @@
                   </div>
                   <small class="text-success d-block mt-1">
                     <i class="bi bi-check-circle"></i> Certificate Available
+                  </small>
+                @elseif($certificateRecord && !$certificateRecord->certificate_url)
+                  {{-- Show certificate tracking record without URL (pending generation) --}}
+                  <div class="d-flex gap-1 flex-wrap">
+                    <button class="btn btn-sm btn-warning" onclick="generateCertificate({{ $certificateRecord->id }})">
+                      <i class="bi bi-gear"></i> Generate
+                    </button>
+                  </div>
+                  <small class="text-warning d-block mt-1">
+                    <i class="bi bi-clock"></i> Certificate Pending Generation
                   </small>
                 @elseif(!empty($c->certificate_path))
                   {{-- Show legacy certificate file --}}
@@ -195,6 +215,8 @@
 
 <!-- html2pdf.js for PDF export -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<!-- SweetAlert2 for notifications -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <!-- Hidden certificate preview for PDF generation - unified template -->
 <div id="certificate-pdf-preview" style="display:none !important; background:#fff; width:10.5in; height:7.5in; margin:0 auto; border:8px solid #2d3a5a; border-radius:6px; position:relative; padding:25px; page-break-inside:avoid; box-sizing:border-box; flex-direction:column; justify-content:space-between; overflow:hidden;">
   <div style="position:absolute; top:15px; left:15px; right:15px; bottom:15px; border:2px solid #87ceeb; border-radius:3px; pointer-events:none;"></div>
@@ -317,6 +339,68 @@ async function downloadCertificatePDF(certId) {
   } catch (error) {
     console.error('PDF download error:', error);
     alert('Unable to download certificate PDF. Please try again.');
+  }
+}
+
+// Generate certificate function for pending certificates
+async function generateCertificate(certificateId) {
+  try {
+    // First, get the certificate record details
+    const certResponse = await fetch(`/admin/training-record-certificate-tracking/${certificateId}`, {
+      headers: {
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!certResponse.ok) {
+      throw new Error('Failed to fetch certificate details');
+    }
+
+    const certData = await certResponse.json();
+
+    // Now generate the certificate using the manual generation endpoint
+    const response = await fetch('/admin/generate-manual-certificate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        employee_id: certData.employee_id,
+        course_id: certData.course_id,
+        completion_date: certData.training_date
+      })
+    });
+
+    const result = await response.json();
+
+    if (response.ok && result.success) {
+      Swal.fire({
+        icon: 'success',
+        title: 'Certificate Generated!',
+        text: result.message || 'Certificate has been generated successfully.',
+        timer: 2000,
+        timerProgressBar: true
+      }).then(() => {
+        // Reload the page to show the updated certificate
+        location.reload();
+      });
+    } else {
+      Swal.fire({
+        icon: 'error',
+        title: 'Generation Failed',
+        text: result.message || 'Failed to generate certificate. Please try again.'
+      });
+    }
+  } catch (error) {
+    console.error('Certificate generation error:', error);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'An error occurred while generating the certificate. Please try again.'
+    });
   }
 }
 

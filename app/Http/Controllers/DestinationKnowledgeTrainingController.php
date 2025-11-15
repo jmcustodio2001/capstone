@@ -185,6 +185,16 @@ class DestinationKnowledgeTrainingController extends BaseController
         $this->fixExpirationDates();
 
         $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('id', 'asc')->get();
+// Sync status with course_management
+foreach ($destinations as $destination) {
+    $course = \App\Models\CourseManagement::where('course_title', $destination->destination_name)->first();
+    $destination->course_active = ($course && $course->status === 'Active');
+    if ($destination->admin_approved_for_upcoming) {
+        $destination->status = 'in-progress';
+    } elseif ($destination->course_active) {
+        $destination->status = 'active';
+    }
+}
 
         // Don't automatically update progress from competency gap - preserve admin's input
         // foreach ($destinations as $destination) {

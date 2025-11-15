@@ -292,16 +292,25 @@ function showRequestDocumentForm(password) {
                     <label for="swalRequestType" class="form-label fw-bold">Document Type</label>
                     <select name="request_type" id="swalRequestType" class="form-select" required>
                         <option value="">-- Select Document Type --</option>
-                        <option value="Certificate of Employment (COE)">Certificate of Employment (COE)</option>
-                        <option value="Employment Verification Letter">Employment Verification Letter</option>
-                        <option value="Salary Certificate">Salary Certificate</option>
-                        <option value="Experience Letter">Experience Letter</option>
-                        <option value="Government-related forms (SSS)">Government-related forms (SSS)</option>
-                        <option value="Government-related forms (PhilHealth)">Government-related forms (PhilHealth)</option>
-                        <option value="Government-related forms (Pag-IBIG)">Government-related forms (Pag-IBIG)</option>
-                        <option value="Tax Certificate (BIR 2316)">Tax Certificate (BIR 2316)</option>
-                        <option value="Clearance Certificate">Clearance Certificate</option>
-                        <option value="Service Record">Service Record</option>
+                        
+                        <optgroup label="📋 Employment Documents">
+                            <option value="Certificate of Employment (COE)">Certificate of Employment (COE)</option>
+                            <option value="Employment Verification Letter">Employment Verification Letter</option>
+                            <option value="Salary Certificate">Salary Certificate</option>
+                            <option value="Experience Letter">Experience Letter</option>
+                            <option value="Service Record">Service Record</option>
+                        </optgroup>
+                        
+                        <optgroup label="🏛️ Government Forms">
+                            <option value="Government-related forms (SSS)">Government-related forms (SSS)</option>
+                            <option value="Government-related forms (PhilHealth)">Government-related forms (PhilHealth)</option>
+                            <option value="Government-related forms (Pag-IBIG)">Government-related forms (Pag-IBIG)</option>
+                            <option value="Tax Certificate (BIR 2316)">Tax Certificate (BIR 2316)</option>
+                        </optgroup>
+                        
+                        <optgroup label="📜 Certificates & Clearances">
+                            <option value="Clearance Certificate">Clearance Certificate</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div class="mb-3 text-start">
@@ -404,16 +413,25 @@ function showEditRequestForm(requestId, currentRequestType, currentReason, passw
                     <label for="swalEditRequestType" class="form-label fw-bold">Document Type</label>
                     <select name="request_type" id="swalEditRequestType" class="form-select" required>
                         <option value="">-- Select Document Type --</option>
-                        <option value="Certificate of Employment (COE)" ${currentRequestType === 'Certificate of Employment (COE)' ? 'selected' : ''}>Certificate of Employment (COE)</option>
-                        <option value="Employment Verification Letter" ${currentRequestType === 'Employment Verification Letter' ? 'selected' : ''}>Employment Verification Letter</option>
-                        <option value="Salary Certificate" ${currentRequestType === 'Salary Certificate' ? 'selected' : ''}>Salary Certificate</option>
-                        <option value="Experience Letter" ${currentRequestType === 'Experience Letter' ? 'selected' : ''}>Experience Letter</option>
-                        <option value="Government-related forms (SSS)" ${currentRequestType === 'Government-related forms (SSS)' ? 'selected' : ''}>Government-related forms (SSS)</option>
-                        <option value="Government-related forms (PhilHealth)" ${currentRequestType === 'Government-related forms (PhilHealth)' ? 'selected' : ''}>Government-related forms (PhilHealth)</option>
-                        <option value="Government-related forms (Pag-IBIG)" ${currentRequestType === 'Government-related forms (Pag-IBIG)' ? 'selected' : ''}>Government-related forms (Pag-IBIG)</option>
-                        <option value="Tax Certificate (BIR 2316)" ${currentRequestType === 'Tax Certificate (BIR 2316)' ? 'selected' : ''}>Tax Certificate (BIR 2316)</option>
-                        <option value="Clearance Certificate" ${currentRequestType === 'Clearance Certificate' ? 'selected' : ''}>Clearance Certificate</option>
-                        <option value="Service Record" ${currentRequestType === 'Service Record' ? 'selected' : ''}>Service Record</option>
+                        
+                        <optgroup label="📋 Employment Documents">
+                            <option value="Certificate of Employment (COE)" ${currentRequestType === 'Certificate of Employment (COE)' ? 'selected' : ''}>Certificate of Employment (COE)</option>
+                            <option value="Employment Verification Letter" ${currentRequestType === 'Employment Verification Letter' ? 'selected' : ''}>Employment Verification Letter</option>
+                            <option value="Salary Certificate" ${currentRequestType === 'Salary Certificate' ? 'selected' : ''}>Salary Certificate</option>
+                            <option value="Experience Letter" ${currentRequestType === 'Experience Letter' ? 'selected' : ''}>Experience Letter</option>
+                            <option value="Service Record" ${currentRequestType === 'Service Record' ? 'selected' : ''}>Service Record</option>
+                        </optgroup>
+                        
+                        <optgroup label="🏛️ Government Forms">
+                            <option value="Government-related forms (SSS)" ${currentRequestType === 'Government-related forms (SSS)' ? 'selected' : ''}>Government-related forms (SSS)</option>
+                            <option value="Government-related forms (PhilHealth)" ${currentRequestType === 'Government-related forms (PhilHealth)' ? 'selected' : ''}>Government-related forms (PhilHealth)</option>
+                            <option value="Government-related forms (Pag-IBIG)" ${currentRequestType === 'Government-related forms (Pag-IBIG)' ? 'selected' : ''}>Government-related forms (Pag-IBIG)</option>
+                            <option value="Tax Certificate (BIR 2316)" ${currentRequestType === 'Tax Certificate (BIR 2316)' ? 'selected' : ''}>Tax Certificate (BIR 2316)</option>
+                        </optgroup>
+                        
+                        <optgroup label="📜 Certificates & Clearances">
+                            <option value="Clearance Certificate" ${currentRequestType === 'Clearance Certificate' ? 'selected' : ''}>Clearance Certificate</option>
+                        </optgroup>
                     </select>
                 </div>
                 <div class="mb-3 text-start">

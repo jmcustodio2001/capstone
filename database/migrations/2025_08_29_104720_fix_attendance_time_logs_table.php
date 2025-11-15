@@ -37,29 +37,7 @@ return new class extends Migration
             $table->index('log_date');
         });
         
-        // Insert sample data
-        DB::table('attendance_time_logs')->insert([
-            [
-                'employee_id' => 'EMP001',
-                'log_date' => '2025-08-27',
-                'time_in' => '08:45:00',
-                'time_out' => '17:15:00',
-                'hours_worked' => 8.50,
-                'status' => 'Present',
-                'created_at' => now(),
-                'updated_at' => now()
-            ],
-            [
-                'employee_id' => 'EMP001',
-                'log_date' => '2025-08-28',
-                'time_in' => '09:15:00',
-                'time_out' => '17:30:00',
-                'hours_worked' => 8.25,
-                'status' => 'Late',
-                'created_at' => now(),
-                'updated_at' => now()
-            ]
-        ]);
+        // Sample data insertion removed - table should be empty for new employee accounts
     }
 
     /**

@@ -970,6 +970,11 @@ Route::post('/employee/verify-password', [EmployeeController::class, 'verifyPass
 Route::post('/employee/settings/fix-save', [EmployeeController::class, 'fixEmployeeSettingsSave'])->name('employee.settings.fix')->middleware('auth:employee');
 Route::get('/employee/debug-auth', [EmployeeController::class, 'debugEmployeeAuth'])->name('employee.debug.auth')->middleware('auth:employee');
 
+// Employee ping route for online status check
+Route::get('/employee/ping', function() {
+    return response()->json(['status' => 'online', 'timestamp' => now()]);
+})->name('employee.ping')->middleware('auth:employee');
+
 
 
 Route::get('/employee/my-trainings', [App\Http\Controllers\MyTrainingController::class, 'index'])->name('employee.my_trainings.index')->middleware('auth:employee');

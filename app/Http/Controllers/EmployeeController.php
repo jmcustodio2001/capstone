@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 
@@ -777,8 +778,29 @@ class EmployeeController extends Controller
                 $data['profile_picture'] = $request->file('profile_picture')->store('profile_pictures', 'public');
             }
 
+            // Debug: Log the data being updated
+            Log::info('Employee settings update data:', $data);
+            Log::info('Current employee status before update:', ['status' => $employee->status]);
+            
+            // Check if status column exists in database
+            $hasStatusColumn = Schema::hasColumn('employees', 'status');
+            Log::info('Status column exists in database:', ['exists' => $hasStatusColumn]);
+            
             // Update employee record
-            $employee->update($data);
+            $updateResult = $employee->update($data);
+            
+            // Alternative direct update if mass assignment fails
+            if (isset($data['status'])) {
+                $employee->status = $data['status'];
+                $employee->save();
+            }
+            
+            // Refresh the model to get updated data
+            $employee->refresh();
+            
+            // Debug: Log the status after update
+            Log::info('Employee status after update:', ['status' => $employee->status]);
+            Log::info('Update result:', ['success' => $updateResult]);
 
             return redirect()->back()->with('success', self::SETTINGS_UPDATED_SUCCESS);
 

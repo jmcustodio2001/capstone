@@ -53,29 +53,133 @@
     .gap-moderate { background-color: transparent; color: #ef6c00; }
     .gap-needs-development { background-color: transparent; color: #c62828; }
 
-    /* Category Badge Colors - Simple Card Header Style */
-    .category-leadership,
-    .category-technical,
-    .category-behavioral,
-    .category-destination-knowledge,
-    .category-communication,
-    .category-general,
-    .category-interpersonal,
-    .category-cognitive,
-    .category-analytical,
-    .category-creative,
-    .category-problem-solving,
-    .category-decision-making,
-    .category-emotional-intelligence,
-    .category-adaptability,
-    .category-teamwork,
-    .category-management,
-    .category-strategic-thinking,
-    .category-innovation,
+    /* Category Badge Colors - Vibrant Colored Backgrounds */
+    .category-leadership {
+      background: linear-gradient(135deg, #6f42c1, #5a32a3) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(111, 66, 193, 0.3) !important;
+    }
+    .category-technical {
+      background: linear-gradient(135deg, #0d6efd, #0b5ed7) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3) !important;
+    }
+    .category-behavioral {
+      background: linear-gradient(135deg, #e83e8c, #d91a72) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(232, 62, 140, 0.3) !important;
+    }
+    .category-destination-knowledge {
+      background: linear-gradient(135deg, #20c997, #1aa179) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(32, 201, 151, 0.3) !important;
+    }
+    .category-communication {
+      background: linear-gradient(135deg, #fd7e14, #e8690b) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(253, 126, 20, 0.3) !important;
+    }
+    .category-general {
+      background: linear-gradient(135deg, #6c757d, #5a6268) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3) !important;
+    }
+    .category-interpersonal {
+      background: linear-gradient(135deg, #dc3545, #c82333) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+    }
+    .category-cognitive {
+      background: linear-gradient(135deg, #ffc107, #e0a800) !important;
+      color: #212529 !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(255, 193, 7, 0.3) !important;
+    }
+    .category-analytical {
+      background: linear-gradient(135deg, #198754, #146c43) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(25, 135, 84, 0.3) !important;
+    }
+    .category-creative {
+      background: linear-gradient(135deg, #d63384, #b02a5b) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(214, 51, 132, 0.3) !important;
+    }
+    .category-problem-solving {
+      background: linear-gradient(135deg, #6610f2, #520dc2) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(102, 16, 242, 0.3) !important;
+    }
+    .category-decision-making {
+      background: linear-gradient(135deg, #17a2b8, #138496) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3) !important;
+    }
+    .category-emotional-intelligence {
+      background: linear-gradient(135deg, #f8d7da, #f5c6cb) !important;
+      color: #721c24 !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(248, 215, 218, 0.3) !important;
+    }
+    .category-adaptability {
+      background: linear-gradient(135deg, #28a745, #1e7e34) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+    }
+    .category-teamwork {
+      background: linear-gradient(135deg, #007bff, #0056b3) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3) !important;
+    }
+    .category-management {
+      background: linear-gradient(135deg, #343a40, #23272b) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(52, 58, 64, 0.3) !important;
+    }
+    .category-strategic-thinking {
+      background: linear-gradient(135deg, #795548, #5d4037) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(121, 85, 72, 0.3) !important;
+    }
+    .category-innovation {
+      background: linear-gradient(135deg, #ff5722, #e64a19) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(255, 87, 34, 0.3) !important;
+    }
     .category-organizational {
-      background: #f8f9fa !important;
-      color: black !important;
-      border: 1px solid #dee2e6 !important;
+      background: linear-gradient(135deg, #9c27b0, #7b1fa2) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(156, 39, 176, 0.3) !important;
+    }
+    .category-performance {
+      background: linear-gradient(135deg, #ff6b35, #e55a2b) !important;
+      color: white !important;
+      border: none !important;
+      box-shadow: 0 2px 8px rgba(255, 107, 53, 0.3) !important;
+    }
+    
+    /* Hover effects for category badges */
+    .badge[class*="category-"]:hover {
+      transform: translateY(-1px) !important;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+      transition: all 0.3s ease !important;
     }
 
     /* Deadline Status Colors */
@@ -205,7 +309,7 @@
           <div class="card stat-card shadow-sm border-0">
             <div class="card-body">
               <div class="d-flex align-items-center">
-                <div class="stat-icon bg-primary bg-opacity-10 text-primary me-3">
+                <div class="stat-icon bg-primary bg-opacity-10 text-dark me-3">
                   <i class="bi bi-bar-chart"></i>
                 </div>
                 <div>
@@ -220,7 +324,7 @@
           <div class="card stat-card shadow-sm border-0">
             <div class="card-body">
               <div class="d-flex align-items-center">
-                <div class="stat-icon bg-success bg-opacity-10 text-success me-3">
+                <div class="stat-icon bg-success bg-opacity-10 text-dark me-3">
                   <i class="bi bi-graph-up"></i>
                 </div>
                 <div>

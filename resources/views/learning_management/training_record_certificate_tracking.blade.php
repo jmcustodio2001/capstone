@@ -192,8 +192,14 @@
       <div class="card-body">
         <div class="row g-4">
         @php
-          // Group certificates by employee
-          $groupedCertificates = $certificates->groupBy('employee_id');
+          // Group certificates by employee and deduplicate by course
+          $groupedCertificates = $certificates->groupBy('employee_id')->map(function($employeeCertificates) {
+            // For each employee, keep only the latest certificate per course
+            return $employeeCertificates->groupBy('course_id')->map(function($courseCertificates) {
+              // Sort by created_at desc and take the first (latest) one
+              return $courseCertificates->sortByDesc('created_at')->first();
+            })->values(); // Reset keys to get a clean collection
+          });
         @endphp
         
         @forelse($groupedCertificates as $employeeId => $employeeCertificates)

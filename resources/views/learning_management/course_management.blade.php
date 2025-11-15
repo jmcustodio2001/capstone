@@ -271,7 +271,7 @@
     <!-- Training Requests Section -->
     <div class="card shadow-sm border-0 mt-4">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h4 class="fw-bold mb-0">Employee Training Requests</h4>
+        <h4 class="fw-bold mb-0">Employee Training</h4>
         <span class="badge bg-primary">{{ $trainingRequests->count() }} Requests</span>
       </div>
       <div class="card-body">

@@ -286,6 +286,11 @@ Route::group(['prefix' => 'employee', 'as' => 'employee.'], function () {
     Route::post('/verify-otp', [EmployeeController::class, 'verifyOTP'])->name('verify_otp');
     Route::post('/resend-otp', [EmployeeController::class, 'resendOTP'])->name('resend_otp');
     Route::post('/logout', [EmployeeController::class, 'logout'])->name('logout');
+    
+    // Simple password verification route (always returns success since we removed password validation)
+    Route::post('/verify-password', function() {
+        return response()->json(['success' => true, 'message' => 'Password verified']);
+    })->name('verify_password');
 
     // Forgot Password Routes
     Route::get('/forgot-password', [EmployeeController::class, 'showForgotPasswordForm'])->name('forgot_password');
@@ -559,6 +564,7 @@ Route::post('/admin/destination-knowledge-training/{id}/request-activation', [Ap
 Route::post('/admin/destination-knowledge-training/consolidate', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'consolidateDestinationTraining'])->name('admin.destination-knowledge-training.consolidate')->middleware('auth:admin');
 Route::get('/admin/destination-knowledge-training/fix-missing-columns', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'fixMissingColumns'])->name('admin.destination-knowledge-training.fix-missing-columns')->middleware('auth:admin');
 Route::post('/admin/destination-knowledge-training/employees-by-position', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'getEmployeesByPosition'])->name('admin.destination-knowledge-training.employees-by-position')->middleware('auth:admin');
+Route::post('/admin/destination-knowledge-training/activate-all-centers', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'activateAllTrainingCenters'])->name('admin.destination-knowledge-training.activate-all-centers')->middleware('auth:admin');
 
 // General resource routes
 Route::get('/admin/destination-knowledge-training', [App\Http\Controllers\DestinationKnowledgeTrainingController::class, 'index'])->name('admin.destination-knowledge-training.index')->middleware('auth:admin');

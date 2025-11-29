@@ -17,6 +17,7 @@ use App\Models\CompetencyLibrary;
 use App\Models\CompetencyGap;
 use App\Models\EmployeeTrainingDashboard;
 use App\Models\DestinationMaster;
+use App\Models\CourseManagement;
 use Illuminate\Routing\Controller as BaseController;
 
 class DestinationKnowledgeTrainingController extends BaseController
@@ -34,7 +35,7 @@ class DestinationKnowledgeTrainingController extends BaseController
         'details' => 'required|string',
         'objectives' => 'required|string',
         'duration' => 'required|string',
-        'delivery_mode' => 'required|string|in:On-site Training,Online Training,Blended Learning,Workshop,Seminar,Field Training',
+        'delivery_mode' => 'required|string|in:On-Site Training,On-site Training,Online Training,Blended Learning,Workshop,Seminar,Field Training,Table Training',
         'status' => 'nullable|string|in:not-started,in-progress,completed',
     ];
 
@@ -46,7 +47,7 @@ class DestinationKnowledgeTrainingController extends BaseController
         'remarks' => 'nullable|string',
         'destination_name' => 'required|string|max:255',
         'details' => 'required|string',
-        'delivery_mode' => 'nullable|string|in:On-site Training,Online Training,Blended Learning,Workshop,Seminar,Field Training',
+        'delivery_mode' => 'nullable|string|in:On-Site Training,On-site Training,Online Training,Blended Learning,Workshop,Seminar,Field Training,Table Training',
         'status' => 'required|string|in:not-started,in-progress,completed',
     ];
     public function __construct()
@@ -77,6 +78,86 @@ class DestinationKnowledgeTrainingController extends BaseController
         ];
 
         return $levelMap[$level] ?? 0;
+    }
+
+    /**
+     * Automatically activate all accredited training centers as courses
+     */
+    private function autoActivateAccreditedTrainingCenters()
+    {
+        try {
+            Log::info('Auto-activating accredited training centers as courses...');
+
+            // Get all active destination masters (accredited training centers)
+            $destinationMasters = DestinationMaster::where('is_active', true)->get();
+
+            $activatedCount = 0;
+            $skippedCount = 0;
+
+            foreach ($destinationMasters as $destination) {
+                // Check if course already exists
+                $existingCourse = CourseManagement::where('course_title', $destination->destination_name)->first();
+
+                if (!$existingCourse) {
+                    // Create new active course
+                    CourseManagement::create([
+                        'course_title' => $destination->destination_name,
+                        'description' => $destination->details ?? 'Auto-activated accredited training center: ' . $destination->destination_name,
+                        'start_date' => now(),
+                        'end_date' => null,
+                        'status' => 'Active', // Automatically set to Active
+                        'source_type' => 'destination_master',
+                        'source_id' => $destination->id,
+                        'requested_at' => now(),
+                        'requested_by' => Auth::id() ?? 1, // Use current admin or default to admin ID 1
+                    ]);
+
+                    $activatedCount++;
+                    Log::info('Auto-activated course: ' . $destination->destination_name);
+                } else {
+                    // If course exists but is not active, activate it
+                    if ($existingCourse->status !== 'Active') {
+                        $existingCourse->update([
+                            'status' => 'Active',
+                            'requested_at' => now(),
+                            'requested_by' => Auth::id() ?? 1,
+                        ]);
+                        $activatedCount++;
+                        Log::info('Activated existing course: ' . $destination->destination_name);
+                    } else {
+                        $skippedCount++;
+                    }
+                }
+            }
+
+            if ($activatedCount > 0) {
+                // Log the auto-activation
+                ActivityLog::createLog([
+                    'module' => self::MODULE_NAME,
+                    'action' => 'auto_activate_courses',
+                    'description' => "Auto-activated {$activatedCount} accredited training centers as courses. Skipped {$skippedCount} already active courses.",
+                    'model_type' => CourseManagement::class,
+                    'model_id' => null,
+                ]);
+
+                Log::info("Auto-activation completed: {$activatedCount} courses activated, {$skippedCount} skipped");
+            }
+
+            return [
+                'activated' => $activatedCount,
+                'skipped' => $skippedCount,
+                'total' => $destinationMasters->count()
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error auto-activating accredited training centers: ' . $e->getMessage());
+            return [
+                'activated' => 0,
+                'skipped' => 0,
+                'total' => 0,
+                'error' => $e->getMessage()
+            ];
+        }
     }
 
     /**
@@ -184,6 +265,20 @@ class DestinationKnowledgeTrainingController extends BaseController
         // Fix expiration dates for destination trainings that don't have proper expired_date
         $this->fixExpirationDates();
 
+        // Auto-activate all accredited training centers as courses
+        $autoActivationResult = $this->autoActivateAccreditedTrainingCenters();
+        
+        // Log the result for admin visibility and add session message
+        if ($autoActivationResult['activated'] > 0) {
+            Log::info("Auto-activation summary: {$autoActivationResult['activated']} courses activated, {$autoActivationResult['skipped']} already active, {$autoActivationResult['total']} total destinations");
+            
+            // Add success message for admin
+            session()->flash('success', "Auto-Activation Complete: {$autoActivationResult['activated']} accredited training centers have been automatically activated as courses. {$autoActivationResult['skipped']} were already active. Total destinations: {$autoActivationResult['total']}");
+        } elseif (isset($autoActivationResult['error'])) {
+            // Add error message if auto-activation failed
+            session()->flash('warning', "Auto-activation encountered an issue: {$autoActivationResult['error']}");
+        }
+
         $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('id', 'asc')->get();
 // Sync status with course_management
 foreach ($destinations as $destination) {
@@ -232,6 +327,36 @@ foreach ($destinations as $destination) {
         }
 
         return view('training_management.destination_knowledge_training', compact('destinations', 'employees', 'destinationMasters', 'possibleDestinations', 'notifications'));
+    }
+
+    /**
+     * Manual endpoint to trigger auto-activation of accredited training centers
+     */
+    public function activateAllTrainingCenters()
+    {
+        try {
+            $result = $this->autoActivateAccreditedTrainingCenters();
+            
+            if ($result['activated'] > 0 || $result['skipped'] > 0) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Auto-Activation Complete: {$result['activated']} training centers activated, {$result['skipped']} already active. Total: {$result['total']}",
+                    'data' => $result
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No training centers found to activate.',
+                    'data' => $result
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error in manual activation: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error activating training centers: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

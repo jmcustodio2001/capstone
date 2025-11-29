@@ -1238,49 +1238,24 @@ class TrainingRecordCertificateTrackingController extends Controller
                 return true;
             }
 
-            // Get all existing columns
-            $existingColumns = DB::select("SHOW COLUMNS FROM training_record_certificate_tracking");
-            $columnNames = array_column($existingColumns, 'Field');
-            
-            // Required columns with their definitions
-            $requiredColumns = [
-                'training_date' => "ADD COLUMN `training_date` date NOT NULL AFTER `course_id`",
-                'certificate_number' => "ADD COLUMN `certificate_number` varchar(255) DEFAULT NULL AFTER `training_date`",
-                'certificate_expiry' => "ADD COLUMN `certificate_expiry` date DEFAULT NULL AFTER `certificate_number`",
-                'certificate_url' => "ADD COLUMN `certificate_url` varchar(255) DEFAULT NULL AFTER `certificate_expiry`",
-                'issue_date' => "ADD COLUMN `issue_date` date DEFAULT NULL AFTER `certificate_url`",
-                'status' => "ADD COLUMN `status` varchar(255) NOT NULL DEFAULT 'Active' AFTER `issue_date`",
-                'remarks' => "ADD COLUMN `remarks` text DEFAULT NULL AFTER `status`"
-            ];
-
-            $columnsAdded = [];
-            
-            // Check and add missing columns
-            foreach ($requiredColumns as $columnName => $alterStatement) {
-                if (!in_array($columnName, $columnNames)) {
-                    try {
-                        DB::statement("ALTER TABLE `training_record_certificate_tracking` " . $alterStatement);
-                        $columnsAdded[] = $columnName;
-                        Log::info("Added missing column: {$columnName}");
-                    } catch (\Exception $e) {
-                        Log::error("Failed to add column {$columnName}: " . $e->getMessage());
-                    }
-                }
-            }
-
-            // Update existing records with default values if columns were added
-            if (!empty($columnsAdded)) {
-                if (in_array('training_date', $columnsAdded)) {
-                    DB::statement("UPDATE `training_record_certificate_tracking` SET `training_date` = COALESCE(DATE(`created_at`), CURDATE()) WHERE `training_date` IS NULL OR `training_date` = '0000-00-00'");
-                }
-                if (in_array('issue_date', $columnsAdded)) {
-                    DB::statement("UPDATE `training_record_certificate_tracking` SET `issue_date` = COALESCE(DATE(`created_at`), CURDATE()) WHERE `issue_date` IS NULL OR `issue_date` = '0000-00-00'");
-                }
-                if (in_array('status', $columnsAdded)) {
-                    DB::statement("UPDATE `training_record_certificate_tracking` SET `status` = 'Active' WHERE `status` IS NULL OR `status` = ''");
-                }
+            // Check if all required columns exist
+            if (!TrainingRecordCertificateTracking::hasAllRequiredColumns()) {
+                Log::info('Missing columns detected, attempting to fix table structure');
                 
-                Log::info('Updated existing records with default values for columns: ' . implode(', ', $columnsAdded));
+                // Get missing columns for logging
+                $missingColumns = TrainingRecordCertificateTracking::getMissingColumns();
+                Log::info('Missing columns: ' . implode(', ', $missingColumns));
+                
+                // Use the model's comprehensive fix method
+                $result = TrainingRecordCertificateTracking::fixMissingColumns();
+                
+                if ($result['success']) {
+                    Log::info('Successfully fixed table structure: ' . $result['message']);
+                    return true;
+                } else {
+                    Log::error('Failed to fix table structure: ' . $result['message']);
+                    return false;
+                }
             }
 
             return true;
@@ -1288,13 +1263,20 @@ class TrainingRecordCertificateTrackingController extends Controller
         } catch (\Exception $e) {
             Log::error('Error ensuring table structure: ' . $e->getMessage());
             
-            // If all else fails, recreate the table completely
+            // If all else fails, try to use the model's fix method
             try {
-                Log::info('Attempting to recreate table due to structure issues...');
-                $this->executeTableCreation();
-                return true;
+                Log::info('Attempting to fix table structure using model method...');
+                $result = TrainingRecordCertificateTracking::fixMissingColumns();
+                
+                if ($result['success']) {
+                    Log::info('Successfully fixed table structure using model method');
+                    return true;
+                } else {
+                    Log::error('Failed to fix table structure using model method: ' . $result['message']);
+                    return false;
+                }
             } catch (\Exception $e2) {
-                Log::error('Failed to recreate table: ' . $e2->getMessage());
+                Log::error('Failed to fix table structure: ' . $e2->getMessage());
                 return false;
             }
         }
@@ -1650,6 +1632,44 @@ class TrainingRecordCertificateTrackingController extends Controller
         } catch (\Exception $e) {
             Log::error('Error getting completed training employees: ' . $e->getMessage());
             return collect();
+        }
+    }
+
+    /**
+     * Fix certificate_expiry field and all missing columns in the table
+     */
+    public function fixCertificateExpiryField()
+    {
+        try {
+            Log::info('Attempting to fix training_record_certificate_tracking table structure');
+            
+            // Use the model's comprehensive fix method
+            $result = TrainingRecordCertificateTracking::fixMissingColumns();
+            
+            if ($result['success']) {
+                Log::info('Successfully fixed table structure', $result);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => $result['message'],
+                    'changes' => $result['changes'] ?? []
+                ]);
+            } else {
+                Log::error('Failed to fix table structure', $result);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => $result['message']
+                ], 500);
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error fixing table structure: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fix table structure: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

@@ -1481,7 +1481,8 @@
       const requestData = {
         employee_id: employeeId,
         course_id: courseId,
-        completion_date: new Date().toISOString().split('T')[0]
+        completion_date: new Date().toISOString().split('T')[0],
+        certificate_expiry: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 2 years from now
       };
 
       console.log('Certificate generation request:', {
@@ -1551,10 +1552,17 @@
             message: data?.message,
             fullResponse: data
           });
+          
+          // Check if it's a database error related to certificate_expiry
+          let displayMessage = errorMsg;
+          if (errorMsg.includes('certificate_expiry') && errorMsg.includes('default value')) {
+            displayMessage = 'Database configuration issue detected. The certificate_expiry field needs a default value. Please contact your administrator to fix the database table structure.';
+          }
+          
           Swal.fire({
             icon: 'error',
             title: 'Generation Failed',
-            text: 'Failed: ' + errorMsg,
+            text: 'Failed: ' + displayMessage,
             confirmButtonColor: '#dc3545'
           });
         }
@@ -1572,7 +1580,11 @@
         if (error.name === 'AbortError') {
           errorMessage = 'Certificate generation timed out - please try again';
         } else if (error.message.includes('500')) {
-          errorMessage = 'Server error - please check server logs for details';
+          if (error.message.includes('certificate_expiry') && error.message.includes('default value')) {
+            errorMessage = 'Database configuration issue: The certificate_expiry field needs a default value. Please contact your administrator to fix the database table structure.';
+          } else {
+            errorMessage = 'Server error - please check server logs for details';
+          }
         } else if (error.message.includes('404')) {
           errorMessage = 'Certificate generation endpoint not found';
         } else if (error.message.includes('422')) {
@@ -1743,6 +1755,7 @@
         }
       });
     });
+
 
     // Toast functions removed - using SweetAlert2 throughout the application
   </script>

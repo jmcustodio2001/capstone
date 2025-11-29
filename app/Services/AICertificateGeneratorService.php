@@ -144,19 +144,23 @@ class AICertificateGeneratorService
                         $filePath = $certificatesPath . DIRECTORY_SEPARATOR . $fileName;
 
                         // Generate PDF using DomPDF with optimized settings for single-page printing
-                        $pdf = Pdf::loadHTML($html);
-                        $pdf->setPaper('A4', 'landscape');
-                        $pdf->setOptions([
-                            'isHtml5ParserEnabled' => true,
-                            'isPhpEnabled' => true,
-                            'defaultFont' => 'Times-Roman',
-                            'dpi' => 96,
-                            'defaultPaperSize' => 'A4',
-                            'defaultPaperOrientation' => 'landscape',
-                            'isFontSubsettingEnabled' => true,
-                            'isRemoteEnabled' => false
-                        ]);
-                        $output = $pdf->output();
+                        try {
+                            $pdf = Pdf::loadHTML($html);
+                            $pdf->setPaper('A4', 'landscape');
+                            $pdf->setOptions([
+                                'isHtml5ParserEnabled' => false,
+                                'isPhpEnabled' => false,
+                                'isRemoteEnabled' => false
+                            ]);
+                            $output = $pdf->output();
+                        } catch (\Exception $pdfException) {
+                            Log::error('DomPDF generation failed', [
+                                'error' => $pdfException->getMessage(),
+                                'certificate_number' => $certificateNumber,
+                                'html_length' => strlen($html)
+                            ]);
+                            throw new \Exception('PDF generation failed: ' . $pdfException->getMessage());
+                        }
                         $bytesWritten = @file_put_contents($filePath, $output, LOCK_EX);
 
                         if ($bytesWritten === false) {
@@ -181,8 +185,8 @@ class AICertificateGeneratorService
                             'certificates_path' => $certificatesPath ?? 'N/A',
                             'certificate_number' => $certificateNumber ?? 'N/A'
                         ]);
-                        // Fallback to simple number
-                        return 'CERT-' . date('Ymd') . '-' . rand(10000, 99999);
+                        // Re-throw the exception instead of returning a fallback string
+                        throw new \Exception('Certificate PDF generation failed: ' . $e->getMessage());
                     }
                 }
 
@@ -195,278 +199,67 @@ class AICertificateGeneratorService
         $formattedDate = Carbon::parse($completionDate)->format('F j, Y');
         $issuedDate = Carbon::parse($completionDate)->format('M j, Y');
         
-        $html = '<!DOCTYPE html>
-<html lang="en">
+        $html = '<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Certificate of Achievement - Travel & Tours Training</title>
     <style>
-        @page {
-            size: A4 landscape;
-            margin: 0.2in;
+        body { margin: 0; padding: 20px; }
+        .certificate { 
+            border: 5px solid #2d3a5a; 
+            padding: 30px; 
+            text-align: center; 
+            background: white;
+            width: 800px;
+            height: 600px;
         }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        .title { 
+            font-size: 36px; 
+            font-weight: bold; 
+            color: #2d3a5a; 
+            margin-bottom: 20px; 
         }
-        
-        body {
-            font-family: "Georgia", "Times New Roman", serif;
-            background: #f8f9fa;
-            width: 100%;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 10px;
+        .subtitle { 
+            font-size: 18px; 
+            color: #2d3a5a; 
+            margin-bottom: 30px; 
         }
-        
-        .certificate-container {
-            background: #fff;
-            width: 100%;
-            max-width: 10.5in;
-            height: 7.5in;
-            border: 8px solid #2d3a5a;
-            border-radius: 6px;
-            position: relative;
-            padding: 25px;
-            page-break-inside: avoid;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            box-sizing: border-box;
-            overflow: hidden;
+        .content { 
+            font-size: 16px; 
+            margin: 20px 0; 
+            color: #2d3a5a; 
         }
-        
-        .inner-border {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            right: 15px;
-            bottom: 15px;
-            border: 2px solid #87ceeb;
-            border-radius: 3px;
-            pointer-events: none;
+        .name { 
+            font-size: 32px; 
+            font-weight: bold; 
+            color: #2d3a5a; 
+            margin: 20px 0; 
         }
-        
-        
-        .certificate-header {
-            text-align: center;
-            margin-bottom: 15px;
-            position: relative;
-            z-index: 2;
+        .course { 
+            background: #2196f3; 
+            color: white; 
+            padding: 10px 20px; 
+            font-size: 20px; 
+            font-weight: bold; 
+            margin: 20px 0; 
+            display: inline-block; 
         }
-        
-        .logo-container {
-            position: relative;
-            display: inline-block;
-            margin-bottom: 10px;
-        }
-        
-        .logo {
-            width: 60px;
-            height: 60px;
-            margin: 0 auto;
-            border-radius: 50%;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: linear-gradient(135deg, #2d3a5a, #4a5568);
-            border: 3px solid #ffffff;
-            box-shadow: 0 4px 8px rgba(45, 58, 90, 0.3);
-        }
-        
-        .logo img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .certificate-title {
-            font-size: 48px;
-            font-weight: bold;
-            color: #2d3a5a;
-            margin-bottom: 5px;
-            letter-spacing: 2px;
-        }
-        
-        .certificate-subtitle {
-            font-size: 16px;
-            color: #2d3a5a;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-            font-weight: 300;
-        }
-        
-        .travel-tagline {
-            font-size: 12px;
-            color: #2d3a5a;
-            font-style: italic;
-            margin-bottom: 15px;
-        }
-        
-        .certificate-body {
-            text-align: center;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            margin: 15px 0;
-            position: relative;
-            z-index: 2;
-        }
-        
-        .certification-text {
-            font-size: 14px;
-            color: #2d3a5a;
-            margin-bottom: 10px;
-            line-height: 1.2;
-            font-weight: 400;
-        }
-        
-        .recipient-name {
-            font-size: 48px;
-            font-family: cursive;
-            font-weight: bold;
-            color: #2d3a5a;
-            margin: 10px 0;
-            letter-spacing: 1px;
-        }
-        
-        .course-name {
-            background: #2196f3;
-            color: white;
-            padding: 8px 25px;
-            border-radius: 5px;
-            font-size: 28px;
-            font-weight: bold;
-            margin: 12px auto;
-            display: inline-block;
-        }
-        
-        .completion-date {
-            font-size: 12px;
-            color: #2d3a5a;
-            margin: 12px 0;
-            font-weight: 500;
-        }
-        
-        .certificate-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 20px;
-            padding-top: 10px;
-            position: relative;
-            z-index: 2;
-        }
-        
-        .signature-section {
-            text-align: center;
-            flex: 1;
-            position: relative;
-        }
-        
-        .signature-line {
-            width: 100px;
-            height: 1px;
-            background: #2d3a5a;
-            margin: 0 auto 5px;
-        }
-        
-        .signature-name {
-            font-weight: bold;
-            font-size: 12px;
-            color: #2d3a5a;
-            margin-bottom: 2px;
-        }
-        
-        .signature-title {
-            font-size: 10px;
-            color: #2d3a5a;
-            font-style: italic;
-        }
-        
-        .certificate-info {
-            text-align: center;
-            margin-top: 15px;
-            font-size: 10px;
-            color: #555;
-        }
-        
-        @media print {
-            @page {
-                size: A4 landscape;
-                margin: 0.2in;
-            }
-            
-            body {
-                background: white !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                height: auto !important;
-            }
-            
-            .certificate-container {
-                max-width: 10.5in !important;
-                width: 10.5in !important;
-                height: 7.5in !important;
-                max-height: 7.5in !important;
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                margin: 0 auto !important;
-                box-shadow: none !important;
-            }
+        .footer { 
+            margin-top: 40px; 
+            font-size: 12px; 
+            color: #666; 
         }
     </style>
 </head>
 <body>
-    <div class="certificate-container">
-        <div class="inner-border"></div>
-        
-        <div class="certificate-header">
-            <div class="logo-container">
-                <div class="logo">
-                    <img src="/assets/images/jetlouge_logo.png" alt="Jetlouge Logo" onerror="this.parentElement.innerHTML=\'&lt;div style=&quot;background:linear-gradient(135deg, #2d3a5a, #4a5568);width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:20px;font-weight:bold;&quot;&gt;JT&lt;/div&gt;\'">
-                </div>
-            </div>
-            <div class="certificate-title">CERTIFICATE</div>
-            <div class="certificate-subtitle">OF ACHIEVEMENT</div>
-            <div class="travel-tagline">Excellence in Travel & Tourism Training</div>
-        </div>
-        
-        <div class="certificate-body">
-            <div class="certification-text">This is to proudly certify that</div>
-            
-            <div class="recipient-name">' . htmlspecialchars($employeeName) . '</div>
-            
-            <div class="certification-text">has successfully completed the comprehensive training program and demonstrated exceptional proficiency in</div>
-            
-            <div class="course-name">' . htmlspecialchars($courseName) . '</div>
-            
-            <div class="completion-date">Completed with distinction on <strong>' . $formattedDate . '</strong></div>
-        </div>
-        
-        <div class="certificate-footer">
-            <div class="signature-section">
-                <div class="signature-line"></div>
-                <div class="signature-name">John Mark Custodio</div>
-                <div class="signature-title">Training Director</div>
-            </div>
-            
-            <div class="signature-section">
-                <div class="signature-line"></div>
-                <div class="signature-name">Jetlouge Admin</div>
-                <div class="signature-title">HR Manager</div>
-            </div>
-        </div>
-        
-        <div class="certificate-info">
-            Certificate ID: ' . htmlspecialchars($certificateNumber) . ' &nbsp; | &nbsp; Issued: ' . $issuedDate . '
+    <div class="certificate">
+        <div class="title">CERTIFICATE</div>
+        <div class="subtitle">OF ACHIEVEMENT</div>
+        <div class="content">This is to certify that</div>
+        <div class="name">' . htmlspecialchars($employeeName) . '</div>
+        <div class="content">has successfully completed</div>
+        <div class="course">' . htmlspecialchars($courseName) . '</div>
+        <div class="content">Completed on ' . $formattedDate . '</div>
+        <div class="footer">
+            Certificate ID: ' . htmlspecialchars($certificateNumber) . ' | Issued: ' . $issuedDate . '
         </div>
     </div>
 </body>

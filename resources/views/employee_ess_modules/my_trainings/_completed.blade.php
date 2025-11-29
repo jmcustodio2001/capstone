@@ -123,14 +123,11 @@
                 @elseif($certificateRecord && !$certificateRecord->certificate_url)
                   {{-- Show certificate tracking record without URL (pending generation) --}}
                   <div class="d-flex gap-1 flex-wrap">
-                    <button class="btn btn-sm btn-warning" onclick="generateCertificate({{ $certificateRecord->id }})">
-                      <i class="bi bi-gear"></i> Generate
-                    </button>
+                    <button class="btn btn-sm btn-secondary" disabled>
+  <i class="bi bi-hourglass-split"></i> WAIT FOR THE VERIFIED OF ADMIN
+</button>
                   </div>
-                  <small class="text-warning d-block mt-1">
-                    <i class="bi bi-clock"></i> Certificate Pending Generation
-                  </small>
-                @elseif(!empty($c->certificate_path))
+                                  @elseif(!empty($c->certificate_path))
                   {{-- Show legacy certificate file --}}
                   <div class="d-flex gap-1 flex-wrap">
                     <button class="btn btn-info btn-sm"
@@ -263,18 +260,82 @@
 </div>
 
 <script>
-document.getElementById('previewCertModal')?.addEventListener('show.bs.modal', function (e) {
-  const cert = e.relatedTarget.getAttribute('data-cert');
-  document.getElementById('certFrame').src = cert;
-});
+// Initialize global objects to prevent undefined errors - MUST BE FIRST
+try {
+  if (typeof window.translationService === 'undefined') {
+    window.translationService = {
+      translate: function(key, params) { return key; },
+      get: function(key, params) { return key; },
+      trans: function(key, params) { return key; },
+      choice: function(key, count, params) { return key; }
+    };
+  }
+
+  // Add global trans function
+  if (typeof window.trans === 'undefined') {
+    window.trans = function(key, params) { return key; };
+  }
+
+  // Add app object if missing
+  if (typeof window.app === 'undefined') {
+    window.app = {};
+  }
+
+  console.log('Global objects initialized successfully for completed trainings');
+} catch (error) {
+  console.error('Error initializing global objects:', error);
+}
+
+// Safe modal event listener with null checks
+const previewModal = document.getElementById('previewCertModal');
+if (previewModal) {
+  previewModal.addEventListener('show.bs.modal', function (e) {
+    try {
+      const relatedTarget = e.relatedTarget;
+      if (relatedTarget) {
+        const cert = relatedTarget.getAttribute('data-cert');
+        const certFrame = document.getElementById('certFrame');
+        if (certFrame && cert) {
+          certFrame.src = cert;
+        }
+      }
+    } catch (error) {
+      console.error('Error in modal event listener:', error);
+    }
+  });
+} else {
+  console.warn('previewCertModal element not found');
+}
+
+// Enhanced CSRF token getter with error handling
+function getCSRFToken() {
+  const metaTag = document.querySelector('meta[name="csrf-token"]');
+  if (!metaTag) {
+    console.error('CSRF token meta tag not found');
+    return null;
+  }
+  const token = metaTag.getAttribute('content');
+  if (!token) {
+    console.error('CSRF token content is empty');
+    return null;
+  }
+  return token;
+}
 
 // PDF Export for Certificate with actual employee data - matches training_record_certificate_tracking.blade.php
 async function downloadCertificatePDF(certId) {
   try {
+    // Validate CSRF token first
+    const csrfToken = getCSRFToken();
+    if (!csrfToken) {
+      throw new Error('CSRF token not available');
+    }
+
     // Fetch certificate data from server
     const response = await fetch(`/admin/training-record-certificate-tracking/${certId}`, {
       headers: {
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        'X-CSRF-TOKEN': csrfToken,
+        'Accept': 'application/json'
       }
     });
 
@@ -345,10 +406,21 @@ async function downloadCertificatePDF(certId) {
 // Generate certificate function for pending certificates
 async function generateCertificate(certificateId) {
   try {
+    // Validate CSRF token first
+    const csrfToken = getCSRFToken();
+    if (!csrfToken) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Security Error',
+        text: 'Security token not found. Please refresh the page and try again.'
+      });
+      return;
+    }
+
     // First, get the certificate record details
     const certResponse = await fetch(`/admin/training-record-certificate-tracking/${certificateId}`, {
       headers: {
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'X-CSRF-TOKEN': csrfToken,
         'Accept': 'application/json'
       }
     });
@@ -364,7 +436,7 @@ async function generateCertificate(certificateId) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+        'X-CSRF-TOKEN': csrfToken,
         'Accept': 'application/json'
       },
       body: JSON.stringify({
@@ -404,41 +476,92 @@ async function generateCertificate(certificateId) {
   }
 }
 
-// Simple search + filter
-document.getElementById('trainingSearch')?.addEventListener('keyup', function () {
-  let val = this.value.toLowerCase();
-  document.querySelectorAll('#trainingTable tbody tr').forEach(tr => {
-    tr.style.display = tr.innerText.toLowerCase().includes(val) ? '' : 'none';
+// Simple search + filter with enhanced error handling
+const trainingSearchElement = document.getElementById('trainingSearch');
+if (trainingSearchElement) {
+  trainingSearchElement.addEventListener('keyup', function () {
+    try {
+      let val = this.value.toLowerCase();
+      const tableRows = document.querySelectorAll('#trainingTable tbody tr');
+      tableRows.forEach(tr => {
+        if (tr.cells && tr.cells.length > 0) {
+          tr.style.display = tr.innerText.toLowerCase().includes(val) ? '' : 'none';
+        }
+      });
+    } catch (error) {
+      console.error('Error in training search:', error);
+    }
   });
-});
+} else {
+  console.warn('trainingSearch element not found');
+}
 
-document.getElementById('trainingFilter')?.addEventListener('change', function () {
-  let val = this.value.toLowerCase();
-  document.querySelectorAll('#trainingTable tbody tr').forEach(tr => {
-    if (!val || tr.innerText.toLowerCase().includes(val)) tr.style.display = '';
-    else tr.style.display = 'none';
+const trainingFilterElement = document.getElementById('trainingFilter');
+if (trainingFilterElement) {
+  trainingFilterElement.addEventListener('change', function () {
+    try {
+      let val = this.value.toLowerCase();
+      const tableRows = document.querySelectorAll('#trainingTable tbody tr');
+      tableRows.forEach(tr => {
+        if (tr.cells && tr.cells.length > 0) {
+          if (!val || tr.innerText.toLowerCase().includes(val)) {
+            tr.style.display = '';
+          } else {
+            tr.style.display = 'none';
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error in training filter:', error);
+    }
   });
-});
+} else {
+  console.warn('trainingFilter element not found');
+}
 
-// Toggle remarks expansion
+// Toggle remarks expansion with error handling
 function toggleRemarks(button) {
-  const remarksCell = button.closest('.remarks-cell');
-  const remarksText = remarksCell.querySelector('.remarks-text');
-  const fullText = remarksText.getAttribute('title');
-  const isExpanded = remarksText.classList.contains('expanded');
+  try {
+    if (!button) {
+      console.error('toggleRemarks: button parameter is null');
+      return;
+    }
 
-  if (isExpanded) {
-    // Collapse
-    remarksText.textContent = fullText.length > 50 ? fullText.substring(0, 50) + '...' : fullText;
-    remarksText.classList.remove('expanded');
-    button.innerHTML = '<i class="bi bi-three-dots"></i>';
-    button.title = 'Show full remarks';
-  } else {
-    // Expand
-    remarksText.textContent = fullText;
-    remarksText.classList.add('expanded');
-    button.innerHTML = '<i class="bi bi-dash"></i>';
-    button.title = 'Show less';
+    const remarksCell = button.closest('.remarks-cell');
+    if (!remarksCell) {
+      console.error('toggleRemarks: remarks-cell not found');
+      return;
+    }
+
+    const remarksText = remarksCell.querySelector('.remarks-text');
+    if (!remarksText) {
+      console.error('toggleRemarks: remarks-text not found');
+      return;
+    }
+
+    const fullText = remarksText.getAttribute('title');
+    if (!fullText) {
+      console.error('toggleRemarks: title attribute not found');
+      return;
+    }
+
+    const isExpanded = remarksText.classList.contains('expanded');
+
+    if (isExpanded) {
+      // Collapse
+      remarksText.textContent = fullText.length > 50 ? fullText.substring(0, 50) + '...' : fullText;
+      remarksText.classList.remove('expanded');
+      button.innerHTML = '<i class="bi bi-three-dots"></i>';
+      button.title = 'Show full remarks';
+    } else {
+      // Expand
+      remarksText.textContent = fullText;
+      remarksText.classList.add('expanded');
+      button.innerHTML = '<i class="bi bi-dash"></i>';
+      button.title = 'Show less';
+    }
+  } catch (error) {
+    console.error('Error in toggleRemarks:', error);
   }
 }
 </script>

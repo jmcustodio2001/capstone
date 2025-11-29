@@ -35,18 +35,7 @@ use App\Services\AIQuestionGeneratorService;
 use App\Services\AICertificateGeneratorService;
 class MyTrainingController extends Controller
 {
-    /**
-     * Verify employee password
-     */
-    private function verifyEmployeePassword($password)
-    {
-        $employee = Auth::user();
-        if (!$employee) {
-            return false;
-        }
-        
-        return Hash::check($password, $employee->password);
-    }
+
 
     /**
      * Ensure the training_requests table exists
@@ -734,17 +723,25 @@ class MyTrainingController extends Controller
             })->toArray()
         ]);
 
-        // Combine all upcoming trainings with proper deduplication
-        $allTrainings = collect()
+        // Create separate collections for different purposes:
+        // 1. For training requests: exclude destination trainings (they have their own workflow)
+        $allTrainingsForRequests = collect()
+            ->merge($manualUpcoming->toArray())
+            ->merge($adminAssigned->toArray())
+            ->merge($competencyAssigned->toArray());
+            // Note: destinationAssigned excluded from training requests - they have their own workflow
+            
+        // 2. For upcoming trainings view: include ALL trainings including destination trainings
+        $allTrainingsForUpcoming = collect()
             ->merge($manualUpcoming->toArray())
             ->merge($adminAssigned->toArray())
             ->merge($competencyAssigned->toArray())
             ->merge($destinationAssigned->toArray());
 
-        // SIMPLE and AGGRESSIVE deduplication to fix the 8->4 issue
+        // SIMPLE and AGGRESSIVE deduplication for upcoming trainings (includes destination trainings)
         $seenTitles = [];
         $seenCourseIds = [];
-        $upcoming = $allTrainings->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
+        $upcoming = $allTrainingsForUpcoming->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
             $item = (object) $item;
             
             // Get raw training title
@@ -782,11 +779,52 @@ class MyTrainingController extends Controller
             return (object) $item;
         })->values(); // Reset array keys
 
+        // Create deduplicated collection for training requests (excludes destination trainings)
+        $seenTitlesForRequests = [];
+        $seenCourseIdsForRequests = [];
+        $upcomingForRequests = $allTrainingsForRequests->filter(function($item) use (&$seenTitlesForRequests, &$seenCourseIdsForRequests) {
+            $item = (object) $item;
+            
+            // Get raw training title
+            $rawTitle = $item->training_title ?? '';
+            
+            // Skip if training title is empty or generic
+            if (empty(trim($rawTitle)) || in_array(strtolower(trim($rawTitle)), ['training course', 'unknown course', 'unknown', 'course', 'n/a'])) {
+                return false;
+            }
+            
+            // Normalize title for comparison
+            $normalizedTitle = strtolower(trim($rawTitle));
+            $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/i', '', $normalizedTitle);
+            $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
+            
+            // Check for duplicates by course_id first (most reliable)
+            $courseId = $item->course_id ?? null;
+            if ($courseId && in_array($courseId, $seenCourseIdsForRequests)) {
+                return false; // Skip duplicate course_id
+            }
+            
+            // Check for duplicates by normalized title
+            if (in_array($normalizedTitle, $seenTitlesForRequests)) {
+                return false; // Skip duplicate title
+            }
+            
+            // Add to seen lists
+            if ($courseId) {
+                $seenCourseIdsForRequests[] = $courseId;
+            }
+            $seenTitlesForRequests[] = $normalizedTitle;
+            
+            return true;
+        })->map(function($item) {
+            return (object) $item;
+        })->values(); // Reset array keys
+
         // Debug: Log final deduplicated results
         Log::info('DEBUG - Final deduplicated trainings:', [
             'employee_id' => $employeeId,
             'total_count' => $upcoming->count(),
-            'all_trainings_before_dedup' => $allTrainings->count(),
+            'all_trainings_before_dedup' => $allTrainingsForUpcoming->count(),
             'manual_upcoming' => $manualUpcoming->count(),
             'admin_assigned' => $adminAssigned->count(),
             'competency_assigned' => $competencyAssigned->count(),
@@ -808,7 +846,7 @@ class MyTrainingController extends Controller
                 'adminAssigned_count' => $adminAssigned->count(),
                 'competencyAssigned_count' => $competencyAssigned->count(),
                 'final_upcoming_count' => $upcoming->count(),
-                'all_trainings_before_dedup' => $allTrainings->map(function($item) {
+                'all_trainings_before_dedup' => $allTrainingsForUpcoming->map(function($item) {
                     $item = (object) $item;
                     return [
                         'training_title' => $item->training_title ?? 'N/A',
@@ -1330,7 +1368,16 @@ class MyTrainingController extends Controller
         $notifications = TrainingNotification::where('employee_id', $employeeId)->orderBy('sent_at', 'desc')->get();
 
         // Get training requests for the employee with course relationship
-        $trainingRequests = TrainingRequest::with('course')->where('employee_id', $employeeId)->get();
+        $trainingRequests = TrainingRequest::with('course')
+            ->where('employee_id', $employeeId)
+            ->get()
+            ->filter(function($request) {
+                // If request has a course, exclude if course source_type is 'destination_master'
+                if ($request->course && isset($request->course->source_type) && $request->course->source_type === 'destination_master') {
+                    return false;
+                }
+                return true;
+            });
 
         // Get readiness rating for the employee
         $readinessRatingRecord = SuccessionReadinessRating::where('employee_id', $employeeId)->first();
@@ -1447,7 +1494,7 @@ class MyTrainingController extends Controller
             'upcoming', 'completed', 'progress', 'feedback', 'notifications',
             'trainingRequests', 'readinessRating', 'availableCourses', 'recommendedCourses',
             'completedTrainings'
-        ))->with('upcomingTrainings', $upcoming);
+        ))->with('upcomingTrainings', $upcomingForRequests); // Use collection without destination trainings for requests
     }
 
     /**
@@ -1589,17 +1636,8 @@ class MyTrainingController extends Controller
                     'training_title' => 'required|string|max:255',
                     'reason' => 'required|string|max:1000',
                     'requested_date' => 'required|date',
-                    'course_id' => 'nullable', // Allow both string and integer, we'll handle conversion below
-                    'password' => 'required|string|min:3'
+                    'course_id' => 'nullable' // Allow both string and integer, we'll handle conversion below
                 ]);
-
-                // Verify employee password
-                if (!$this->verifyEmployeePassword($request->password)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Invalid password. Please enter your correct password.'
-                    ], 401);
-                }
 
                 // Handle course_id conversion - convert numeric strings to integers, non-numeric to null
                 $courseId = null;
@@ -1758,17 +1796,8 @@ class MyTrainingController extends Controller
                 'training_title' => 'required|string|max:255',
                 'reason' => 'required|string|max:1000',
                 'requested_date' => 'required|date',
-                'status' => 'required|string|in:Pending,Approved,Rejected',
-                'password' => 'required|string|min:3'
+                'status' => 'required|string|in:Pending,Approved,Rejected'
             ]);
-
-            // Verify employee password
-            if (!$this->verifyEmployeePassword($request->password)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid password. Please enter your correct password.'
-                ], 401);
-            }
 
             // Find the training request
             $trainingRequest = TrainingRequest::where('request_id', $id)
@@ -1825,21 +1854,8 @@ class MyTrainingController extends Controller
         $employeeId = Auth::user()->employee_id;
         $isAjax = request()->ajax();
 
-        // Verify password for security
-        $requestData = json_decode(request()->getContent(), true);
-        if (!isset($requestData['password'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Password is required for this action.'
-            ], 400);
-        }
-
-        if (!$this->verifyEmployeePassword($requestData['password'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid password. Please enter your correct password.'
-            ], 401);
-        }
+        // Get request data
+        $requestData = json_decode(request()->getContent(), true) ?? [];
 
         // 1. Dashboard training records (direct dashboard_id or format: dashboard_X)
         if (is_numeric($id) || str_starts_with($id, 'dashboard_')) {

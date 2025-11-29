@@ -971,34 +971,27 @@ if (typeof window.trans === 'undefined') {
                 <div class="row">
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="details">Details*</label>
-                    <textarea class="form-control" name="details" id="details" rows="2" required></textarea>
+                    <textarea class="form-control" name="details" id="details" rows="2" required disabled></textarea>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="objectives">Objectives*</label>
-                    <textarea class="form-control" name="objectives" id="objectives" rows="2" required></textarea>
+                    <textarea class="form-control" name="objectives" id="objectives" rows="2" required disabled></textarea>
                   </div>
                 </div>
                 <div class="row">
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="duration">Duration*</label>
-                    <input type="text" class="form-control" name="duration" id="duration" placeholder="e.g., 5 days, 2 weeks" required>
+                    <input type="text" class="form-control" name="duration" id="duration" placeholder="e.g., 5 days, 2 weeks" required disabled>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="delivery_mode">Delivery Mode*</label>
-                    <select class="form-select" name="delivery_mode" id="delivery_mode" required>
-                      <option value="">Select Delivery Mode</option>
-                      <option value="On-site Training" style="background-color: #198754; color: white;">🏢 On-site Training</option>
-                      <option value="Blended Learning" style="background-color: #0d6efd; color: white;">🔄 Blended Learning</option>
-                      <option value="Workshop" style="background-color: #6f42c1; color: white;">🎯 Workshop</option>
-                      <option value="Seminar" style="background-color: #20c997; color: white;">📚 Seminar</option>
-                      <option value="Field Training" style="background-color: #dc3545; color: white;">🏃 Field Training</option>
-                    </select>
+                    <input type="text" class="form-control" name="delivery_mode" id="delivery_mode" placeholder="Will be auto-filled when destination is selected" readonly required>
                   </div>
                 </div>
                 <div class="row">
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="expired_date">Expired Date</label>
-                    <input type="date" class="form-control" name="expired_date" id="expired_date">
+                    <input type="date" class="form-control" name="expired_date" id="expired_date" required>
                   </div>
                 </div>
                 <div class="row" id="onlineTrainingFields" style="display: none;">
@@ -1017,9 +1010,7 @@ if (typeof window.trans === 'undefined') {
                 <div class="row">
                   <div class="col-md-12 mb-3">
                     <label class="form-label" for="status">Status</label>
-                    <select class="form-select" name="status" id="status">
-                      <option value="not-started" selected>Not Started</option>
-                    </select>
+                    <input type="text" class="form-control" name="status" id="status" value="not-started" readonly required>
                   </div>
                 </div>
                 <!-- Removed Active field -->
@@ -2096,7 +2087,7 @@ if (typeof window.trans === 'undefined') {
     const detailsTextarea = document.getElementById('details');
     const objectivesTextarea = document.getElementById('objectives');
     const durationInput = document.getElementById('duration');
-    const deliveryModeSelect = document.getElementById('delivery_mode');
+    const deliveryModeInput = document.getElementById('delivery_mode');
 
     if (destinationSelect) {
       destinationSelect.addEventListener('change', function() {
@@ -2111,7 +2102,7 @@ if (typeof window.trans === 'undefined') {
           detailsTextarea.value = '';
           objectivesTextarea.value = '';
           durationInput.value = '';
-          deliveryModeSelect.value = '';
+          deliveryModeInput.value = '';
         } else if (selectedValue && selectedValue !== '') {
           // Hide custom input field
           customDestinationInput.classList.add('d-none');
@@ -2134,13 +2125,16 @@ if (typeof window.trans === 'undefined') {
                 const deliveryModeCell = row.querySelector('td:nth-child(6)');
                 let deliveryMode = '';
 
-                // Extract delivery mode from badge text
+                // Extract delivery mode from span text
                 if (deliveryModeCell) {
-                  const badge = deliveryModeCell.querySelector('.badge');
-                  if (badge) {
-                    const badgeText = badge.textContent.trim();
+                  const span = deliveryModeCell.querySelector('span');
+                  if (span) {
+                    const spanText = span.textContent.trim();
                     // Remove emoji and extract text
-                    deliveryMode = badgeText.replace(/^[^\w\s]+\s*/, '').trim();
+                    deliveryMode = spanText.replace(/^[^\w\s]+\s*/, '').trim();
+                  } else {
+                    // Fallback: get text content directly
+                    deliveryMode = deliveryModeCell.textContent.trim().replace(/^[^\w\s]+\s*/, '').trim();
                   }
                 }
 
@@ -2148,7 +2142,7 @@ if (typeof window.trans === 'undefined') {
                 detailsTextarea.value = details;
                 objectivesTextarea.value = objectives;
                 durationInput.value = duration;
-                deliveryModeSelect.value = deliveryMode;
+                deliveryModeInput.value = deliveryMode;
 
                 foundDestination = true;
               }
@@ -2165,7 +2159,7 @@ if (typeof window.trans === 'undefined') {
                   detailsTextarea.value = data.data.details;
                   objectivesTextarea.value = data.data.objectives;
                   durationInput.value = data.data.duration;
-                  deliveryModeSelect.value = data.data.delivery_mode;
+                  deliveryModeInput.value = data.data.delivery_mode;
 
                   alert('Destination details loaded from database!');
                 } else {
@@ -2185,7 +2179,7 @@ if (typeof window.trans === 'undefined') {
           detailsTextarea.value = '';
           objectivesTextarea.value = '';
           durationInput.value = '';
-          deliveryModeSelect.value = '';
+          deliveryModeInput.value = '';
         }
       });
     }
@@ -2950,6 +2944,87 @@ if (typeof window.trans === 'undefined') {
         function changeTrainingPage(direction) {
           const newPage = trainingCurrentPage + direction;
           showTrainingPage(newPage);
+        }
+
+        // Function to manually activate all training centers
+        function activateAllTrainingCenters() {
+          // Show confirmation dialog
+          Swal.fire({
+            title: 'Auto-Activate All Training Centers?',
+            text: 'This will automatically activate all accredited training centers as courses in the course management system.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, Activate All',
+            cancelButtonText: 'Cancel'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // Show loading state
+              Swal.fire({
+                title: 'Activating Training Centers...',
+                text: 'Please wait while we activate all accredited training centers.',
+                icon: 'info',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                  Swal.showLoading();
+                }
+              });
+
+              // Get CSRF token
+              const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+              
+              if (!csrfToken) {
+                Swal.fire({
+                  icon: 'error',
+                  title: 'Security Error',
+                  text: 'CSRF token not found. Please refresh the page and try again.'
+                });
+                return;
+              }
+
+              // Make AJAX request
+              fetch('/admin/destination-knowledge-training/activate-all-centers', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRF-TOKEN': csrfToken,
+                  'Accept': 'application/json'
+                }
+              })
+              .then(response => response.json())
+              .then(data => {
+                if (data.success) {
+                  Swal.fire({
+                    icon: 'success',
+                    title: 'Activation Complete!',
+                    text: data.message,
+                    confirmButtonColor: '#28a745'
+                  }).then(() => {
+                    // Reload the page to show updated course statuses
+                    location.reload();
+                  });
+                } else {
+                  Swal.fire({
+                    icon: 'warning',
+                    title: 'Activation Result',
+                    text: data.message,
+                    confirmButtonColor: '#ffc107'
+                  });
+                }
+              })
+              .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                  icon: 'error',
+                  title: 'Activation Failed',
+                  text: 'An error occurred while activating training centers. Please try again.',
+                  confirmButtonColor: '#dc3545'
+                });
+              });
+            }
+          });
         }
       </script>
     </main>

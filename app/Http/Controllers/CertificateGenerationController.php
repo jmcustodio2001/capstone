@@ -54,7 +54,7 @@ class CertificateGenerationController extends Controller
             
             $employeeName = $employee->first_name . ' ' . $employee->last_name;
             $courseName = $course->course_title;
-            $completionDate = $completionDate ?? now();
+            $completionDate = $completionDate ? \Carbon\Carbon::parse($completionDate) : now();
             
             Log::info('Employee and course found', [
                 'employee_name' => $employeeName,
@@ -94,14 +94,27 @@ class CertificateGenerationController extends Controller
                     ->where('course_id', $courseId)
                     ->first();
                 
+                // Build certificate data with only basic required fields
                 $certificateData = [
                     'certificate_number' => $result['certificate_number'],
-                    'certificate_url' => $result['file_url'],
-                    'training_date' => $completionDate,
-                    'certificate_expiry' => now()->addYear(),
-                    'status' => 'Completed',
-                    'remarks' => 'Auto-generated certificate upon training completion'
+                    'certificate_url' => $result['file_url']
                 ];
+
+                // Only add fields that exist in the database and are in the fillable array
+                $fillableFields = (new TrainingRecordCertificateTracking())->getFillable();
+                
+                if (in_array('training_date', $fillableFields) && \Illuminate\Support\Facades\Schema::hasColumn('training_record_certificate_tracking', 'training_date')) {
+                    $certificateData['training_date'] = $completionDate;
+                }
+                if (in_array('certificate_expiry', $fillableFields) && \Illuminate\Support\Facades\Schema::hasColumn('training_record_certificate_tracking', 'certificate_expiry')) {
+                    $certificateData['certificate_expiry'] = $completionDate->copy()->addYear();
+                }
+                if (in_array('status', $fillableFields) && \Illuminate\Support\Facades\Schema::hasColumn('training_record_certificate_tracking', 'status')) {
+                    $certificateData['status'] = 'Completed';
+                }
+                if (in_array('remarks', $fillableFields) && \Illuminate\Support\Facades\Schema::hasColumn('training_record_certificate_tracking', 'remarks')) {
+                    $certificateData['remarks'] = 'Auto-generated certificate upon training completion';
+                }
                 
                 if ($existingCertificate) {
                     // Update existing certificate
@@ -149,13 +162,14 @@ class CertificateGenerationController extends Controller
                 
                 return $certificateRecord;
             } else {
+                $errorMessage = $result['error'] ?? 'Unknown error';
                 Log::error("Certificate generation failed", [
                     'employee_id' => $employeeId,
                     'course_id' => $courseId,
-                    'error' => $result['error'] ?? 'Unknown error',
+                    'error' => $errorMessage,
                     'full_result' => $result
                 ]);
-                return false;
+                throw new \Exception('Certificate generation failed: ' . $errorMessage);
             }
             
         } catch (\Exception $e) {
@@ -165,7 +179,7 @@ class CertificateGenerationController extends Controller
                 'message' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            return false;
+            throw $e;
         }
     }
     

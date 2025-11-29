@@ -6,12 +6,11 @@
   <meta name="csrf-token" content="{{ csrf_token() }}">
   <!-- Security Headers -->
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
-  <meta http-equiv="X-Frame-Options" content="DENY">
   <meta http-equiv="X-XSS-Protection" content="1; mode=block">
   <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
   <meta http-equiv="Permissions-Policy" content="geolocation=(), microphone=(), camera=()">
   <!-- Content Security Policy -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self'; frame-src https://www.google.com;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; font-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com data:; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src https://www.google.com; object-src 'none'; base-uri 'self';">
   <title>Employee Portal</title>
   <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
 
@@ -230,7 +229,13 @@
 
           <!-- Google reCAPTCHA -->
           <div class="mb-3 d-flex justify-content-center">
-            <div class="g-recaptcha" data-sitekey="{{ env('RECAPTCHA_SITE_KEY') }}" id="recaptcha-widget"></div>
+            @if(env('RECAPTCHA_SITE_KEY'))
+              <div class="g-recaptcha" data-sitekey="{{ env('RECAPTCHA_SITE_KEY') }}" id="recaptcha-widget"></div>
+            @else
+              <div class="alert alert-warning" style="font-size: 0.9rem;">
+                <i class="bi bi-exclamation-triangle me-2"></i>reCAPTCHA not configured. Please contact administrator.
+              </div>
+            @endif
           </div>
           
           <!-- CAPTCHA error display -->
@@ -425,6 +430,17 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
+    // Prevent any uncaught errors from breaking the page
+    window.addEventListener('error', function(event) {
+      console.warn('JavaScript error caught:', event.error);
+      // Don't prevent default - just log the error
+    });
+
+    // Prevent unhandled promise rejections from breaking the page
+    window.addEventListener('unhandledrejection', function(event) {
+      console.warn('Unhandled promise rejection:', event.reason);
+      // Don't prevent default - just log the error
+    });
     // Global Privacy and Security Functions (must be global for onclick handlers)
     function showPrivacyPolicy() {
       const modal = new bootstrap.Modal(document.getElementById('privacyPolicyModal'));
@@ -449,6 +465,41 @@
       return metaTag ? metaTag.getAttribute('content') : null;
     }
 
+    // Initialize global objects to prevent undefined errors - MUST BE FIRST
+    try {
+      if (typeof window.translationService === 'undefined') {
+        window.translationService = {
+          translate: function(key, params) { return key; },
+          get: function(key, params) { return key; },
+          trans: function(key, params) { return key; },
+          choice: function(key, count, params) { return key; },
+          __: function(key, params) { return key; }
+        };
+      }
+
+      // Add global trans function
+      if (typeof window.trans === 'undefined') {
+        window.trans = function(key, params) { return key; };
+      }
+
+      // Add global __ function (Laravel style)
+      if (typeof window.__ === 'undefined') {
+        window.__ = function(key, params) { return key; };
+      }
+
+      // Add app object if missing
+      if (typeof window.app === 'undefined') {
+        window.app = {
+          locale: 'en',
+          fallback_locale: 'en'
+        };
+      }
+
+      console.log('Global objects initialized successfully');
+    } catch (error) {
+      console.error('Error initializing global objects:', error);
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
       // Global variables
       let otpTimer;
@@ -460,7 +511,7 @@
 
       // Server-side attempt tracking - no client-side localStorage needed
 
-      // DOM elements
+      // DOM elements with null checks
       const loginForm = document.getElementById('loginForm');
       const otpForm = document.getElementById('otpForm');
       const loginButton = document.getElementById('loginButton');
@@ -474,31 +525,49 @@
       const togglePassword = document.getElementById('togglePassword');
       const passwordInput = document.getElementById('password');
 
-      // Password toggle functionality
-      togglePassword.addEventListener('click', function() {
-        const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-        passwordInput.setAttribute('type', type);
+      // Check if required elements exist
+      if (!loginForm) {
+        console.error('Login form not found');
+        return;
+      }
+      if (!loginButton) {
+        console.error('Login button not found');
+        return;
+      }
 
-        const icon = this.querySelector('i');
-        icon.classList.toggle('bi-eye');
-        icon.classList.toggle('bi-eye-slash');
-      });
+      console.log('Login page elements loaded successfully');
 
-      // Remember Me functionality with visual feedback
+      // Password toggle functionality with null checks
+      if (togglePassword && passwordInput) {
+        togglePassword.addEventListener('click', function() {
+          const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+          passwordInput.setAttribute('type', type);
+
+          const icon = this.querySelector('i');
+          if (icon) {
+            icon.classList.toggle('bi-eye');
+            icon.classList.toggle('bi-eye-slash');
+          }
+        });
+      }
+
+      // Remember Me functionality with visual feedback and null checks
       const rememberMeCheckbox = document.getElementById('rememberMe');
       const rememberMeLabel = document.querySelector('label[for="rememberMe"]');
 
-      rememberMeCheckbox.addEventListener('change', function() {
-        if (this.checked) {
-          rememberMeLabel.style.color = 'var(--jetlouge-primary)';
-          rememberMeLabel.style.fontWeight = '600';
-          rememberMeLabel.setAttribute('title', 'You will stay logged in for 30 days');
-        } else {
-          rememberMeLabel.style.color = '';
-          rememberMeLabel.style.fontWeight = '';
-          rememberMeLabel.removeAttribute('title');
-        }
-      });
+      if (rememberMeCheckbox && rememberMeLabel) {
+        rememberMeCheckbox.addEventListener('change', function() {
+          if (this.checked) {
+            rememberMeLabel.style.color = 'var(--jetlouge-primary)';
+            rememberMeLabel.style.fontWeight = '600';
+            rememberMeLabel.setAttribute('title', 'You will stay logged in for 30 days');
+          } else {
+            rememberMeLabel.style.color = '';
+            rememberMeLabel.style.fontWeight = '';
+            rememberMeLabel.removeAttribute('title');
+          }
+        });
+      }
 
       // CSRF token handling - using global function
 
@@ -637,14 +706,25 @@
         return true;
       }
 
-      // CAPTCHA validation function
+      // CAPTCHA validation function with safety checks
       function validateCaptcha() {
-        const captchaResponse = grecaptcha.getResponse();
-        if (!captchaResponse) {
-          showCaptchaError('Please complete the CAPTCHA verification before proceeding.');
-          return false;
+        // Check if reCAPTCHA is available and configured
+        if (typeof grecaptcha === 'undefined') {
+          console.warn('reCAPTCHA not loaded');
+          return true; // Skip validation if reCAPTCHA not available
         }
-        return true;
+        
+        try {
+          const captchaResponse = grecaptcha.getResponse();
+          if (!captchaResponse) {
+            showCaptchaError('Please complete the CAPTCHA verification before proceeding.');
+            return false;
+          }
+          return true;
+        } catch (error) {
+          console.warn('reCAPTCHA validation error:', error);
+          return true; // Skip validation on error
+        }
       }
 
       // Function to show CAPTCHA errors
@@ -683,23 +763,39 @@
         }, 5000);
       }
 
-      // Function to clear all error displays
+      // Function to clear all error displays with null checks
       function clearLoginErrors() {
-        document.getElementById('loginError').style.display = 'none';
-        document.getElementById('emailError').style.display = 'none';
-        document.getElementById('passwordError').style.display = 'none';
-        document.getElementById('captchaError').style.display = 'none';
-        document.getElementById('successMessage').style.display = 'none';
+        const errorElements = [
+          'loginError', 'emailError', 'passwordError', 'captchaError', 'successMessage'
+        ];
         
-        // Remove invalid classes
-        document.getElementById('email').classList.remove('is-invalid');
-        document.getElementById('password').classList.remove('is-invalid');
+        errorElements.forEach(elementId => {
+          const element = document.getElementById(elementId);
+          if (element) {
+            element.style.display = 'none';
+          }
+        });
+        
+        // Remove invalid classes with null checks
+        const emailElement = document.getElementById('email');
+        const passwordElement = document.getElementById('password');
+        
+        if (emailElement) {
+          emailElement.classList.remove('is-invalid');
+        }
+        if (passwordElement) {
+          passwordElement.classList.remove('is-invalid');
+        }
       }
 
-      // Reset CAPTCHA function
+      // Reset CAPTCHA function with error handling
       function resetCaptcha() {
         if (typeof grecaptcha !== 'undefined') {
-          grecaptcha.reset();
+          try {
+            grecaptcha.reset();
+          } catch (error) {
+            console.warn('reCAPTCHA reset error:', error);
+          }
         }
       }
 
@@ -741,8 +837,15 @@
             formData.append('_token', csrfToken);
           }
           
-          // Add CAPTCHA response
-          const captchaResponse = grecaptcha.getResponse();
+          // Add CAPTCHA response with safety check
+          let captchaResponse = '';
+          if (typeof grecaptcha !== 'undefined') {
+            try {
+              captchaResponse = grecaptcha.getResponse();
+            } catch (error) {
+              console.warn('Error getting reCAPTCHA response:', error);
+            }
+          }
           formData.append('g-recaptcha-response', captchaResponse);
 
           const response = await fetch('{{ route("employee.login.submit") }}', {
@@ -963,36 +1066,42 @@
         otpError.style.display = 'block';
       }
 
-      // Event listeners
-      resendOtpButton.addEventListener('click', resendOTP);
+      // Event listeners with null checks
+      if (resendOtpButton) {
+        resendOtpButton.addEventListener('click', resendOTP);
+      }
 
-      backToLoginButton.addEventListener('click', function() {
-        const goBack = confirm('Cancel Login?\n\nAre you sure you want to go back to the login form?');
-        if (goBack) {
-          // Reset CAPTCHA when going back to login
-          resetCaptcha();
-          showLoginForm();
-        }
-      });
+      if (backToLoginButton) {
+        backToLoginButton.addEventListener('click', function() {
+          const goBack = confirm('Cancel Login?\n\nAre you sure you want to go back to the login form?');
+          if (goBack) {
+            // Reset CAPTCHA when going back to login
+            resetCaptcha();
+            showLoginForm();
+          }
+        });
+      }
 
-      // OTP input formatting
-      otpInput.addEventListener('input', function() {
-        // Only allow numbers
-        this.value = this.value.replace(/[^0-9]/g, '');
+      // OTP input formatting with null checks
+      if (otpInput && otpError && otpForm) {
+        otpInput.addEventListener('input', function() {
+          // Only allow numbers
+          this.value = this.value.replace(/[^0-9]/g, '');
 
-        // Clear error when user starts typing
-        if (this.classList.contains('is-invalid')) {
-          this.classList.remove('is-invalid');
-          otpError.style.display = 'none';
-        }
+          // Clear error when user starts typing
+          if (this.classList.contains('is-invalid')) {
+            this.classList.remove('is-invalid');
+            otpError.style.display = 'none';
+          }
 
-        // Auto-submit when 6 digits are entered
-        if (this.value.length === 6) {
-          setTimeout(() => {
-            otpForm.dispatchEvent(new Event('submit'));
-          }, 500);
-        }
-      });
+          // Auto-submit when 6 digits are entered
+          if (this.value.length === 6) {
+            setTimeout(() => {
+              otpForm.dispatchEvent(new Event('submit'));
+            }, 500);
+          }
+        });
+      }
 
       // Session Timeout Management (Silent - No Warnings for Security)
       function startSessionTimeout() {

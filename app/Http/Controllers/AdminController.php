@@ -54,13 +54,13 @@ class AdminController extends Controller
         // Check if account is locked due to too many failed attempts
         $lockoutKey = 'admin_lockout_count_' . hash('sha256', $request->ip() . $request->email);
         $lockoutTimeKey = 'admin_lockout_time_' . hash('sha256', $request->ip() . $request->email);
-        
+
         if ($request->session()->has($lockoutTimeKey)) {
             $lockoutTime = \Carbon\Carbon::parse($request->session()->get($lockoutTimeKey));
             if (now()->lt($lockoutTime)) {
                 $lockoutCount = $request->session()->get($lockoutKey, 1);
                 $remainingSeconds = now()->diffInSeconds($lockoutTime, false);
-                
+
                 if ($request->expectsJson()) {
                     return response()->json([
                         'success' => false,
@@ -70,7 +70,7 @@ class AdminController extends Controller
                         'lockout_count' => $lockoutCount
                     ], 429);
                 }
-                
+
                 $remainingMinutes = max(1, ceil($remainingSeconds / 60));
                 return back()->withErrors([
                     'email' => "Account is temporarily locked. Please try again after {$remainingMinutes} minutes.",
@@ -91,19 +91,19 @@ class AdminController extends Controller
             if (strcasecmp($user->role, 'admin') === 0) {
                 // Successful login - reset lockout counters
                 $request->session()->forget([$lockoutKey, $lockoutTimeKey]);
-                
+
                 // Generate and send OTP
                 $otp = $this->generateOTP();
                 $request->session()->put('admin_otp', $otp);
                 $request->session()->put('admin_otp_expires', now()->addMinutes(10));
                 $request->session()->put('admin_pending_user_id', $user->id);
-                
+
                 // Send OTP email
                 $this->sendOTPEmail($user, $otp);
-                
+
                 // Logout the user temporarily until OTP is verified
                 Auth::guard('admin')->logout();
-                
+
                 if ($request->expectsJson()) {
                     return response()->json([
                         'success' => true,
@@ -111,13 +111,13 @@ class AdminController extends Controller
                         // No message for security - don't reveal OTP was sent
                     ]);
                 }
-                
+
                 return redirect()->route('admin.login')->with('otp_required', true);
             } else {
                 Auth::guard('admin')->logout();
                 // This is also a failed attempt (wrong role)
                 $this->handleFailedLoginAttempt($request, 'You do not have admin privileges.');
-                
+
                 if ($request->expectsJson()) {
                     return response()->json([
                         'success' => false,
@@ -125,7 +125,7 @@ class AdminController extends Controller
                         'step' => 'invalid_role'
                     ], 403);
                 }
-                
+
                 return back()->withErrors([
                     'email' => 'You do not have admin privileges.',
                 ]);
@@ -134,7 +134,7 @@ class AdminController extends Controller
 
         // Failed login - increment attempts counter
         $this->handleFailedLoginAttempt($request, 'Invalid credentials');
-        
+
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => false,
@@ -142,7 +142,7 @@ class AdminController extends Controller
                 'step' => 'invalid_credentials'
             ], 401);
         }
-        
+
         return back()->withErrors([
             'email' => 'Invalid credentials',
         ]);
@@ -155,19 +155,19 @@ class AdminController extends Controller
     {
         $lockoutKey = 'admin_lockout_count_' . hash('sha256', $request->ip() . $request->email);
         $lockoutTimeKey = 'admin_lockout_time_' . hash('sha256', $request->ip() . $request->email);
-        
+
         // Get current lockout count (starts at 0, increments on each lockout)
         $lockoutCount = $request->session()->get($lockoutKey, 0);
-        
+
         // Increment lockout count for next time
         $lockoutCount++;
         $request->session()->put($lockoutKey, $lockoutCount);
-        
+
         // Progressive lockout: 3min → 6min → 12min → 24min → 48min → 96min (capped)
         $lockoutMinutes = min(3 * pow(2, $lockoutCount - 1), 96);
         $lockoutTime = now()->addMinutes($lockoutMinutes);
         $request->session()->put($lockoutTimeKey, $lockoutTime->toDateTimeString());
-        
+
         Log::warning("Admin login attempt failed for {$request->email} from {$request->ip()}. Lockout #{$lockoutCount} for {$lockoutMinutes} minutes.");
     }
 
@@ -181,12 +181,12 @@ class AdminController extends Controller
         }
 
         $secretKey = config('services.recaptcha.secret_key');
-        
+
         if (empty($secretKey)) {
             Log::error('RECAPTCHA_SECRET_KEY not configured in environment');
             return false;
         }
-        
+
         try {
             $response = Http::asForm()->post('https://www.google.com/recaptcha/api/siteverify', [
                 'secret' => $secretKey,
@@ -195,16 +195,16 @@ class AdminController extends Controller
             ]);
 
             $result = $response->json();
-            
+
             if (!isset($result['success'])) {
                 Log::error('Invalid CAPTCHA response format', ['response' => $result]);
                 return false;
             }
-            
+
             if (!$result['success'] && isset($result['error-codes'])) {
                 Log::error('CAPTCHA verification failed', ['errors' => $result['error-codes']]);
             }
-            
+
             return $result['success'] === true;
         } catch (\Exception $e) {
             Log::error('CAPTCHA verification failed: ' . $e->getMessage());
@@ -229,39 +229,39 @@ class AdminController extends Controller
             Log::info("=== ADMIN OTP EMAIL DEBUG START ===");
             Log::info("Attempting to send admin OTP email to: {$user->email}");
             Log::info("Using EXACT same method as employee login");
-            
+
             // Create a fake Employee object with admin data to use the working employee OTP method
             $fakeEmployee = new \App\Models\Employee();
             $fakeEmployee->email = $user->email;
             $fakeEmployee->first_name = $user->name ?? 'Admin';
             $fakeEmployee->last_name = '';
             $fakeEmployee->employee_id = 'ADMIN_' . $user->id;
-            
+
             // Set OTP data (required by employee OTP method)
             $fakeEmployee->otp_code = $otp;
             $fakeEmployee->otp_expires_at = now()->addMinutes(10);
             $fakeEmployee->otp_attempts = 0;
             $fakeEmployee->last_otp_sent_at = now();
             $fakeEmployee->otp_verified = false;
-            
+
             Log::info("Created fake employee object for admin: " . json_encode([
                 'email' => $fakeEmployee->email,
                 'first_name' => $fakeEmployee->first_name,
                 'employee_id' => $fakeEmployee->employee_id
             ]));
-            
+
             // Use the EXACT same OTPService method that works for employees
             $otpService = new OTPService();
-            
+
             // Call the private sendOTPEmail method using reflection (same as employee)
             $reflection = new \ReflectionClass($otpService);
             $method = $reflection->getMethod('sendOTPEmail');
             $method->setAccessible(true);
-            
+
             $result = $method->invoke($otpService, $fakeEmployee, $otp);
-            
+
             Log::info("Employee OTP method result: " . ($result ? 'SUCCESS' : 'FAILED'));
-            
+
             if ($result) {
                 Log::info("✅ Admin OTP email sent successfully using employee method to {$user->email}: {$otp}");
                 Log::info("=== ADMIN OTP EMAIL DEBUG END (SUCCESS) ===");
@@ -272,11 +272,11 @@ class AdminController extends Controller
                 Log::info("=== ADMIN OTP EMAIL DEBUG END (FAILED) ===");
                 return false;
             }
-            
+
         } catch (\Exception $e) {
             Log::error('❌ Exception in admin OTP email sending: ' . $e->getMessage());
             Log::error('Exception details: ' . $e->getTraceAsString());
-            
+
             // Fallback: log the OTP if email fails
             Log::info("Email failed due to exception, OTP for {$user->email}: {$otp}");
             Log::info("=== ADMIN OTP EMAIL DEBUG END (EXCEPTION) ===");
@@ -311,7 +311,7 @@ class AdminController extends Controller
         if (now()->gt(\Carbon\Carbon::parse($otpExpires))) {
             // Clear expired OTP session
             $request->session()->forget(['admin_otp', 'admin_otp_expires', 'admin_pending_user_id']);
-            
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
@@ -499,8 +499,9 @@ class AdminController extends Controller
     {
         $admin = Auth::guard('admin')->user();
 
-        // Get login history for the admin (last 10 sessions)
+        // Get login history for the admin (last 10 active sessions only)
         $loginHistory = AdminLoginSession::where('user_id', $admin->id)
+            ->where('is_active', true)
             ->orderBy('login_at', 'desc')
             ->limit(10)
             ->get();
@@ -730,7 +731,7 @@ class AdminController extends Controller
             // Check database connection first
             try {
                 DB::connection()->getPdo();
-                
+
                 // Get system metrics with safe queries and multiple column name attempts
                 try {
                     // Try different column names for employment status
@@ -743,7 +744,7 @@ class AdminController extends Controller
                                   ->orWhereNull('employment_status'); // Include records without status
                         })
                         ->count();
-                    
+
                     // If still 0, get total employee count
                     if ($activeEmployees == 0) {
                         $activeEmployees = DB::table('employees')->count();
@@ -762,7 +763,7 @@ class AdminController extends Controller
                     // Try multiple possible training table names
                     $totalTrainings = 0;
                     $trainingTables = ['employee_training_dashboard', 'employee_trainings', 'trainings', 'training_records'];
-                    
+
                     foreach ($trainingTables as $table) {
                         try {
                             $count = DB::table($table)->count();
@@ -782,7 +783,7 @@ class AdminController extends Controller
                     // Try multiple possible request table names and status columns
                     $pendingRequests = 0;
                     $requestTables = ['training_requests', 'employee_training_requests', 'requests'];
-                    
+
                     foreach ($requestTables as $table) {
                         try {
                             $count = DB::table($table)
@@ -806,7 +807,7 @@ class AdminController extends Controller
                 }
 
                 $onlineUsers = $this->getOnlineUsersCount();
-                
+
             } catch (\Exception $e) {
                 $databaseStatus = 'disconnected';
                 Log::error('Database connection failed: ' . $e->getMessage());
@@ -819,7 +820,7 @@ class AdminController extends Controller
                 $tableNames = array_map(function($table) {
                     return array_values((array) $table)[0];
                 }, $tables);
-                
+
                 $debugInfo['available_tables'] = $tableNames;
                 $debugInfo['employee_table_exists'] = in_array('employees', $tableNames);
                 $debugInfo['training_tables'] = array_intersect(['employee_training_dashboard', 'employee_trainings', 'trainings', 'training_records'], $tableNames);
@@ -855,7 +856,7 @@ class AdminController extends Controller
     {
         try {
             $notifications = [];
-            
+
             // Get recent employee profile updates
             try {
                 if (Schema::hasTable('profile_updates')) {
@@ -866,12 +867,12 @@ class AdminController extends Controller
                         ->limit(5)
                         ->select('profile_updates.*', 'users.name')
                         ->get();
-                        
+
                     foreach ($recentProfileUpdates as $update) {
                         // Use IP address from profile update, not user's last login IP
                         $ipAddress = $update->ip_address ?? 'N/A';
                         $deviceInfo = 'Unknown Device';
-                        
+
                         // Parse user agent from profile update for device info
                         if ($update->user_agent) {
                             if (strpos($update->user_agent, 'Mobile') !== false) {
@@ -886,7 +887,7 @@ class AdminController extends Controller
                                 $deviceInfo = 'Desktop Browser';
                             }
                         }
-                        
+
                         $notifications[] = [
                             'type' => 'profile_update',
                             'title' => 'Profile Update',
@@ -907,7 +908,7 @@ class AdminController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->limit(5)
                 ->get();
-                
+
             foreach ($recentEmployees as $employee) {
                 $notifications[] = [
                     'type' => 'employee_registration',
@@ -925,7 +926,7 @@ class AdminController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->limit(5)
                 ->get();
-                
+
             foreach ($recentTrainingRequests as $request) {
                 $employeeName = 'Employee';
                 if ($request->employee) {
@@ -937,7 +938,7 @@ class AdminController extends Controller
                         $employeeName = $employee->first_name . ' ' . $employee->last_name;
                     }
                 }
-                
+
                 $notifications[] = [
                     'type' => 'training_request',
                     'title' => 'New Training Request',
@@ -954,7 +955,7 @@ class AdminController extends Controller
                 ->orderBy('updated_at', 'desc')
                 ->limit(3)
                 ->get();
-                
+
             foreach ($recentCompletions as $completion) {
                 $notifications[] = [
                     'type' => 'training_completion',
@@ -973,16 +974,16 @@ class AdminController extends Controller
                         ->orderBy('created_at', 'desc')
                         ->limit(10)
                         ->get();
-                        
+
                     foreach ($recentAlerts as $alert) {
                         $ipAddress = 'N/A';
                         $deviceInfo = 'Unknown Device';
-                        
+
                         // Extract IP and device info from alert details
                         if ($alert->details && is_array($alert->details)) {
                             $ipAddress = $alert->details['ip_address'] ?? 'N/A';
                             $userAgent = $alert->details['user_agent'] ?? '';
-                            
+
                             // Parse user agent for device info
                             if ($userAgent) {
                                 if (strpos($userAgent, 'Mobile') !== false) {
@@ -998,7 +999,7 @@ class AdminController extends Controller
                                 }
                             }
                         }
-                        
+
                         $notifications[] = [
                             'type' => $alert->type,
                             'title' => $alert->title,
@@ -1041,7 +1042,7 @@ class AdminController extends Controller
     {
         try {
             $count = 0;
-            
+
             // Count recent activities
             $count += \App\Models\Employee::where('created_at', '>=', now()->subDays(7))->count();
             $count += \App\Models\EmployeeTrainingDashboard::where('progress', '>=', 100)
@@ -1089,10 +1090,10 @@ class AdminController extends Controller
         try {
             // Get employees data
             $employees = \App\Models\Employee::orderBy('created_at', 'desc')->get();
-            
+
             // Generate next employee ID
             $nextEmployeeId = $this->generateNextEmployeeId();
-            
+
             // Check if this is an AJAX request for employee data
             if ($request->expectsJson()) {
                 return response()->json([
@@ -1101,19 +1102,19 @@ class AdminController extends Controller
                     'nextEmployeeId' => $nextEmployeeId
                 ]);
             }
-            
+
             // Return the employee list view with data
             return view('employee_ess_modules.employee_list', compact('employees', 'nextEmployeeId'));
         } catch (\Exception $e) {
             Log::error('Employee list error: ' . $e->getMessage());
-            
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to load employee list'
                 ], 500);
             }
-            
+
             // Return view with empty employees array and default next ID on error
             return view('employee_ess_modules.employee_list', [
                 'employees' => collect(),
@@ -1203,21 +1204,21 @@ class AdminController extends Controller
         try {
             // Get available columns in employees table
             $columns = $this->getTableColumns('employees');
-            
+
             // Build select array with available columns
             $selectColumns = [];
             $availableFields = [
-                'employee_id', 'first_name', 'last_name', 'email', 
+                'employee_id', 'first_name', 'last_name', 'email',
                 'department', 'position', 'employment_status', 'status',
                 'created_at', 'updated_at'
             ];
-            
+
             foreach ($availableFields as $field) {
                 if (in_array($field, $columns)) {
                     $selectColumns[] = $field;
                 }
             }
-            
+
             // Fallback if no specific columns found - get all
             if (empty($selectColumns)) {
                 $employees = DB::table('employees')->get();
@@ -1227,7 +1228,7 @@ class AdminController extends Controller
 
             $filename = 'employee_report_' . date('Y-m-d_H-i-s') . '.csv';
             $filePath = storage_path('app/reports/' . $filename);
-            
+
             // Ensure reports directory exists
             if (!file_exists(dirname($filePath))) {
                 mkdir(dirname($filePath), 0755, true);
@@ -1236,7 +1237,7 @@ class AdminController extends Controller
             // Create dynamic CSV header based on available data
             $headers = [];
             $sampleEmployee = $employees->first();
-            
+
             if ($sampleEmployee) {
                 foreach ($sampleEmployee as $key => $value) {
                     $headers[] = ucwords(str_replace('_', ' ', $key));
@@ -1244,9 +1245,9 @@ class AdminController extends Controller
             } else {
                 $headers = ['Employee ID', 'First Name', 'Last Name', 'Email', 'Department', 'Position', 'Status', 'Created Date'];
             }
-            
+
             $csvContent = implode(',', $headers) . "\n";
-            
+
             // Add employee data
             foreach ($employees as $employee) {
                 $row = [];
@@ -1299,7 +1300,7 @@ class AdminController extends Controller
 
             $filename = 'training_report_' . date('Y-m-d_H-i-s') . '.csv';
             $filePath = storage_path('app/reports/' . $filename);
-            
+
             // Ensure reports directory exists
             if (!file_exists(dirname($filePath))) {
                 mkdir(dirname($filePath), 0755, true);
@@ -1307,7 +1308,7 @@ class AdminController extends Controller
 
             // Create CSV content
             $csvContent = "Employee ID,Employee Name,Course ID,Course Title,Training Title,Progress %,Status,Training Date,Last Accessed,Assigned By\n";
-            
+
             foreach ($trainings as $training) {
                 $employeeName = trim(($training->first_name ?? '') . ' ' . ($training->last_name ?? ''));
                 $csvContent .= sprintf(
@@ -1366,7 +1367,7 @@ class AdminController extends Controller
 
             $filename = 'competency_report_' . date('Y-m-d_H-i-s') . '.csv';
             $filePath = storage_path('app/reports/' . $filename);
-            
+
             // Ensure reports directory exists
             if (!file_exists(dirname($filePath))) {
                 mkdir(dirname($filePath), 0755, true);
@@ -1374,7 +1375,7 @@ class AdminController extends Controller
 
             // Create CSV content
             $csvContent = "Employee ID,Employee Name,Competency ID,Competency Name,Proficiency Level,Required Level,Assessment Date,Notes\n";
-            
+
             foreach ($competencies as $competency) {
                 $employeeName = trim(($competency->first_name ?? '') . ' ' . ($competency->last_name ?? ''));
                 $csvContent .= sprintf(
@@ -1456,7 +1457,7 @@ class AdminController extends Controller
 
             $filename = 'system_report_' . date('Y-m-d_H-i-s') . '.json';
             $filePath = storage_path('app/reports/' . $filename);
-            
+
             // Ensure reports directory exists
             if (!file_exists(dirname($filePath))) {
                 mkdir(dirname($filePath), 0755, true);
@@ -1485,10 +1486,10 @@ class AdminController extends Controller
     {
         try {
             $backupId = 'BACKUP_' . date('Y-m-d_H-i-s');
-            
+
             // In a real implementation, you would create actual backup files
             // For now, we'll simulate the process
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'System backup created successfully',
@@ -1538,7 +1539,7 @@ class AdminController extends Controller
     {
         try {
             $activities = [];
-            
+
             // Get recent admin login sessions
             try {
                 $adminSessions = AdminLoginSession::with('user')
@@ -1546,7 +1547,7 @@ class AdminController extends Controller
                     ->orderBy('login_at', 'desc')
                     ->limit(10)
                     ->get();
-                    
+
                 foreach ($adminSessions as $session) {
                     $activities[] = [
                         'user_name' => $session->user ? $session->user->name : 'Unknown Admin',
@@ -1568,7 +1569,7 @@ class AdminController extends Controller
                     ->orderBy('last_login_at', 'desc')
                     ->limit(10)
                     ->get();
-                    
+
                 foreach ($recentEmployeeLogins as $employee) {
                     $activities[] = [
                         'user_name' => ($employee->first_name ?? 'Unknown') . ' ' . ($employee->last_name ?? 'Employee'),
@@ -1593,7 +1594,7 @@ class AdminController extends Controller
                         ->limit(5)
                         ->select('profile_updates.*', 'users.name')
                         ->get();
-                        
+
                     foreach ($recentProfileUpdates as $update) {
                         $createdAt = \Carbon\Carbon::parse($update->created_at);
                         $activities[] = [
@@ -1619,11 +1620,11 @@ class AdminController extends Controller
                         ->orderBy('created_at', 'desc')
                         ->limit(5)
                         ->get();
-                        
+
                     foreach ($recentSecurityEvents as $alert) {
                         $details = is_array($alert->details) ? $alert->details : json_decode($alert->details, true);
                         $employeeName = $details['employee_name'] ?? $details['email'] ?? 'Unknown User';
-                        
+
                         $activities[] = [
                             'user_name' => $employeeName,
                             'user_type' => 'employee',
@@ -1668,7 +1669,7 @@ class AdminController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::error('Get user activity error: ' . $e->getMessage());
-            
+
             // Return a basic fallback response
             return response()->json([
                 'success' => true,
@@ -1692,13 +1693,13 @@ class AdminController extends Controller
     {
         try {
             $logs = [];
-            
+
             // Read Laravel log file
             $logFile = storage_path('logs/laravel.log');
             if (file_exists($logFile)) {
                 $logContent = file_get_contents($logFile);
                 $logLines = array_slice(explode("\n", $logContent), -50); // Last 50 lines
-                
+
                 foreach ($logLines as $line) {
                     if (trim($line)) {
                         // Parse log line
@@ -1747,26 +1748,26 @@ class AdminController extends Controller
             $tableCount = 0;
             $totalRecords = 0;
             $databaseSize = 'N/A';
-            
+
             try {
                 $pdo = DB::connection()->getPdo();
-                
+
                 // Get table count
                 $tables = DB::select('SHOW TABLES');
                 $tableCount = count($tables);
-                
+
                 // Get total records (approximate)
                 foreach ($tables as $table) {
                     $tableName = array_values((array) $table)[0];
                     $count = DB::table($tableName)->count();
                     $totalRecords += $count;
                 }
-                
+
                 // Get database size
                 $databaseName = DB::connection()->getDatabaseName();
                 $sizeQuery = DB::select("SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) AS 'db_size' FROM information_schema.tables WHERE table_schema=?", [$databaseName]);
                 $databaseSize = ($sizeQuery[0]->db_size ?? 0) . ' MB';
-                
+
             } catch (\Exception $e) {
                 $connectionStatus = 'error';
             }
@@ -1829,7 +1830,7 @@ class AdminController extends Controller
             ]);
 
             $user = Auth::guard('admin')->user();
-            
+
             if (!Hash::check($request->current_password, $user->password)) {
                 return response()->json([
                     'success' => false,
@@ -1871,7 +1872,7 @@ class AdminController extends Controller
             } catch (\Exception $e) {
                 Log::warning('Failed to count active admin sessions: ' . $e->getMessage());
             }
-            
+
             // For employees, estimate based on recent activity (last 30 minutes)
             try {
                 $activeEmployees = DB::table('employees')
@@ -1880,7 +1881,7 @@ class AdminController extends Controller
             } catch (\Exception $e) {
                 Log::warning('Failed to count active employees: ' . $e->getMessage());
             }
-            
+
             return $activeAdmins + $activeEmployees;
         } catch (\Exception $e) {
             Log::warning('Failed to get online users count: ' . $e->getMessage());
@@ -1901,7 +1902,7 @@ class AdminController extends Controller
                     $startTime = \Carbon\Carbon::parse($sessionStart);
                     $now = \Carbon\Carbon::now();
                     $diff = $now->diff($startTime);
-                    
+
                     // If session uptime is reasonable (less than 7 days), use it
                     if ($diff->days < 7) {
                         return $diff->format('%a days, %h hours, %i minutes (session)');
@@ -1910,14 +1911,14 @@ class AdminController extends Controller
                     // Continue to next method
                 }
             }
-            
+
             // Priority 2: Application uptime from file (with validation)
             $appStartFile = storage_path('framework/cache/app_start_time');
             if (file_exists($appStartFile)) {
                 $appStartTime = intval(file_get_contents($appStartFile));
                 $appUptime = time() - $appStartTime;
                 $days = floor($appUptime / 86400);
-                
+
                 // If app uptime is reasonable (less than 30 days), use it
                 if ($days < 30) {
                     $hours = floor(($appUptime % 86400) / 3600);
@@ -1929,13 +1930,13 @@ class AdminController extends Controller
                     return "0 days, 0 hours, 0 minutes (reset)";
                 }
             }
-            
+
             // Priority 3: Create new app uptime file
             if (!file_exists($appStartFile)) {
                 file_put_contents($appStartFile, time());
                 return "0 days, 0 hours, 0 minutes (new)";
             }
-            
+
             // Priority 4: Try Windows system uptime (only if reasonable)
             if (PHP_OS_FAMILY === 'Windows') {
                 // Method 1: Try systeminfo command
@@ -1948,7 +1949,7 @@ class AdminController extends Controller
                             $bootDateTime = new \DateTime($bootTime);
                             $now = new \DateTime();
                             $diff = $now->diff($bootDateTime);
-                            
+
                             // Only use system uptime if it's reasonable (less than 30 days)
                             if ($diff->days < 30) {
                                 return $diff->format('%a days, %h hours, %i minutes (system)');
@@ -1958,7 +1959,7 @@ class AdminController extends Controller
                         }
                     }
                 }
-                
+
                 // Method 2: Try WMI query
                 $output = shell_exec('wmic os get lastbootuptime /value 2>nul');
                 if ($output && preg_match('/LastBootUpTime=(\d{14})/', $output, $matches)) {
@@ -1969,7 +1970,7 @@ class AdminController extends Controller
                     $hour = substr($bootTime, 8, 2);
                     $minute = substr($bootTime, 10, 2);
                     $second = substr($bootTime, 12, 2);
-                    
+
                     try {
                         $bootDateTime = new \DateTime("$year-$month-$day $hour:$minute:$second");
                         $now = new \DateTime();
@@ -1982,7 +1983,7 @@ class AdminController extends Controller
                         // Continue to next method
                     }
                 }
-                
+
                 // Method 3: Calculate from PHP process start (approximation)
                 if (function_exists('getmypid')) {
                     $startTime = filectime(__FILE__); // Approximate using file creation time
@@ -1993,13 +1994,13 @@ class AdminController extends Controller
                     return "{$days} days, {$hours} hours, {$minutes} minutes (approx)";
                 }
             }
-            
+
             // Priority 5: Linux/Unix systems (with validation)
             if (file_exists('/proc/uptime')) {
                 $uptime = file_get_contents('/proc/uptime');
                 $uptime = floatval(explode(' ', $uptime)[0]);
                 $days = floor($uptime / 86400);
-                
+
                 // Only use if reasonable
                 if ($days < 30) {
                     $hours = floor(($uptime % 86400) / 3600);
@@ -2007,7 +2008,7 @@ class AdminController extends Controller
                     return "{$days} days, {$hours} hours, {$minutes} minutes (system)";
                 }
             }
-            
+
             // Try uptime command (Linux/macOS)
             $output = shell_exec('uptime 2>/dev/null');
             if ($output) {
@@ -2021,14 +2022,14 @@ class AdminController extends Controller
                     return "0 days, {$matches[1]} hours, {$matches[2]} minutes";
                 }
             }
-            
+
             // Final fallback - create new session-based uptime
             session(['admin_session_start' => now()]);
             return "0 days, 0 hours, 0 minutes (initialized)";
-            
+
         } catch (\Exception $e) {
             Log::warning('Failed to get system uptime: ' . $e->getMessage());
-            
+
             // Final fallback - show current time
             return "Since " . date('Y-m-d H:i:s');
         }
@@ -2046,22 +2047,22 @@ class AdminController extends Controller
                 unlink($appStartFile);
                 Log::info('Removed existing uptime file: ' . $appStartFile);
             }
-            
+
             // Create new start time file with current timestamp
             file_put_contents($appStartFile, time());
             Log::info('Created new uptime file with timestamp: ' . time());
-            
+
             // Reset session-based uptime to current time
             $request->session()->put('admin_session_start', now());
             Log::info('Reset admin session start time');
-            
+
             // Clear any cached uptime values
             if (function_exists('opcache_reset')) {
                 opcache_reset();
             }
-            
+
             Log::info('System uptime counter reset by admin: ' . Auth::guard('admin')->user()->name);
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'System uptime counter has been reset successfully',
@@ -2085,7 +2086,7 @@ class AdminController extends Controller
         try {
             // Generate a new CSRF token
             $request->session()->regenerateToken();
-            
+
             return response()->json([
                 'success' => true,
                 'token' => csrf_token()
@@ -2123,30 +2124,30 @@ class AdminController extends Controller
         try {
             // Get the latest employee ID using DB query instead of model
             $latestEmployee = DB::table('employees')->orderBy('employee_id', 'desc')->first();
-            
+
             if (!$latestEmployee) {
                 return 'EMP001';
             }
-            
+
             // Extract numeric part from employee ID (assuming format like EMP001, EMP002, etc.)
             $latestId = $latestEmployee->employee_id;
-            
+
             // Check if it follows the EMP### pattern
             if (preg_match('/^EMP(\d+)$/', $latestId, $matches)) {
                 $nextNumber = intval($matches[1]) + 1;
                 return 'EMP' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
             }
-            
+
             // If it doesn't follow the pattern, try to extract any number
             if (preg_match('/(\d+)/', $latestId, $matches)) {
                 $nextNumber = intval($matches[1]) + 1;
                 return 'EMP' . str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
             }
-            
+
             // Fallback if no pattern is found
             $employeeCount = DB::table('employees')->count();
             return 'EMP' . str_pad($employeeCount + 1, 3, '0', STR_PAD_LEFT);
-            
+
         } catch (\Exception $e) {
             Log::error('Generate next employee ID error: ' . $e->getMessage());
             return 'EMP001';

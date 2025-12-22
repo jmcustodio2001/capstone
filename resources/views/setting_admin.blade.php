@@ -395,7 +395,7 @@
     <script>
     // Password verification and SweetAlert functions
     async function verifyPassword() {
-        const { value: password } = await Swal.fire({
+        const result = await Swal.fire({
             title: 'Security Verification',
             text: 'Please enter your current password to continue',
             input: 'password',
@@ -409,7 +409,13 @@
                 }
             }
         });
-        return password;
+
+        // Return null if user cancelled or dismissed the dialog
+        if (!result.isConfirmed) {
+            return null;
+        }
+
+        return result.value;
     }
 
     async function verifyAndSubmit(formId, action) {
@@ -457,69 +463,73 @@
 
     async function verifyAndRevokeSession(sessionId) {
         const password = await verifyPassword();
-        if (password) {
-            try {
-                const response = await fetch('/admin/verify-password', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    },
-                    body: JSON.stringify({ password: password })
-                });
+        if (!password) {
+            return; // User cancelled or didn't enter password
+        }
 
-                const result = await response.json();
+        try {
+            const response = await fetch('/admin/verify-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ password: password })
+            });
 
-                if (result.success) {
-                    revokeSession(sessionId);
-                } else {
-                    Swal.fire({
-                        title: 'Invalid Password',
-                        text: 'The password you entered is incorrect.',
-                        icon: 'error'
-                    });
-                }
-            } catch (error) {
+            const result = await response.json();
+
+            if (result.success) {
+                revokeSession(sessionId);
+            } else {
                 Swal.fire({
-                    title: 'Error',
-                    text: 'Failed to verify password. Please try again.',
+                    title: 'Invalid Password',
+                    text: 'The password you entered is incorrect.',
                     icon: 'error'
                 });
             }
+        } catch (error) {
+            Swal.fire({
+                title: 'Error',
+                text: 'Failed to verify password. Please try again.',
+                icon: 'error'
+            });
         }
     }
 
     async function verifyAndLogoutAllDevices() {
         const password = await verifyPassword();
-        if (password) {
-            try {
-                const response = await fetch('/admin/verify-password', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                    },
-                    body: JSON.stringify({ password: password })
-                });
+        if (!password) {
+            return; // User cancelled or didn't enter password
+        }
 
-                const result = await response.json();
+        try {
+            const response = await fetch('/admin/verify-password', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ password: password })
+            });
 
-                if (result.success) {
-                    logoutAllDevices();
-                } else {
-                    Swal.fire({
-                        title: 'Invalid Password',
-                        text: 'The password you entered is incorrect.',
-                        icon: 'error'
-                    });
-                }
-            } catch (error) {
+            const result = await response.json();
+
+            if (result.success) {
+                logoutAllDevices();
+            } else {
                 Swal.fire({
-                    title: 'Error',
-                    text: 'Failed to verify password. Please try again.',
+                    title: 'Invalid Password',
+                    text: 'The password you entered is incorrect.',
                     icon: 'error'
                 });
             }
+        } catch (error) {
+            Swal.fire({
+                title: 'Error',
+                text: 'Failed to verify password. Please try again.',
+                icon: 'error'
+            });
         }
     }
     document.addEventListener('DOMContentLoaded', function() {

@@ -296,11 +296,6 @@
                             title="View Details" data-bs-toggle="tooltip">
                       <i class="bi bi-eye me-1"></i>View
                     </button>
-                    <button class="btn btn-outline-success btn-sm flex-fill"
-                            onclick="saveEmployeeToDatabase({{ json_encode($employee) }})"
-                            title="Save to My Database" data-bs-toggle="tooltip">
-                      <i class="bi bi-database-add me-1"></i>Save
-                    </button>
                   </div>
                 </div>
 

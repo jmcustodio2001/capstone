@@ -19,21 +19,21 @@
     // Prevent translation service errors
     if (typeof window.translationService === 'undefined') {
       window.translationService = {
-        translate: function(key, params) { 
+        translate: function(key, params) {
           console.log('Translation fallback - translate:', key);
-          return key; 
+          return key;
         },
-        get: function(key, params) { 
+        get: function(key, params) {
           console.log('Translation fallback - get:', key);
-          return key; 
+          return key;
         },
-        trans: function(key, params) { 
+        trans: function(key, params) {
           console.log('Translation fallback - trans:', key);
-          return key; 
+          return key;
         },
-        choice: function(key, count, params) { 
+        choice: function(key, count, params) {
           console.log('Translation fallback - choice:', key);
-          return key; 
+          return key;
         },
         setTranslations: function(translations) {
           console.log('Translation fallback - setTranslations:', translations);
@@ -55,7 +55,7 @@
         }
       };
     }
-    
+
     // Also ensure the global trans function exists
     if (typeof window.trans === 'undefined') {
       window.trans = function(key, params) {
@@ -63,12 +63,12 @@
         return key;
       };
     }
-    
+
     // Add any other global objects that might be missing
     if (typeof window.app === 'undefined') {
       window.app = {};
     }
-    
+
     // Initialize static text content
     window.messages = {
       loading: 'Loading...',
@@ -455,7 +455,7 @@
       <div class="col-md-3">
         <div class="card text-center border-0 shadow-sm">
           <div class="card-body">
-            <div class="display-4 text-primary mb-2">
+            <div class="display-4 text-dark mb-2">
               <i class="bi bi-people-fill"></i>
             </div>
             <h5 class="card-title">Total Candidates</h5>
@@ -466,7 +466,7 @@
       <div class="col-md-3">
         <div class="card text-center border-0 shadow-sm">
           <div class="card-body">
-            <div class="display-4 text-success mb-2">
+            <div class="display-4 text-dark mb-2">
               <i class="bi bi-trophy-fill"></i>
             </div>
             <h5 class="card-title">Ready Leaders</h5>
@@ -477,7 +477,7 @@
       <div class="col-md-3">
         <div class="card text-center border-0 shadow-sm">
           <div class="card-body">
-            <div class="display-4 text-warning mb-2">
+            <div class="display-4 text-dark mb-2">
               <i class="bi bi-graph-up-arrow"></i>
             </div>
             <h5 class="card-title">In Development</h5>
@@ -488,7 +488,7 @@
       <div class="col-md-3">
         <div class="card text-center border-0 shadow-sm">
           <div class="card-body">
-            <div class="display-4 text-info mb-2">
+            <div class="display-4 text-dark mb-2">
               <i class="bi bi-diagram-3-fill"></i>
             </div>
             <h5 class="card-title">Key Positions</h5>
@@ -634,7 +634,7 @@
           </div>
         @else
           <div class="text-center py-5">
-            <i class="bi bi-diagram-3 display-4 text-muted mb-3"></i>
+            <i class="bi bi-diagram-3 display-4 text-dark mb-3"></i>
             <h5 class="text-muted">No organizational positions defined</h5>
             <p class="text-muted">Create organizational positions to see the role chart.</p>
           </div>
@@ -738,7 +738,7 @@
           @else
             <div class="col-12">
               <div class="text-center py-4">
-                <i class="bi bi-people display-4 text-muted mb-3"></i>
+                <i class="bi bi-people display-4 text-dark mb-3"></i>
                 <h5 class="text-muted">No candidates available</h5>
                 <p class="text-muted">Run the succession planning evaluation to see potential candidates.</p>
               </div>
@@ -1289,7 +1289,7 @@
     // Add Candidate with Password Confirmation
     async function addCandidateWithConfirmation() {
       const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification Required',
+        title: '<i class="bi bi-shield-lock text-dark"></i> Security Verification Required',
         html: `
           <div class="text-start">
             <p class="mb-3">Please enter your admin password to add a new succession candidate:</p>
@@ -1379,7 +1379,7 @@
       }
 
       Swal.fire({
-        title: '<i class="bi bi-person-plus text-primary"></i> Add New Succession Candidate',
+        title: '<i class="bi bi-person-plus text-dark"></i> Add New Succession Candidate',
         html: `
           <form id="swalAddCandidateForm" class="text-start">
             <div class="row">
@@ -1520,7 +1520,7 @@
     // View Simulation Details
     function viewSimulationDetails(id, employeeName, simulationResult, createdAt) {
       Swal.fire({
-        title: '<i class="bi bi-eye text-primary"></i> Simulation Details',
+        title: '<i class="bi bi-eye text-dark"></i> Simulation Details',
         html: `
           <div class="text-start">
             <div class="row">
@@ -1550,7 +1550,7 @@
     // Edit Simulation with Confirmation
     async function editSimulationWithConfirmation(id, employeeId, simulationResult, createdAt) {
       const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification Required',
+        title: '<i class="bi bi-shield-lock text-dark"></i> Security Verification Required',
         html: `
           <div class="text-start">
             <p class="mb-3">Please enter your admin password to edit this simulation entry:</p>
@@ -1639,7 +1639,7 @@
       });
 
       Swal.fire({
-        title: '<i class="bi bi-pencil text-warning"></i> Edit Simulation Entry',
+        title: '<i class="bi bi-pencil text-dark"></i> Edit Simulation Entry',
         html: `
           <form id="swalEditSimulationForm" class="text-start">
             <div class="mb-3">
@@ -1839,7 +1839,7 @@
     // Delete Simulation with Confirmation
     async function deleteSimulationWithConfirmation(id, employeeName) {
       const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-danger"></i> Security Verification Required',
+        title: '<i class="bi bi-shield-lock text-dark"></i> Security Verification Required',
         html: `
           <div class="text-start">
             <p class="mb-3">Please enter your admin password to delete this simulation entry:</p>
@@ -2109,7 +2109,7 @@
       }
 
       const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-success"></i> Security Verification Required',
+        title: '<i class="bi bi-shield-lock text-dark"></i> Security Verification Required',
         html: `
           <div class="text-start">
             <p class="mb-3">Please enter your admin password to add this simulation entry:</p>
@@ -2497,7 +2497,7 @@
                       <i class="bi bi-exclamation-triangle me-1"></i>AI-Identified Risk Factors
                     </h6>
                     <ul class="list-unstyled">
-                      ${scenario.keyRisks.map(risk => `<li class="mb-2"><i class="bi bi-dot text-danger"></i><span class="ai-risk-item">${risk}</span></li>`).join('')}
+                      ${scenario.keyRisks.map(risk => `<li class="mb-2"><i class="bi bi-dot text-dark"></i><span class="ai-risk-item">${risk}</span></li>`).join('')}
                     </ul>
                   </div>
                   <div class="col-md-6">
@@ -2505,7 +2505,7 @@
                       <i class="bi bi-cpu me-1"></i>AI-Powered Recommendations
                     </h6>
                     <ul class="list-unstyled">
-                      ${scenario.aiRecommendations.map(rec => `<li class="mb-2"><i class="bi bi-check-circle text-success me-1"></i><span class="ai-recommendation">${rec}</span></li>`).join('')}
+                      ${scenario.aiRecommendations.map(rec => `<li class="mb-2"><i class="bi bi-check-circle text-dark me-1"></i><span class="ai-recommendation">${rec}</span></li>`).join('')}
                     </ul>
                   </div>
                 </div>
@@ -2548,7 +2548,7 @@
     // AI Scenario Actions
     async function implementAIScenario(scenarioTitle, index) {
       const result = await Swal.fire({
-        title: '<i class="bi bi-cpu text-success"></i> Implement AI Succession Plan',
+        title: '<i class="bi bi-cpu text-dark"></i> Implement AI Succession Plan',
         html: `
           <div class="text-start">
             <p class="mb-3">Are you ready to implement the AI-powered succession plan for:</p>
@@ -2583,7 +2583,7 @@
 
     async function runAISimulation(scenarioTitle, index) {
       Swal.fire({
-        title: '<i class="bi bi-cpu text-primary"></i> Running AI Simulation',
+        title: '<i class="bi bi-cpu text-dark"></i> Running AI Simulation',
         html: `
           <div class="text-center">
             <div class="spinner-border text-primary mb-3" role="status"></div>
@@ -2604,7 +2604,7 @@
         };
 
         Swal.fire({
-          title: '<i class="bi bi-check-circle text-success"></i> AI Simulation Complete',
+          title: '<i class="bi bi-check-circle text-dark"></i> AI Simulation Complete',
           html: `
             <div class="text-start">
               <h6 class="text-primary mb-3">Simulation Results for: ${scenarioTitle}</h6>
@@ -2662,7 +2662,7 @@
     // Schedule AI Review
     async function scheduleAIReview(scenarioTitle, index) {
       const result = await Swal.fire({
-        title: '<i class="bi bi-calendar-event text-warning"></i> Schedule AI Review',
+        title: '<i class="bi bi-calendar-event text-dark"></i> Schedule AI Review',
         html: `
           <form id="swalScheduleReviewForm" class="text-start">
             <p class="mb-3">Schedule a review for AI scenario: <strong>"${scenarioTitle}"</strong></p>
@@ -2760,7 +2760,7 @@
     // Generate Custom Scenario with Confirmation
     async function generateCustomScenarioWithConfirmation() {
       const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-primary"></i> Security Verification Required',
+        title: '<i class="bi bi-shield-lock text-dark"></i> Security Verification Required',
         html: `
           <div class="text-start">
             <p class="mb-3">Please enter your admin password to create a custom AI scenario:</p>
@@ -2824,7 +2824,7 @@
     // Show Custom Scenario Form
     function showCustomScenarioForm() {
       Swal.fire({
-        title: '<i class="bi bi-plus-circle text-primary"></i> Create Custom AI Scenario',
+        title: '<i class="bi bi-plus-circle text-dark"></i> Create Custom AI Scenario',
         html: `
           <form id="swalCustomScenarioForm" class="text-start">
             <div class="mb-3">
@@ -2915,7 +2915,7 @@
     // Generate Custom AI Scenario
     function generateCustomAIScenario(data) {
       Swal.fire({
-        title: '<i class="bi bi-cpu text-primary"></i> AI Processing Custom Scenario',
+        title: '<i class="bi bi-cpu text-dark"></i> AI Processing Custom Scenario',
         html: `
           <div class="text-center">
             <div class="spinner-border text-primary mb-3" role="status"></div>
@@ -3020,7 +3020,7 @@
       console.log('Export Scenario Report function called!'); // Debug log
 
       const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-info"></i> Security Verification Required',
+        title: '<i class="bi bi-shield-lock text-dark"></i> Security Verification Required',
         html: `
           <div class="text-start">
             <p class="mb-3">Please enter your admin password to export scenario reports:</p>
@@ -3086,7 +3086,7 @@
       console.log('Export All Scenario Reports function called!'); // Debug log
 
       const result = await Swal.fire({
-        title: '<i class="bi bi-file-earmark-spreadsheet text-info"></i> Select Export Type',
+        title: '<i class="bi bi-file-earmark-spreadsheet text-dark"></i> Select Export Type',
         html: `
           <form id="swalExportForm" class="text-start">
             <div class="mb-3">
@@ -3139,7 +3139,7 @@
       console.log('Submit Export Request called with type:', exportType); // Debug log
 
       const { value: password } = await Swal.fire({
-        title: '<i class="bi bi-shield-lock text-warning"></i> Security Verification Required',
+        title: '<i class="bi bi-shield-lock text-dark"></i> Security Verification Required',
         html: `
           <div class="text-start">
             <p class="mb-3">Please enter your admin password to export succession planning data:</p>
@@ -3174,7 +3174,7 @@
 
       if (password) {
         Swal.fire({
-          title: '<i class="bi bi-file-earmark-spreadsheet text-info"></i> Exporting Data',
+          title: '<i class="bi bi-file-earmark-spreadsheet text-dark"></i> Exporting Data',
           html: `
             <div class="text-center">
               <div class="spinner-border text-info mb-3" role="status"></div>
@@ -3388,7 +3388,7 @@
                     <i class="bi bi-exclamation-triangle me-1"></i>Key Risk Factors
                   </h6>
                   <ul class="list-unstyled">
-                    ${scenario.keyFactors.map(factor => `<li class="mb-1"><i class="bi bi-dot text-danger"></i>${factor}</li>`).join('')}
+                    ${scenario.keyFactors.map(factor => `<li class="mb-1"><i class="bi bi-dot text-dark"></i>${factor}</li>`).join('')}
                   </ul>
                 </div>
                 <div class="col-md-6">
@@ -3396,7 +3396,7 @@
                     <i class="bi bi-shield-check me-1"></i>Mitigation Strategies
                   </h6>
                   <ul class="list-unstyled">
-                    ${scenario.recommendations.map(rec => `<li class="mb-1"><i class="bi bi-check-circle text-success me-1"></i>${rec}</li>`).join('')}
+                    ${scenario.recommendations.map(rec => `<li class="mb-1"><i class="bi bi-check-circle text-dark me-1"></i>${rec}</li>`).join('')}
                   </ul>
                 </div>
               </div>
@@ -3505,10 +3505,10 @@
 
       // Try to find position in database first
       let position = positions.find(p => p.id == positionId);
-      
+
       // Try multiple ways to get candidates data
       let candidates = [];
-      
+
       // Method 1: Direct position ID lookup
       if (topCandidates[positionId]) {
         candidates = topCandidates[positionId];
@@ -3519,17 +3519,17 @@
       }
       // Method 3: Check if topCandidates is an array and find by position
       else if (Array.isArray(topCandidates)) {
-        candidates = topCandidates.filter(candidate => 
-          candidate.position_id == positionId || 
+        candidates = topCandidates.filter(candidate =>
+          candidate.position_id == positionId ||
           candidate.target_position_id == positionId
         );
       }
-      
+
       // Ensure candidates is always an array
       if (!Array.isArray(candidates)) {
         candidates = [];
       }
-      
+
       // Also try to fetch candidates from API as fallback
       if (candidates.length === 0) {
         try {
@@ -3541,7 +3541,7 @@
           console.warn('Failed to fetch candidates from API:', error);
         }
       }
-      
+
       // Note: Sample candidates removed - now using real data from controller for all positions 1-12
 
       console.log('=== DEBUGGING CANDIDATES DATA ===');
@@ -3571,9 +3571,9 @@
           '11': { id: 11, position_title: 'Ticketing Officer', department: 'Operations', level: 4 },
           '12': { id: 12, position_title: 'Transport Coordinator', department: 'Operations', level: 4 }
         };
-        
+
         position = fallbackPositions[positionId.toString()];
-        
+
         if (!position) {
           Swal.fire({
             icon: 'warning',
@@ -3658,7 +3658,7 @@
           addCandidateWithConfirmation();
         }
       });
-      
+
       // Debug: Log the final state
       console.log(`Final state for position ${positionId}: ${candidates.length} candidates, button will ${candidates.length === 0 ? 'show' : 'hide'}`);
     }
@@ -4238,15 +4238,15 @@
         console.log('addCandidateForm event listener attached successfully');
       }
     }
-    
+
     // Try to initialize the form immediately
     initializeAddCandidateForm();
-    
+
     // Also try to initialize when DOM is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
       initializeAddCandidateForm();
     });
-    
+
     // Initialize when modal is shown (if modal exists)
     const addCandidateModal = document.getElementById('addCandidateModal');
     if (addCandidateModal) {

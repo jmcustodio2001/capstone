@@ -74,20 +74,20 @@
         font-size: 1.2rem;
         margin-right: 0.5rem;
         }
-        
+
         /* Sidebar responsive styles */
         @media (min-width: 768px) {
             #main-content {
                 margin-left: var(--sidebar-width, 280px);
                 transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }
-            
+
             #main-content.expanded {
                 margin-left: 0;
                 width: 100%;
             }
         }
-        
+
         @media (max-width: 767px) {
             #main-content {
                 margin-left: 0;
@@ -207,10 +207,7 @@
             </div>
             <div class="col-md-6">
                 <label class="form-label">Role</label>
-                <select class="form-select" name="role">
-                <option value="superadmin" {{ $admin->role == 'superadmin' ? 'selected' : '' }}>Super Admin</option>
-                <option value="admin" {{ $admin->role == 'admin' ? 'selected' : '' }}>Admin</option>
-                </select>
+                <input type="text" class="form-control" value="{{ ucfirst($admin->role) }}" readonly>
             </div>
             </div>
 
@@ -428,9 +425,9 @@
                     },
                     body: JSON.stringify({ password: password })
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (result.success) {
                     Swal.fire({
                         title: 'Confirmed!',
@@ -470,9 +467,9 @@
                     },
                     body: JSON.stringify({ password: password })
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (result.success) {
                     revokeSession(sessionId);
                 } else {
@@ -504,9 +501,9 @@
                     },
                     body: JSON.stringify({ password: password })
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (result.success) {
                     logoutAllDevices();
                 } else {
@@ -782,9 +779,9 @@
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('main-content');
         const sidebarCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-        
+
         console.log('Initializing sidebar state:', { sidebarCollapsed, sidebar: !!sidebar, mainContent: !!mainContent });
-        
+
         if (sidebar && mainContent) {
             if (sidebarCollapsed) {
                 sidebar.classList.add('collapsed');

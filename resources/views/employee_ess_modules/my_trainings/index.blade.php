@@ -4,18 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  
+
   <!-- IMMEDIATE translation service initialization - MUST be first -->
   <script>
     (function(){window.translationService=window.translationService||{translate:function(k){return k},get:function(k){return k},trans:function(k){return k},choice:function(k){return k},setLocale:function(l){return l},getLocale:function(){return'en'},has:function(){return true},translations:{},setTranslations:function(t){this.translations=t||{}}};window.trans=window.translationService.translate;window.__=window.translationService.translate;window.app=window.app||{locale:'en',fallback_locale:'en',translationService:window.translationService};window.Laravel=window.Laravel||{};window.Laravel.translationService=window.translationService;if(typeof global!=='undefined'){global.translationService=window.translationService}})();
   </script>
-  
+
   <title>Employee Trainings</title>
   <link rel="icon" href="{{ asset('assets/images/jetlouge_logo.png') }}" type="image/png">
-  
+
   <!-- Load translation service FIRST to prevent undefined errors -->
   <script src="{{ asset('js/translation-service-init.js') }}"></script>
-  
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/employee_dashboard-style.css') }}">
@@ -146,30 +146,30 @@
       <div class="card text-center border-0 shadow-sm">
         <div class="card-body py-3">
           @php
-            // EXACT SAME LOGIC as the progress table to ensure consistency
+            // Count trainings that have progress (both approved requests AND competency gap trainings)
             $currentEmployeeId = Auth::user()->employee_id;
-            
-            // Filter to ONLY approved training requests from _requests.blade.php (same as table)
-            $approvedRequestsOnly = collect($progress)->filter(function ($item) use ($currentEmployeeId) {
-                // Only include items that are from approved training requests
-                return isset($item->source) && 
-                       $item->source == 'approved_request' && 
-                       ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId;
+
+            // Filter to include ALL training progress sources with actual progress
+            $trainingProgressItems = collect($progress)->filter(function ($item) use ($currentEmployeeId) {
+                // Include items with progress > 0 from any source
+                return ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId &&
+                       isset($item->source) &&
+                       $item->source !== null;
             });
-            
-            // Group by training title to eliminate any remaining duplicates (same as table)
-            $groupedProgress = $approvedRequestsOnly->groupBy(function ($item) {
+
+            // Group by training title to eliminate any remaining duplicates
+            $groupedProgress = $trainingProgressItems->groupBy(function ($item) {
                 $trainingTitle = strtolower(trim($item->training_title ?? ''));
-                
-                // Normalize training title (EXACT same logic as table)
+
+                // Normalize training title
                 $normalizedTitle = preg_replace('/\s+/', ' ', $trainingTitle);
                 $normalizedTitle = str_replace([' training', ' course', ' program', ' skills'], '', $normalizedTitle);
                 $normalizedTitle = trim($normalizedTitle);
-                
+
                 return $normalizedTitle;
             });
-            
-            // Count unique groups (same as table)
+
+            // Count unique trainings
             $actualProgressCount = $groupedProgress->count();
           @endphp
           <h5 class="text-info mb-1">{{ $actualProgressCount }}</h5>
@@ -267,7 +267,7 @@
     };
 
     window.translationService = translationService;
-    
+
     // Global error handler for this page
     window.addEventListener('error', function(event) {
       if (event.error && event.error.message && event.error.message.includes('translationService')) {
@@ -275,7 +275,7 @@
         return true; // Prevent error from breaking the page
       }
     });
-    
+
     console.log('My-trainings translation service initialized successfully');
   } catch (error) {
     console.error('Error initializing translation service:', error);
@@ -338,7 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Determine which tab to show
     let targetTab = null;
-    
+
     if (tabParam && ['upcoming', 'completed', 'requests', 'progress', 'feedback', 'notifications'].includes(tabParam)) {
         // Show the tab specified in URL parameter
         targetTab = tabParam;
@@ -354,7 +354,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     }
-    
+
     if (targetTab) {
         showSection(targetTab);
     }

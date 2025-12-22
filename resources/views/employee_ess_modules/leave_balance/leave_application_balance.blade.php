@@ -1079,7 +1079,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // AJAX Form submission for new leave application with SweetAlert and Password Verification
+  // AJAX Form submission for new leave application - Confirmation notification disabled
   const leaveFormElement = document.getElementById('leaveForm');
   if (leaveFormElement) {
     console.log('Leave form found, adding event listener');
@@ -1090,32 +1090,24 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = this;
     const formData = new FormData(form);
 
-    // Get form values for confirmation display
+    // Get form values
     const leaveType = form.querySelector('#leave_type').value;
     const leaveDays = form.querySelector('#leave_days').value;
     const startDate = form.querySelector('#start_date').value;
     const endDate = form.querySelector('#end_date').value;
     const reason = form.querySelector('#reason').value;
 
-    // Simple confirmation dialog
-    const confirmMessage = `Please confirm your leave application:\n\nLeave Type: ${leaveType}\nNumber of Days: ${leaveDays}\nStart Date: ${startDate}\nEnd Date: ${endDate}\nReason: ${reason}\n\nDo you want to submit this leave request?`;
+    // Notification confirmation disabled - submitting directly
+    // No confirmation dialog or password prompt required
 
-    if (confirm(confirmMessage)) {
-      // Get password for verification
-      const password = prompt('Please enter your password to verify this request:');
-      if (password && password.length >= 6) {
-        // Close the modal first
-        const modal = bootstrap.Modal.getInstance(document.getElementById('applyLeaveModal'));
-        if (modal) {
-          modal.hide();
-        }
-
-        // Verify password and submit
-        verifyEmployeePassword(password, form, formData);
-      } else if (password !== null) {
-        alert('Password must be at least 6 characters long.');
-      }
+    // Close the modal first
+    const modal = bootstrap.Modal.getInstance(document.getElementById('applyLeaveModal'));
+    if (modal) {
+      modal.hide();
     }
+
+    // Submit form directly without confirmation
+    submitLeaveApplication(form, formData);
   });
   }
 
@@ -1199,8 +1191,7 @@ document.addEventListener('DOMContentLoaded', function() {
       console.log('Response data:', data);
 
       if (data.success) {
-        // Show success message
-        alert(data.message || 'Your leave application has been submitted successfully.');
+        // Success - no notification shown
         // Close modal and reset form
         bootstrap.Modal.getInstance(document.getElementById('applyLeaveModal')).hide();
         form.reset();

@@ -6,14 +6,15 @@
   </div>
   <div class="card-body">
     <div class="table-responsive">
-      <table class="table table-hover align-middle">
+      <table class="table align-middle">
         <thead class="table-light">
           <tr>
             <th>Training ID</th>
             <th>Training Title</th>
-            <th>Reason</th>
+            <th>Source</th>
             <th>Status</th>
-            <th>Requested Date</th>
+            <th>Assigned Date</th>
+            <th>Expiration Date</th>
             <th class="text-center">Actions</th>
           </tr>
         </thead>
@@ -22,26 +23,49 @@
             <tr>
               <td>{{ $index + 1 }}</td>
               <td>{{ $r->training_title ?? 'N/A' }}</td>
-              <td>{{ $r->reason ?? 'N/A' }}</td>
               <td>
-                <span class="badge {{ ($r->status ?? 'Pending') == 'Approved' ? 'bg-success' : (($r->status ?? 'Pending') == 'Rejected' ? 'bg-danger' : 'bg-warning text-dark') }}">
-                  {{ $r->status ?? 'Pending' }}
+                <span class="badge {{ ($r->source ?? 'N/A') == 'competency_gap' ? 'bg-info' : 'bg-secondary' }}">
+                  {{ ucfirst(str_replace('_', ' ', $r->source ?? 'N/A')) }}
                 </span>
               </td>
-              <td>{{ $r->requested_date ?? now()->format('Y-m-d') }}</td>
+              <td>
+                <span class="badge {{ ($r->status ?? 'Assigned') == 'Assigned' ? 'bg-info' : 'bg-secondary' }}">
+                  {{ $r->status ?? 'Assigned' }}
+                </span>
+              </td>
+              <td>{{ isset($r->assigned_date) ? \Carbon\Carbon::parse($r->assigned_date)->format('M d, Y') : 'N/A' }}</td>
+              <td>
+                @php
+                  $endDate = isset($r->end_date) ? \Carbon\Carbon::parse($r->end_date) : null;
+                  $daysLeft = $endDate ? $endDate->diffInDays(now(), false) : 0;
+                  $isExpired = $endDate && $endDate->isPast();
+                @endphp
+                <span class="badge {{ $isExpired ? 'bg-danger' : ($daysLeft <= 7 ? 'bg-warning text-dark' : 'bg-success') }}">
+                  {{ $endDate ? $endDate->format('M d, Y') : 'N/A' }}
+                  @if($daysLeft > 0)
+                    <small>({{ $daysLeft }} days)</small>
+                  @elseif($isExpired)
+                    <small>(Expired)</small>
+                  @endif
+                </span>
+              </td>
               <td class="text-center">
-                <button class="btn btn-outline-info btn-sm" onclick="viewDetails('{{ $r->training_title ?? 'N/A' }}')">
+                <button class="btn btn-outline-info btn-sm" onclick="viewTrainingRequest('{{ $r->training_title ?? 'N/A' }}', '{{ $r->source ?? 'N/A' }}')">
                   <i class="bi bi-eye"></i>
                 </button>
-                @if(($r->status ?? 'Pending') == 'Approved' || isset($r->course_id))
+                @if(($r->source ?? '') == 'competency_gap')
+                  <a href="/employee/exam/start/{{ $r->destination_training_id ?? 1 }}" class="btn btn-primary btn-sm" target="_blank">
+                    <i class="fas fa-book"></i> Start Training
+                  </a>
+                @else
                   <a href="/employee/exam/start/{{ $r->course_id ?? 1 }}" class="btn btn-primary btn-sm" target="_blank">
-                    <i class="fas fa-edit"></i> Take Exam
+                    <i class="fas fa-book"></i> Start Training
                   </a>
                 @endif
               </td>
             </tr>
           @empty
-            <tr><td colspan="6" class="text-center text-muted">No training requests</td></tr>
+            <tr><td colspan="7" class="text-center text-muted">No training requests</td></tr>
           @endforelse
         </tbody>
       </table>
@@ -50,7 +74,7 @@
 </div>
 
 <script>
-function viewDetails(title) {
-  alert('Training: ' + title);
+function viewTrainingRequest(title, source) {
+  alert('Training: ' + title + '\nSource: ' + source);
 }
 </script>

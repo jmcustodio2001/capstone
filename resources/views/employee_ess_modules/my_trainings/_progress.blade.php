@@ -24,45 +24,55 @@
         </thead>
         <tbody>
           @php
-            // ONLY show approved training requests - no other sources
+            // Show progress for both approved training requests AND competency gap trainings
             $currentEmployeeId = Auth::user()->employee_id;
-            
-            // Filter to ONLY approved training requests from _requests.blade.php
-            $approvedRequestsOnly = collect($progress)->filter(function ($item) use ($currentEmployeeId) {
-                // Only include items that are from approved training requests
-                return isset($item->source) && 
-                       $item->source == 'approved_request' && 
-                       ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId;
+
+            // Filter to include BOTH:
+            // 1. Approved training requests from _requests.blade.php
+            // 2. Trainings from competency gaps
+            $trainingProgressItems = collect($progress)->filter(function ($item) use ($currentEmployeeId) {
+                // Include approved requests
+                if(isset($item->source) && $item->source == 'approved_request') {
+                    return ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId;
+                }
+
+                // Also include competency gap trainings
+                if(isset($item->source) && $item->source == 'competency_gap') {
+                    return ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId;
+                }
+
+                // Include other training progress sources
+                return isset($item->source) && ($item->employee_id ?? $currentEmployeeId) == $currentEmployeeId;
             });
-            
+
             // Group by training title to eliminate any remaining duplicates
-            $groupedProgress = $approvedRequestsOnly->groupBy(function ($item) {
+            $groupedProgress = $trainingProgressItems->groupBy(function ($item) {
                 $trainingTitle = strtolower(trim($item->training_title ?? ''));
-                
+
                 // Normalize training title
                 $normalizedTitle = preg_replace('/\s+/', ' ', $trainingTitle);
                 $normalizedTitle = str_replace([' training', ' course', ' program', ' skills'], '', $normalizedTitle);
                 $normalizedTitle = trim($normalizedTitle);
-                
+
                 return $normalizedTitle;
             });
-            
+
             // Take only one item per unique training and add sequential ID
             $uniqueProgress = collect();
             $sequentialId = 1;
-            
+
             foreach ($groupedProgress as $group) {
-                // Get the most recent approved request
+                // Get the most recent item (could be from approved request or competency gap)
                 $bestItem = $group->sortByDesc(function($item) {
                     $updated = $item->last_updated ?? $item->updated_at ?? now();
                     return strtotime($updated);
                 })->first();
-                
+
                 // Add sequential ID for display
                 $bestItem->display_id = $sequentialId++;
                 $uniqueProgress->push($bestItem);
             }
-            
+
             // Sort by display ID to maintain consistent order
             $uniqueProgress = $uniqueProgress->sortBy('display_id')->values();
           @endphp
@@ -151,7 +161,7 @@
                       ->whereIn('status', ['completed', 'failed']) // Include both passed and failed attempts
                       ->orderBy('completed_at', 'desc')
                       ->first();
-                    
+
                     if ($examAttempt) {
                       // Use actual exam score for progress, but set to 100% if passed (>=80%)
                       $actualScore = round($examAttempt->score);
@@ -180,7 +190,7 @@
                       ->whereHas('competency', function($query) use ($competencyName) {
                         $query->where('competency_name', 'LIKE', '%' . $competencyName . '%');
                       })->first();
-                    
+
                     if ($competencyProfile && $competencyProfile->proficiency_level > 0) {
                       $progressValue = min(100, round(($competencyProfile->proficiency_level / 5) * 100));
                       $progressSource = 'competency';
@@ -194,7 +204,7 @@
                       $dashboardRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
                         ->where('course_id', $p->course_id)
                         ->first();
-                      
+
                       if ($dashboardRecord) {
                         $progressValue = max(0, min(100, (float)$dashboardRecord->progress));
                         $progressSource = 'approved_request_dashboard';
@@ -216,7 +226,7 @@
                     $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
                       ->where('destination_name', 'LIKE', '%' . $p->training_title . '%')
                       ->first();
-                    
+
                     if ($destinationRecord && $destinationRecord->progress > 0) {
                       $progressValue = min(100, round($destinationRecord->progress));
                       $progressSource = 'destination';
@@ -226,14 +236,14 @@
                   // Calculate expired date from available sources
                   $expiredDate = null;
                   $expiredDateSource = 'none';
-                  
+
                   // Priority 1: Check competency gap
                   $competencyGap = \App\Models\CompetencyGap::where('employee_id', $employeeId)->first();
                   if ($competencyGap && $competencyGap->expired_date) {
                     $expiredDate = $competencyGap->expired_date;
                     $expiredDateSource = 'competency_gap';
                   }
-                  
+
                   // Priority 2: Check training dashboard
                   if (!$expiredDate && isset($p->course_id)) {
                     $trainingRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
@@ -244,7 +254,7 @@
                       $expiredDateSource = 'training_dashboard';
                     }
                   }
-                  
+
                   // Priority 3: Use request data if available
                   if (!$expiredDate && isset($p->expired_date)) {
                     $expiredDate = $p->expired_date;
@@ -281,7 +291,7 @@
                     @endif
                   </div>
                 </div>
-                
+
                 {{-- Show progress source --}}
                 @if($progressSource !== 'none')
                   <small class="text-muted d-block mt-1">
@@ -367,7 +377,7 @@
                 @php
                   $lastUpdated = $p->last_updated ?? now();
                   $updateSource = 'System';
-                  
+
                   if(isset($p->source)) {
                     switch($p->source) {
                       case 'approved_request':
@@ -619,13 +629,13 @@ document.getElementById('viewProgressModal')?.addEventListener('show.bs.modal', 
   else if (status === 'Started') statusBadgeClass = 'bg-primary';
   else if (status === 'Failed') statusBadgeClass = 'bg-danger';
   else if (status === 'Ready to Start') statusBadgeClass = 'bg-info';
-  
+
   document.getElementById('viewStatus').innerHTML = `<span class="badge ${statusBadgeClass}">${status || 'Unknown'}</span>`;
 
   // Format source display with icons
   let sourceDisplay = source || 'Not specified';
   let sourceIcon = 'bi-info-circle';
-  
+
   if (source === 'approved_request') {
     sourceDisplay = 'From Training Request';
     sourceIcon = 'bi-check-circle';
@@ -651,7 +661,7 @@ document.getElementById('viewProgressModal')?.addEventListener('show.bs.modal', 
     sourceDisplay = 'From System Data';
     sourceIcon = 'bi-database';
   }
-  
+
   document.getElementById('viewSource').innerHTML = `<i class="${sourceIcon} me-2"></i>${sourceDisplay}`;
 
   // Create progress bar with proper value handling
@@ -683,7 +693,7 @@ document.getElementById('viewProgressModal')?.addEventListener('show.bs.modal', 
           const scoreIcon = data.score >= 80 ? 'bi-check-circle' : 'bi-x-circle';
           document.getElementById('viewExamScore').innerHTML = `
             <span class="${scoreColor}">
-              <i class="bi ${scoreIcon} me-2"></i>${data.score}% 
+              <i class="bi ${scoreIcon} me-2"></i>${data.score}%
               <small class="text-muted">(${data.date})</small>
             </span>
           `;
@@ -725,7 +735,7 @@ function refreshProgressData() {
   const urlParams = new URLSearchParams(window.location.search);
   const fromExam = urlParams.get('from_exam');
   const examCompleted = urlParams.get('exam_completed');
-  
+
   if (fromExam === 'true' || examCompleted === 'true') {
     // Wait a moment for database updates to complete, then refresh
     setTimeout(() => {
@@ -750,7 +760,7 @@ function manualRefreshProgress() {
   const originalText = refreshBtn.innerHTML;
   refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i> Refreshing...';
   refreshBtn.disabled = true;
-  
+
   // Show SweetAlert loading
   Swal.fire({
     title: 'Refreshing Progress',
@@ -762,7 +772,7 @@ function manualRefreshProgress() {
       Swal.showLoading();
     }
   });
-  
+
   // Force refresh after short delay
   setTimeout(() => {
     window.location.reload();
@@ -802,10 +812,10 @@ window.addEventListener('DOMContentLoaded', refreshProgressData);
 
 // Redirect to completed section with SweetAlert
 function redirectToCompleted(trainingTitle, examScore) {
-  const message = examScore >= 80 ? 
+  const message = examScore >= 80 ?
     `Congratulations! You completed "${trainingTitle}" with ${examScore}% score.` :
     `Training "${trainingTitle}" completed.`;
-  
+
   Swal.fire({
     title: 'Training Completed!',
     text: message + ' Would you like to view it in Completed Trainings?',
@@ -947,7 +957,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
   // Format source display with icons
   let sourceDisplay = source || 'Not specified';
   let sourceIcon = 'bi-info-circle';
-  
+
   if (source === 'exam') {
     sourceDisplay = 'From Exam Score';
     sourceIcon = 'bi-mortarboard';
@@ -1001,7 +1011,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
               </div>
             </div>
           </div>
-          
+
           <div class="col-8">
             <div class="card border-success">
               <div class="card-header bg-success bg-opacity-10">
@@ -1019,7 +1029,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
               </div>
             </div>
           </div>
-          
+
           <div class="col-4">
             <div class="card border-info">
               <div class="card-header bg-info bg-opacity-10">
@@ -1032,7 +1042,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
               </div>
             </div>
           </div>
-          
+
           <div class="col-6">
             <div class="card border-warning">
               <div class="card-header bg-warning bg-opacity-10">
@@ -1045,7 +1055,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
               </div>
             </div>
           </div>
-          
+
           <div class="col-6">
             <div class="card border-danger">
               <div class="card-header bg-danger bg-opacity-10">
@@ -1058,7 +1068,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
               </div>
             </div>
           </div>
-          
+
           <div class="col-12">
             <div class="card border-secondary">
               <div class="card-header bg-secondary bg-opacity-10">
@@ -1071,7 +1081,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
               </div>
             </div>
           </div>
-          
+
           <div class="col-12">
             <div class="card border-light">
               <div class="card-header bg-light">
@@ -1106,7 +1116,7 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
           const scoreColor = data.score >= 80 ? 'text-success' : 'text-danger';
           const scoreIcon = data.score >= 80 ? 'bi-check-circle' : 'bi-x-circle';
           const scoreBadge = data.score >= 80 ? 'bg-success' : 'bg-danger';
-          
+
           // Update the SweetAlert content to include exam score
           const examScoreHtml = `
             <div class="col-12 mt-3">
@@ -1132,8 +1142,8 @@ function viewProgressDetails(progressId, title, percent, status, updated, remark
               </div>
             </div>
           `;
-          
-          // Note: We can't easily update the existing SweetAlert content, 
+
+          // Note: We can't easily update the existing SweetAlert content,
           // but the exam score info is already shown in the main table
         }
       })

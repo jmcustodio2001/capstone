@@ -315,9 +315,9 @@ class MyTrainingController extends Controller
         try {
             // Ensure the notifications table exists
             $this->ensureTrainingNotificationsTableExists();
-            
+
             Log::info("Processing {$employeeId} - Total upcoming trainings to process: " . count($upcomingTrainings));
-            
+
             foreach ($upcomingTrainings as $index => $training) {
                 // Handle both array and object formats
                 if (is_array($training)) {
@@ -326,25 +326,25 @@ class MyTrainingController extends Controller
                     Log::warning("Skipping invalid training data at index {$index}: " . json_encode($training));
                     continue;
                 }
-                
+
                 Log::info("Processing training {$index}: " . json_encode([
                     'title' => $training->training_title ?? 'N/A',
                     'source' => $training->source ?? 'N/A',
                     'upcoming_id' => $training->upcoming_id ?? 'N/A'
                 ]));
-                
+
                 // Check if notification already exists for this training (more specific check)
                 $trainingTitle = $training->training_title ?? '';
                 $existingNotification = TrainingNotification::where('employee_id', $employeeId)
                     ->where('message', 'LIKE', '%' . str_replace("'", "''", $trainingTitle) . '%')
                     ->where('created_at', '>=', now()->subDays(7)) // Only check recent notifications
                     ->first();
-                
+
                 if (!$existingNotification && !empty($training->training_title)) {
                     // Create notification based on training source
                     $message = '';
                     $source = $training->source ?? 'unknown';
-                    
+
                     switch ($source) {
                         case 'admin_assigned':
                             $message = "You have been assigned a new training: '{$training->training_title}' by admin.";
@@ -360,19 +360,19 @@ class MyTrainingController extends Controller
                             $message = "You have a new upcoming training: '{$training->training_title}'.";
                             break;
                     }
-                    
+
                     $notification = TrainingNotification::create([
                         'employee_id' => $employeeId,
                         'message' => $message,
                         'sent_at' => now()
                     ]);
-                    
+
                     Log::info("Successfully created notification ID {$notification->id} for training: {$training->training_title} (Source: {$source})");
                 } else {
                     Log::info("Skipping notification creation - either exists or empty title. Title: '{$trainingTitle}', Existing: " . ($existingNotification ? 'Yes' : 'No'));
                 }
             }
-            
+
             // If no notifications were created and we have upcoming trainings, create a summary notification
             $notificationCount = TrainingNotification::where('employee_id', $employeeId)->count();
             if ($notificationCount == 0 && count($upcomingTrainings) > 0) {
@@ -384,7 +384,7 @@ class MyTrainingController extends Controller
                 ]);
                 Log::info("Created summary notification for {$employeeId}");
             }
-            
+
         } catch (\Exception $e) {
             Log::error('Error creating notifications for upcoming trainings: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
@@ -408,7 +408,7 @@ class MyTrainingController extends Controller
         // Clear any cached data first to ensure fresh counts
         Cache::forget("employee_training_counts_{$employeeId}");
         Cache::forget("upcoming_trainings_{$employeeId}");
-        
+
         // Get all upcoming trainings including competency gap assignments
         $manualUpcoming = UpcomingTraining::where('employee_id', $employeeId)->get()->map(function($training) use ($employeeId) {
             // Fix expiration date for competency gap trainings
@@ -419,7 +419,7 @@ class MyTrainingController extends Controller
                         $query->where('competency_name', $training->training_title);
                     })
                     ->first();
-                
+
                 if ($competencyGap && $competencyGap->expired_date) {
                     $training->end_date = $competencyGap->expired_date;
                     $training->expired_date = $competencyGap->expired_date;
@@ -459,7 +459,7 @@ class MyTrainingController extends Controller
                 $trainingYear = $training->created_at->format('Y');
                 $sequentialNumber = str_pad($training->id, 4, '0', STR_PAD_LEFT);
                 $properTrainingId = "TR{$trainingYear}{$sequentialNumber}";
-                
+
                 // Calculate proper expired date
                 $expiredDate = $competencyGapExpiredDate ?? $training->expired_date ?? ($training->course ? $training->course->expired_date : null);
                 if (!$expiredDate && $training->course && $training->course->start_date) {
@@ -501,7 +501,7 @@ class MyTrainingController extends Controller
                 $assignmentYear = $assignment->created_at->format('Y');
                 $sequentialNumber = str_pad($assignment->id, 4, '0', STR_PAD_LEFT);
                 $properAssignmentId = "CA{$assignmentYear}{$sequentialNumber}";
-                
+
                 // Calculate proper expired date for competency assignment
                 $expiredDate = $assignment->expired_date;
                 if (!$expiredDate && $assignment->course && $assignment->course->start_date) {
@@ -528,7 +528,7 @@ class MyTrainingController extends Controller
 
         // Fix expiration dates for destination trainings before retrieving them
         $this->fixDestinationExpirationDates();
-        
+
         // Fix expiration dates for competency gap trainings
         $this->fixCompetencyGapExpirationDates();
 
@@ -539,7 +539,7 @@ class MyTrainingController extends Controller
             ->where('source', 'destination_assigned')
             ->pluck('training_title')
             ->toArray();
-            
+
         $destinationAssigned = DestinationKnowledgeTraining::where('employee_id', $employeeId)
             ->where('admin_approved_for_upcoming', true) // Only show if explicitly approved via Auto-Assign button
             ->whereNotIn('status', ['completed', 'declined']) // Exclude completed and declined
@@ -564,13 +564,13 @@ class MyTrainingController extends Controller
                 $destinationYear = $training->created_at->format('Y');
                 $sequentialNumber = str_pad($training->id, 4, '0', STR_PAD_LEFT);
                 $properDestinationId = "DT{$destinationYear}{$sequentialNumber}";
-                
+
                 // Use proper expired date or calculate one
                 $expiredDate = $training->expired_date;
                 if (!$expiredDate) {
                     $expiredDate = $training->created_at->addMonths(3);
                 }
-                
+
                 // Get the actual admin name who assigned this training
                 $assignedByName = 'Admin User';
                 try {
@@ -578,7 +578,7 @@ class MyTrainingController extends Controller
                     $upcomingTraining = \App\Models\UpcomingTraining::where('employee_id', $training->employee_id)
                         ->where('destination_training_id', $training->id)
                         ->first();
-                    
+
                     if ($upcomingTraining && !empty($upcomingTraining->assigned_by_name) && $upcomingTraining->assigned_by_name !== '1') {
                         $assignedByName = $upcomingTraining->assigned_by_name;
                     } elseif ($upcomingTraining && $upcomingTraining->assigned_by) {
@@ -593,19 +593,19 @@ class MyTrainingController extends Controller
                             }
                         }
                     }
-                    
+
                     // If still no name found or showing numeric ID, try to fix it
                     if ($upcomingTraining && (empty($upcomingTraining->assigned_by_name) || is_numeric($upcomingTraining->assigned_by_name))) {
                         // Fix the assigned_by_name based on source or user lookup
                         $fixedName = null;
-                        
+
                         if (is_numeric($upcomingTraining->assigned_by)) {
                             $user = \App\Models\User::find($upcomingTraining->assigned_by);
                             if ($user && !empty($user->name)) {
                                 $fixedName = $user->name;
                             }
                         }
-                        
+
                         // If no user found, try to get from destination training record itself
                         if (!$fixedName && $training->assigned_by) {
                             if (is_numeric($training->assigned_by)) {
@@ -615,19 +615,19 @@ class MyTrainingController extends Controller
                                 }
                             }
                         }
-                        
+
                         // Final fallback
                         if (!$fixedName) {
                             $fixedName = 'Admin User'; // Default for destination training
                         }
-                        
+
                         $upcomingTraining->assigned_by_name = $fixedName;
                         $upcomingTraining->save();
                         $assignedByName = $fixedName;
-                        
+
                         Log::info("Fixed assigned_by_name for upcoming training ID {$upcomingTraining->upcoming_id}: {$fixedName}");
                     }
-                    
+
                     // If no upcoming training record exists, try to get from destination training record
                     if (!$upcomingTraining && $training->assigned_by && is_numeric($training->assigned_by)) {
                         $user = \App\Models\User::find($training->assigned_by);
@@ -635,11 +635,11 @@ class MyTrainingController extends Controller
                             $assignedByName = $user->name;
                         }
                     }
-                    
+
                 } catch (\Exception $e) {
                     Log::warning('Error getting assigned by name for destination training: ' . $e->getMessage());
                 }
-                
+
                 return (object)[
                     'upcoming_id' => $properDestinationId,
                     'training_title' => $training->destination_name,
@@ -730,7 +730,7 @@ class MyTrainingController extends Controller
             ->merge($adminAssigned->toArray())
             ->merge($competencyAssigned->toArray());
             // Note: destinationAssigned excluded from training requests - they have their own workflow
-            
+
         // 2. For upcoming trainings view: include ALL trainings including destination trainings
         $allTrainingsForUpcoming = collect()
             ->merge($manualUpcoming->toArray())
@@ -743,37 +743,37 @@ class MyTrainingController extends Controller
         $seenCourseIds = [];
         $upcoming = $allTrainingsForUpcoming->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
             $item = (object) $item;
-            
+
             // Get raw training title
             $rawTitle = $item->training_title ?? '';
-            
+
             // Skip if training title is empty or generic
             if (empty(trim($rawTitle)) || in_array(strtolower(trim($rawTitle)), ['training course', 'unknown course', 'unknown', 'course', 'n/a'])) {
                 return false;
             }
-            
+
             // Normalize title for comparison
             $normalizedTitle = strtolower(trim($rawTitle));
             $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/i', '', $normalizedTitle);
             $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
-            
+
             // Check for duplicates by course_id first (most reliable)
             $courseId = $item->course_id ?? null;
             if ($courseId && in_array($courseId, $seenCourseIds)) {
                 return false; // Skip duplicate course_id
             }
-            
+
             // Check for duplicates by normalized title
             if (in_array($normalizedTitle, $seenTitles)) {
                 return false; // Skip duplicate title
             }
-            
+
             // Add to seen lists
             if ($courseId) {
                 $seenCourseIds[] = $courseId;
             }
             $seenTitles[] = $normalizedTitle;
-            
+
             return true;
         })->map(function($item) {
             return (object) $item;
@@ -784,37 +784,37 @@ class MyTrainingController extends Controller
         $seenCourseIdsForRequests = [];
         $upcomingForRequests = $allTrainingsForRequests->filter(function($item) use (&$seenTitlesForRequests, &$seenCourseIdsForRequests) {
             $item = (object) $item;
-            
+
             // Get raw training title
             $rawTitle = $item->training_title ?? '';
-            
+
             // Skip if training title is empty or generic
             if (empty(trim($rawTitle)) || in_array(strtolower(trim($rawTitle)), ['training course', 'unknown course', 'unknown', 'course', 'n/a'])) {
                 return false;
             }
-            
+
             // Normalize title for comparison
             $normalizedTitle = strtolower(trim($rawTitle));
             $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/i', '', $normalizedTitle);
             $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
-            
+
             // Check for duplicates by course_id first (most reliable)
             $courseId = $item->course_id ?? null;
             if ($courseId && in_array($courseId, $seenCourseIdsForRequests)) {
                 return false; // Skip duplicate course_id
             }
-            
+
             // Check for duplicates by normalized title
             if (in_array($normalizedTitle, $seenTitlesForRequests)) {
                 return false; // Skip duplicate title
             }
-            
+
             // Add to seen lists
             if ($courseId) {
                 $seenCourseIdsForRequests[] = $courseId;
             }
             $seenTitlesForRequests[] = $normalizedTitle;
-            
+
             return true;
         })->map(function($item) {
             return (object) $item;
@@ -1313,8 +1313,43 @@ class MyTrainingController extends Controller
                 ];
             });
 
+        // Get training progress from competency gap assignments
+        $competencyGapProgress = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
+            ->where('source', 'competency_gap')
+            ->get()
+            ->map(function($training) use ($employeeId) {
+                // Check if there's progress for this training
+                $dashboardRecord = EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                    ->where('training_title', $training->training_title)
+                    ->first();
+
+                // Calculate progress from dashboard or default to 0
+                $actualProgress = 0;
+                $lastUpdated = $training->assigned_date ? $training->assigned_date->format('Y-m-d H:i') : now()->format('Y-m-d H:i');
+
+                if ($dashboardRecord) {
+                    $actualProgress = $dashboardRecord->progress ?? 0;
+                    $lastUpdated = $dashboardRecord->updated_at->format('Y-m-d H:i');
+                }
+
+                return (object)[
+                    'progress_id' => 'gap_' . $training->upcoming_id,
+                    'training_title' => $training->training_title,
+                    'progress' => $actualProgress,
+                    'progress_percentage' => $actualProgress,
+                    'last_updated' => $lastUpdated,
+                    'status' => $actualProgress >= 100 ? 'Completed' : ($actualProgress > 0 ? 'In Progress' : 'Ready to Start'),
+                    'source' => 'competency_gap',
+                    'destination_training_id' => $training->destination_training_id,
+                    'upcoming_id' => $training->upcoming_id,
+                    'can_start_exam' => $actualProgress >= 0,
+                    'exam_quiz_scores' => $dashboardRecord ? ExamAttempt::getBestScores($employeeId, $dashboardRecord->course_id ?? null) : null,
+                    'expired_date' => $training->end_date ? $training->end_date->format('Y-m-d H:i:s') : null
+                ];
+            });
+
         // Combine all progress sources and deduplicate
-        $allProgress = $dashboardProgress->concat($manualProgress)->concat($approvedRequests);
+        $allProgress = $dashboardProgress->concat($manualProgress)->concat($approvedRequests)->concat($competencyGapProgress);
 
         // Deduplicate based on course_id and training title to prevent duplicates
         $progress = $allProgress->unique(function ($item) {
@@ -1339,21 +1374,21 @@ class MyTrainingController extends Controller
             return $group->sortByDesc('progress_percentage')->first();
         })
         ->values();
-        
+
         // DIRECT FIX: Create notifications immediately for upcoming trainings
         $this->ensureTrainingNotificationsTableExists();
-        
+
         // Force create notifications for each upcoming training
         foreach ($upcoming as $training) {
             $trainingObj = (object) $training;
             $trainingTitle = $trainingObj->training_title ?? '';
-            
+
             if (!empty($trainingTitle)) {
                 // Check if notification exists
                 $exists = TrainingNotification::where('employee_id', $employeeId)
                     ->where('message', 'LIKE', '%' . $trainingTitle . '%')
                     ->exists();
-                
+
                 if (!$exists) {
                     TrainingNotification::create([
                         'employee_id' => $employeeId,
@@ -1363,12 +1398,12 @@ class MyTrainingController extends Controller
                 }
             }
         }
-        
+
         $feedback = TrainingFeedback::where('employee_id', $employeeId)->get();
         $notifications = TrainingNotification::where('employee_id', $employeeId)->orderBy('sent_at', 'desc')->get();
 
         // Get training requests for the employee with course relationship
-        $trainingRequests = TrainingRequest::with('course')
+        $trainingRequestsFromTable = TrainingRequest::with('course')
             ->where('employee_id', $employeeId)
             ->get()
             ->filter(function($request) {
@@ -1378,6 +1413,29 @@ class MyTrainingController extends Controller
                 }
                 return true;
             });
+
+        // Also get training requests from upcoming_trainings table that come from competency_gap
+        $competencyGapTrainings = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
+            ->where('source', 'competency_gap')
+            ->get()
+            ->map(function($training) {
+                return (object)[
+                    'id' => $training->upcoming_id,
+                    'employee_id' => $training->employee_id,
+                    'training_title' => $training->training_title,
+                    'reason' => 'Assigned from Competency Gap',
+                    'status' => $training->status,
+                    'requested_date' => $training->assigned_date,
+                    'assigned_date' => $training->assigned_date,
+                    'source' => $training->source,
+                    'end_date' => $training->end_date,
+                    'destination_training_id' => $training->destination_training_id,
+                    'course' => null
+                ];
+            });
+
+        // Merge both training request sources
+        $trainingRequests = $trainingRequestsFromTable->concat($competencyGapTrainings);
 
         // Get readiness rating for the employee
         $readinessRatingRecord = SuccessionReadinessRating::where('employee_id', $employeeId)->first();
@@ -1427,7 +1485,7 @@ class MyTrainingController extends Controller
         // FALLBACK: If no completed trainings found, check for 100% progress trainings
         if ($completedTrainings->count() === 0) {
             Log::info('No completed trainings found, checking for 100% progress trainings...');
-            
+
             // Check training dashboard for 100% progress
             $progressCompleted = EmployeeTrainingDashboard::with('course')
                 ->where('employee_id', $employeeId)
@@ -1443,7 +1501,7 @@ class MyTrainingController extends Controller
                         'course_id' => $training->course_id
                     ];
                 });
-            
+
             // Check for any training requests with 100% exam progress
             $examCompleted = TrainingRequest::with('course')
                 ->where('employee_id', $employeeId)
@@ -1463,9 +1521,9 @@ class MyTrainingController extends Controller
                         'course_id' => $request->course_id
                     ];
                 });
-            
+
             $completedTrainings = $progressCompleted->concat($examCompleted);
-            
+
             Log::info('FALLBACK COMPLETED TRAININGS FOUND:', [
                 'employee_id' => $employeeId,
                 'progress_completed_count' => $progressCompleted->count(),
@@ -1503,17 +1561,17 @@ class MyTrainingController extends Controller
     public function getTrainingCounts()
     {
         $employeeId = Auth::user()->employee_id;
-        
+
         // Clear caches to ensure fresh data
         Cache::forget("employee_training_counts_{$employeeId}");
         Cache::forget("upcoming_trainings_{$employeeId}");
         Cache::forget("training_requests_{$employeeId}");
         Cache::forget("training_progress_{$employeeId}");
-        
+
         // Get fresh counts using the same logic as index method
         // Upcoming trainings count
         $upcomingCount = $this->getUpcomingTrainingsCount($employeeId);
-        
+
         // Training requests count (excluding recently unassigned)
         $requestsCount = TrainingRequest::where('employee_id', $employeeId)
             ->whereNotExists(function($query) use ($employeeId) {
@@ -1523,13 +1581,13 @@ class MyTrainingController extends Controller
                       ->where('competency_gaps.employee_id', $employeeId)
                       ->where('competency_gaps.assigned_to_training', false)
                       ->where('competency_gaps.updated_at', '>', now()->subMinutes(5))
-                      ->whereRaw('(training_requests.training_title LIKE CONCAT("%", competency_library.competency_name, "%") 
+                      ->whereRaw('(training_requests.training_title LIKE CONCAT("%", competency_library.competency_name, "%")
                                   OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Training", ""), "%")
                                   OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Course", ""), "%")
                                   OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Program", ""), "%"))');
             })
             ->count();
-        
+
         // Training progress count (only approved requests that haven't been recently unassigned)
         $progressCount = TrainingRequest::where('employee_id', $employeeId)
             ->where('status', 'Approved')
@@ -1540,13 +1598,13 @@ class MyTrainingController extends Controller
                       ->where('competency_gaps.employee_id', $employeeId)
                       ->where('competency_gaps.assigned_to_training', false)
                       ->where('competency_gaps.updated_at', '>', now()->subMinutes(5))
-                      ->whereRaw('(training_requests.training_title LIKE CONCAT("%", competency_library.competency_name, "%") 
+                      ->whereRaw('(training_requests.training_title LIKE CONCAT("%", competency_library.competency_name, "%")
                                   OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Training", ""), "%")
                                   OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Course", ""), "%")
                                   OR training_requests.training_title LIKE CONCAT("%", REPLACE(competency_library.competency_name, " Program", ""), "%"))');
             })
             ->count();
-        
+
         return response()->json([
             'success' => true,
             'counts' => [
@@ -1572,7 +1630,7 @@ class MyTrainingController extends Controller
             ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
             ->whereHas('course')
             ->get();
-        
+
         // Apply the same deduplication logic as in index method
         $allTrainings = collect()
             ->merge($manualUpcoming->toArray())
@@ -1583,33 +1641,33 @@ class MyTrainingController extends Controller
         $seenCourseIds = [];
         $deduplicated = $allTrainings->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
             $item = (object) $item;
-            
+
             $rawTitle = $item->training_title ?? '';
             if (empty(trim($rawTitle))) {
                 return false;
             }
-            
+
             $normalizedTitle = strtolower(trim($rawTitle));
             $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development)\b/i', '', $normalizedTitle);
             $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
-            
+
             $courseId = $item->course_id ?? null;
             if ($courseId && in_array($courseId, $seenCourseIds)) {
                 return false;
             }
-            
+
             if (in_array($normalizedTitle, $seenTitles)) {
                 return false;
             }
-            
+
             if ($courseId) {
                 $seenCourseIds[] = $courseId;
             }
             $seenTitles[] = $normalizedTitle;
-            
+
             return true;
         });
-        
+
         return $deduplicated->count();
     }
 
@@ -1877,7 +1935,7 @@ class MyTrainingController extends Controller
         if ($trainingRequest) {
             // Check if this is an approved request deletion
             $deleteApproved = isset($requestData['delete_approved']) && $requestData['delete_approved'];
-            
+
             if ($trainingRequest->status == 'Approved' && $deleteApproved) {
                 // Enhanced deletion for approved requests - remove related records
                 try {
@@ -1887,19 +1945,19 @@ class MyTrainingController extends Controller
                         $course = \App\Models\CourseManagement::where('course_title', $trainingRequest->training_title)->first();
                         $courseId = $course ? $course->course_id : null;
                     }
-                    
+
                     if ($courseId) {
                         // Delete related dashboard records
                         EmployeeTrainingDashboard::where('employee_id', $employeeId)
                             ->where('course_id', $courseId)
                             ->where('source', 'approved_request')
                             ->delete();
-                        
+
                         // Delete related exam attempts
                         \App\Models\ExamAttempt::where('employee_id', $employeeId)
                             ->where('course_id', $courseId)
                             ->delete();
-                        
+
                         Log::info('Deleted approved training request with related records', [
                             'request_id' => $id,
                             'employee_id' => $employeeId,
@@ -1907,10 +1965,10 @@ class MyTrainingController extends Controller
                             'training_title' => $trainingRequest->training_title
                         ]);
                     }
-                    
+
                     // Delete the training request
                     $trainingRequest->delete();
-                    
+
                     // Log activity
                     ActivityLog::createLog([
                         'module' => 'Training Management',
@@ -1919,25 +1977,25 @@ class MyTrainingController extends Controller
                         'model_type' => 'TrainingRequest',
                         'model_id' => $id
                     ]);
-                    
+
                     if ($isAjax) {
                         return response()->json([
-                            'success' => true, 
+                            'success' => true,
                             'message' => 'Approved training request and all related records deleted successfully!'
                         ]);
                     }
                     return redirect()->back()->with('success', 'Approved training request and all related records deleted successfully!');
-                    
+
                 } catch (\Exception $e) {
                     Log::error('Error deleting approved training request', [
                         'request_id' => $id,
                         'employee_id' => $employeeId,
                         'error' => $e->getMessage()
                     ]);
-                    
+
                     if ($isAjax) {
                         return response()->json([
-                            'success' => false, 
+                            'success' => false,
                             'message' => 'Error deleting approved training request: ' . $e->getMessage()
                         ], 500);
                     }
@@ -1946,7 +2004,7 @@ class MyTrainingController extends Controller
             } else {
                 // Regular deletion for pending/rejected requests
                 $trainingRequest->delete();
-                
+
                 // Log activity
                 ActivityLog::createLog([
                     'module' => 'Training Management',
@@ -1955,7 +2013,7 @@ class MyTrainingController extends Controller
                     'model_type' => 'TrainingRequest',
                     'model_id' => $id
                 ]);
-                
+
                 if ($isAjax) {
                     return response()->json(['success' => true, 'message' => 'Training request deleted successfully!']);
                 }
@@ -2801,7 +2859,7 @@ class MyTrainingController extends Controller
     {
         try {
             $updated = 0;
-            
+
             // Get all destination training records without proper expiration dates
             $records = DestinationKnowledgeTraining::destinationTrainings()
                 ->where(function($query) {
@@ -2814,14 +2872,14 @@ class MyTrainingController extends Controller
             foreach ($records as $record) {
                 // Set expiration date to 3 months from creation date
                 $expirationDate = $record->created_at->addMonths(3);
-                
+
                 $record->expired_date = $expirationDate;
-                
+
                 // Ensure the record is properly marked for upcoming if active
                 if ($record->is_active && !$record->admin_approved_for_upcoming) {
                     $record->admin_approved_for_upcoming = true;
                 }
-                
+
                 $record->save();
                 $updated++;
             }
@@ -2842,7 +2900,7 @@ class MyTrainingController extends Controller
     {
         try {
             $updated = 0;
-            
+
             // Get all competency gaps without proper expiration dates
             $competencyGaps = \App\Models\CompetencyGap::where(function($query) {
                 $query->whereNull('expired_date')
@@ -2853,7 +2911,7 @@ class MyTrainingController extends Controller
             foreach ($competencyGaps as $gap) {
                 // Set expiration date to 6 months from creation date for competency gaps
                 $expirationDate = $gap->created_at->addMonths(6);
-                
+
                 $gap->expired_date = $expirationDate;
                 $gap->save();
                 $updated++;
@@ -2881,7 +2939,7 @@ class MyTrainingController extends Controller
                     // Fallback: set to 6 months from creation
                     $training->expired_date = $training->created_at->addMonths(6);
                 }
-                
+
                 $training->save();
                 $updated++;
             }
@@ -2902,7 +2960,7 @@ class MyTrainingController extends Controller
     {
         try {
             $employeeId = 'EMP001'; // Debug for specific employee
-            
+
             $debugData = [
                 'employee_id' => $employeeId,
                 'timestamp' => now()->format('Y-m-d H:i:s'),
@@ -2913,7 +2971,7 @@ class MyTrainingController extends Controller
             $upcomingTrainings = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
                 ->where('training_title', 'LIKE', '%Communication Skills%')
                 ->get();
-            
+
             $debugData['sources']['upcoming_trainings'] = [
                 'count' => $upcomingTrainings->count(),
                 'records' => $upcomingTrainings->map(function($training) {
@@ -3051,13 +3109,13 @@ class MyTrainingController extends Controller
                 'course_id' => $assignment->course_id,
                 'assigned_by' => $assignment->assigned_by ?? 'null'
             ]);
-            
+
             // Try to get from the assignment's assignedBy relationship first
             if ($assignment->assignedBy && !empty($assignment->assignedBy->name)) {
                 Log::info('Found admin from assignedBy relationship: ' . $assignment->assignedBy->name);
                 return $assignment->assignedBy->name;
             }
-            
+
             // If assigned_by is numeric, try to find the user directly
             if (isset($assignment->assigned_by) && is_numeric($assignment->assigned_by)) {
                 $user = \App\Models\User::find($assignment->assigned_by);
@@ -3066,29 +3124,29 @@ class MyTrainingController extends Controller
                     return $user->name;
                 }
             }
-            
+
             // If assigned_by is already a name (string), use it
             if (isset($assignment->assigned_by) && !is_numeric($assignment->assigned_by) && !empty($assignment->assigned_by)) {
                 Log::info('Using string assigned_by: ' . $assignment->assigned_by);
                 return $assignment->assigned_by;
             }
-            
+
             // Check upcoming training record for this assignment
             $upcomingTraining = \App\Models\UpcomingTraining::where('employee_id', $assignment->employee_id)
                 ->where('course_id', $assignment->course_id)
                 ->where('source', 'competency_gap')
                 ->first();
-            
+
             if ($upcomingTraining) {
                 Log::info('Found upcoming training record', [
                     'assigned_by' => $upcomingTraining->assigned_by,
                     'assigned_by_name' => $upcomingTraining->assigned_by_name
                 ]);
-                
+
                 if (!empty($upcomingTraining->assigned_by_name) && !is_numeric($upcomingTraining->assigned_by_name) && $upcomingTraining->assigned_by_name !== 'Competency System') {
                     return $upcomingTraining->assigned_by_name;
                 }
-                
+
                 if ($upcomingTraining->assigned_by && is_numeric($upcomingTraining->assigned_by)) {
                     $user = \App\Models\User::find($upcomingTraining->assigned_by);
                     if ($user && !empty($user->name)) {
@@ -3097,7 +3155,7 @@ class MyTrainingController extends Controller
                     }
                 }
             }
-            
+
             // Check if we can get it from the competency gap that created this assignment
             if ($assignment->course && $assignment->course->course_title) {
                 $competencyGap = \App\Models\CompetencyGap::where('employee_id', $assignment->employee_id)
@@ -3108,12 +3166,12 @@ class MyTrainingController extends Controller
                               ->orWhere('competency_name', 'LIKE', '%' . str_replace(' Training', '', $courseTitle) . '%');
                     })
                     ->first();
-                
+
                 if ($competencyGap && $competencyGap->assigned_by) {
                     Log::info('Found competency gap record', [
                         'assigned_by' => $competencyGap->assigned_by
                     ]);
-                    
+
                     if (is_numeric($competencyGap->assigned_by)) {
                         $user = \App\Models\User::find($competencyGap->assigned_by);
                         if ($user && !empty($user->name)) {
@@ -3125,17 +3183,17 @@ class MyTrainingController extends Controller
                     }
                 }
             }
-            
+
             // Final fallback - try to get any admin user
             $adminUser = \App\Models\User::where('role', 'admin')->first();
             if ($adminUser) {
                 Log::info('Using fallback admin: ' . $adminUser->name);
                 return $adminUser->name;
             }
-            
+
             Log::warning('No admin found, using system fallback');
             return 'Admin User';
-            
+
         } catch (\Exception $e) {
             Log::warning('Error getting competency assigned by name: ' . $e->getMessage());
             return 'Admin User';
@@ -3149,7 +3207,7 @@ class MyTrainingController extends Controller
     {
         try {
             $updatedCount = 0;
-            
+
             // Fix upcoming training records with competency source
             $competencyUpcomingTrainings = \App\Models\UpcomingTraining::where('source', 'competency_gap')
                 ->where(function($query) {
@@ -3159,10 +3217,10 @@ class MyTrainingController extends Controller
                           ->orWhere('assigned_by_name', '');
                 })
                 ->get();
-            
+
             foreach ($competencyUpcomingTrainings as $training) {
                 $assignedByName = null;
-                
+
                 // Try to get the admin name from the assigned_by ID
                 if (is_numeric($training->assigned_by)) {
                     $user = \App\Models\User::find($training->assigned_by);
@@ -3170,7 +3228,7 @@ class MyTrainingController extends Controller
                         $assignedByName = $user->name;
                     }
                 }
-                
+
                 // If no user found, try to get from competency gap record
                 if (!$assignedByName) {
                     $competencyGap = \App\Models\CompetencyGap::where('employee_id', $training->employee_id)
@@ -3181,7 +3239,7 @@ class MyTrainingController extends Controller
                                   ->orWhere('competency_name', 'LIKE', '%' . str_replace(' Training', '', $trainingTitle) . '%');
                         })
                         ->first();
-                    
+
                     if ($competencyGap && $competencyGap->assigned_by) {
                         if (is_numeric($competencyGap->assigned_by)) {
                             $user = \App\Models\User::find($competencyGap->assigned_by);
@@ -3193,26 +3251,26 @@ class MyTrainingController extends Controller
                         }
                     }
                 }
-                
+
                 // Final fallback
                 if (!$assignedByName) {
                     $assignedByName = 'Competency System';
                 }
-                
+
                 // Update the record
                 $training->assigned_by_name = $assignedByName;
                 $training->save();
                 $updatedCount++;
-                
+
                 Log::info("Updated competency training assigned_by_name for ID {$training->upcoming_id}: {$assignedByName}");
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => "Successfully updated {$updatedCount} competency training records with assigned_by_name",
                 'updated_count' => $updatedCount
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error fixing competency assigned_by_name: ' . $e->getMessage());
             return response()->json([
@@ -3248,7 +3306,7 @@ class MyTrainingController extends Controller
 
             foreach ($upcomingTrainings as $training) {
                 $assignedByName = null;
-                
+
                 // Try to get the admin name from the assigned_by ID
                 if (is_numeric($training->assigned_by)) {
                     $user = \App\Models\User::find($training->assigned_by);
@@ -3256,7 +3314,7 @@ class MyTrainingController extends Controller
                         $assignedByName = $user->name;
                     }
                 }
-                
+
                 // For competency gap records, try harder to find the actual admin
                 if (!$assignedByName && $training->source === 'competency_gap') {
                     // Try to find from competency gap record
@@ -3268,7 +3326,7 @@ class MyTrainingController extends Controller
                                   ->orWhere('competency_name', 'LIKE', '%' . str_replace(' Training', '', $trainingTitle) . '%');
                         })
                         ->first();
-                    
+
                     if ($competencyGap && $competencyGap->assigned_by) {
                         if (is_numeric($competencyGap->assigned_by)) {
                             $user = \App\Models\User::find($competencyGap->assigned_by);
@@ -3280,7 +3338,7 @@ class MyTrainingController extends Controller
                         }
                     }
                 }
-                
+
                 // If still no user found, use source-based names
                 if (!$assignedByName) {
                     switch ($training->source) {
@@ -3302,14 +3360,14 @@ class MyTrainingController extends Controller
                             break;
                     }
                 }
-                
+
                 // Update the record
                 $training->assigned_by_name = $assignedByName;
                 $training->save();
-                
+
                 Log::info("Auto-fixed assigned_by_name for training ID {$training->upcoming_id}: {$assignedByName}");
             }
-            
+
         } catch (\Exception $e) {
             Log::warning('Error auto-fixing assigned_by_name on load: ' . $e->getMessage());
         }
@@ -3322,7 +3380,7 @@ class MyTrainingController extends Controller
     {
         try {
             $updatedCount = 0;
-            
+
             // Get all upcoming training records that have assigned_by but no assigned_by_name
             $upcomingTrainings = \App\Models\UpcomingTraining::whereNotNull('assigned_by')
                 ->where(function($query) {
@@ -3335,7 +3393,7 @@ class MyTrainingController extends Controller
 
             foreach ($upcomingTrainings as $training) {
                 $assignedByName = null;
-                
+
                 // Try to get the admin name from the assigned_by ID
                 if (is_numeric($training->assigned_by)) {
                     $user = \App\Models\User::find($training->assigned_by);
@@ -3343,7 +3401,7 @@ class MyTrainingController extends Controller
                         $assignedByName = $user->name;
                     }
                 }
-                
+
                 // If no user found or assigned_by is not numeric, use source-based names
                 if (!$assignedByName) {
                     switch ($training->source) {
@@ -3363,21 +3421,21 @@ class MyTrainingController extends Controller
                             break;
                     }
                 }
-                
+
                 // Update the record
                 $training->assigned_by_name = $assignedByName;
                 $training->save();
                 $updatedCount++;
-                
+
                 Log::info("Updated assigned_by_name for training ID {$training->upcoming_id}: {$assignedByName}");
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => "Successfully updated {$updatedCount} upcoming training records with assigned_by_name",
                 'updated_count' => $updatedCount
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error fixing assigned_by_name: ' . $e->getMessage());
             return response()->json([
@@ -3395,7 +3453,7 @@ class MyTrainingController extends Controller
             $employeeId = Auth::user()->employee_id;
 
             // Get updated counts for each section - using the same logic as the main index method
-            
+
             // Get upcoming count with proper deduplication
             $manualUpcoming = UpcomingTraining::where('employee_id', $employeeId)->get();
             $adminAssigned = EmployeeTrainingDashboard::where('employee_id', $employeeId)
@@ -3406,7 +3464,7 @@ class MyTrainingController extends Controller
                 ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
                 ->whereHas('course')
                 ->get();
-            
+
             // Combine and deduplicate by training title (same logic as main method)
             $allTrainings = collect()
                 ->merge($manualUpcoming->pluck('training_title'))
@@ -3415,14 +3473,14 @@ class MyTrainingController extends Controller
                 ->filter()
                 ->unique()
                 ->values();
-            
+
             $upcomingCount = $allTrainings->count();
             $completedCount = CompletedTraining::where('employee_id', $employeeId)->count();
-            
+
             // Calculate requests count including auto-generated ones from upcoming trainings
             $realRequests = TrainingRequest::where('employee_id', $employeeId)->get();
             $upcomingTrainings = $allTrainings; // Use the same upcoming trainings data
-            
+
             // Count auto-generated requests (same logic as in _requests.blade.php)
             $autoCreatedCount = 0;
             foreach ($upcomingTrainings as $upcomingTitle) {
@@ -3433,12 +3491,12 @@ class MyTrainingController extends Controller
                     $autoCreatedCount++;
                 }
             }
-            
+
             $requestsCount = $realRequests->count() + $autoCreatedCount;
-            
+
             // Progress count - EXACT SAME LOGIC as the progress table to ensure consistency
             // Build progress data the same way as the main index method
-            
+
             // Get approved training requests that should appear in progress
             $approvedRequests = TrainingRequest::with('course')
                 ->where('employee_id', $employeeId)
@@ -3453,29 +3511,29 @@ class MyTrainingController extends Controller
                         'employee_id' => $employeeId
                     ];
                 });
-            
+
             // Filter to ONLY approved training requests (same as table)
             $approvedRequestsOnly = $approvedRequests->filter(function ($item) use ($employeeId) {
-                return isset($item->source) && 
-                       $item->source == 'approved_request' && 
+                return isset($item->source) &&
+                       $item->source == 'approved_request' &&
                        ($item->employee_id ?? $employeeId) == $employeeId;
             });
-            
+
             // Group by training title to eliminate duplicates (same as table)
             $groupedProgress = $approvedRequestsOnly->groupBy(function ($item) {
                 $trainingTitle = strtolower(trim($item->training_title ?? ''));
-                
+
                 // Normalize training title (EXACT same logic as table)
                 $normalizedTitle = preg_replace('/\s+/', ' ', $trainingTitle);
                 $normalizedTitle = str_replace([' training', ' course', ' program', ' skills'], '', $normalizedTitle);
                 $normalizedTitle = trim($normalizedTitle);
-                
+
                 return $normalizedTitle;
             });
-            
+
             // Count unique groups (same as table)
             $progressCount = $groupedProgress->count();
-            
+
             $feedbackCount = TrainingFeedback::where('employee_id', $employeeId)->count();
             $notificationsCount = TrainingNotification::where('employee_id', $employeeId)->count();
 

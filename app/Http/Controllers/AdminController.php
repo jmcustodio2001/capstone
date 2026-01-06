@@ -1041,20 +1041,15 @@ class AdminController extends Controller
     public function getNotificationCount(Request $request)
     {
         try {
-            $count = 0;
-
-            // Count recent activities
-            $count += \App\Models\Employee::where('created_at', '>=', now()->subDays(7))->count();
-            $count += \App\Models\EmployeeTrainingDashboard::where('progress', '>=', 100)
-                ->where('updated_at', '>=', now()->subDays(3))->count();
-            $count += \App\Models\TrainingRequest::where('status', 'Pending')
-                ->where('created_at', '>=', now()->subDays(7))->count();
+            // Get unread notifications from the database
+            $count = \App\Models\AdminNotification::where('is_read', false)->count();
 
             return response()->json([
                 'success' => true,
                 'count' => $count
             ]);
         } catch (\Exception $e) {
+            Log::error('Get notification count error: ' . $e->getMessage());
             return response()->json([
                 'success' => true,
                 'count' => 0
@@ -1068,13 +1063,15 @@ class AdminController extends Controller
     public function markAllNotificationsRead(Request $request)
     {
         try {
-            // In a real implementation, you would update notification read status
-            // For now, we'll just return success
+            // Mark all unread admin notifications as read
+            \App\Models\AdminNotification::where('is_read', false)->update(['is_read' => true]);
+
             return response()->json([
                 'success' => true,
                 'message' => 'All notifications marked as read'
             ]);
         } catch (\Exception $e) {
+            Log::error('Mark all notifications read error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to mark notifications as read'

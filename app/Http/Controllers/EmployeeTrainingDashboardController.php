@@ -187,6 +187,74 @@ class EmployeeTrainingDashboardController extends Controller
             ]);
         }
 
+        // PRIORITY 1.5: Get employee competency profiles (if EmployeeTrainingDashboard is empty)
+        // This bridges the gap when data is stored in EmployeeCompetencyProfile instead
+        if ($dashboardRecords->isEmpty()) {
+            $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with(['employee', 'competency'])->get();
+
+            foreach ($competencyProfiles as $profile) {
+                if (!$profile->employee || !$profile->competency) {
+                    continue;
+                }
+
+                // Find matching course by competency name
+                $course = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $profile->competency->competency_name . '%')
+                    ->where('course_title', 'NOT LIKE', '%ITALY%')
+                    ->where('course_title', 'NOT LIKE', '%BESTLINK%')
+                    ->where('course_title', 'NOT LIKE', '%BORACAY%')
+                    ->where('course_title', 'NOT LIKE', '%destination%')
+                    ->where('course_title', 'NOT LIKE', '%Destination%')
+                    ->where('course_title', 'NOT LIKE', '%DESTINATION%')
+                    ->first();
+
+                // Create pseudo-record from competency profile
+                $pseudoRecord = new \stdClass();
+                $pseudoRecord->id = 'competency_profile_' . $profile->id;
+                $pseudoRecord->employee_id = $profile->employee->employee_id;
+                $pseudoRecord->course_id = $course ? $course->course_id : null;
+                $pseudoRecord->training_title = $profile->competency->competency_name;
+                $pseudoRecord->progress = round(($profile->proficiency_level / 5) * 100);
+                $pseudoRecord->status = $pseudoRecord->progress >= 100 ? 'Completed' : ($pseudoRecord->progress >= 50 ? 'In Progress' : 'Not Started');
+                $pseudoRecord->created_at = $profile->updated_at ?? now();
+                $pseudoRecord->updated_at = $profile->updated_at ?? now();
+                $pseudoRecord->last_accessed = $profile->updated_at ?? now();
+                $pseudoRecord->expired_date = null;
+                $pseudoRecord->assigned_by_name = 'Competency Profile';
+                $pseudoRecord->source = 'employee_competency_profile';
+                $pseudoRecord->employee = $profile->employee;
+                $pseudoRecord->course = $course;
+
+                // Create unique keys for this competency profile
+                $courseTitle = $course ? $course->course_title : null;
+                $uniqueKeys = $createUniqueKeys($pseudoRecord->employee_id, $pseudoRecord->course_id, $pseudoRecord->training_title, $courseTitle);
+
+                // Check if any keys already exist
+                $isDuplicate = false;
+                foreach ($uniqueKeys as $key) {
+                    if ($seenCombinations->has($key)) {
+                        $isDuplicate = true;
+                        break;
+                    }
+                }
+
+                if (!$isDuplicate) {
+                    $uniqueRecords->push($pseudoRecord);
+
+                    // Track all unique keys
+                    foreach ($uniqueKeys as $key) {
+                        $seenCombinations->put($key, 'employee_competency_profile');
+                    }
+
+                    Log::info('Added competency profile record', [
+                        'employee_id' => $pseudoRecord->employee_id,
+                        'competency' => $pseudoRecord->training_title,
+                        'progress' => $pseudoRecord->progress,
+                        'unique_keys' => $uniqueKeys
+                    ]);
+                }
+            }
+        }
+
         // 2. PRIORITY 2: Get approved training requests (only if not already in dashboard)
         // Filter out destination training requests
         $approvedRequests = \App\Models\TrainingRequest::with(['employee', 'course'])

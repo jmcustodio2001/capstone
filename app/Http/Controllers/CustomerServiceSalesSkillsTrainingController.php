@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CustomerServiceSalesSkillsTraining;
 use App\Models\Employee;
 use App\Models\EmployeeTrainingDashboard; // or CourseManagement if you want courses
+use App\Models\EmployeeCompetencyProfile;
 use App\Models\CompetencyGap;
 use App\Models\CompetencyLibrary;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
     {
         // Removed redundant assignment to $records
         $employees = Employee::all();
-        
+
         // Filter out destination training courses from the dropdown
         $trainings = EmployeeTrainingDashboard::with('course')
             ->whereHas('course', function($query) {
@@ -66,20 +67,20 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
         // SYNC WITH MAIN EMPLOYEE TRAINING DASHBOARD DATA
         // Instead of using separate CustomerServiceSalesSkillsTraining table,
         // directly fetch filtered data from the main EmployeeTrainingDashboard system
-        
+
         // ENHANCED DEDUPLICATION: Use same logic as main EmployeeTrainingDashboardController
         $uniqueRecords = collect();
         $seenCombinations = collect();
-        
+
         // Helper function to create multiple unique keys for employee-course combination
         $createUniqueKeys = function($employeeId, $courseId, $trainingTitle = null, $courseTitle = null) {
             $keys = [];
-            
+
             // Primary key: employee + course_id (if exists and numeric)
             if (!empty($courseId) && is_numeric($courseId)) {
                 $keys[] = $employeeId . '_course_' . $courseId;
             }
-            
+
             // Secondary key: employee + normalized training_title
             if (!empty($trainingTitle)) {
                 $normalized = strtolower(trim($trainingTitle));
@@ -89,7 +90,7 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                     $keys[] = $employeeId . '_title_' . $normalized;
                 }
             }
-            
+
             // Tertiary key: employee + normalized course_title (from relationship)
             if (!empty($courseTitle) && $courseTitle !== $trainingTitle) {
                 $normalized = strtolower(trim($courseTitle));
@@ -99,10 +100,10 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                     $keys[] = $employeeId . '_coursetitle_' . $normalized;
                 }
             }
-            
+
             return array_unique($keys);
         };
-        
+
         // Get filtered training records with deduplication
         $dashboardRecords = EmployeeTrainingDashboard::with(['employee', 'course'])
             ->where(function($query) {
@@ -135,17 +136,17 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                 // Remove duplicates at the database level first
                 return $record->employee_id . '_' . $record->course_id . '_' . ($record->training_title ?? '');
             });
-            
+
         foreach ($dashboardRecords as $record) {
             // Skip records without valid employee
             if (!$record->employee_id || !$record->employee) {
                 continue;
             }
-            
+
             // Create unique keys for this record (multiple keys for better deduplication)
             $courseTitle = $record->course->course_title ?? null;
             $uniqueKeys = $createUniqueKeys($record->employee_id, $record->course_id, $record->training_title, $courseTitle);
-            
+
             // Check if any of the keys already exist
             $isDuplicate = false;
             $matchingKey = null;
@@ -156,20 +157,20 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                     break;
                 }
             }
-            
+
             if ($isDuplicate) {
                 continue; // Skip if already seen
             }
-            
+
             // Enhanced progress sync with multiple strategies
             $examProgress = 0;
             $courseIdToUse = $record->course_id;
-            
+
             // Strategy 1: Try with current course_id
             if ($courseIdToUse) {
                 $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $courseIdToUse);
             }
-            
+
             // Strategy 2: If no progress and we have a course title, try to find the correct course
             if ($examProgress == 0 && $record->course && $record->course->course_title) {
                 $courseByTitle = \App\Models\CourseManagement::where('course_title', $record->course->course_title)->first();
@@ -182,7 +183,7 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                     }
                 }
             }
-            
+
             // Strategy 3: Check if there's progress in the main employee training dashboard for this employee-course combination
             if ($examProgress == 0) {
                 $mainDashboardRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $record->employee_id)
@@ -195,7 +196,7 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                     })
                     ->where('progress', '>', 0)
                     ->first();
-                
+
                 if ($mainDashboardRecord && $mainDashboardRecord->progress > 0) {
                     $examProgress = $mainDashboardRecord->progress;
                     // Sync the course_id if different
@@ -205,13 +206,13 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                     }
                 }
             }
-            
+
             if ($examProgress > 0 && $examProgress != $record->progress) {
                 // Update the dashboard record with exam progress
                 $record->progress = $examProgress;
                 $record->status = $examProgress >= 100 ? 'Completed' : ($examProgress >= 80 ? 'Completed' : 'In Progress');
                 $record->save();
-                
+
                 // Also trigger competency profile sync for 100% completion
                 if ($examProgress >= 100) {
                     try {
@@ -220,7 +221,7 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                         $method = new \ReflectionMethod($controller, 'syncWithCompetencyProfile');
                         $method->setAccessible(true);
                         $method->invoke($controller, $record);
-                        
+
                         $gapMethod = new \ReflectionMethod($controller, 'syncWithCompetencyGap');
                         $gapMethod->setAccessible(true);
                         $gapMethod->invoke($controller, $record);
@@ -229,21 +230,83 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
                     }
                 }
             }
-            
+
             // ENHANCED: Fix missing training_title from course relationship
             if ($record->course && !$record->training_title) {
                 $record->update(['training_title' => $record->course->course_title]);
             }
-            
+
             // Add to unique records
             $uniqueRecords->push($record);
-            
+
             // Track all unique keys for this record to prevent future duplicates
             foreach ($uniqueKeys as $key) {
                 $seenCombinations->put($key, 'dashboard');
             }
         }
-        
+
+        // PRIORITY 2: Get employee competency profiles (if EmployeeTrainingDashboard is empty)
+        // This bridges the gap when data is stored in EmployeeCompetencyProfile instead
+        if ($uniqueRecords->isEmpty()) {
+            $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with(['employee', 'competency'])->get();
+
+            foreach ($competencyProfiles as $profile) {
+                if (!$profile->employee || !$profile->competency) {
+                    continue;
+                }
+
+                // Find matching course by competency name
+                $course = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $profile->competency->competency_name . '%')
+                    ->where('course_title', 'NOT LIKE', '%ITALY%')
+                    ->where('course_title', 'NOT LIKE', '%BESTLINK%')
+                    ->where('course_title', 'NOT LIKE', '%BORACAY%')
+                    ->where('course_title', 'NOT LIKE', '%destination%')
+                    ->where('course_title', 'NOT LIKE', '%Destination%')
+                    ->where('course_title', 'NOT LIKE', '%DESTINATION%')
+                    ->first();
+
+                // Create pseudo-record from competency profile
+                $pseudoRecord = new \stdClass();
+                $pseudoRecord->id = 'competency_profile_' . $profile->id;
+                $pseudoRecord->employee_id = $profile->employee->employee_id;
+                $pseudoRecord->course_id = $course ? $course->course_id : null;
+                $pseudoRecord->training_title = $profile->competency->competency_name;
+                $pseudoRecord->progress = round(($profile->proficiency_level / 5) * 100);
+                $pseudoRecord->status = $pseudoRecord->progress >= 100 ? 'Completed' : ($pseudoRecord->progress >= 50 ? 'In Progress' : 'Not Started');
+                $pseudoRecord->created_at = $profile->updated_at ?? now();
+                $pseudoRecord->updated_at = $profile->updated_at ?? now();
+                $pseudoRecord->last_accessed = $profile->updated_at ?? now();
+                $pseudoRecord->expired_date = null;
+                $pseudoRecord->assigned_by_name = 'Competency Profile';
+                $pseudoRecord->source = 'employee_competency_profile';
+                $pseudoRecord->employee = $profile->employee;
+                $pseudoRecord->course = $course;
+                $pseudoRecord->training_date = $profile->updated_at;
+
+                // Create unique keys for this competency profile
+                $courseTitle = $course ? $course->course_title : null;
+                $uniqueKeys = $createUniqueKeys($pseudoRecord->employee_id, $pseudoRecord->course_id, $pseudoRecord->training_title, $courseTitle);
+
+                // Check if any keys already exist
+                $isDuplicate = false;
+                foreach ($uniqueKeys as $key) {
+                    if ($seenCombinations->has($key)) {
+                        $isDuplicate = true;
+                        break;
+                    }
+                }
+
+                if (!$isDuplicate) {
+                    $uniqueRecords->push($pseudoRecord);
+
+                    // Track all unique keys
+                    foreach ($uniqueKeys as $key) {
+                        $seenCombinations->put($key, 'employee_competency_profile');
+                    }
+                }
+            }
+        }
+
         // Convert to the expected format
         $records = $uniqueRecords->map(function($item) {
             return (object)[

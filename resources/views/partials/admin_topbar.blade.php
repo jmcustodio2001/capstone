@@ -783,11 +783,16 @@ async function markAllNotificationsRead() {
 
     if (data.success) {
       console.log('All notifications marked as read');
+      // Update the notification badge immediately
+      await updateNotificationCount();
+      // Close the notification modal
+      Swal.close();
     } else {
       throw new Error(data.message || 'Failed to mark notifications as read');
     }
   } catch (error) {
     console.error('Mark Notifications Error:', error);
+    Swal.fire('Error', 'Failed to mark notifications as read', 'error');
   }
 }
 
@@ -813,7 +818,7 @@ async function markAlertAsRead(alertId) {
           button.remove();
         }
       }
-      
+
       // Update notification badge
       updateNotificationBadge();
     } else {
@@ -838,7 +843,10 @@ async function markAllAlertsAsRead() {
 
     if (data.success) {
       console.log('All alerts marked as read');
-      updateNotificationBadge();
+      // Update the notification badge immediately
+      await updateNotificationCount();
+      // Close the notification modal
+      Swal.close();
     } else {
       throw new Error(data.message || 'Failed to mark alerts as read');
     }
@@ -848,13 +856,8 @@ async function markAllAlertsAsRead() {
 }
 
 function updateNotificationBadge() {
-  // Update the notification count badge
-  const notificationBadge = document.getElementById('notification-count');
-  if (notificationBadge) {
-    // You can make an AJAX call here to get the updated count
-    // For now, just hide the badge
-    notificationBadge.style.display = 'none';
-  }
+  // Update the notification count badge by fetching the latest count
+  updateNotificationCount();
 }
 
 // Quick Actions Functions with Real Backend Integration

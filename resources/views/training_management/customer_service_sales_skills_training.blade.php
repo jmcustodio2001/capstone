@@ -562,7 +562,7 @@
           // Group records by employee
           $groupedRecords = $records->groupBy('employee_id');
         @endphp
-        
+
         @forelse($groupedRecords as $employeeId => $employeeRecords)
           @php
             // Get employee info from first record
@@ -602,7 +602,8 @@
             $totalProgress = 0;
             $completedTrainings = 0;
             $inProgressTrainings = 0;
-            
+            $expiredTrainings = 0;
+
             foreach ($employeeRecords as $record) {
                 // Enhanced progress calculation with multiple fallback strategies
                 $courseId = $record->course_id ?? $record->training_id;
@@ -646,14 +647,14 @@
                             $q->where('competency_name', $trainingTitle)
                               ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
                         })->first();
-                    
+
                     if ($competencyGap) {
                         $requiredLevel = $competencyGap->required_level;
                     }
                 }
 
                 $rawProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
-                
+
                 if ($requiredLevel && $requiredLevel > 0) {
                     $maxAllowedProgress = min(($requiredLevel / 5) * 100, 100);
                     $displayProgress = min($rawProgress, $maxAllowedProgress);
@@ -661,18 +662,31 @@
                     $displayProgress = $rawProgress;
                 }
 
+                $displayProgress = max(0, min(100, (int)$displayProgress));
+
                 // Store the calculated progress in the record for JavaScript access
                 $record->calculated_progress = $displayProgress;
-                
+
+                // Check if expired (SAME LOGIC AS MAIN DASHBOARD)
+                $finalExpiredDate = $record->expired_date ?? ($record->course->expired_date ?? null);
+                $isExpired = false;
+                if ($finalExpiredDate) {
+                    $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
+                    $isExpired = \Carbon\Carbon::now()->gt($expiredDate);
+                }
+
                 $totalProgress += $displayProgress;
-                if ($displayProgress >= 100) {
+                if ($isExpired && $displayProgress < 100) {
+                    $expiredTrainings++;
+                } elseif ($displayProgress >= 100) {
                     $completedTrainings++;
                 } elseif ($displayProgress > 0) {
                     $inProgressTrainings++;
                 }
             }
-            
+
             $averageProgress = $employeeRecords->count() > 0 ? round($totalProgress / $employeeRecords->count()) : 0;
+            $notStartedTrainings = $employeeRecords->count() - $completedTrainings - $inProgressTrainings - $expiredTrainings;
           @endphp
 
           <div class="col-lg-6 col-xl-4 mb-4">
@@ -734,7 +748,7 @@
                          aria-valuemax="100">
                     </div>
                   </div>
-                  
+
                   <div class="mt-2">
                     @if($averageProgress >= 100)
                       <span class="badge bg-success bg-opacity-10 text-success fs-6 px-3 py-2">All Completed</span>
@@ -907,14 +921,14 @@
                           $q->where('competency_name', $trainingTitle)
                             ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
                       })->first();
-                  
+
                   if ($competencyGap) {
                       $requiredLevel = $competencyGap->required_level;
                   }
               }
 
               $rawProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
-              
+
               // Cap progress at required level if available
               if ($requiredLevel && $requiredLevel > 0) {
                   // Convert required level (1-5 scale) to percentage (20%, 40%, 60%, 80%, 100%)
@@ -1067,14 +1081,14 @@
                   $q->where('competency_name', $trainingTitle)
                     ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
               })->first();
-          
+
           if ($competencyGap) {
               $requiredLevel = $competencyGap->required_level;
           }
       }
 
       $rawProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
-      
+
       // Cap progress at required level if available
       if ($requiredLevel && $requiredLevel > 0) {
           // Convert required level (1-5 scale) to percentage (20%, 40%, 60%, 80%, 100%)
@@ -1112,7 +1126,7 @@
   @endphp
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  
+
   <!-- Initialize global objects to prevent undefined errors -->
   <script>
     // Prevent translation service errors
@@ -1122,19 +1136,19 @@
         get: function(key) { return key; }
       };
     }
-    
+
     // Add any other global objects that might be missing
     if (typeof window.app === 'undefined') {
       window.app = {};
     }
-    
+
     // Prevent sidebar toggle errors
     if (typeof window.toggleSidebar === 'undefined') {
       window.toggleSidebar = function() {
         console.log('Sidebar toggle called (fallback)');
       };
     }
-    
+
     // Safe Bootstrap initialization
     document.addEventListener('DOMContentLoaded', function() {
       try {
@@ -1147,7 +1161,7 @@
       } catch (error) {
         console.warn('Tooltip initialization failed:', error);
       }
-      
+
       try {
         // Initialize dropdowns
         const dropdownElements = document.querySelectorAll('[data-bs-toggle="dropdown"]');
@@ -1159,10 +1173,10 @@
         console.warn('Dropdown initialization failed:', error);
       }
     });
-    
+
     console.log('Global objects and Bootstrap components initialized safely');
   </script>
-  
+
   <script>
     // Pagination variables
     const itemsPerPage = 15; // Show 15 items per page for better viewing
@@ -1216,7 +1230,7 @@
       } else {
         container = document.getElementById(`${section}-container`);
       }
-      
+
       if (container && currentPages[section] > 1) {
         currentPages[section]--;
         updatePagination(section);
@@ -1230,7 +1244,7 @@
       } else {
         container = document.getElementById(`${section}-container`);
       }
-      
+
       if (container) {
         const totalPages = Math.ceil(allData[section].length / itemsPerPage);
         if (currentPages[section] < totalPages) {
@@ -1348,7 +1362,7 @@
         if (!csrfToken) {
           throw new Error('CSRF token not available');
         }
-        
+
         const response = await fetch('/admin/verify-password', {
           method: 'POST',
           headers: {
@@ -2145,7 +2159,7 @@
       // Get employee records from the PHP data
       const employeeRecords = @json($records->groupBy('employee_id'));
       const records = employeeRecords[employeeId] || [];
-      
+
       if (records.length === 0) {
         Swal.fire({
           icon: 'info',
@@ -2165,13 +2179,13 @@
       let trainingsHtml = '';
       records.forEach((record, index) => {
         const trainingTitle = record.training?.course_title || record.training?.title || 'Unknown Training';
-        const dateCompleted = record.date_completed && record.date_completed !== '1970-01-01' 
-          ? new Date(record.date_completed).toLocaleDateString() 
+        const dateCompleted = record.date_completed && record.date_completed !== '1970-01-01'
+          ? new Date(record.date_completed).toLocaleDateString()
           : 'Not completed';
-        
+
         // Use the calculated progress from the record (includes exam scores and competency profiles)
         let progress = 0;
-        
+
         // Try to get the calculated progress from different sources
         if (record.calculated_progress !== undefined) {
           progress = record.calculated_progress;
@@ -2183,7 +2197,7 @@
           progress = record.progress || 0;
           console.log(`Using fallback progress for ${trainingTitle}: ${progress}%`);
         }
-        
+
         progress = Math.max(0, Math.min(100, parseInt(progress) || 0));
         const progressColor = progress >= 100 ? 'success' : progress > 0 ? 'primary' : 'secondary';
         const statusText = progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started';

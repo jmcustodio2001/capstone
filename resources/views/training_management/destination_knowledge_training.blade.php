@@ -971,17 +971,17 @@ if (typeof window.trans === 'undefined') {
                 <div class="row">
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="details">Details*</label>
-                    <textarea class="form-control" name="details" id="details" rows="2" required disabled></textarea>
+                    <textarea class="form-control" name="details" id="details" rows="2" required></textarea>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="objectives">Objectives*</label>
-                    <textarea class="form-control" name="objectives" id="objectives" rows="2" required disabled></textarea>
+                    <textarea class="form-control" name="objectives" id="objectives" rows="2" required></textarea>
                   </div>
                 </div>
                 <div class="row">
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="duration">Duration*</label>
-                    <input type="text" class="form-control" name="duration" id="duration" placeholder="e.g., 5 days, 2 weeks" required disabled>
+                    <input type="text" class="form-control" name="duration" id="duration" placeholder="e.g., 5 days, 2 weeks" required>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="delivery_mode">Delivery Mode*</label>
@@ -1509,7 +1509,7 @@ if (typeof window.trans === 'undefined') {
               notificationContainer.innerHTML = '';
             }
 
-            
+
             // Automatically assign training from Accredited Training Center
             if (data.record_ids && data.record_ids.length > 0) {
               console.log('Auto-assigning trainings for records:', data.record_ids);
@@ -1955,7 +1955,7 @@ if (typeof window.trans === 'undefined') {
 
             if (data.success) {
               const successMessage = `${deliveryMode} request submitted successfully!`;
-              
+
               // Update button to show pending status
               this.innerHTML = '<i class="bi bi-clock"></i> Request Submitted';
               this.classList.remove('btn-outline-primary');
@@ -2039,7 +2039,7 @@ if (typeof window.trans === 'undefined') {
           const modal = bootstrap.Modal.getInstance(document.getElementById(modalId));
           modal.hide();
 
-          
+
           submitBtn.disabled = false;
           submitBtn.innerHTML = 'Update Destination';
         });
@@ -2370,7 +2370,7 @@ if (typeof window.trans === 'undefined') {
 
             if (data.success) {
               // Show success notification
-              
+
               // Replace button with success badge
               const parentTd = this.parentElement;
               parentTd.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Approved for Upcoming</span>';
@@ -2974,7 +2974,7 @@ if (typeof window.trans === 'undefined') {
 
               // Get CSRF token
               const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-              
+
               if (!csrfToken) {
                 Swal.fire({
                   icon: 'error',

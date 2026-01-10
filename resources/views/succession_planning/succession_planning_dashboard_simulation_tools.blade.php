@@ -417,6 +417,132 @@
       padding-top: 1rem;
       border-top: 1px solid #dee2e6;
     }
+
+    /* Position & Vacancy Overview Styling */
+    #positionOverviewTable tr {
+      transition: all 0.3s ease;
+    }
+
+    #positionOverviewTable tr:hover {
+      background-color: #f8f9fa;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    #positionOverviewTable tr.table-active {
+      background-color: #e7f3ff;
+      border-left: 4px solid #0d6efd;
+    }
+
+    #positionOverviewTable .cursor-pointer {
+      cursor: pointer;
+      text-decoration: none;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    #positionOverviewTable .cursor-pointer:hover {
+      text-decoration: underline;
+      color: #0b5ed7;
+    }
+
+    .table-responsive {
+      border-radius: 0.5rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .btn-group-sm .btn {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .btn-group-sm .btn i {
+      font-size: 0.75rem;
+    }
+
+    /* Risk Summary Alerts */
+    .alert-warning, .alert-info {
+      border-left: 4px solid;
+      border-radius: 0.375rem;
+    }
+
+    .alert-warning {
+      border-left-color: #ff6c00;
+    }
+
+    .alert-info {
+      border-left-color: #0dcaf0;
+    }
+
+    .alert-warning .alert-heading {
+      color: #856404;
+    }
+
+    .alert-info .alert-heading {
+      color: #055160;
+    }
+
+    /* Module Integration Styles */
+    .animate-pulse {
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.7;
+      }
+    }
+
+    .competency-gap-item {
+      background-color: #fff3cd;
+      border-left: 4px solid #ff6c00;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+      border-radius: 0.25rem;
+    }
+
+    .training-status-item {
+      background-color: #d1ecf1;
+      border-left: 4px solid #0dcaf0;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+      border-radius: 0.25rem;
+    }
+
+    .recruitment-flag {
+      background-color: #f8d7da;
+      border-left: 4px solid #dc3545;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+      border-radius: 0.25rem;
+    }
+
+    .module-integration-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      margin: 0.25rem;
+      border-radius: 0.25rem;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      #positionOverviewTable th {
+        font-size: 0.85rem;
+        padding: 0.5rem;
+      }
+
+      #positionOverviewTable td {
+        font-size: 0.85rem;
+        padding: 0.5rem;
+      }
+
+      .btn-group-sm .btn {
+        padding: 0.2rem 0.4rem;
+      }
+    }
   </style>
 </head>
 <body style="background-color: #f8f9fa !important;">
@@ -640,6 +766,212 @@
           </div>
         @endif
       </div>
+      </div>
+    </div>
+
+    <!-- Position & Vacancy Overview -->
+    <div class="simulation-card card mb-4">
+      <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+        <h4 class="fw-bold mb-0"><i class="bi bi-briefcase me-2"></i>Position & Vacancy Overview</h4>
+        <button class="btn btn-outline-primary btn-sm" onclick="refreshPositionOverview()">
+          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover table-striped align-middle">
+            <thead class="table-light">
+              <tr>
+                <th class="fw-bold"><i class="bi bi-briefcase me-2"></i>Position Title</th>
+                <th class="fw-bold">Department</th>
+                <th class="fw-bold">Job Level</th>
+                <th class="fw-bold text-center">Approved HC</th>
+                <th class="fw-bold text-center">Filled</th>
+                <th class="fw-bold text-center">Available</th>
+                <th class="fw-bold text-center">Critical Role</th>
+                <th class="fw-bold text-center">Ready Now</th>
+                <th class="fw-bold text-center">In Dev (1-2y)</th>
+                <th class="fw-bold text-center">Competency Gaps</th>
+                <th class="fw-bold text-center">Training Status</th>
+                <th class="fw-bold text-center">Recruitment</th>
+                <th class="fw-bold text-center">Risk Level</th>
+                <th class="fw-bold text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="positionOverviewTable">
+              <!-- Populated by JavaScript -->
+              @if(isset($positions) && count($positions) > 0)
+                @foreach($positions as $position)
+                  @php
+                    // Get candidate data for this position
+                    $candidates = $topCandidates[$position->id] ?? collect([]);
+                    $readyNow = $readinessScores[$position->id] ?? 0;
+                    $inDev = $inDevelopmentCounts[$position->id] ?? 0;
+
+                    // Calculate vacancies based on real candidates and readiness
+                    // If we have ready candidates (>=70%), position is filled; otherwise it's available
+                    $filled = ($readyNow >= 70) ? 1 : 0;
+                    $available = 1 - $filled; // If filled=1 then available=0, if filled=0 then available=1
+                    $approved = 1; // One position per row
+
+                    // Get position name from multiple possible sources
+                    $positionName = null;
+
+                    // Try different ways to get the position name
+                    if (!empty($position->position_name)) {
+                      $positionName = $position->position_name;
+                    } elseif (!empty($position->position_title)) {
+                      $positionName = $position->position_title;
+                    } elseif (!empty($position->title)) {
+                      $positionName = $position->title;
+                    } elseif (!empty($position->position_code)) {
+                      // Generate readable name from position code
+                      $positionName = ucwords(str_replace(['-', '_'], ' ', $position->position_code));
+                    } else {
+                      // Fallback to department + level
+                      $dept = $position->department ?? 'General';
+                      $level = $position->level ?? $position->hierarchy_level ?? '3';
+                      $positionName = $dept . ' - ' . $level;
+                    }
+                  @endphp
+                  <tr class="position-row" data-position-id="{{ $position->id }}" data-position-name="{{ $positionName }}" data-department="{{ $position->department ?? 'General' }}" data-job-level="{{ $position->level ?? 'Level ' . ($position->hierarchy_level ?? '3') }}" data-approved-hc="{{ $approved }}" data-filled="{{ $filled }}" data-available="{{ $available }}" data-critical-role="{{ isset($position->is_critical_position) && $position->is_critical_position ? 'Yes' : 'No' }}" data-ready-now="{{ $readyNow }}" data-in-dev="{{ $inDev }}" data-risk-level="{{ isset($riskLevel) ? $riskLevel : 'Low' }}">
+                    <td class="fw-bold">
+                      <span class="cursor-pointer text-primary" onclick="expandPositionDetails({{ $position->id }})">
+                        {{ $positionName }}
+                      </span>
+                    </td>
+                    <td>{{ $position->department ?? 'General' }}</td>
+                    <td>
+                      <span class="badge bg-info">
+                        {{ $position->level ?? 'Level ' . ($position->hierarchy_level ?? '3') }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge bg-secondary">{{ $approved }}</span>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge bg-success">{{ $filled }}</span>
+                    </td>
+                    <td class="text-center">
+                      @php
+                        $badgeClass = $available > 0 ? 'bg-warning' : 'bg-secondary';
+                      @endphp
+                      <span class="badge {{ $badgeClass }}">{{ $available }}</span>
+                    </td>
+                    <td class="text-center">
+                      @if(isset($position->is_critical_position) && $position->is_critical_position)
+                        <span class="badge bg-danger"><i class="bi bi-check-circle me-1"></i>Yes</span>
+                      @elseif(isset($position->is_critical_role) && $position->is_critical_role)
+                        <span class="badge bg-danger"><i class="bi bi-check-circle me-1"></i>Yes</span>
+                      @else
+                        <span class="badge bg-light text-dark">No</span>
+                      @endif
+                    </td>
+                    <td class="text-center">
+                      <span class="badge bg-success">
+                        {{ $readyNow }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <span class="badge bg-info">
+                        {{ $inDev }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-warning" title="View Competency Gaps" onclick="viewCompetencyGaps({{ $position->id }})">
+                        <i class="bi bi-diagram-2 me-1"></i><span class="d-none d-lg-inline">Gaps</span>
+                      </button>
+                    </td>
+                    <td class="text-center">
+                      <button class="btn btn-sm btn-outline-info" title="View Training Status" onclick="viewTrainingStatus({{ $position->id }})">
+                        <i class="bi bi-book me-1"></i><span class="d-none d-lg-inline">Training</span>
+                      </button>
+                    </td>
+                    <td class="text-center">
+                      @php
+                        // Show recruitment flag if:
+                        // 1. There are available positions, AND
+                        // 2. Either no ready candidates OR readiness is low
+                        $showRecruitmentFlag = ($available > 0) && ($readyNow < 70);
+
+                        // Determine recruitment status based on available positions
+                        $recruitmentStatus = 'Not Needed';
+                        $recruitmentClass = 'bg-success';
+
+                        if ($available > 0) {
+                          if ($readyNow == 0) {
+                            $recruitmentStatus = 'Urgent';
+                            $recruitmentClass = 'bg-danger';
+                          } elseif ($readyNow < 50) {
+                            $recruitmentStatus = 'Critical';
+                            $recruitmentClass = 'bg-danger';
+                          } elseif ($readyNow < 70) {
+                            $recruitmentStatus = 'Needed';
+                            $recruitmentClass = 'bg-warning';
+                          } else {
+                            $recruitmentStatus = 'Covered';
+                            $recruitmentClass = 'bg-success';
+                          }
+                        }
+                      @endphp
+                      <span class="badge {{ $recruitmentClass }}" title="Recruitment status based on available positions and readiness">
+                        {{ $recruitmentStatus }}
+                      </span>
+                    </td>
+                    <td class="text-center">
+                      @php
+                        $riskLevel = 'Low';
+                        $riskBadgeClass = 'bg-success';
+
+                        if ($available == 0 && $readyNow < 50) {
+                          $riskLevel = 'High';
+                          $riskBadgeClass = 'bg-danger';
+                        } elseif ($available <= 1 || $readyNow < 70) {
+                          $riskLevel = 'Medium';
+                          $riskBadgeClass = 'bg-warning';
+                        }
+                      @endphp
+                      <span class="badge {{ $riskBadgeClass }}">{{ $riskLevel }}</span>
+                    </td>
+                    <td class="text-center">
+                      <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-primary" title="View Details" onclick="viewPositionDetails({{ $position->id }})">
+                          <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-outline-success" title="Assign Successor" onclick="assignSuccessor({{ $position->id }})">
+                          <i class="bi bi-person-plus"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                @endforeach
+              @else
+                <tr>
+                  <td colspan="14" class="text-center text-muted py-5">
+                    <i class="bi bi-inbox display-4 d-block mb-3"></i>
+                    <p>No positions defined. Create positions to view vacancy overview.</p>
+                  </td>
+                </tr>
+              @endif
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Risk Positions Summary -->
+        <div class="row mt-4">
+          <div class="col-md-6">
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+              <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>At-Risk Positions</h6>
+              <p class="mb-0" id="atRiskSummary">Analyzing positions...</p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+              <h6 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Vacancy Summary</h6>
+              <p class="mb-0" id="vacancySummary">Analyzing vacancies...</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1152,6 +1484,357 @@
       }
     }
 
+    // ===== POSITION & VACANCY OVERVIEW FUNCTIONS =====
+
+    // Refresh Position Overview Table
+    function refreshPositionOverview() {
+      location.reload(); // Simple refresh - can be enhanced with AJAX later
+    }
+
+    // Expand Position Details (clickable position title)
+    function expandPositionDetails(positionId) {
+      const row = document.querySelector(`[data-position-id="${positionId}"]`);
+      if (row) {
+        row.classList.toggle('table-active');
+        console.log('Expanded details for position:', positionId);
+      }
+    }
+
+    // View Position Details in Modal
+    function viewPositionDetails(positionId) {
+      const row = document.querySelector(`[data-position-id="${positionId}"]`);
+      if (!row) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Position data not found. Please refresh the page.'
+        });
+        return;
+      }
+
+      try {
+        // Read data from data attributes (more reliable than parsing table cells)
+        const positionTitle = row.getAttribute('data-position-name') || 'N/A';
+        const department = row.getAttribute('data-department') || 'N/A';
+        const jobLevel = row.getAttribute('data-job-level') || 'N/A';
+        const approvedHC = row.getAttribute('data-approved-hc') || 'N/A';
+        const filled = row.getAttribute('data-filled') || 'N/A';
+        const available = row.getAttribute('data-available') || 'N/A';
+        const criticalRole = row.getAttribute('data-critical-role') || 'No';
+        const readyNow = row.getAttribute('data-ready-now') || 'N/A';
+        const inDev = row.getAttribute('data-in-dev') || 'N/A';
+        const riskLevel = row.getAttribute('data-risk-level') || 'N/A';
+
+        Swal.fire({
+          title: positionTitle,
+          html: `
+            <div class="text-start">
+              <div class="row mb-3">
+                <div class="col-6">
+                  <p><strong>Department:</strong> ${department}</p>
+                  <p><strong>Job Level:</strong> ${jobLevel}</p>
+                  <p><strong>Approved HC:</strong> ${approvedHC}</p>
+                  <p><strong>Critical Role:</strong> ${criticalRole}</p>
+                </div>
+                <div class="col-6">
+                  <p><strong>Filled:</strong> ${filled}</p>
+                  <p><strong>Available:</strong> ${available}</p>
+                  <p><strong>Ready Now:</strong> ${readyNow}%</p>
+                  <p><strong>In Development:</strong> ${inDev}</p>
+                </div>
+              </div>
+              <div class="alert alert-info mb-0">
+                <strong>Risk Level:</strong> ${riskLevel}
+              </div>
+            </div>
+          `,
+          icon: 'info',
+          confirmButtonText: 'Close'
+        });
+      } catch (error) {
+        console.error('Error reading position details:', error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Unable to display position details'
+        });
+      }
+    }
+
+    // Assign Successor to Position
+    async function assignSuccessor(positionId) {
+      const row = document.querySelector(`[data-position-id="${positionId}"]`);
+      if (!row) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Info',
+          text: 'Position data not found. Please refresh the page.'
+        });
+        return;
+      }
+
+      Swal.fire({
+        title: 'Assign Successor',
+        html: `
+          <div class="text-start">
+            <p class="mb-3">This feature will be available through the Candidate Details & Comparison section above.</p>
+            <p class="mb-0">To assign a successor, click on a candidate card to open detailed options.</p>
+          </div>
+        `,
+        icon: 'info',
+        confirmButtonText: 'Understood',
+        confirmButtonColor: '#0d6efd'
+      });
+    }
+
+    // Calculate and Display Risk Analysis
+    function updatePositionRiskAnalysis() {
+      const rows = document.querySelectorAll('#positionOverviewTable tr.position-row');
+      let atRiskPositions = [];
+      let totalVacancies = 0;
+      let totalApproved = 0;
+
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        const approved = parseInt(cells[3].textContent) || 0;
+        const filled = parseInt(cells[4].textContent) || 0;
+        const available = parseInt(cells[5].textContent) || 0;
+        const isCritical = cells[6].textContent.includes('Yes');
+        const readyNow = parseInt(cells[7].textContent) || 0;
+        const riskLevel = cells[12].textContent.trim();
+
+        totalApproved += approved;
+        totalVacancies += available;
+
+        if (riskLevel === 'High' || riskLevel === 'Medium') {
+          atRiskPositions.push({
+            position: cells[0].textContent.trim(),
+            risk: riskLevel,
+            critical: isCritical
+          });
+        }
+      });
+
+      // Update summaries
+      const atRiskSummary = document.getElementById('atRiskSummary');
+      const vacancySummary = document.getElementById('vacancySummary');
+
+      if (atRiskSummary) {
+        if (atRiskPositions.length > 0) {
+          const summary = atRiskPositions.map(p =>
+            `<strong>${p.position}</strong> (${p.risk} Risk${p.critical ? ', Critical' : ''})`
+          ).join(' • ');
+          atRiskSummary.innerHTML = summary;
+        } else {
+          atRiskSummary.innerHTML = '✓ All positions are at safe risk levels';
+        }
+      }
+
+      if (vacancySummary) {
+        vacancySummary.innerHTML = `
+          <strong>${totalVacancies}</strong> open position(s) out of <strong>${totalApproved}</strong> approved headcount
+        `;
+      }
+    }
+
+    // ===== MODULE INTEGRATION FUNCTIONS =====
+
+    // View Competency Gaps (Competency Management Integration)
+    function viewCompetencyGaps(positionId) {
+      Swal.fire({
+        title: 'Loading Competency Gaps...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      // Fetch real competency gaps data from backend
+      fetch(`/api/succession-planning/position/${positionId}/competency-gaps`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.success && data.gaps && data.gaps.length > 0) {
+            let gapsHtml = '<div class="text-start">';
+
+            gapsHtml += `<div class="alert alert-info mb-3">
+              <strong><i class="bi bi-info-circle me-2"></i>Competency Management Module</strong><br>
+              <small>Data from Employee Competency Profile & Competency Gap Analysis</small>
+            </div>`;
+
+            data.gaps.forEach(gap => {
+              const gapPercentage = gap.gap || gap.current ? Math.round(((gap.required - (gap.current || 0)) / gap.required) * 100) : 0;
+              const priorityColor = gap.priority === 'High' ? 'danger' : gap.priority === 'Medium' ? 'warning' : 'info';
+
+              gapsHtml += `<div class="competency-gap-item">
+                <div class="d-flex justify-content-between align-items-start">
+                  <div>
+                    <strong>${gap.competency_name || gap.competency_id}</strong><br>
+                    <small>Required: ${gap.required}% | Current: ${gap.current || 0}%</small>
+                  </div>
+                  <span class="badge bg-${priorityColor}">${gap.priority || 'Medium'}</span>
+                </div>
+                <div class="progress mt-2" style="height: 8px;">
+                  <div class="progress-bar bg-warning" style="width: ${Math.min(gapPercentage, 100)}%"></div>
+                </div>
+              </div>`;
+            });
+
+            gapsHtml += `<div class="mt-3">
+              <small class="text-muted">Link to: <strong>Employee Training Dashboard</strong> for course enrollment</small>
+            </div></div>`;
+
+            Swal.fire({
+              title: `<i class="bi bi-diagram-2 me-2"></i>Competency Gaps - ${data.position_title}`,
+              html: gapsHtml,
+              icon: 'info',
+              confirmButtonText: 'Close'
+            });
+          } else {
+            Swal.fire({
+              title: 'Competency Gaps',
+              html: `<div class="text-start">
+                <div class="alert alert-success">
+                  <i class="bi bi-check-circle me-2"></i>No significant competency gaps found for this position.
+                </div>
+              </div>`,
+              icon: 'success',
+              confirmButtonText: 'Close'
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching competency gaps:', error);
+          Swal.fire({
+            title: 'Error',
+            text: 'Failed to load competency gaps data: ' + error.message,
+            icon: 'error',
+            confirmButtonText: 'Close'
+          });
+        });
+    }
+
+    // View Training Status (Learning Management Integration)
+    function viewTrainingStatus(positionId) {
+      Swal.fire({
+        title: 'Loading Training Status...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      // Fetch real training status data from backend
+      fetch(`/api/succession-planning/position/${positionId}/training-status`)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.json();
+        })
+        .then(data => {
+          if (data.success && data.training_statuses && data.training_statuses.length > 0) {
+            let trainingHtml = '<div class="text-start">';
+
+            trainingHtml += `<div class="alert alert-info mb-3">
+              <strong><i class="bi bi-info-circle me-2"></i>Learning Management Module</strong><br>
+              <small>Data from Training Record & Certificate Tracking, Employee Training Dashboard</small>
+            </div>`;
+
+            data.training_statuses.forEach(status => {
+              trainingHtml += `<div class="training-status-item">
+                <strong>${status.employee_name}</strong>
+                <div class="mt-2">
+                  <small class="d-block mb-2">Readiness: <span class="badge bg-success">${status.readiness_score}%</span></small>`;
+
+              if (status.trainings && status.trainings.length > 0) {
+                trainingHtml += '<strong class="d-block mb-2">In-Progress Trainings:</strong>';
+                status.trainings.forEach(training => {
+                  trainingHtml += `
+                    <div class="mb-2">
+                      <small><strong>${training.training_title}</strong></small>
+                      <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-info" style="width: ${training.progress_percentage || 0}%"></div>
+                      </div>
+                      <small>${training.progress_percentage || 0}% Complete</small>
+                    </div>`;
+                });
+              } else {
+                trainingHtml += '<small class="text-muted">No active trainings</small>';
+              }
+
+              trainingHtml += `</div></div>`;
+            });
+
+            trainingHtml += `<div class="alert alert-success mt-3 mb-0">
+              <small><strong>Total Candidates:</strong> ${data.total_candidates}</small>
+            </div></div>`;
+
+            Swal.fire({
+              title: `<i class="bi bi-book me-2"></i>Training Status - ${data.position_title}`,
+              html: trainingHtml,
+              icon: 'info',
+              confirmButtonText: 'Close'
+            });
+          } else {
+            Swal.fire({
+              title: 'Training Status',
+              html: `<div class="text-start">
+                <div class="alert alert-info">
+                  <i class="bi bi-info-circle me-2"></i>No training data available for candidates in this position.
+                </div>
+              </div>`,
+              icon: 'info',
+              confirmButtonText: 'Close'
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching training status:', error);
+          Swal.fire({
+            title: 'Error',
+            text: 'Failed to load training status data: ' + error.message,
+            icon: 'error',
+            confirmButtonText: 'Close'
+          });
+        });
+    }
+
+    // View Recruitment Needs (Recruitment Module Integration - Future)
+    function viewRecruitmentNeeds(positionId) {
+      Swal.fire({
+        title: '<i class="bi bi-person-plus me-2"></i>Recruitment Requirements',
+        html: `
+          <div class="text-start">
+            <div class="alert alert-warning mb-3">
+              <strong><i class="bi bi-exclamation-triangle me-2"></i>Recruitment Module (Future)</strong><br>
+              <small>Will integrate with HR 2 Recruitment module when available</small>
+            </div>
+            <div class="recruitment-flag">
+              <strong>Recruitment Flag:</strong> <span class="badge bg-danger">URGENT</span>
+              <p class="mt-2 mb-0">
+                • Available Slots: 1<br>
+                • Ready Successors: 0<br>
+                • Action: Initiate external recruitment
+              </p>
+            </div>
+            <div class="alert alert-info mt-3 mb-0">
+              <small>When integration is enabled, recruitment requests will be auto-flagged here for positions with vacancies and no ready successors.</small>
+            </div>
+          </div>
+        `,
+        icon: 'warning',
+        confirmButtonText: 'Close',
+        confirmButtonColor: '#dc3545'
+      });
+    }
+
     // Initialize when document is ready
     document.addEventListener('DOMContentLoaded', function() {
       // Initialize tooltips
@@ -1160,17 +1843,8 @@
         return new bootstrap.Tooltip(tooltipTriggerEl);
       });
 
-      // Initialize translation service defaults
-      if (window.translationService) {
-        window.translationService.setTranslations({
-          ...window.translationService.translations,
-          'loading': 'Loading...',
-          'error': 'Error',
-          'success': 'Success',
-          'confirm': 'Confirm',
-          'cancel': 'Cancel'
-        });
-      }
+      // Initialize Position Risk Analysis
+      updatePositionRiskAnalysis();
     });
 
     // Test export functionality when page loads

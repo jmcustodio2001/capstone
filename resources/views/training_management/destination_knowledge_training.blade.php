@@ -437,7 +437,7 @@ if (typeof window.trans === 'undefined') {
               </div>
               <h4 class="text-muted mb-3">No Possible Destinations Found</h4>
               <p class="text-muted mb-4">Get started by adding your first training destination</p>
-              <button class="btn btn-primary btn-lg" onclick="confirmAction('add-destination', 'Add New Destination', 'Are you sure you want to add a new destination?')">
+              <button class="btn btn-primary btn-lg" onclick="document.getElementById('addDestinationModal').showModal ? document.getElementById('addDestinationModal').showModal() : new bootstrap.Modal(document.getElementById('addDestinationModal')).show()">
                 <i class="bi bi-plus-lg me-2"></i> Add Your First Destination
               </button>
             </div>
@@ -469,7 +469,7 @@ if (typeof window.trans === 'undefined') {
             <button class="btn btn-outline-primary btn-sm" onclick="confirmAction('export-pdf', 'Export PDF', 'Export training data to PDF?')">
               <i class="bi bi-download me-1"></i> Export PDF
             </button>
-            <button class="btn btn-primary btn-sm" onclick="confirmAction('add-new', 'Add New Training', 'Add new training record?')">
+            <button class="btn btn-primary btn-sm" id="addNewDestinationBtn">
               <i class="bi bi-plus-lg me-1"></i> Add New
             </button>
           </div>
@@ -971,11 +971,11 @@ if (typeof window.trans === 'undefined') {
                 <div class="row">
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="details">Details*</label>
-                    <textarea class="form-control" name="details" id="details" rows="2" required></textarea>
+                    <textarea class="form-control" name="details" id="details" rows="2" required readonly style="background-color: #e9ecef; cursor: not-allowed;"></textarea>
                   </div>
                   <div class="col-md-6 mb-3">
                     <label class="form-label" for="objectives">Objectives*</label>
-                    <textarea class="form-control" name="objectives" id="objectives" rows="2" required></textarea>
+                    <textarea class="form-control" name="objectives" id="objectives" rows="2" required readonly style="background-color: #e9ecef; cursor: not-allowed;"></textarea>
                   </div>
                 </div>
                 <div class="row">
@@ -1059,7 +1059,7 @@ if (typeof window.trans === 'undefined') {
                 <div class="row">
                   <div class="col-12 mb-2">
                     <label class="form-label small" for="details_{{ $record->id }}">Details*</label>
-                    <textarea class="form-control form-control-sm" name="details" id="details_{{ $record->id }}" rows="2" required>{{ $record->details }}</textarea>
+                    <textarea class="form-control form-control-sm" name="details" id="details_{{ $record->id }}" rows="2" required readonly style="background-color: #e9ecef; cursor: not-allowed;">{{ $record->details }}</textarea>
                   </div>
                 </div>
 

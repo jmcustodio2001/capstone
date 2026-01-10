@@ -286,7 +286,7 @@ Route::group(['prefix' => 'employee', 'as' => 'employee.'], function () {
     Route::post('/verify-otp', [EmployeeController::class, 'verifyOTP'])->name('verify_otp');
     Route::post('/resend-otp', [EmployeeController::class, 'resendOTP'])->name('resend_otp');
     Route::post('/logout', [EmployeeController::class, 'logout'])->name('logout');
-    
+
     // Simple password verification route (always returns success since we removed password validation)
     Route::post('/verify-password', function() {
         return response()->json(['success' => true, 'message' => 'Password verified']);
@@ -374,11 +374,11 @@ Route::middleware('auth:employee')->group(function () {
     Route::post('/employee/leave-application', [EmployeeDashboardController::class, 'submitLeaveApplication'])->name('employee.leave-application.submit');
     Route::post('/employee/attendance/log', [EmployeeDashboardController::class, 'logAttendance'])->name('employee.attendance.log');
     Route::get('/employee/dashboard/get-counts', [EmployeeDashboardController::class, 'getDashboardCounts'])->name('employee.dashboard.get_counts');
-    
+
     // Employee Training Progress - create or update
     Route::post('/employee/training-progress/create-or-update', [TrainingProgressUpdateController::class, 'store'])->name('employee.training_progress.create_or_update');
     Route::post('/employee/training/refresh-progress', [TrainingProgressUpdateController::class, 'refreshProgress'])->name('employee.training.refresh_progress');
-    
+
     // Employee Training Data Refresh
     Route::get('/employee/my-trainings/refresh-data', [App\Http\Controllers\MyTrainingController::class, 'refreshData'])->name('employee.my_trainings.refresh_data');
     Route::get('/employee/my-trainings/get-counts', [App\Http\Controllers\MyTrainingController::class, 'getTrainingCounts'])->name('employee.my_trainings.get_counts');
@@ -904,6 +904,11 @@ Route::post('/admin/succession-simulations', [App\Http\Controllers\SuccessionSim
 Route::put('/admin/succession-simulations/{id}', [App\Http\Controllers\SuccessionSimulationController::class, 'update'])->name('succession_simulations.update')->middleware('auth:admin');
 Route::delete('/admin/succession-simulations/{id}', [App\Http\Controllers\SuccessionSimulationController::class, 'destroy'])->name('succession_simulations.destroy')->middleware('auth:admin');
 Route::post('/admin/succession-simulations/export', [App\Http\Controllers\SuccessionSimulationController::class, 'exportSuccessionData'])->name('succession_simulations.export')->middleware('auth:admin');
+
+// Succession Planning Dashboard - API Routes for Real Data Integration
+Route::get('/admin/succession-planning', [App\Http\Controllers\SuccessionPlanningController::class, 'index'])->name('succession_planning.index')->middleware('auth:admin');
+Route::get('/api/succession-planning/position/{positionId}/competency-gaps', [App\Http\Controllers\SuccessionPlanningController::class, 'getPositionCompetencyGaps'])->name('api.succession_planning.position_competency_gaps')->middleware('auth:admin');
+Route::get('/api/succession-planning/position/{positionId}/training-status', [App\Http\Controllers\SuccessionPlanningController::class, 'getPositionTrainingStatus'])->name('api.succession_planning.position_training_status')->middleware('auth:admin');
 
 // Employee Routes - Self Service
 Route::get('/employee/leave-applications', [App\Http\Controllers\LeaveApplicationController::class, 'index'])->name('employee.leave_applications.index')->middleware('auth:employee');

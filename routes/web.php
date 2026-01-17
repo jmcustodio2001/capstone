@@ -24,6 +24,14 @@ Route::get('/', function () {
     return view('landingpage');
 })->name('welcome');
 
+Route::get('/about', function () {
+    return view('aboutpage');
+})->name('about');
+
+Route::get('/contact', function () {
+    return view('contactpage');
+})->name('contact');
+
 Route::get('/welcome', function () {
     return view('welcome');
 })->name('welcome.page');

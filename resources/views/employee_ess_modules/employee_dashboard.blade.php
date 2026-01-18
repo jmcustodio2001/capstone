@@ -719,11 +719,11 @@
 </div>
 
 <!-- Recent Activity & Quick Actions -->
-<div class="row g-4">
-  <div class="col-lg-8">
+<div class="row g-4 mb-4">
+  <div class="col-12">
     <div class="card shadow-sm border-0">
       <div class="card-header border-bottom">
-        <h5 class="card-title mb-0">Recent Requests</h5>
+        <h5 class="card-title mb-0"><i class="bi bi-list-check me-2"></i>Recent Requests</h5>
       </div>
       <div class="card-body">
         <div class="table-responsive">
@@ -795,65 +795,186 @@
       </div>
     </div>
   </div>
+</div>
 
-  <div class="col-lg-4">
+<!-- Rewards & Recognition Cards Section -->
+<div class="row mb-4">
+  <div class="col-12">
     <div class="card shadow-sm border-0">
-      <div class="card-header border-bottom">
-        <h5 class="card-title mb-0">Quick Actions</h5>
+      <div class="card-header d-flex justify-content-between align-items-center border-bottom">
+        <h5 class="card-title mb-0"><i class="bi bi-award me-2"></i>Rewards & Recognition</h5>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-success" id="rewardsCountBadge">{{ isset($rewards) ? $rewards->count() : 0 }} Earned</span>
+          <button class="btn btn-sm btn-outline-primary" id="refreshRewardsBtn" onclick="fetchRewardsData()">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
       </div>
       <div class="card-body">
-        <div class="d-grid gap-2">
-          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#leaveApplicationModal">
-            <i class="bi bi-calendar-plus me-2"></i> Apply for Leave
-          </button>
-          <button class="btn btn-outline-primary" onclick="logAttendance()">
-            <i class="bi bi-clock me-2"></i> Log Attendance
-          </button>
-          <button class="btn btn-outline-primary" onclick="viewPayslip()">
-            <i class="bi bi-receipt me-2"></i> View Payslip
-          </button>
-          <button class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#profileUpdateModal">
-            <i class="bi bi-person-circle me-2"></i> Update Profile
-          </button>
+        <div id="rewardsContainer">
+          @if(isset($rewards) && $rewards->count() > 0)
+            <div class="row g-3">
+              @foreach($rewards as $reward)
+              <div class="col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start mb-3">
+                      <i class="bi bi-award me-2" style="font-size: 1.5rem;"></i>
+                      <div class="flex-grow-1">
+                        <h6 class="card-title mb-1">{{ $reward->name ?? 'Award' }}</h6>
+                        <small class="opacity-75">
+                          {{ $reward->employee_name ?? 'Employee' }}
+                        </small>
+                      </div>
+                    </div>
 
+                    <div class="mb-0">
+                      <small class="opacity-75">Benefits</small>
+                      <p class="small mb-0"><strong>{{ $reward->benefits ?? 'Certificate' }}</strong></p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              @endforeach
+            </div>
+          @else
+            <div class="text-center py-5">
+              <i class="bi bi-award" style="font-size: 3rem; color: #dee2e6;"></i>
+              <p class="text-muted mt-3 mb-0">No rewards earned yet. Keep up the great work!</p>
+            </div>
+          @endif
         </div>
       </div>
     </div>
+  </div>
+</div>
+          @endif
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-    <div class="card shadow-sm border-0 mt-4">
+<!-- Recent Activity & Quick Actions -->
+<div class="row g-4 mb-4">
+  <div class="col-12">
+    <div class="card shadow-sm border-0">
       <div class="card-header border-bottom">
-        <h5 class="card-title mb-0">My Progress</h5>
+        <h5 class="card-title mb-0"><i class="bi bi-lightning-fill me-2"></i>Quick Actions</h5>
       </div>
       <div class="card-body">
-        <div class="mb-3">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="small">Competency Goals</span>
+        <div class="row g-2">
+          <div class="col-md-6 col-lg-3">
+            <button class="btn btn-primary w-100 py-3" data-bs-toggle="modal" data-bs-target="#leaveApplicationModal">
+              <i class="bi bi-calendar-plus me-2"></i> Apply for Leave
+            </button>
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <button class="btn btn-outline-primary w-100 py-3" onclick="window.location.href='{{ route("employee.attendance_logs.index") }}'">
+              <i class="bi bi-clock me-2"></i> Log Attendance
+            </button>
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <button class="btn btn-outline-primary w-100 py-3" onclick="viewPayslip()">
+              <i class="bi bi-receipt me-2"></i> View Payslip
+            </button>
+          </div>
+          <div class="col-md-6 col-lg-3">
+            <button class="btn btn-outline-info w-100 py-3" data-bs-toggle="modal" data-bs-target="#profileUpdateModal">
+              <i class="bi bi-person-circle me-2"></i> Update Profile
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- My Progress Section -->
+<div class="row mb-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-header border-bottom">
+        <h5 class="card-title mb-0"><i class="bi bi-graph-up me-2"></i>My Progress</h5>
+      </div>
+      <div class="card-body">
+        <div class="mb-4">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="small fw-bold">Competency Goals</span>
             <span class="small text-muted">{{ $competencyGoalsAchieved }} / {{ $totalCompetencies }}</span>
           </div>
-          <div class="progress" style="height: 8px;">
+          <div class="progress" style="height: 10px;">
             <div class="progress-bar" style="width: {{ $competencyProgress }}%"></div>
           </div>
           <small class="text-muted">{{ $competencyProgress }}% achieved</small>
         </div>
-        <div class="mb-3">
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="small">Trainings Completed</span>
+        <div class="mb-4">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="small fw-bold">Trainings Completed</span>
             <span class="small text-muted">{{ $completedTrainings }} / {{ $totalTrainings }}</span>
           </div>
-          <div class="progress" style="height: 8px;">
+          <div class="progress" style="height: 10px;">
             <div class="progress-bar bg-success" style="width: {{ $trainingCompletionRate }}%"></div>
           </div>
           <small class="text-muted">{{ $trainingCompletionRate }}% completed</small>
         </div>
         <div>
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <span class="small">Attendance Rate</span>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="small fw-bold">Attendance Rate</span>
             <span class="small text-muted">{{ $attendanceRate }}%</span>
           </div>
-          <div class="progress" style="height: 8px;">
+          <div class="progress" style="height: 10px;">
             <div class="progress-bar bg-warning" style="width: {{ $attendanceRate }}%"></div>
           </div>
           <small class="text-muted">{{ $attendanceRate >= 95 ? 'Excellent' : ($attendanceRate >= 85 ? 'Good' : 'Needs Improvement') }}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card shadow-sm border-0">
+      <div class="card-header border-bottom">
+        <h5 class="card-title mb-0"><i class="bi bi-person-check me-2"></i>Employee Overview</h5>
+      </div>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block mb-1">Employee ID</small>
+              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->employee_id ?? 'N/A' }}</h6>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block mb-1">Department</small>
+              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->department ?? 'N/A' }}</h6>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block mb-1">Position</small>
+              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->position ?? 'N/A' }}</h6>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block mb-1">Join Date</small>
+              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->joining_date ? Auth::guard('employee')->user()->joining_date->format('M d, Y') : 'N/A' }}</h6>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block mb-1">Email</small>
+              <p class="mb-0 text-break">{{ Auth::guard('employee')->user()->email ?? 'N/A' }}</p>
+            </div>
+          </div>
+          <div class="col-12">
+            <div class="p-3 bg-light rounded">
+              <small class="text-muted d-block mb-1">Contact</small>
+              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->phone ?? 'N/A' }}</h6>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1297,62 +1418,8 @@
 
     // Quick Actions Functions
     function logAttendance() {
-      const now = new Date();
-      const timeString = now.toLocaleTimeString();
-      Swal.fire({
-        title: 'Log attendance at ' + timeString + '?',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, log it!',
-        cancelButtonText: 'Cancel'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          const csrfToken = getCSRFToken();
-          if (!csrfToken) {
-            Swal.fire({
-              icon: 'error',
-              title: 'Security Error',
-              text: 'Security token not found. Please refresh the page and try again.'
-            });
-            return;
-          }
-
-          fetch('/employee/attendance/log', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': csrfToken
-            },
-            body: JSON.stringify({
-              timestamp: now.toISOString()
-            })
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              Swal.fire({
-                icon: 'success',
-                title: 'Attendance logged!',
-                text: 'Attendance logged successfully.'
-              }).then(() => location.reload());
-            } else {
-              Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: data.message || 'Error logging attendance.'
-              });
-            }
-          })
-          .catch(error => {
-            console.error('Error:', error);
-            Swal.fire({
-              icon: 'error',
-              title: 'Error',
-              text: 'Error logging attendance. Please try again.'
-            });
-          });
-        }
-      });
+      // Redirect to attendance logs page
+      window.location.href = '{{ route("employee.attendance_logs.index") }}';
     }
 
     function viewPayslip() {
@@ -1658,6 +1725,119 @@
             '<h6 class="text-muted mt-2">Connection Error</h6>' +
             '<p class="text-muted small mb-0">Unable to connect to the server. Please check your internet connection and try again.</p>' +
           '</div>';
+      });
+    }
+
+    // Fetch Rewards Data Function
+    function fetchRewardsData() {
+      const refreshBtn = document.getElementById('refreshRewardsBtn');
+      const container = document.getElementById('rewardsContainer');
+      const countBadge = document.getElementById('rewardsCountBadge');
+
+      // Disable button and show loading state
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading...';
+
+      const csrfToken = getCSRFToken();
+      if (!csrfToken) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Security Error',
+          text: 'Security token not found. Please refresh the page.'
+        });
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
+        return;
+      }
+
+      fetch('/employee/fetch-rewards', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': csrfToken
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.data) {
+          // Process the rewards data
+          const rewards = data.data;
+          let rewardsHtml = '';
+
+          if (Array.isArray(rewards) && rewards.length > 0) {
+            // Update badge count
+            countBadge.textContent = rewards.length + ' Earned';
+
+            rewardsHtml = '<div class="row g-3">';
+
+            rewards.forEach(reward => {
+              const rewardName = reward.reward?.name || reward.name || 'Award';
+              const rewardBenefits = reward.reward?.benefits || reward.benefits || 'Certificate';
+              const employeeName = reward.employee_name || 'Employee';
+
+              rewardsHtml += `
+                <div class="col-md-6 col-lg-4">
+                  <div class="card h-100 shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                    <div class="card-body">
+                      <div class="d-flex align-items-start mb-3">
+                        <i class="bi bi-award me-2" style="font-size: 1.5rem;"></i>
+                        <div class="flex-grow-1">
+                          <h6 class="card-title mb-1">${escapeHtml(rewardName)}</h6>
+                          <small class="opacity-75">${escapeHtml(employeeName)}</small>
+                        </div>
+                      </div>
+
+                      <div class="mb-0">
+                        <small class="opacity-75">Benefits</small>
+                        <p class="small mb-0"><strong>${escapeHtml(rewardBenefits)}</strong></p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `;
+            });
+
+            rewardsHtml += '</div>';
+          } else {
+            countBadge.textContent = '0 Earned';
+            rewardsHtml = `
+              <div class="text-center py-5">
+                <i class="bi bi-award" style="font-size: 3rem; color: #dee2e6;"></i>
+                <p class="text-muted mt-3 mb-0">No rewards earned yet. Keep up the great work!</p>
+              </div>
+            `;
+          }
+
+          // Update container with new HTML
+          container.innerHTML = rewardsHtml;
+
+          Swal.fire({
+            icon: 'success',
+            title: 'Rewards Updated',
+            text: 'Your rewards data has been refreshed successfully.',
+            timer: 2000,
+            showConfirmButton: false
+          });
+        } else {
+          Swal.fire({
+            icon: 'warning',
+            title: 'No Data',
+            text: data.message || 'Unable to fetch rewards data at this time.'
+          });
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching rewards:', error);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Error fetching rewards data. Please try again.'
+        });
+      })
+      .finally(() => {
+        // Re-enable button
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i>';
       });
     }
   </script>

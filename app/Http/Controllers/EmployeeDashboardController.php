@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Routing\Controller;
 use Carbon\Carbon;
 
@@ -34,7 +35,7 @@ class EmployeeDashboardController extends Controller
 
         // Also include completed trainings from employee self-reports
         $completedTrainingsSelfReported = \App\Models\CompletedTraining::where('employee_id', $employeeId)->count();
-        
+
         $completedTrainings = $trainings->where('progress', 100)->count() + $completedTrainingsSelfReported;
         $inProgressTrainings = $trainings->where('progress', '>', 0)->where('progress', '<', 100)->count();
         $totalTrainings = $trainings->count() + $completedTrainingsSelfReported;
@@ -73,13 +74,13 @@ class EmployeeDashboardController extends Controller
 
         // Get upcoming trainings count using the same logic as MyTrainingController
         $upcomingTrainings = $this->getAccurateUpcomingTrainingsCount($employeeId);
-        
+
         // Get upcoming trainings list for the view
         $upcomingTrainingsList = $this->getUpcomingTrainingsFromMyTrainingController($employeeId);
 
         // Get recent requests with mixed types
         $recentRequests = collect();
-        
+
         // Get leave applications
         $leaveRequests = \App\Models\RequestForm::where('employee_id', $employeeId)
             ->where('request_type', 'Leave Application')
@@ -149,7 +150,10 @@ class EmployeeDashboardController extends Controller
 
         // Get company announcements
         $announcements = $this->getCompanyAnnouncements();
-        
+
+        // Get rewards data
+        $rewards = $this->getEmployeeRewards($employeeId);
+
         // Debug: Log the upcoming trainings being passed to view
         error_log('Passing ' . $upcomingTrainingsList->count() . ' upcoming trainings to view for employee: ' . $employeeId);
 
@@ -173,7 +177,8 @@ class EmployeeDashboardController extends Controller
             'competencyProgress',
             'trainingCompletionRate',
             'upcomingTrainingsList',
-            'announcements'
+            'announcements',
+            'rewards'
         ));
     }
 
@@ -184,12 +189,12 @@ class EmployeeDashboardController extends Controller
     {
         // Fix expiration dates for destination trainings before retrieving them
         $this->fixDestinationExpirationDates();
-        
+
         // Fix expiration dates for competency gap trainings
         $this->fixCompetencyGapExpirationDates();
-        
+
         // Use the exact same logic as MyTrainingController
-        
+
         // Get ONLY competency gap sourced upcoming trainings (exclude admin assigned)
         $manualUpcoming = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
             ->whereIn('source', ['competency_gap', 'competency_assigned', 'competency_auto_assigned'])
@@ -204,7 +209,7 @@ class EmployeeDashboardController extends Controller
             ->where('source', 'destination_assigned')
             ->pluck('training_title')
             ->toArray();
-            
+
         $destinationAssigned = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
             ->where('admin_approved_for_upcoming', true)
             ->whereNotIn('status', ['completed', 'declined'])
@@ -215,13 +220,13 @@ class EmployeeDashboardController extends Controller
                 $destinationYear = $training->created_at->format('Y');
                 $sequentialNumber = str_pad($training->id, 4, '0', STR_PAD_LEFT);
                 $properDestinationId = "DT{$destinationYear}{$sequentialNumber}";
-                
+
                 // Use proper expired date or calculate one
                 $expiredDate = $training->expired_date;
                 if (!$expiredDate) {
                     $expiredDate = $training->created_at->addMonths(3);
                 }
-                
+
                 return (object)[
                     'upcoming_id' => $properDestinationId,
                     'training_title' => $training->destination_name,
@@ -258,15 +263,15 @@ class EmployeeDashboardController extends Controller
         // Clear any cached data first to ensure fresh counts
         Cache::forget("employee_training_counts_{$employeeId}");
         Cache::forget("upcoming_trainings_{$employeeId}");
-        
+
         // Use the exact same logic as MyTrainingController
         $manualUpcoming = \App\Models\UpcomingTraining::where('employee_id', $employeeId)->get();
-        
+
         $adminAssigned = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
             ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
             ->whereHas('course')
             ->get();
-            
+
         $competencyAssigned = \App\Models\CompetencyCourseAssignment::where('employee_id', $employeeId)
             ->whereIn('status', ['Assigned', 'In Progress', 'Not Started'])
             ->whereHas('course')
@@ -282,33 +287,33 @@ class EmployeeDashboardController extends Controller
         $seenCourseIds = [];
         $deduplicated = $allTrainings->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
             $item = (object) $item;
-            
+
             $rawTitle = $item->training_title ?? '';
             if (empty(trim($rawTitle))) {
                 return false;
             }
-            
+
             $normalizedTitle = strtolower(trim($rawTitle));
             $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development)\b/i', '', $normalizedTitle);
             $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
-            
+
             $courseId = $item->course_id ?? null;
             if ($courseId && in_array($courseId, $seenCourseIds)) {
                 return false;
             }
-            
+
             if (in_array($normalizedTitle, $seenTitles)) {
                 return false;
             }
-            
+
             if ($courseId) {
                 $seenCourseIds[] = $courseId;
             }
             $seenTitles[] = $normalizedTitle;
-            
+
             return true;
         });
-        
+
         return $deduplicated->count();
     }
 
@@ -318,18 +323,18 @@ class EmployeeDashboardController extends Controller
     public function getDashboardCounts()
     {
         $employeeId = Auth::guard('employee')->user()->employee_id;
-        
+
         // Get fresh upcoming trainings count
         $upcomingTrainings = $this->getAccurateUpcomingTrainingsCount($employeeId);
-        
+
         // Get training requests count
         $requestsCount = \App\Models\TrainingRequest::where('employee_id', $employeeId)->count();
-        
+
         // Get training progress count (only approved requests)
         $progressCount = \App\Models\TrainingRequest::where('employee_id', $employeeId)
             ->where('status', 'Approved')
             ->count();
-        
+
         return response()->json([
             'success' => true,
             'counts' => [
@@ -347,7 +352,7 @@ class EmployeeDashboardController extends Controller
     {
         // Find the employee
         $employee = \App\Models\Employee::where('employee_id', $employeeId)->first();
-        
+
         if (!$employee) {
             return redirect()->back()->with('error', 'Employee not found.');
         }
@@ -403,7 +408,7 @@ class EmployeeDashboardController extends Controller
 
         // Get recent requests with mixed types
         $recentRequests = collect();
-        
+
         // Get leave applications
         $leaveRequests = \App\Models\RequestForm::where('employee_id', $employeeId)
             ->where('request_type', 'Leave Application')
@@ -512,7 +517,7 @@ class EmployeeDashboardController extends Controller
             ]);
 
             $employee = Auth::guard('employee')->user();
-            
+
             if (!$employee) {
                 return response()->json([
                     'success' => false,
@@ -548,7 +553,7 @@ class EmployeeDashboardController extends Controller
     {
         try {
             $updated = 0;
-            
+
             // Get all destination training records without proper expiration dates
             $records = \App\Models\DestinationKnowledgeTraining::destinationTrainings()
                 ->where(function($query) {
@@ -561,14 +566,14 @@ class EmployeeDashboardController extends Controller
             foreach ($records as $record) {
                 // Set expiration date to 3 months from creation date
                 $expirationDate = $record->created_at->addMonths(3);
-                
+
                 $record->expired_date = $expirationDate;
-                
+
                 // Ensure the record is properly marked for upcoming if active
                 if ($record->is_active && !$record->admin_approved_for_upcoming) {
                     $record->admin_approved_for_upcoming = true;
                 }
-                
+
                 $record->save();
                 $updated++;
             }
@@ -589,7 +594,7 @@ class EmployeeDashboardController extends Controller
     {
         try {
             $updated = 0;
-            
+
             // Get all competency gaps without proper expiration dates
             $competencyGaps = \App\Models\CompetencyGap::where(function($query) {
                 $query->whereNull('expired_date')
@@ -600,7 +605,7 @@ class EmployeeDashboardController extends Controller
             foreach ($competencyGaps as $gap) {
                 // Set expiration date to 6 months from creation date for competency gaps
                 $expirationDate = $gap->created_at->addMonths(6);
-                
+
                 $gap->expired_date = $expirationDate;
                 $gap->save();
                 $updated++;
@@ -628,7 +633,7 @@ class EmployeeDashboardController extends Controller
                     // Fallback: set to 6 months from creation
                     $training->expired_date = $training->created_at->addMonths(6);
                 }
-                
+
                 $training->save();
                 $updated++;
             }
@@ -662,12 +667,12 @@ class EmployeeDashboardController extends Controller
                     ->where('employee_id', $employeeId)
                     ->orderBy('pay_period_end', 'desc')
                     ->first();
-                
+
                 if ($latestPayslip) {
                     return $latestPayslip->net_pay ?? $latestPayslip->gross_pay ?? 28500;
                 }
             }
-            
+
             // Fallback to default amount
             return 28500;
         } catch (\Exception $e) {
@@ -687,12 +692,12 @@ class EmployeeDashboardController extends Controller
                     ->where('employee_id', $employeeId)
                     ->orderBy('pay_period_end', 'desc')
                     ->first();
-                
+
                 if ($latestPayslip && $latestPayslip->pay_period_end) {
                     return Carbon::parse($latestPayslip->pay_period_end)->format('F Y');
                 }
             }
-            
+
             // Fallback to current month
             return Carbon::now()->format('F Y');
         } catch (\Exception $e) {
@@ -714,7 +719,7 @@ class EmployeeDashboardController extends Controller
                     ->take(10)
                     ->get();
             }
-            
+
             // Try alternative table names
             if (Schema::hasTable('company_announcements')) {
                 return DB::table('company_announcements')
@@ -723,7 +728,7 @@ class EmployeeDashboardController extends Controller
                     ->take(10)
                     ->get();
             }
-            
+
             // Create sample announcements for demonstration
             return collect([
                 (object)[
@@ -761,21 +766,21 @@ class EmployeeDashboardController extends Controller
     {
         try {
             $announcement = null;
-            
+
             // Try to get from announcements table if it exists
             if (Schema::hasTable('announcements')) {
                 $announcement = DB::table('announcements')
                     ->where('id', $announcementId)
                     ->first();
             }
-            
+
             // Try alternative table names
             if (!$announcement && Schema::hasTable('company_announcements')) {
                 $announcement = DB::table('company_announcements')
                     ->where('id', $announcementId)
                     ->first();
             }
-            
+
             // Fallback to sample data
             if (!$announcement) {
                 $sampleAnnouncements = [
@@ -804,10 +809,10 @@ class EmployeeDashboardController extends Controller
                         'author' => 'IT Department'
                     ]
                 ];
-                
+
                 $announcement = $sampleAnnouncements[$announcementId] ?? null;
             }
-            
+
             if ($announcement) {
                 return response()->json([
                     'success' => true,
@@ -819,7 +824,7 @@ class EmployeeDashboardController extends Controller
                     'message' => 'Announcement not found'
                 ], 404);
             }
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -835,7 +840,7 @@ class EmployeeDashboardController extends Controller
     {
         try {
             $employee = Auth::guard('employee')->user();
-            
+
             // Verify password first
             if (!Hash::check($request->verify_password, $employee->password)) {
                 return response()->json([
@@ -844,7 +849,7 @@ class EmployeeDashboardController extends Controller
                     'message' => 'Invalid password provided'
                 ], 400);
             }
-            
+
             // Validate input
             $request->validate([
                 'first_name' => 'required|string|max:255',
@@ -853,13 +858,13 @@ class EmployeeDashboardController extends Controller
                 'phone_number' => 'nullable|string|max:20',
                 'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
             ]);
-            
+
             // Update employee data
             $employee->first_name = $request->first_name;
             $employee->last_name = $request->last_name;
             $employee->email = $request->email;
             $employee->phone_number = $request->phone_number;
-            
+
             // Handle profile picture upload
             if ($request->hasFile('profile_picture')) {
                 $file = $request->file('profile_picture');
@@ -867,14 +872,14 @@ class EmployeeDashboardController extends Controller
                 $file->storeAs('profile_pictures', $filename, 'public');
                 $employee->profile_picture = 'profile_pictures/' . $filename;
             }
-            
+
             $employee->save();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Profile updated successfully'
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -890,7 +895,7 @@ class EmployeeDashboardController extends Controller
     {
         try {
             $employee = Auth::guard('employee')->user();
-            
+
             // Validate input
             $request->validate([
                 'leave_type' => 'required|string',
@@ -898,7 +903,7 @@ class EmployeeDashboardController extends Controller
                 'end_date' => 'required|date|after_or_equal:start_date',
                 'reason' => 'required|string|max:1000'
             ]);
-            
+
             // Create leave application
             $leaveApplication = new \App\Models\RequestForm();
             $leaveApplication->employee_id = $employee->employee_id;
@@ -906,21 +911,21 @@ class EmployeeDashboardController extends Controller
             $leaveApplication->requested_date = Carbon::now();
             $leaveApplication->status = 'Pending';
             $leaveApplication->reason = $request->reason;
-            
+
             // Store additional leave details in a JSON field or separate fields
             $leaveApplication->details = json_encode([
                 'leave_type' => $request->leave_type,
                 'start_date' => $request->start_date,
                 'end_date' => $request->end_date
             ]);
-            
+
             $leaveApplication->save();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Leave application submitted successfully'
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -936,27 +941,27 @@ class EmployeeDashboardController extends Controller
     {
         try {
             $employee = Auth::guard('employee')->user();
-            
+
             // Validate input
             $request->validate([
                 'timestamp' => 'required|date'
             ]);
-            
+
             $timestamp = Carbon::parse($request->timestamp);
             $today = $timestamp->format('Y-m-d');
-            
+
             // Check if attendance already logged for today
             $existingLog = \App\Models\AttendanceTimeLog::where('employee_id', $employee->employee_id)
                 ->whereDate('log_date', $today)
                 ->first();
-            
+
             if ($existingLog) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Attendance already logged for today'
                 ], 400);
             }
-            
+
             // Create attendance log
             $attendanceLog = new \App\Models\AttendanceTimeLog();
             $attendanceLog->employee_id = $employee->employee_id;
@@ -964,12 +969,12 @@ class EmployeeDashboardController extends Controller
             $attendanceLog->time_in = $timestamp->format('H:i:s');
             $attendanceLog->status = 'Present';
             $attendanceLog->save();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Attendance logged successfully'
             ]);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -977,4 +982,80 @@ class EmployeeDashboardController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get employee rewards from API
+     */
+    private function getEmployeeRewards($employeeId)
+    {
+        try {
+            $response = Http::get('https://hr1.jetlougetravel.com/api/give-rewards');
+
+            if(!$response->successful()) {
+                error_log('Failed to fetch rewards from API for employee: ' . $employeeId);
+                return collect();
+            }
+
+            $data = $response->json();
+
+            // Process the data according to the structure
+            $rewards = collect();
+
+            if (is_array($data)) {
+                foreach($data as $item) {
+                    $employeeName = $item['employee_name'] ?? '';
+                    $rewardName = $item['reward']['name'] ?? '';
+                    $benefits = $item['reward']['benefits'] ?? '';
+                    $rewardDescription = $item['reward']['description'] ?? 'Certificate of achievement';
+                    $rewardType = $item['reward']['type'] ?? 'standard';
+                    $createdAt = isset($item['created_at']) ? Carbon::parse($item['created_at']) : Carbon::now();
+
+                    // Only add rewards for the current employee
+                    if ($employeeName || isset($item['employee_id']) && $item['employee_id'] == $employeeId) {
+                        $rewards->push((object)[
+                            'name' => $rewardName,
+                            'benefits' => $benefits,
+                            'description' => $rewardDescription,
+                            'type' => $rewardType,
+                            'created_at' => $createdAt,
+                            'employee_name' => $employeeName
+                        ]);
+                    }
+                }
+            }
+
+            return $rewards;
+
+        } catch (\Exception $e) {
+            error_log('Error fetching rewards for employee ' . $employeeId . ': ' . $e->getMessage());
+            return collect();
+        }
+    }
+
+    public function fetchGivenRewards() {
+        try {
+            $response = Http::get('https://hr1.jetlougetravel.com/api/give-rewards');
+
+            if(!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch rewards data'
+                ], 500);
+            }
+
+            $data = $response->json();
+
+            return response()->json([
+                'success' => true,
+                'data' => $data
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching rewards: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
+

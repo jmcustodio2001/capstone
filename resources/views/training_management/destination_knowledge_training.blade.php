@@ -897,6 +897,41 @@ if (typeof window.trans === 'undefined') {
         </div>
       </div>
 
+      <!-- Orientation Table -->
+      <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center" style="background: #fff3cd;">
+          <div class="d-flex align-items-center gap-3">
+            <h2 class="fw-bold mb-1">Orientation</h2>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead class="table-light">
+                <tr>
+                  <th>Employee</th>
+                  <th>Date & Time</th>
+                  <th>Location</th>
+                  <th>Facilitator</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="6" class="text-center py-5">
+                    <div class="mb-3">
+                      <i class="bi bi-calendar display-1 text-muted"></i>
+                    </div>
+                    <p class="text-muted mb-0">No orientations scheduled</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Add Destination Modal -->
       <div class="modal fade" id="addDestinationModal" tabindex="-1" aria-labelledby="addDestinationModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-lg" style="max-width: 600px;">

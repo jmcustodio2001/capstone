@@ -848,12 +848,7 @@
     </div>
   </div>
 </div>
-          @endif
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+
 
 <!-- Recent Activity & Quick Actions -->
 <div class="row g-4 mb-4">

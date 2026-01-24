@@ -48,6 +48,8 @@ class SuccessionPlanningController extends Controller
         $topCandidates = [];
         $readinessScores = [];
         $inDevelopmentCounts = [];
+        $readyEmployeeCounts = [];
+        $readyEmployeeNames = [];
 
         foreach ($positions as $position) {
             $candidates = $this->eligibilityService->getCandidatesForPosition($position);
@@ -61,6 +63,15 @@ class SuccessionPlanningController extends Controller
             $inDevelopmentCounts[$position->id] = collect($candidates)
                 ->whereBetween('readiness_score', [70, 89])
                 ->count();
+
+            // Count REAL ready employees (readiness >= 70%) for this position
+            $readyEmployees = collect($candidates)->where('readiness_score', '>=', 70);
+            $readyEmployeeCounts[$position->id] = $readyEmployees->count();
+
+            // Get names of ready employees
+            $readyEmployeeNames[$position->id] = $readyEmployees->map(function($emp) {
+                return $emp['name'] . ' (' . $emp['readiness_score'] . '%)';
+            })->toArray();
         }
 
         // Get scenario data
@@ -111,6 +122,8 @@ class SuccessionPlanningController extends Controller
             'topCandidates',
             'readinessScores',
             'inDevelopmentCounts',
+            'readyEmployeeCounts',
+            'readyEmployeeNames',
             'scenarioData'
         ));
     }

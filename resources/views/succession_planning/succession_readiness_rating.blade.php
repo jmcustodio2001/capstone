@@ -11,57 +11,73 @@
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <meta name="csrf-token" content="{{ csrf_token() }}">
-  
+
   <!-- Custom SweetAlert Styling -->
   <style>
     .swal-wide {
       width: 800px !important;
     }
-    
+
     .swal2-popup {
       border-radius: 15px !important;
     }
-    
+
     .swal2-title {
       font-size: 1.5rem !important;
       font-weight: 600 !important;
     }
-    
+
     .swal2-html-container {
       font-size: 0.95rem !important;
       line-height: 1.5 !important;
     }
-    
+
     .swal2-confirm {
       border-radius: 8px !important;
       font-weight: 500 !important;
       padding: 8px 20px !important;
     }
-    
+
     .swal2-cancel {
       border-radius: 8px !important;
       font-weight: 500 !important;
       padding: 8px 20px !important;
     }
-    
+
     .swal2-input {
       border-radius: 8px !important;
       border: 2px solid #e9ecef !important;
       padding: 10px 15px !important;
       font-size: 0.95rem !important;
     }
-    
+
     .swal2-input:focus {
       border-color: #0d6efd !important;
       box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25) !important;
     }
-    
+
     .swal2-validation-message {
       background: #f8d7da !important;
       color: #721c24 !important;
       border-radius: 6px !important;
       padding: 8px 12px !important;
       margin-top: 8px !important;
+    }
+
+    /* Smooth collapse animation */
+    .collapse {
+      transition: height 0.35s ease, opacity 0.35s ease !important;
+    }
+
+    .collapse:not(.show) {
+      height: 0;
+      overflow: hidden;
+      opacity: 0;
+    }
+
+    .collapse.show {
+      height: auto;
+      opacity: 1;
     }
   </style>
 </head>
@@ -119,14 +135,14 @@
           @endif
           <div class="row">
             <div class="col-md-4">
-              <input type="text" name="employee_display" class="form-control" placeholder="Select Employee" readonly 
+              <input type="text" name="employee_display" class="form-control" placeholder="Select Employee" readonly
                 @if(isset($rating) && $rating->employee) value="{{ $rating->employee->first_name }} {{ $rating->employee->last_name }} ({{ $rating->employee_id }})" @endif
                 @if(isset($showMode)) disabled @endif>
               <input type="hidden" name="employee_id" required
                 @if(isset($rating)) value="{{ $rating->employee_id }}" @endif>
             </div>
             <div class="col-md-3">
-              <input type="text" name="readiness_level" class="form-control" placeholder="Readiness Level" readonly required 
+              <input type="text" name="readiness_level" class="form-control" placeholder="Readiness Level" readonly required
                 @if(isset($rating)) value="{{ $rating->readiness_level }}" @endif
                 @if(isset($showMode)) disabled @endif>
             </div>
@@ -168,14 +184,14 @@
                 </select>
               </div>
             </div>
-            
+
             <!-- AI Analysis Header -->
             <div class="mb-3">
               <h6 class="fw-bold text-success">
                 <i class="bi bi-person me-1"></i>Individual Analysis
               </h6>
             </div>
-            
+
             <!-- Individual Analysis Content -->
             <div id="analysisResults">
                   <div class="text-center py-4">
@@ -238,31 +254,28 @@
                         $firstName = $rating->employee->first_name ?? 'Unknown';
                         $lastName = $rating->employee->last_name ?? 'Employee';
                         $fullName = $firstName . ' ' . $lastName;
-                        
-                        // Check if profile picture exists - simplified approach
-                        $profilePicUrl = null;
-                        if ($rating->employee->profile_picture) {
-                            // Direct asset URL generation - Laravel handles the storage symlink
-                            $profilePicUrl = asset('storage/' . $rating->employee->profile_picture);
-                        }
-                        
+
                         // Generate consistent color based on employee name for fallback
                         $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
                         $employeeId = $rating->employee->employee_id ?? 'default';
                         $colorIndex = abs(crc32($employeeId)) % count($colors);
                         $bgColor = $colors[$colorIndex];
-                        
-                        // Fallback to UI Avatars if no profile picture found
-                        if (!$profilePicUrl) {
-                            $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) . 
-                                           "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+
+                        // Always use UI Avatars as primary source for reliability
+                        $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
+                                       "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+
+                        // If profile picture exists in storage, try it first
+                        if ($rating->employee->profile_picture && file_exists(storage_path('app/public/' . $rating->employee->profile_picture))) {
+                            $profilePicUrl = asset('storage/' . $rating->employee->profile_picture);
                         }
                       @endphp
-                      
-                      <img src="{{ $profilePicUrl }}" 
-                           alt="{{ $firstName }} {{ $lastName }}" 
-                           class="rounded-circle" 
-                           style="width: 40px; height: 40px; object-fit: cover;">
+
+                      <img src="{{ $profilePicUrl }}"
+                           alt="{{ $firstName }} {{ $lastName }}"
+                           class="rounded-circle"
+                           style="width: 40px; height: 40px; object-fit: cover;"
+                           onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($fullName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
                     </div>
                     <div>
                       <span class="fw-semibold">{{ $firstName }} {{ $lastName }}</span>
@@ -278,7 +291,7 @@
                   $level = $rating->readiness_level ?? 'Needs Development';
                   $badgeClass = match($level) {
                     'Ready Now' => 'bg-success',
-                    'Ready Soon' => 'bg-warning', 
+                    'Ready Soon' => 'bg-warning',
                     'Needs Development' => 'bg-danger',
                     default => 'bg-secondary'
                   };
@@ -299,13 +312,24 @@
                         <i class="bi {{ $icon }} me-2"></i>
                         <span class="fw-bold text-{{ str_replace('bg-', '', $badgeClass) }}">{{ $level }}</span>
                       </div>
-                      <span class="badge {{ $badgeClass }} text-white">
-                        {{ $level === 'Ready Now' ? 'HIGH' : ($level === 'Ready Soon' ? 'MEDIUM' : 'LOW') }}
-                      </span>
+                      <div class="d-flex align-items-center gap-2">
+                        <span id="ai-verification-badge-{{ $rating->id }}" class="badge bg-light text-dark border shadow-sm">
+                            <i class="bi bi-robot text-primary me-1"></i> AI Generated
+                        </span>
+                        <span class="badge {{ $badgeClass }} text-white">
+                          {{ $level === 'Ready Now' ? 'HIGH' : ($level === 'Ready Soon' ? 'MEDIUM' : 'LOW') }}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  
+
                   <div class="card-body p-3">
+                    <!-- Alert Section -->
+                    <div class="alert alert-danger border-left-danger shadow-sm mb-3">
+                      <i class="bi bi-exclamation-circle-fill me-2"></i>
+                      <strong>Needs Development:</strong> 1/5 competency, 2 leadership skills, 0 years experience, 6-12 months recommended
+                    </div>
+
                     <!-- Reasoning Section -->
                     <div class="readiness-reasoning mb-3" id="reasoning-{{ $rating->id }}">
                       <div class="d-flex align-items-start">
@@ -317,22 +341,27 @@
                         </div>
                       </div>
                     </div>
-                    
+
                     <!-- Action Buttons -->
                     <div class="d-flex gap-2">
-                      <button class="btn btn-sm btn-outline-primary flex-grow-1" type="button" 
+                      <button class="btn btn-sm btn-outline-primary flex-grow-1" type="button"
                               onclick="toggleReadinessDetails({{ $rating->id }}, '{{ $rating->employee ? $rating->employee->employee_id : '' }}')">
                         <i class="bi bi-chevron-down"></i> <span>View Analysis</span>
                       </button>
-                      <button class="btn btn-sm btn-outline-success" type="button" 
-                              onclick="applyToForm('{{ $rating->employee ? $rating->employee->employee_id : '' }}', '{{ $level }}')" 
+                      <button class="btn btn-sm btn-outline-success" type="button"
+                              onclick="applyToForm('{{ $rating->employee ? $rating->employee->employee_id : '' }}', '{{ $level }}')"
                               title="Apply to Form">
                         <i class="bi bi-arrow-up-circle"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-success" type="button"
+                              onclick="confirmHRAssessment({{ $rating->id }})"
+                              title="Confirm HR Assessment">
+                        <i class="bi bi-check-circle"></i>
                       </button>
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- Enhanced Expandable Details -->
                 <div class="collapse mt-3" id="details-{{ $rating->id }}">
                   <div class="card border-primary border-opacity-25 shadow-sm">
@@ -351,6 +380,33 @@
                         </div>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                <!-- Audit Log Section -->
+                <div class="card shadow mb-4" style="margin-top: 1rem;">
+                  <div class="card-header card-header-custom bg-white">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-journal-text me-2"></i>Audit Log</h5>
+                  </div>
+                  <div class="card-body p-0">
+                    <table class="table table-sm mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th>Timestamp</th>
+                          <th>Action</th>
+                          <th>Status</th>
+                          <th>Verified By</th>
+                        </tr>
+                      </thead>
+                      <tbody id="auditLogBody-{{ $rating->id }}">
+                        <tr>
+                          <td class="text-muted small">{{ now()->format('Y-m-d H:i:s') }} AM</td>
+                          <td>Initial Assessment</td>
+                          <td><span class="badge bg-secondary">AI Generated</span></td>
+                          <td>System (LeadGen AI)</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </td>
@@ -385,7 +441,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  
+
   <script>
     // Simple AI Analysis System
     function showAIAnalysis() {
@@ -400,7 +456,7 @@
       const employeeSelect = document.getElementById('analyzeEmployee');
       const employeeId = employeeSelect.value;
       const employeeName = employeeSelect.options[employeeSelect.selectedIndex].getAttribute('data-name');
-      
+
       if (!employeeId) return;
 
       const resultsContainer = document.getElementById('analysisResults');
@@ -413,7 +469,7 @@
 
       // Get readiness score from Employee Training Dashboard API
       console.log(`Fetching readiness score for employee: ${employeeId}`);
-      
+
       // Get competency data directly from succession readiness API (which includes all data)
       fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
         .then(response => {
@@ -429,7 +485,7 @@
         })
         .then(competencyData => {
           console.log('Competency data received:', competencyData);
-          
+
           // Use the calculated readiness score from backend instead of frontend calculation
           if (competencyData.calculated_readiness_score !== undefined) {
             // Use the backend-calculated score directly
@@ -458,7 +514,7 @@
 
     function displaySimpleAnalysis(data, employeeName) {
       console.log('Display analysis called with data:', data);
-      
+
       // Use backend-calculated score (new simplified calculation)
       let overallReadiness;
       if (data.calculated_readiness_score !== undefined) {
@@ -470,26 +526,26 @@
         const certificates = data.certificates_earned || 0;
         const totalCompetencies = data.total_competencies_assessed || 0;
         const avgProficiency = data.avg_proficiency_level || 0;
-        
+
         // 1. HIRE DATE COMPONENT (10%)
         const hireDateScore = Math.min(10, yearsOfService * 1); // 1% per year, max 10%
-        
+
         // 2. TRAINING RECORDS COMPONENT (3%)
         const trainingRecordsScore = Math.min(3, certificates * 0.5); // 0.5% per certificate, max 3%
-        
+
         // 3. COMPETENCY PROFILES COMPONENT (Additive)
         // Each competency adds 2% per proficiency level (Level 1=2%, Level 2=4%, etc.)
         const competencyScore = totalCompetencies * avgProficiency * 2;
-        
+
         // CALCULATE FINAL SCORE
         const totalScore = hireDateScore + trainingRecordsScore + competencyScore;
-        
+
         // Set minimum score
         const minimumScore = yearsOfService < 1 ? 5 : 15;
-        
+
         // Final score
         overallReadiness = Math.max(minimumScore, Math.min(100, Math.round(totalScore)));
-        
+
         console.log('Simplified calculation:', {
           hireDateScore,
           trainingRecordsScore,
@@ -498,7 +554,7 @@
           overallReadiness
         });
       }
-      
+
       // Determine readiness level based on calculated score (matching dropdown options)
       let readinessLevel, readinessClass, timeline;
       if (overallReadiness >= 80) {
@@ -514,37 +570,37 @@
         readinessClass = "danger";
         timeline = "6-12 months";
       }
-      
+
       console.log(`Final Analysis Score: ${overallReadiness}% for ${employeeName}`);
-      
+
       // Get data for display
       const proficiency = data.avg_proficiency_level || 0;
       const leadership = data.leadership_competencies_count || 0;
       const trainingProgress = data.training_progress || 0;
       const certificates = data.certificates_earned || 0;
       const yearsOfService = data.years_of_service || 0;
-      
+
       // Generate strengths and development areas
       const strengths = [];
       const developmentAreas = [];
-      
+
       if (proficiency >= 4) strengths.push('High Competency Level');
       if (leadership >= 3) strengths.push('Leadership Skills');
       if (trainingProgress >= 80) strengths.push('Training Excellence');
       if (certificates >= 2) strengths.push('Professional Certifications');
       // Removed destination training reference
       if (yearsOfService >= 3) strengths.push('Experienced Employee');
-      
+
       if (proficiency < 3) developmentAreas.push('Skill Development');
       if (leadership < 2) developmentAreas.push('Leadership Training');
       if (trainingProgress < 60) developmentAreas.push('Complete Training');
       if (certificates === 0) developmentAreas.push('Earn Certifications');
       const destinationTrainingsCompleted = data.destination_trainings_completed || 0;
       if (destinationTrainingsCompleted === 0) developmentAreas.push('Gain Destination Knowledge');
-      
+
       if (strengths.length === 0) strengths.push('Ready for Assessment');
       if (developmentAreas.length === 0) developmentAreas.push('Continue Development');
-      
+
       const resultsContainer = document.getElementById('analysisResults');
       resultsContainer.innerHTML = `
         <div class="card border-${readinessClass}">
@@ -573,7 +629,7 @@
                 <small class="text-muted">Destination Trainings</small>
               </div>
             </div>
-            
+
             <div class="row">
               <div class="col-md-6">
                 <h6 class="fw-bold text-success"><i class="bi bi-award me-1"></i>Strengths</h6>
@@ -588,7 +644,7 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="alert alert-info">
               <h6><i class="bi bi-lightbulb me-2"></i>AI Recommendation</h6>
               <p class="mb-2">${getSimpleRecommendation(readinessLevel)}</p>
@@ -604,7 +660,7 @@
         </div>
       `;
     }
-    
+
     function getSimpleRecommendation(level) {
       switch(level) {
         case 'Ready Now':
@@ -617,7 +673,7 @@
           return 'Assessment needed to determine readiness level.';
       }
     }
-    
+
     function applyToForm(employeeId, level) {
       if (employeeId) {
         // This is the old function - the new enhanced one is below
@@ -625,10 +681,10 @@
       }
       document.querySelector('input[name="readiness_level"]').value = level;
       document.querySelector('input[name="assessment_date"]').value = new Date().toISOString().split('T')[0];
-      
+
       // Scroll to form
       document.querySelector('form').scrollIntoView({ behavior: 'smooth' });
-      
+
       // Show success message
       const alert = document.createElement('div');
       alert.className = 'alert alert-success alert-dismissible fade show mt-2';
@@ -651,7 +707,7 @@
 
     function loadSimpleReasoning(ratingId, employeeId, readinessLevel) {
       const reasoningElement = document.getElementById(`reasoning-${ratingId}`);
-      
+
       fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
         .then(response => {
           if (!response.ok) {
@@ -686,7 +742,7 @@
       const yearsOfService = data.years_of_service || 0;
 
       let icon, colorClass, reasoning;
-      
+
       switch(readinessLevel) {
         case 'Ready Now':
           icon = 'bi-check-circle-fill';
@@ -722,19 +778,34 @@
       const button = event.target.closest('button');
       const icon = button.querySelector('i');
       const text = button.querySelector('span');
-      
-      if (detailsElement.classList.contains('show')) {
+
+      console.log('Toggle called for rating:', ratingId);
+      console.log('Details element:', detailsElement);
+
+      if (!detailsElement) {
+        console.error('Details element not found for rating:', ratingId);
+        return;
+      }
+
+      // Toggle the collapse manually
+      const isShown = detailsElement.classList.contains('show');
+
+      if (isShown) {
+        // Hide it
         detailsElement.classList.remove('show');
         icon.className = 'bi bi-chevron-down';
-        text.textContent = 'Show Details';
+        text.textContent = 'View Analysis';
+        console.log('Collapsed details');
       } else {
+        // Show it
         detailsElement.classList.add('show');
         icon.className = 'bi bi-chevron-up';
         text.textContent = 'Hide Details';
-        
+        console.log('Expanded details');
+
         // Load simple detailed analysis
         const analysisContainer = document.getElementById(`detailed-analysis-${ratingId}`);
-        if (analysisContainer.innerHTML.includes('Analyzing competency data') || analysisContainer.innerHTML.includes('Loading detailed analysis')) {
+        if (analysisContainer && (analysisContainer.innerHTML.includes('Analyzing competency data') || analysisContainer.innerHTML.includes('Loading detailed analysis') || analysisContainer.innerHTML.includes('spinner-border'))) {
           loadSimpleDetailedAnalysis(ratingId, employeeId);
         }
       }
@@ -742,7 +813,7 @@
 
     function loadSimpleDetailedAnalysis(ratingId, employeeId) {
       const analysisContainer = document.getElementById(`detailed-analysis-${ratingId}`);
-      
+
       // Show loading state
       analysisContainer.innerHTML = `
         <div class="text-center py-3">
@@ -750,9 +821,9 @@
           <div class="text-muted">Loading employee data...</div>
         </div>
       `;
-      
+
       console.log('Loading analysis for employee:', employeeId);
-      
+
       fetch(`/succession_readiness_ratings/competency-data/${employeeId}`)
         .then(response => {
           console.log('Response status:', response.status);
@@ -802,14 +873,25 @@
           </div>
         `;
       }
-      
+
       const proficiency = data.avg_proficiency_level || 0;
       const leadership = data.leadership_competencies_count || 0;
       const totalCompetencies = data.total_competencies_assessed || 0;
       const certificates = data.certificates_earned || 0;
       const yearsOfService = data.years_of_service || 0;
       const totalCourses = data.total_courses_assigned || 0;
-      
+
+      // Debug logging
+      console.log('Detailed Analysis Data:', {
+        proficiency,
+        leadership,
+        totalCompetencies,
+        certificates,
+        yearsOfService,
+        totalCourses,
+        trainingProgress: data.training_progress
+      });
+
       // Calculate training progress - use API value or calculate from certificates/courses
       let trainingProgress = data.training_progress || 0;
       if (trainingProgress === 0 && totalCourses > 0) {
@@ -818,7 +900,9 @@
         // If no courses assigned but has certificates, assume good progress
         trainingProgress = Math.min(100, certificates * 25); // 25% per certificate, max 100%
       }
-      
+
+      console.log('Final trainingProgress:', trainingProgress);
+
       return `
         <div class="row g-4">
           <!-- Competency Section -->
@@ -853,17 +937,19 @@
                     </div>
                   </div>
                   <div class="col-12">
-                    <div class="d-flex align-items-center">
-                      <i class="bi bi-calendar-check text-secondary me-2"></i>
-                      <span class="text-muted">Experience:</span>
-                      <span class="fw-bold ms-2">${yearsOfService} years</span>
+                    <div class="d-flex align-items-center justify-content-between p-2 bg-light rounded">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-calendar-check text-secondary me-2"></i>
+                        <span class="text-muted">Experience:</span>
+                      </div>
+                      <span class="fw-bold text-success">${yearsOfService} years</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          
+
           <!-- Training Section -->
           <div class="col-md-6">
             <div class="card border-warning border-opacity-25 h-100">
@@ -896,10 +982,12 @@
                     </div>
                   </div>
                   <div class="col-12">
-                    <div class="d-flex align-items-center">
-                      <i class="bi bi-trophy text-warning me-2"></i>
-                      <span class="text-muted">Completion Rate:</span>
-                      <span class="fw-bold ms-2">${totalCourses > 0 ? Math.min(100, Math.round((certificates / totalCourses) * 100)) : (certificates > 0 ? 100 : 0)}%</span>
+                    <div class="d-flex align-items-center justify-content-between p-2 bg-light rounded">
+                      <div class="d-flex align-items-center">
+                        <i class="bi bi-trophy text-warning me-2"></i>
+                        <span class="text-muted">Completion Rate:</span>
+                      </div>
+                      <span class="fw-bold text-warning">${totalCourses > 0 ? Math.min(100, Math.round((certificates / totalCourses) * 100)) : (certificates > 0 ? 100 : 0)}%</span>
                     </div>
                   </div>
                 </div>
@@ -907,7 +995,7 @@
             </div>
           </div>
         </div>
-        
+
         <!-- Performance Summary -->
         <div class="card border-info border-opacity-25 mt-3">
           <div class="card-header bg-info bg-opacity-10 border-0">
@@ -968,32 +1056,32 @@
       if (!isVerified) return;
 
       const form = document.querySelector('form');
-      
+
       // Force correct form action if it's wrong
       if (form.action.includes('/admin/logout')) {
         console.log('WARNING: Form action was pointing to logout, fixing it...');
         form.action = '/admin/succession-readiness-ratings';
       }
-      
+
       console.log('Form action URL:', form.action);
       console.log('Form method:', form.method);
-      
+
       // Get form values directly from form elements
       const employeeIdHidden = document.querySelector('input[name="employee_id"]');
       const readinessInput = document.querySelector('input[name="readiness_level"]');
       const assessmentInput = document.querySelector('input[name="assessment_date"]');
-      
+
       const employeeId = employeeIdHidden ? employeeIdHidden.value : '';
       const readinessLevel = readinessInput ? readinessInput.value : '';
       const assessmentDate = assessmentInput ? assessmentInput.value : '';
 
       console.log('Form validation values:', { employeeId, readinessLevel, assessmentDate });
-      console.log('Form elements found:', { 
-        employeeIdHidden: !!employeeIdHidden, 
-        readinessInput: !!readinessInput, 
-        assessmentInput: !!assessmentInput 
+      console.log('Form elements found:', {
+        employeeIdHidden: !!employeeIdHidden,
+        readinessInput: !!readinessInput,
+        assessmentInput: !!assessmentInput
       });
-      
+
       // Debug actual form element values
       if (employeeIdHidden) console.log('Employee ID hidden value:', employeeIdHidden.value);
       if (readinessInput) console.log('Readiness input value:', readinessInput.value);
@@ -1026,7 +1114,7 @@
                     <strong>Employee:</strong> ${employeeName}
                   </div>
                   <div class="col-12">
-                    <strong>Readiness Level:</strong> 
+                    <strong>Readiness Level:</strong>
                     <span class="badge ${readinessLevel === 'Ready Now' ? 'bg-success' : readinessLevel === 'Ready Soon' ? 'bg-warning' : 'bg-danger'} ms-1">
                       ${readinessLevel}
                     </span>
@@ -1064,21 +1152,21 @@
         try {
           // Create FormData manually to ensure correct field names
           const formData = new FormData();
-          
+
           // Add CSRF token
           formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-          
+
           // Add form fields manually
           formData.append('employee_id', employeeId);
           formData.append('readiness_level', readinessLevel);
           formData.append('assessment_date', assessmentDate);
-          
+
           // Debug FormData contents
           console.log('Manual FormData contents:');
           for (let [key, value] of formData.entries()) {
             console.log(`${key}: ${value}`);
           }
-          
+
           const response = await fetch(form.action, {
             method: 'POST',
             body: formData,
@@ -1095,7 +1183,7 @@
               try {
                 const responseText = await response.text();
                 console.log('422 Raw response:', responseText);
-                
+
                 // Try to parse as JSON
                 const errorData = JSON.parse(responseText);
                 console.log('Validation errors:', errorData);
@@ -1157,7 +1245,7 @@
 
       const form = document.querySelector('form');
       const formData = new FormData(form);
-      
+
       const result = await Swal.fire({
         title: '<i class="bi bi-pencil text-primary"></i> Confirm Update Rating',
         html: `
@@ -1192,7 +1280,7 @@
 
         try {
           const formData = new FormData(form);
-          
+
           const response = await fetch(form.action, {
             method: 'POST',
             body: formData,
@@ -1358,17 +1446,17 @@
           const form = document.createElement('form');
           form.method = 'POST';
           form.action = `/admin/succession-readiness-ratings/${ratingId}`;
-          
+
           const csrfToken = document.createElement('input');
           csrfToken.type = 'hidden';
           csrfToken.name = '_token';
           csrfToken.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-          
+
           const methodField = document.createElement('input');
           methodField.type = 'hidden';
           methodField.name = '_method';
           methodField.value = 'DELETE';
-          
+
           form.appendChild(csrfToken);
           form.appendChild(methodField);
           document.body.appendChild(form);
@@ -1389,21 +1477,21 @@
     // Enhanced apply to form function with SweetAlert
     function applyToForm(employeeId, level) {
       console.log('Applying to form:', { employeeId, level });
-      
+
       // Set employee ID and display name
       if (employeeId) {
         // Get employee name from the analyze dropdown
         const analyzeSelect = document.getElementById('analyzeEmployee');
         const selectedOption = analyzeSelect.options[analyzeSelect.selectedIndex];
         const employeeName = selectedOption.getAttribute('data-name');
-        
+
         // Set display name in the visible input
         const employeeDisplayInput = document.querySelector('input[name="employee_display"]');
         if (employeeDisplayInput && employeeName) {
           employeeDisplayInput.value = `${employeeName} (${employeeId})`;
           console.log('Employee display name set to:', `${employeeName} (${employeeId})`);
         }
-        
+
         // Set actual employee ID in the hidden field
         const employeeIdHidden = document.querySelector('input[name="employee_id"]');
         if (employeeIdHidden) {
@@ -1411,17 +1499,17 @@
           console.log('Employee ID value set to:', employeeId);
         }
       }
-      
+
       // Set readiness level
       const readinessInput = document.querySelector('input[name="readiness_level"]');
       if (readinessInput && level) {
         readinessInput.value = level;
         console.log('Readiness level set to:', level);
-        
+
         // Trigger change event to ensure any listeners are notified
         readinessInput.dispatchEvent(new Event('change'));
       }
-      
+
       // Set assessment date to today
       const dateInput = document.querySelector('input[name="assessment_date"]');
       if (dateInput) {
@@ -1429,13 +1517,13 @@
         dateInput.value = today;
         console.log('Assessment date set to:', today);
       }
-      
+
       // Scroll to form
       const form = document.querySelector('form');
       if (form) {
         form.scrollIntoView({ behavior: 'smooth' });
       }
-      
+
       // Notification removed as requested
     }
 
@@ -1477,7 +1565,7 @@
         // In a real implementation, you would verify against the actual admin password
         return true;
       }
-      
+
       return false;
     }
 
@@ -1485,7 +1573,7 @@
     function togglePasswordVisibility() {
       const passwordInput = document.getElementById('admin-password');
       const toggleIcon = document.getElementById('password-toggle-icon');
-      
+
       if (passwordInput.type === 'password') {
         passwordInput.type = 'text';
         toggleIcon.classList.remove('bi-eye');
@@ -1496,6 +1584,112 @@
         toggleIcon.classList.add('bi-eye');
       }
     }
+
+    // Function para i-confirm ng HR ang AI suggestion with full audit logging - persists with localStorage
+    function confirmHRAssessment(ratingId) {
+        Swal.fire({
+            title: 'Confirm this Assessment?',
+            text: "This will update the badge status to HR Confirmed and save it to the Audit Log",
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonColor: '#198754',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, Confirm it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // 1. Update the Badge Visuals
+                const badge = document.getElementById('ai-verification-badge-' + ratingId);
+                if (badge) {
+                    badge.classList.remove('bg-light', 'text-dark');
+                    badge.classList.add('bg-success', 'text-white');
+                    badge.innerHTML = '<i class="bi bi-person-check-fill me-1"></i> HR Confirmed';
+                }
+
+                // 2. Add entry to Audit Log with persistent storage
+                const now = new Date();
+                const timestamp = now.toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                });
+
+                // Get existing audit logs from localStorage
+                const auditLogsKey = `auditLog_${ratingId}`;
+                let auditLogs = JSON.parse(localStorage.getItem(auditLogsKey)) || [];
+
+                // Add new entry
+                const newEntry = {
+                    timestamp: timestamp,
+                    action: 'Assessment Verified',
+                    status: 'HR Confirmed',
+                    verifiedBy: 'Admin User'
+                };
+                auditLogs.push(newEntry);
+
+                // Save to localStorage
+                localStorage.setItem(auditLogsKey, JSON.stringify(auditLogs));
+
+                // Update the UI
+                const auditLogBody = document.getElementById('auditLogBody-' + ratingId);
+                if (auditLogBody) {
+                    const newRow = document.createElement('tr');
+                    newRow.innerHTML = `
+                        <td class="text-muted small">${timestamp}</td>
+                        <td>Assessment Verified</td>
+                        <td><span class="badge bg-success">HR Confirmed</span></td>
+                        <td>Admin User</td>
+                    `;
+                    auditLogBody.appendChild(newRow);
+                }
+
+                // 3. Show Success Message
+                console.log("Audit log saved: Assessment confirmed by HR on " + new Date().toLocaleString());
+
+                Swal.fire(
+                    'Success!',
+                    'The assessment has been verified and logged.',
+                    'success'
+                );
+            }
+        });
+    }
+
+    // Load audit logs from localStorage on page load
+    function loadAuditLogs(ratingId) {
+        const auditLogsKey = `auditLog_${ratingId}`;
+        const auditLogs = JSON.parse(localStorage.getItem(auditLogsKey)) || [];
+        const auditLogBody = document.getElementById('auditLogBody-' + ratingId);
+
+        if (auditLogBody && auditLogs.length > 0) {
+            // Clear existing rows (keep only initial if no stored data)
+            if (auditLogs.length > 0) {
+                auditLogBody.innerHTML = '';
+
+                // Add all stored entries
+                auditLogs.forEach(log => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="text-muted small">${log.timestamp}</td>
+                        <td>${log.action}</td>
+                        <td><span class="badge ${log.status === 'AI Generated' ? 'bg-secondary' : 'bg-success'}">${log.status}</span></td>
+                        <td>${log.verifiedBy}</td>
+                    `;
+                    auditLogBody.appendChild(row);
+                });
+            }
+        }
+    }
+
+    // Initialize audit logs when document is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        @foreach($ratings as $rating)
+            loadAuditLogs({{ $rating->id }});
+        @endforeach
+    });
 
     // Enhanced AI Analysis with SweetAlert
   </script>

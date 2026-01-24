@@ -769,212 +769,6 @@
       </div>
     </div>
 
-    <!-- Position & Vacancy Overview -->
-    <div class="simulation-card card mb-4">
-      <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-        <h4 class="fw-bold mb-0"><i class="bi bi-briefcase me-2"></i>Position & Vacancy Overview</h4>
-        <button class="btn btn-outline-primary btn-sm" onclick="refreshPositionOverview()">
-          <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-        </button>
-      </div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-hover table-striped align-middle">
-            <thead class="table-light">
-              <tr>
-                <th class="fw-bold"><i class="bi bi-briefcase me-2"></i>Position Title</th>
-                <th class="fw-bold">Department</th>
-                <th class="fw-bold">Job Level</th>
-                <th class="fw-bold text-center">Approved HC</th>
-                <th class="fw-bold text-center">Filled</th>
-                <th class="fw-bold text-center">Available</th>
-                <th class="fw-bold text-center">Critical Role</th>
-                <th class="fw-bold text-center">Ready Now</th>
-                <th class="fw-bold text-center">In Dev (1-2y)</th>
-                <th class="fw-bold text-center">Competency Gaps</th>
-                <th class="fw-bold text-center">Training Status</th>
-                <th class="fw-bold text-center">Recruitment</th>
-                <th class="fw-bold text-center">Risk Level</th>
-                <th class="fw-bold text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="positionOverviewTable">
-              <!-- Populated by JavaScript -->
-              @if(isset($positions) && count($positions) > 0)
-                @foreach($positions as $position)
-                  @php
-                    // Get candidate data for this position
-                    $candidates = $topCandidates[$position->id] ?? collect([]);
-                    $readyNow = $readinessScores[$position->id] ?? 0;
-                    $inDev = $inDevelopmentCounts[$position->id] ?? 0;
-
-                    // Calculate vacancies based on real candidates and readiness
-                    // If we have ready candidates (>=70%), position is filled; otherwise it's available
-                    $filled = ($readyNow >= 70) ? 1 : 0;
-                    $available = 1 - $filled; // If filled=1 then available=0, if filled=0 then available=1
-                    $approved = 1; // One position per row
-
-                    // Get position name from multiple possible sources
-                    $positionName = null;
-
-                    // Try different ways to get the position name
-                    if (!empty($position->position_name)) {
-                      $positionName = $position->position_name;
-                    } elseif (!empty($position->position_title)) {
-                      $positionName = $position->position_title;
-                    } elseif (!empty($position->title)) {
-                      $positionName = $position->title;
-                    } elseif (!empty($position->position_code)) {
-                      // Generate readable name from position code
-                      $positionName = ucwords(str_replace(['-', '_'], ' ', $position->position_code));
-                    } else {
-                      // Fallback to department + level
-                      $dept = $position->department ?? 'General';
-                      $level = $position->level ?? $position->hierarchy_level ?? '3';
-                      $positionName = $dept . ' - ' . $level;
-                    }
-                  @endphp
-                  <tr class="position-row" data-position-id="{{ $position->id }}" data-position-name="{{ $positionName }}" data-department="{{ $position->department ?? 'General' }}" data-job-level="{{ $position->level ?? 'Level ' . ($position->hierarchy_level ?? '3') }}" data-approved-hc="{{ $approved }}" data-filled="{{ $filled }}" data-available="{{ $available }}" data-critical-role="{{ isset($position->is_critical_position) && $position->is_critical_position ? 'Yes' : 'No' }}" data-ready-now="{{ $readyNow }}" data-in-dev="{{ $inDev }}" data-risk-level="{{ isset($riskLevel) ? $riskLevel : 'Low' }}">
-                    <td class="fw-bold">
-                      <span class="cursor-pointer text-primary" onclick="expandPositionDetails({{ $position->id }})">
-                        {{ $positionName }}
-                      </span>
-                    </td>
-                    <td>{{ $position->department ?? 'General' }}</td>
-                    <td>
-                      <span class="badge bg-info">
-                        {{ $position->level ?? 'Level ' . ($position->hierarchy_level ?? '3') }}
-                      </span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-secondary">{{ $approved }}</span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-success">{{ $filled }}</span>
-                    </td>
-                    <td class="text-center">
-                      @php
-                        $badgeClass = $available > 0 ? 'bg-warning' : 'bg-secondary';
-                      @endphp
-                      <span class="badge {{ $badgeClass }}">{{ $available }}</span>
-                    </td>
-                    <td class="text-center">
-                      @if(isset($position->is_critical_position) && $position->is_critical_position)
-                        <span class="badge bg-danger"><i class="bi bi-check-circle me-1"></i>Yes</span>
-                      @elseif(isset($position->is_critical_role) && $position->is_critical_role)
-                        <span class="badge bg-danger"><i class="bi bi-check-circle me-1"></i>Yes</span>
-                      @else
-                        <span class="badge bg-light text-dark">No</span>
-                      @endif
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-success">
-                        {{ $readyNow }}
-                      </span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-info">
-                        {{ $inDev }}
-                      </span>
-                    </td>
-                    <td class="text-center">
-                      <button class="btn btn-sm btn-outline-warning" title="View Competency Gaps" onclick="viewCompetencyGaps({{ $position->id }})">
-                        <i class="bi bi-diagram-2 me-1"></i><span class="d-none d-lg-inline">Gaps</span>
-                      </button>
-                    </td>
-                    <td class="text-center">
-                      <button class="btn btn-sm btn-outline-info" title="View Training Status" onclick="viewTrainingStatus({{ $position->id }})">
-                        <i class="bi bi-book me-1"></i><span class="d-none d-lg-inline">Training</span>
-                      </button>
-                    </td>
-                    <td class="text-center">
-                      @php
-                        // Show recruitment flag if:
-                        // 1. There are available positions, AND
-                        // 2. Either no ready candidates OR readiness is low
-                        $showRecruitmentFlag = ($available > 0) && ($readyNow < 70);
-
-                        // Determine recruitment status based on available positions
-                        $recruitmentStatus = 'Not Needed';
-                        $recruitmentClass = 'bg-success';
-
-                        if ($available > 0) {
-                          if ($readyNow == 0) {
-                            $recruitmentStatus = 'Urgent';
-                            $recruitmentClass = 'bg-danger';
-                          } elseif ($readyNow < 50) {
-                            $recruitmentStatus = 'Critical';
-                            $recruitmentClass = 'bg-danger';
-                          } elseif ($readyNow < 70) {
-                            $recruitmentStatus = 'Needed';
-                            $recruitmentClass = 'bg-warning';
-                          } else {
-                            $recruitmentStatus = 'Covered';
-                            $recruitmentClass = 'bg-success';
-                          }
-                        }
-                      @endphp
-                      <span class="badge {{ $recruitmentClass }}" title="Recruitment status based on available positions and readiness">
-                        {{ $recruitmentStatus }}
-                      </span>
-                    </td>
-                    <td class="text-center">
-                      @php
-                        $riskLevel = 'Low';
-                        $riskBadgeClass = 'bg-success';
-
-                        if ($available == 0 && $readyNow < 50) {
-                          $riskLevel = 'High';
-                          $riskBadgeClass = 'bg-danger';
-                        } elseif ($available <= 1 || $readyNow < 70) {
-                          $riskLevel = 'Medium';
-                          $riskBadgeClass = 'bg-warning';
-                        }
-                      @endphp
-                      <span class="badge {{ $riskBadgeClass }}">{{ $riskLevel }}</span>
-                    </td>
-                    <td class="text-center">
-                      <div class="btn-group btn-group-sm" role="group">
-                        <button class="btn btn-outline-primary" title="View Details" onclick="viewPositionDetails({{ $position->id }})">
-                          <i class="bi bi-eye"></i>
-                        </button>
-                        <button class="btn btn-outline-success" title="Assign Successor" onclick="assignSuccessor({{ $position->id }})">
-                          <i class="bi bi-person-plus"></i>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                @endforeach
-              @else
-                <tr>
-                  <td colspan="14" class="text-center text-muted py-5">
-                    <i class="bi bi-inbox display-4 d-block mb-3"></i>
-                    <p>No positions defined. Create positions to view vacancy overview.</p>
-                  </td>
-                </tr>
-              @endif
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Risk Positions Summary -->
-        <div class="row mt-4">
-          <div class="col-md-6">
-            <div class="alert alert-warning alert-dismissible fade show" role="alert">
-              <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>At-Risk Positions</h6>
-              <p class="mb-0" id="atRiskSummary">Analyzing positions...</p>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="alert alert-info alert-dismissible fade show" role="alert">
-              <h6 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Vacancy Summary</h6>
-              <p class="mb-0" id="vacancySummary">Analyzing vacancies...</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
     <!-- Candidate Details and Comparison -->
     <div class="simulation-card card mb-4">
       <div class="card-header card-header-custom">
@@ -1593,22 +1387,33 @@
       let atRiskPositions = [];
       let totalVacancies = 0;
       let totalApproved = 0;
+      let totalReadyEmployees = 0;
 
       rows.forEach(row => {
         const cells = row.querySelectorAll('td');
-        const approved = parseInt(cells[3].textContent) || 0;
-        const filled = parseInt(cells[4].textContent) || 0;
-        const available = parseInt(cells[5].textContent) || 0;
-        const isCritical = cells[6].textContent.includes('Yes');
-        const readyNow = parseInt(cells[7].textContent) || 0;
-        const riskLevel = cells[12].textContent.trim();
+
+        // Validate we have enough cells before accessing them
+        if (cells.length < 13) {
+          return; // Skip rows that don't have all expected cells
+        }
+
+        // Safely get cell values with null checks
+        const approved = parseInt(cells[3]?.textContent) || 0;
+        const filled = parseInt(cells[4]?.textContent) || 0;
+        const available = parseInt(cells[5]?.textContent) || 0;
+        const isCritical = cells[6]?.textContent?.includes('Yes') || false;
+
+        // Get ready employees count from data attribute (actual count of ready employees)
+        const readyEmployees = parseInt(row.dataset.readyEmployees) || 0;
+        const riskLevel = cells[12]?.textContent?.trim() || 'Low';
 
         totalApproved += approved;
         totalVacancies += available;
+        totalReadyEmployees += readyEmployees;
 
         if (riskLevel === 'High' || riskLevel === 'Medium') {
           atRiskPositions.push({
-            position: cells[0].textContent.trim(),
+            position: cells[0]?.textContent?.trim() || 'Unknown Position',
             risk: riskLevel,
             critical: isCritical
           });
@@ -1618,6 +1423,7 @@
       // Update summaries
       const atRiskSummary = document.getElementById('atRiskSummary');
       const vacancySummary = document.getElementById('vacancySummary');
+      const readyEmployeesSummary = document.getElementById('readyEmployeesSummary');
 
       if (atRiskSummary) {
         if (atRiskPositions.length > 0) {
@@ -1633,6 +1439,13 @@
       if (vacancySummary) {
         vacancySummary.innerHTML = `
           <strong>${totalVacancies}</strong> open position(s) out of <strong>${totalApproved}</strong> approved headcount
+        `;
+      }
+
+      // Display total ready employees
+      if (readyEmployeesSummary) {
+        readyEmployeesSummary.innerHTML = `
+          <i class="bi bi-check-circle text-success me-2"></i><strong>${totalReadyEmployees}</strong> employee(s) ready for succession
         `;
       }
     }

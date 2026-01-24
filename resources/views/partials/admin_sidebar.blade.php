@@ -4,9 +4,14 @@
   <div class="profile-section text-center">
     @if(Auth::guard('admin')->check() && Auth::guard('admin')->user()->profile_picture)
       <img src="{{ asset('storage/profile_pictures/' . Auth::guard('admin')->user()->profile_picture) }}"
-           alt="Admin Profile" class="profile-img mb-2">
+           alt="Admin Profile" class="profile-img mb-2"
+           onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode(Auth::guard('admin')->user()->name ?? 'Admin') }}&size=150&background=007bff&color=ffffff&bold=true&rounded=true'">
     @else
-      <img src="{{ asset('assets/images/default-avatar.png') }}"
+      @php
+        $adminName = Auth::guard('admin')->check() ? (Auth::guard('admin')->user()->name ?? 'Admin') : 'Admin';
+        $adminAvatar = "https://ui-avatars.com/api/?name=" . urlencode($adminName) . "&size=150&background=007bff&color=ffffff&bold=true&rounded=true";
+      @endphp
+      <img src="{{ $adminAvatar }}"
            alt="Admin Profile" class="profile-img mb-2">
     @endif
     <h6 class="fw-semibold mb-1">

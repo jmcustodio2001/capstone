@@ -250,7 +250,7 @@
           </button>
         </div>
       </div>
-      
+
       <!-- Filter Panel (Initially Hidden) -->
       <div id="filterPanel" class="card-body border-top bg-light" style="display: none;">
         <div class="row g-3">
@@ -273,6 +273,15 @@
               <option value="Tourism Business Development">Tourism Business Development (85% Required)</option>
               <option value="Travel Quality Assurance">Travel Quality Assurance (80% Required)</option>
               <option value="Senior Travel Advisor">Senior Travel Advisor (87% Required)</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Filter by Readiness</label>
+            <select id="tableReadinessFilter" class="form-select form-select-sm" onchange="applyFilters()">
+              <option value="">All Readiness Levels</option>
+              <option value="Ready Now">Ready Now</option>
+              <option value="Ready in 1-2 Years">Ready in 1-2 Years</option>
+              <option value="Ready in 3+ Years">Ready in 3+ Years</option>
             </select>
           </div>
           <div class="col-md-3">
@@ -332,9 +341,10 @@
               <tr>
                 <th class="fw-bold">Employee</th>
                 <th class="fw-bold">Potential Role</th>
+                <th class="fw-bold">Readiness</th>
+                <th class="fw-bold text-center">Retention Risk</th>
                 <th class="fw-bold">Identified Date</th>
                 <th class="fw-bold text-center">Actions</th>
-                <th class="fw-bold">Profile Lookup</th>
               </tr>
             </thead>
             <tbody>
@@ -390,27 +400,138 @@
                     {{ $successor->potential_role }}
                   </span>
                 </td>
+                <!-- Readiness Column -->
+                <td>
+                  @php
+                    // Calculate readiness score
+                    $profile = $successor->employee && $successor->employee->competencyProfiles ? $successor->employee->competencyProfiles : [];
+                    $avgProficiency = $profile->count() > 0 ? round($profile->avg('proficiency_level'), 1) : 0;
+                    $leadershipCompetencies = $profile->filter(function($p) {
+                      $category = strtolower($p->competency->category ?? '');
+                      $name = strtolower($p->competency->competency_name ?? '');
+                      $leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building',
+                                           'communication', 'delegation', 'coaching', 'mentoring', 'vision', 'planning'];
+                      foreach ($leadershipKeywords as $keyword) {
+                        if (stripos($name, $keyword) !== false) return true;
+                      }
+                      return false;
+                    });
+
+                    // Get training data
+                    $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $successor->employee_id)->get();
+                    $totalCourses = $trainingRecords->count();
+                    $completedCourses = $trainingRecords->where('progress', '>=', 100)->count();
+                    $avgTrainingProgress = $trainingRecords->count() > 0 ? $trainingRecords->avg('progress') : 0;
+
+                    $hasTrainingData = $totalCourses > 0;
+                    $hasRealCompetencyData = $profile->count() > 0 && $avgProficiency > 0;
+
+                    // Calculate years of service
+                    $yearsOfService = 0;
+                    $serviceScore = 0;
+                    if ($successor->employee && $successor->employee->hire_date) {
+                      $hireDate = \Carbon\Carbon::parse($successor->employee->hire_date);
+                      $exactYearsOfService = max(0, $hireDate->diffInYears(now(), true));
+                      $yearsOfService = floor($exactYearsOfService);
+                      $serviceScore = $exactYearsOfService > 0 ? min(20, $exactYearsOfService * 2) : 0;
+                    }
+
+                    // Calculate readiness score
+                    if ($hasTrainingData) {
+                      $progressScore = min(40, $avgTrainingProgress * 0.4);
+                      $completionScore = $totalCourses > 0 ? min(30, ($completedCourses / $totalCourses) * 30) : 0;
+                      $assignmentScore = min(15, ($totalCourses / 20) * 15);
+                      $trainingBasedScore = ($progressScore * 0.5) + ($completionScore * 0.3) + ($assignmentScore * 0.1) + ($serviceScore * 0.1);
+
+                      if ($hasRealCompetencyData) {
+                        $proficiencyScore = min(50, ($avgProficiency / 5) * 50);
+                        $leadershipScore = 0;
+                        if ($leadershipCompetencies->count() > 0) {
+                          $leadershipProficiencySum = 0;
+                          foreach ($leadershipCompetencies as $leadership) {
+                            $profLevel = match(strtolower($leadership->proficiency_level)) {
+                              'beginner', '1' => 1, 'developing', '2' => 2, 'proficient', '3' => 3,
+                              'advanced', '4' => 4, 'expert', '5' => 5, default => 2
+                            };
+                            $leadershipProficiencySum += $profLevel;
+                          }
+                          $avgLeadershipProficiency = $leadershipProficiencySum / $leadershipCompetencies->count();
+                          $leadershipScore = min(25, ($avgLeadershipProficiency / 5) * 25);
+                        }
+                        $competencyBreadthScore = min(15, ($profile->count() / 20) * 15);
+                        $competencyScore = ($proficiencyScore * 0.5) + ($leadershipScore * 0.3) + ($competencyBreadthScore * 0.1) + ($serviceScore * 0.1);
+                        $readinessScore = round(($competencyScore * 0.6) + ($trainingBasedScore * 0.3) + ($serviceScore * 0.1));
+                      } else {
+                        $readinessScore = round($trainingBasedScore);
+                      }
+                    } elseif ($hasRealCompetencyData) {
+                      $proficiencyScore = min(60, ($avgProficiency / 5) * 60);
+                      $leadershipScore = 0;
+                      if ($leadershipCompetencies->count() > 0) {
+                        $leadershipProficiencySum = 0;
+                        foreach ($leadershipCompetencies as $leadership) {
+                          $profLevel = match(strtolower($leadership->proficiency_level)) {
+                            'beginner', '1' => 1, 'developing', '2' => 2, 'proficient', '3' => 3,
+                            'advanced', '4' => 4, 'expert', '5' => 5, default => 2
+                          };
+                          $leadershipProficiencySum += $profLevel;
+                        }
+                        $avgLeadershipProficiency = $leadershipProficiencySum / $leadershipCompetencies->count();
+                        $leadershipScore = min(30, ($avgLeadershipProficiency / 5) * 30);
+                      }
+                      $competencyBreadthScore = min(20, ($profile->count() / 15) * 20);
+                      $readinessScore = round(($proficiencyScore * 0.5) + ($leadershipScore * 0.3) + ($competencyBreadthScore * 0.1) + ($serviceScore * 0.1));
+                    } else {
+                      $readinessScore = round($serviceScore * 2);
+                    }
+
+                    // Determine readiness level
+                    if ($readinessScore >= 80) {
+                      $readinessLevel = 'Ready Now';
+                      $readinessBadgeColor = 'success';
+                    } elseif ($readinessScore >= 60) {
+                      $readinessLevel = 'Ready in 1-2 Years';
+                      $readinessBadgeColor = 'warning';
+                    } else {
+                      $readinessLevel = 'Ready in 3+ Years';
+                      $readinessBadgeColor = 'danger';
+                    }
+                  @endphp
+                  <span class="badge bg-{{ $readinessBadgeColor }} bg-opacity-20" style="color: black;">
+                    <span style="color: black;">●</span> {{ $readinessLevel }}
+                  </span>
+                </td>
+                <!-- Retention Risk Column -->
+                <td class="text-center">
+                  @php
+                    // Calculate retention risk based on service and readiness
+                    $retentionRisk = 'Low';
+                    $retentionColor = 'success';
+
+                    if ($readinessScore >= 80 && $yearsOfService >= 3) {
+                      // High readiness + good experience = High risk of being recruited
+                      $retentionRisk = 'High';
+                      $retentionColor = 'danger';
+                    } elseif ($readinessScore >= 60 && $yearsOfService >= 2) {
+                      // Medium readiness + some experience = Medium risk
+                      $retentionRisk = 'Medium';
+                      $retentionColor = 'warning';
+                    }
+                  @endphp
+                  <span class="badge bg-{{ $retentionColor }} bg-opacity-20" style="color: black;">
+                    {{ $retentionRisk }}
+                  </span>
+                </td>
                 <td>{{ $successor->identified_date }}</td>
                 <td class="text-center">
-                  <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-sm btn-outline-info" title="View Details" onclick="viewSuccessorDetails('{{ $successor->id }}')">
-                      <i class="bi bi-eye"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Successor" onclick="editSuccessorWithConfirmation('{{ $successor->id }}')">
-                      <i class="bi bi-pencil"></i>
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" title="Delete Successor" onclick="deleteSuccessorWithConfirmation('{{ $successor->id }}')">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  <!-- Profile Lookup Button -->
+                  <button type="button" class="btn btn-sm btn-outline-info me-2" title="View Details" onclick="viewSuccessorDetails('{{ $successor->id }}')">
+                    <i class="bi bi-eye"></i>
+                  </button>
                   <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#profileLookupModal{{ $successor->employee_id }}">
-                    <i class="bi bi-search"></i> Profile Lookup
+                    <i class="bi bi-search"></i>
                   </button>
                 </td>
-				</tr>
+              </tr>
               <!-- Profile Lookup Modal -->
 			  @empty
               <tr>
@@ -653,7 +774,7 @@
               @if($yearsOfService > 0 || $exactYearsOfService > 0)
               <div class="small text-muted">
                 <i class="bi bi-calendar-check me-1"></i>
-                <strong>Service Experience:</strong> 
+                <strong>Service Experience:</strong>
                 @if($yearsOfService > 0)
                   {{ $yearsOfService }} year{{ $yearsOfService != 1 ? 's' : '' }}
                 @else
@@ -842,7 +963,7 @@
     }
 
     // Enhanced SweetAlert Functions for Successor Management
-    
+
     // Add Successor with Password Confirmation
     function addSuccessorWithConfirmation() {
       Swal.fire({
@@ -882,14 +1003,14 @@
         }
       });
     }
-    
+
     // Show Add Successor Form
     function showAddSuccessorForm(prefilledData = {}) {
       const selectedEmployeeId = prefilledData.employeeId || '';
       const selectedEmployeeName = prefilledData.employeeName || '';
       const selectedRole = prefilledData.targetRole || '';
       const selectedDate = prefilledData.identifiedDate || new Date().toISOString().split('T')[0];
-      
+
       Swal.fire({
         title: 'Add New Successor',
         html: `
@@ -918,7 +1039,7 @@
         preConfirm: () => {
           const form = document.getElementById('addSuccessorForm');
           const formData = new FormData(form);
-          
+
           // Validation
           if (!formData.get('employee_id')) {
             Swal.showValidationMessage('Please select an employee');
@@ -932,7 +1053,7 @@
             Swal.showValidationMessage('Please select an identified date');
             return false;
           }
-          
+
           return {
             employee_id: formData.get('employee_id'),
             potential_role: formData.get('potential_role'),
@@ -945,7 +1066,7 @@
         }
       });
     }
-    
+
     // Submit Add Successor Form
     function submitSuccessorForm(formData) {
       Swal.fire({
@@ -958,13 +1079,13 @@
           Swal.showLoading();
         }
       });
-      
+
       const submitData = new FormData();
       submitData.append('employee_id', formData.employee_id);
       submitData.append('potential_role', formData.potential_role);
       submitData.append('identified_date', formData.identified_date);
       submitData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-      
+
       fetch('{{ route("potential_successors.store") }}', {
         method: 'POST',
         body: submitData,
@@ -1004,7 +1125,7 @@
         });
       });
     }
-    
+
     // View Successor Details
     function viewSuccessorDetails(successorId) {
       Swal.fire({
@@ -1017,7 +1138,7 @@
           Swal.showLoading();
         }
       });
-      
+
       fetch(`/admin/potential-successors/${successorId}`, {
         method: 'GET',
         headers: {
@@ -1030,7 +1151,7 @@
         if (data.success) {
           const successor = data.successor;
           const employee = successor.employee || {};
-          
+
           Swal.fire({
             title: 'Successor Details',
             html: `
@@ -1039,7 +1160,6 @@
                   <div class="col-md-6">
                     <div class="card border-primary border-opacity-25">
                       <div class="card-body text-center">
-                        <i class="bi bi-person-circle text-primary display-6 mb-2"></i>
                         <h6>Employee Information</h6>
                         <p class="mb-1"><strong>${employee.first_name || 'Unknown'} ${employee.last_name || 'Employee'}</strong></p>
                         <small class="text-muted">ID: ${successor.employee_id || 'N/A'}</small>
@@ -1049,7 +1169,6 @@
                   <div class="col-md-6">
                     <div class="card border-success border-opacity-25">
                       <div class="card-body text-center">
-                        <i class="bi bi-briefcase text-success display-6 mb-2"></i>
                         <h6>Potential Role</h6>
                         <p class="mb-1"><strong>${successor.potential_role || 'N/A'}</strong></p>
                         <small class="text-muted">Target Position</small>
@@ -1057,7 +1176,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <div class="card border-info border-opacity-25 mb-3">
                   <div class="card-header bg-info bg-opacity-10">
                     <h6 class="mb-0"><i class="bi bi-calendar-event me-2"></i>Succession Timeline</h6>
@@ -1073,7 +1192,7 @@
                     </dl>
                   </div>
                 </div>
-                
+
                 <div class="alert alert-info">
                   <i class="bi bi-info-circle me-2"></i>
                   <strong>Next Steps:</strong> Review competency profile and development plan for this successor candidate.
@@ -1115,7 +1234,7 @@
         });
       });
     }
-    
+
     // Edit Successor with Confirmation
     function editSuccessorWithConfirmation(successorId) {
       Swal.fire({
@@ -1155,7 +1274,7 @@
         }
       });
     }
-    
+
     // Delete Successor with Confirmation
     function deleteSuccessorWithConfirmation(successorId) {
       Swal.fire({
@@ -1197,7 +1316,7 @@
         }
       });
     }
-    
+
     // Verify Admin Password
     function verifyAdminPassword(password, action, successorId) {
       Swal.fire({
@@ -1210,7 +1329,7 @@
           Swal.showLoading();
         }
       });
-      
+
       fetch('/admin/verify-password', {
         method: 'POST',
         headers: {
@@ -1253,7 +1372,7 @@
         });
       });
     }
-    
+
     // Perform Delete Successor
     function performDeleteSuccessor(successorId) {
       Swal.fire({
@@ -1266,7 +1385,7 @@
           Swal.showLoading();
         }
       });
-      
+
       fetch(`/admin/potential-successors/${successorId}`, {
         method: 'DELETE',
         headers: {
@@ -1307,11 +1426,11 @@
         });
       });
     }
-    
+
     // Search and Filter Functionality for Successor List
     let allSuccessorRows = [];
     let filteredRows = [];
-    
+
     // Initialize search and filter functionality
     document.addEventListener('DOMContentLoaded', function() {
       // Store all table rows for filtering
@@ -1322,7 +1441,7 @@
         updateFilterResults();
       }
     });
-    
+
     // Toggle Filter Panel
     function toggleFilterPanel() {
       const panel = document.getElementById('filterPanel');
@@ -1333,11 +1452,11 @@
         panel.style.display = 'none';
       }
     }
-    
+
     // Real-time Search Function
     function searchSuccessors() {
       const searchTerm = document.getElementById('successorSearch').value.toLowerCase().trim();
-      
+
       if (searchTerm === '') {
         // Show all rows if search is empty
         allSuccessorRows.forEach(row => {
@@ -1350,12 +1469,12 @@
           const employeeName = row.cells[0]?.textContent?.toLowerCase() || '';
           const potentialRole = row.cells[1]?.textContent?.toLowerCase() || '';
           const identifiedDate = row.cells[2]?.textContent?.toLowerCase() || '';
-          
-          return employeeName.includes(searchTerm) || 
-                 potentialRole.includes(searchTerm) || 
+
+          return employeeName.includes(searchTerm) ||
+                 potentialRole.includes(searchTerm) ||
                  identifiedDate.includes(searchTerm);
         });
-        
+
         // Show/hide rows based on filter
         allSuccessorRows.forEach(row => {
           if (filteredRows.includes(row)) {
@@ -1365,25 +1484,26 @@
           }
         });
       }
-      
+
       updateFilterResults();
-      
+
       // Apply other filters if they exist
       if (document.getElementById('filterPanel').style.display !== 'none') {
         applyFilters();
       }
     }
-    
+
     // Apply Advanced Filters
     function applyFilters() {
       const roleFilter = document.getElementById('roleFilter').value.toLowerCase();
+      const readinessFilter = document.getElementById('tableReadinessFilter').value.toLowerCase();
       const dateFilter = document.getElementById('dateFilter').value;
       const sortFilter = document.getElementById('sortFilter').value;
       const searchTerm = document.getElementById('successorSearch').value.toLowerCase().trim();
-      
+
       // Start with all rows or search results
       let rowsToFilter = searchTerm ? filteredRows : [...allSuccessorRows];
-      
+
       // Apply role filter
       if (roleFilter) {
         rowsToFilter = rowsToFilter.filter(row => {
@@ -1391,12 +1511,22 @@
           return potentialRole.includes(roleFilter);
         });
       }
-      
+
+      // Apply readiness filter
+      if (readinessFilter) {
+        rowsToFilter = rowsToFilter.filter(row => {
+          const readinessText = row.cells[2]?.textContent?.trim() || '';
+          // Extract just the readiness level text, removing bullet points and extra spaces
+          const cleanReadinessText = readinessText.replace(/[●✓\s]+/g, ' ').trim().toLowerCase();
+          return cleanReadinessText.includes(readinessFilter.toLowerCase());
+        });
+      }
+
       // Apply date filter
       if (dateFilter) {
         const now = new Date();
         let cutoffDate;
-        
+
         switch(dateFilter) {
           case 'last_week':
             cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -1414,7 +1544,7 @@
             cutoffDate = new Date(now.getFullYear(), 0, 1);
             break;
         }
-        
+
         if (cutoffDate) {
           rowsToFilter = rowsToFilter.filter(row => {
             const dateText = row.cells[2]?.textContent?.trim() || '';
@@ -1423,7 +1553,7 @@
           });
         }
       }
-      
+
       // Apply sorting
       if (sortFilter) {
         rowsToFilter.sort((a, b) => {
@@ -1457,7 +1587,7 @@
           }
         });
       }
-      
+
       // Show/hide rows and reorder
       const tableBody = document.querySelector('table tbody');
       if (tableBody) {
@@ -1465,40 +1595,40 @@
         allSuccessorRows.forEach(row => {
           row.style.display = 'none';
         });
-        
+
         // Show and reorder filtered rows
         rowsToFilter.forEach((row, index) => {
           row.style.display = '';
           tableBody.appendChild(row); // This moves the row to the end, creating the sort order
         });
       }
-      
+
       filteredRows = rowsToFilter;
       updateFilterResults();
     }
-    
+
     // Clear All Filters
     function clearFilters() {
       // Clear search
       document.getElementById('successorSearch').value = '';
-      
+
       // Clear filter dropdowns
       document.getElementById('roleFilter').value = '';
       document.getElementById('dateFilter').value = '';
       document.getElementById('sortFilter').value = 'newest';
       document.getElementById('perPageFilter').value = '10';
-      
+
       // Show all rows
       allSuccessorRows.forEach(row => {
         row.style.display = '';
       });
-      
+
       filteredRows = [...allSuccessorRows];
       updateFilterResults();
-      
+
       // Hide filter panel
       document.getElementById('filterPanel').style.display = 'none';
-      
+
       // Show success message
       Swal.fire({
         title: 'Filters Cleared!',
@@ -1508,13 +1638,13 @@
         showConfirmButton: false
       });
     }
-    
+
     // Update Filter Results Display
     function updateFilterResults() {
       const totalRows = allSuccessorRows.length;
       const visibleRows = filteredRows.length;
       const resultsElement = document.getElementById('filterResults');
-      
+
       if (resultsElement) {
         if (visibleRows === totalRows) {
           resultsElement.textContent = `Showing all ${totalRows} records`;
@@ -1523,7 +1653,7 @@
         }
       }
     }
-    
+
     // Export Filtered Results
     function exportFilteredResults() {
       if (filteredRows.length === 0) {
@@ -1535,7 +1665,7 @@
         });
         return;
       }
-      
+
       Swal.fire({
         title: 'Export Filtered Results',
         text: `Export ${filteredRows.length} filtered successor records?`,
@@ -1556,7 +1686,7 @@
         }
       });
     }
-    
+
     // Export Development Plan Functionality
     function exportDevelopmentPlan() {
       // Get the current development path data from the modal
@@ -1570,10 +1700,10 @@
         });
         return;
       }
-      
+
       // Extract data from the modal
       const employeeName = modal.querySelector('.modal-title')?.textContent?.replace('Detailed Development Path - ', '') || 'Unknown Employee';
-      
+
       Swal.fire({
         title: 'Export Development Plan',
         html: `
@@ -1602,7 +1732,7 @@
         width: '500px'
       });
     }
-    
+
     // Export to PDF
     function exportToPDF(employeeName) {
       Swal.fire({
@@ -1633,7 +1763,7 @@
         width: '500px'
       });
     }
-    
+
     // Export to Excel
     function exportToExcel(employeeName) {
       Swal.fire({
@@ -1664,7 +1794,7 @@
         width: '500px'
       });
     }
-    
+
     // Export to Word
     function exportToWord(employeeName) {
       Swal.fire({
@@ -1695,16 +1825,16 @@
         width: '500px'
       });
     }
-    
+
     // Print Development Plan
     function printDevelopmentPlan(employeeName) {
       const modal = document.getElementById('developmentPathModal');
       if (!modal) return;
-      
+
       // Create a print-friendly version
       const printContent = modal.querySelector('.modal-body').innerHTML;
       const printWindow = window.open('', '_blank');
-      
+
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
@@ -1734,14 +1864,14 @@
         </body>
         </html>
       `);
-      
+
       printWindow.document.close();
       printWindow.focus();
-      
+
       setTimeout(() => {
         printWindow.print();
         printWindow.close();
-        
+
         Swal.fire({
           title: 'Print Initiated!',
           text: `Development plan for ${employeeName} has been sent to printer.`,
@@ -1751,7 +1881,7 @@
         });
       }, 500);
     }
-    
+
     // New PDF Export Functions
     function printToPDF(employeeName) {
       const modal = document.getElementById('developmentPathModal');
@@ -1759,18 +1889,18 @@
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const htmlContent = generatePDFContent(developmentData, employeeName);
-      
+
       const printWindow = window.open('', '_blank');
       printWindow.document.write(htmlContent);
       printWindow.document.close();
-      
+
       setTimeout(() => {
         printWindow.focus();
         printWindow.print();
-        
+
         Swal.fire({
           title: 'Print Dialog Opened!',
           html: `
@@ -1787,21 +1917,21 @@
         });
       }, 500);
     }
-    
+
     function viewPDFPreview(employeeName) {
       const modal = document.getElementById('developmentPathModal');
       if (!modal) {
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const htmlContent = generatePDFContent(developmentData, employeeName);
-      
+
       const previewWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
       previewWindow.document.write(htmlContent);
       previewWindow.document.close();
-      
+
       Swal.fire({
         title: 'Preview Opened!',
         text: `PDF preview for ${employeeName} opened in new window.`,
@@ -1810,17 +1940,17 @@
         showConfirmButton: false
       });
     }
-    
+
     function copyPDFContent(employeeName) {
       const modal = document.getElementById('developmentPathModal');
       if (!modal) {
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const textContent = generateTextContent(developmentData, employeeName);
-      
+
       navigator.clipboard.writeText(textContent).then(() => {
         Swal.fire({
           title: 'Content Copied!',
@@ -1840,7 +1970,7 @@
         Swal.fire('Error!', 'Failed to copy content to clipboard.', 'error');
       });
     }
-    
+
     // New Excel Export Functions
     function downloadCSVFile(employeeName) {
       const modal = document.getElementById('developmentPathModal');
@@ -1848,10 +1978,10 @@
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const csvContent = generateCSVContent(developmentData, employeeName);
-      
+
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -1862,7 +1992,7 @@
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       Swal.fire({
         title: 'CSV Downloaded!',
         html: `
@@ -1878,17 +2008,17 @@
         confirmButtonText: 'OK'
       });
     }
-    
+
     function copyExcelData(employeeName) {
       const modal = document.getElementById('developmentPathModal');
       if (!modal) {
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const csvContent = generateCSVContent(developmentData, employeeName);
-      
+
       navigator.clipboard.writeText(csvContent).then(() => {
         Swal.fire({
           title: 'Data Copied!',
@@ -1908,17 +2038,17 @@
         Swal.fire('Error!', 'Failed to copy data to clipboard.', 'error');
       });
     }
-    
+
     function viewExcelPreview(employeeName) {
       const modal = document.getElementById('developmentPathModal');
       if (!modal) {
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const csvContent = generateCSVContent(developmentData, employeeName);
-      
+
       Swal.fire({
         title: `Data Preview - ${employeeName}`,
         html: `
@@ -1931,7 +2061,7 @@
         width: '700px'
       });
     }
-    
+
     // New Word Export Functions
     function copyWordContent(employeeName) {
       const modal = document.getElementById('developmentPathModal');
@@ -1939,10 +2069,10 @@
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const textContent = generateTextContent(developmentData, employeeName);
-      
+
       navigator.clipboard.writeText(textContent).then(() => {
         Swal.fire({
           title: 'Content Copied!',
@@ -1962,21 +2092,21 @@
         Swal.fire('Error!', 'Failed to copy content to clipboard.', 'error');
       });
     }
-    
+
     function viewWordPreview(employeeName) {
       const modal = document.getElementById('developmentPathModal');
       if (!modal) {
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const htmlContent = generateWordContent(developmentData, employeeName);
-      
+
       const previewWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes');
       previewWindow.document.write(htmlContent);
       previewWindow.document.close();
-      
+
       Swal.fire({
         title: 'Preview Opened!',
         text: `Document preview for ${employeeName} opened in new window.`,
@@ -1985,25 +2115,25 @@
         showConfirmButton: false
       });
     }
-    
+
     function printWordDocument(employeeName) {
       const modal = document.getElementById('developmentPathModal');
       if (!modal) {
         Swal.fire('Error!', 'No development plan data available.', 'error');
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const htmlContent = generateWordContent(developmentData, employeeName);
-      
+
       const printWindow = window.open('', '_blank');
       printWindow.document.write(htmlContent);
       printWindow.document.close();
-      
+
       setTimeout(() => {
         printWindow.focus();
         printWindow.print();
-        
+
         Swal.fire({
           title: 'Print Dialog Opened!',
           text: `Document for ${employeeName} sent to printer.`,
@@ -2013,7 +2143,7 @@
         });
       }, 500);
     }
-    
+
     // Generate plain text content for copying
     function generateTextContent(data, employeeName) {
       return `
@@ -2040,7 +2170,7 @@ MILESTONES
 ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetDate} - ${milestone.status}`).join('\n')}
       `.trim();
     }
-    
+
     // Actual download functions with proper file generation
     function downloadDevelopmentPlanPDF(employeeName) {
       // Get development plan data from the modal
@@ -2053,28 +2183,28 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         });
         return;
       }
-      
+
       // Extract data from modal for PDF generation
       const modalBody = modal.querySelector('.modal-body');
       const developmentData = extractDevelopmentPlanData(modalBody, employeeName);
-      
+
       // Generate HTML content for PDF
       const htmlContent = generatePDFContent(developmentData, employeeName);
-      
+
       // Create a new window for PDF generation
       const printWindow = window.open('', '_blank');
       printWindow.document.write(htmlContent);
       printWindow.document.close();
-      
+
       // Wait for content to load, then trigger print
       setTimeout(() => {
         printWindow.focus();
         printWindow.print();
-        
+
         // Close the window after printing
         setTimeout(() => {
           printWindow.close();
-          
+
           Swal.fire({
             title: 'PDF Generation Complete!',
             html: `
@@ -2092,7 +2222,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         }, 1000);
       }, 500);
     }
-    
+
     function downloadDevelopmentPlanExcel(employeeName) {
       // Generate CSV content for Excel compatibility
       const modal = document.getElementById('developmentPathModal');
@@ -2104,10 +2234,10 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         });
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const csvContent = generateCSVContent(developmentData, employeeName);
-      
+
       // Create downloadable CSV file
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -2118,7 +2248,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       Swal.fire({
         title: 'CSV File Downloaded!',
         html: `
@@ -2134,7 +2264,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         confirmButtonText: 'OK'
       });
     }
-    
+
     function downloadDevelopmentPlanWord(employeeName) {
       // Generate HTML content that can be opened in Word
       const modal = document.getElementById('developmentPathModal');
@@ -2146,10 +2276,10 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         });
         return;
       }
-      
+
       const developmentData = extractDevelopmentPlanData(modal.querySelector('.modal-body'), employeeName);
       const htmlContent = generateWordContent(developmentData, employeeName);
-      
+
       // Create downloadable HTML file that Word can open
       const blob = new Blob([htmlContent], { type: 'application/msword;charset=utf-8;' });
       const link = document.createElement('a');
@@ -2160,7 +2290,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       Swal.fire({
         title: 'Word Document Downloaded!',
         html: `
@@ -2176,11 +2306,11 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         confirmButtonText: 'OK'
       });
     }
-    
+
     // Helper function to extract development plan data from modal
     function extractDevelopmentPlanData(modalBody, employeeName) {
       if (!modalBody) return null;
-      
+
       // Extract basic information
       const data = {
         employeeName: employeeName,
@@ -2203,10 +2333,10 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
           { milestone: 'Role transition preparation', targetDate: '2026-06-28', status: 'pending' }
         ]
       };
-      
+
       return data;
     }
-    
+
     // Generate PDF-ready HTML content
     function generatePDFContent(data, employeeName) {
       return `
@@ -2238,7 +2368,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
             <h2>${employeeName}</h2>
             <p>Generated on: ${new Date().toLocaleDateString()}</p>
           </div>
-          
+
           <div class="section">
             <h3>Current Status</h3>
             <div class="info-grid">
@@ -2252,7 +2382,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
               </div>
             </div>
           </div>
-          
+
           <div class="section">
             <h3>Strengths & Development Areas</h3>
             <div class="info-grid">
@@ -2266,7 +2396,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
               </div>
             </div>
           </div>
-          
+
           <div class="section">
             <h3>Development Plan</h3>
             <div class="phases">
@@ -2277,7 +2407,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
               `).join('')}
             </div>
           </div>
-          
+
           <div class="section milestones">
             <h3>Milestones</h3>
             <table>
@@ -2303,7 +2433,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         </html>
       `;
     }
-    
+
     // Generate CSV content for Excel
     function generateCSVContent(data, employeeName) {
       let csv = 'Development Plan Data\n\n';
@@ -2313,35 +2443,35 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
       csv += `Suitability Score,${data.suitabilityScore}\n`;
       csv += `Target Role,${data.targetRole}\n`;
       csv += `Timeline,${data.timeline}\n\n`;
-      
+
       csv += 'Current Strengths\n';
       data.currentStrengths.forEach(strength => {
         csv += `${strength}\n`;
       });
       csv += '\n';
-      
+
       csv += 'Development Areas\n';
       data.developmentAreas.forEach(area => {
         csv += `${area}\n`;
       });
       csv += '\n';
-      
+
       csv += 'Development Phases\n';
       csv += 'Phase,Duration\n';
       data.phases.forEach(phase => {
         csv += `"${phase.name}",${phase.duration}\n`;
       });
       csv += '\n';
-      
+
       csv += 'Milestones\n';
       csv += 'Milestone,Target Date,Status\n';
       data.milestones.forEach(milestone => {
         csv += `"${milestone.milestone}",${milestone.targetDate},${milestone.status}\n`;
       });
-      
+
       return csv;
     }
-    
+
     // Generate Word-compatible HTML content
     function generateWordContent(data, employeeName) {
       return `
@@ -2365,7 +2495,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
             <h2>${employeeName}</h2>
             <p>Generated on: ${new Date().toLocaleDateString()}</p>
           </div>
-          
+
           <div class="section">
             <h3>Employee Information</h3>
             <table>
@@ -2375,21 +2505,21 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
               <tr><td><strong>Estimated Timeline</strong></td><td>${data.timeline}</td></tr>
             </table>
           </div>
-          
+
           <div class="section">
             <h3>Current Strengths</h3>
             <ul>
               ${data.currentStrengths.map(strength => `<li>${strength}</li>`).join('')}
             </ul>
           </div>
-          
+
           <div class="section">
             <h3>Development Areas</h3>
             <ul>
               ${data.developmentAreas.map(area => `<li>${area}</li>`).join('')}
             </ul>
           </div>
-          
+
           <div class="section">
             <h3>Development Phases</h3>
             <table>
@@ -2406,7 +2536,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
               </tbody>
             </table>
           </div>
-          
+
           <div class="section">
             <h3>Milestones</h3>
             <table>
@@ -2428,7 +2558,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         </html>
       `;
     }
-    
+
     // Enhanced AI Functions with SweetAlert Integration
     function autoGenerateSuggestions() {
       Swal.fire({
@@ -2457,7 +2587,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         if (result.isConfirmed) {
           document.getElementById('aiSuggestionsPanel').style.display = 'block';
           document.getElementById('aiSuggestionsPanel').scrollIntoView({ behavior: 'smooth' });
-          
+
           // Show success message
           Swal.fire({
             title: 'AI Panel Activated!',
@@ -2767,37 +2897,37 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
       // For exact matching, assume most employees have minimal training data (like the PHP shows 15% and 13%)
       // This matches the low scores we see in the profile lookup
       const employeeIdNum = employee.employee_id ? parseInt(employee.employee_id.replace(/\D/g, '')) || 1 : 1;
-      
+
       // Simulate minimal training data to match low scores in profile lookup
       const simulatedTotalCourses = employeeIdNum % 3; // 0-2 courses (very few)
       const simulatedCompletedCourses = Math.floor(simulatedTotalCourses * 0.3); // 30% completion rate (low)
       const simulatedAvgProgress = simulatedTotalCourses > 0 ? 20 + (employeeIdNum % 30) : 0; // 20-50% progress (low)
-      
+
       const hasTrainingData = simulatedTotalCourses > 0;
       const hasRealCompetencyData = employee.competencyProfiles && employee.competencyProfiles.length > 0;
-      
+
       // Service score simulation - assume newer employees (lower service scores)
       const simulatedYearsOfService = Math.max(0, (employeeIdNum % 5)); // 0-4 years (newer employees)
       const serviceScore = simulatedYearsOfService > 0 ? Math.min(20, simulatedYearsOfService * 2) : 0;
-      
+
       let readinessScore = 0;
-      
+
       // EXACT PHP ALGORITHM REPLICATION
       if (hasTrainingData) {
         // Training-based calculation (matches PHP lines 591-599)
         const progressScore = Math.min(40, simulatedAvgProgress * 0.4); // Max 40% from training progress
         const completionScore = simulatedTotalCourses > 0 ? Math.min(30, (simulatedCompletedCourses / simulatedTotalCourses) * 30) : 0; // Max 30% from completion rate
         const assignmentScore = Math.min(15, (simulatedTotalCourses / 20) * 15); // Max 15%, requires 20+ courses for full score
-        
+
         const trainingBasedScore = (progressScore * 0.5) + (completionScore * 0.3) + (assignmentScore * 0.1) + (serviceScore * 0.1);
-        
+
         if (hasRealCompetencyData) {
           // Competency + Training blend (matches PHP lines 602-635)
           const profiles = employee.competencyProfiles;
           const avgProficiency = profiles.reduce((sum, p) => sum + (p.proficiency_level || 2), 0) / profiles.length;
-          
+
           const proficiencyScore = Math.min(50, (avgProficiency / 5) * 50); // Max 50% from proficiency
-          
+
           // Leadership calculation (matches PHP lines 607-624)
           const leadershipCompetencies = profiles.filter(p => {
             const name = (p.competency?.competency_name || '').toLowerCase();
@@ -2805,7 +2935,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
             const leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building', 'communication'];
             return leadershipKeywords.some(keyword => name.includes(keyword) || category.includes(keyword));
           });
-          
+
           let leadershipScore = 0;
           if (leadershipCompetencies.length > 0) {
             const leadershipProficiencySum = leadershipCompetencies.reduce((sum, leadership) => {
@@ -2828,12 +2958,12 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
             const avgLeadershipProficiency = leadershipProficiencySum / leadershipCompetencies.length;
             leadershipScore = Math.min(25, (avgLeadershipProficiency / 5) * 25); // Max 25% from leadership
           }
-          
+
           // Competency breadth (matches PHP line 627)
           const competencyBreadthScore = Math.min(15, (profiles.length / 20) * 15); // Max 15% from breadth, requires 20+ competencies
-          
+
           const competencyScore = (proficiencyScore * 0.5) + (leadershipScore * 0.3) + (competencyBreadthScore * 0.1) + (serviceScore * 0.1);
-          
+
           // Final blend: 60% competency + 30% training + 10% service (matches PHP line 635)
           readinessScore = Math.round((competencyScore * 0.6) + (trainingBasedScore * 0.3) + (serviceScore * 0.1));
         } else {
@@ -2843,9 +2973,9 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         // Competency-only calculation (matches PHP lines 641-672)
         const profiles = employee.competencyProfiles;
         const avgProficiency = profiles.reduce((sum, p) => sum + (p.proficiency_level || 2), 0) / profiles.length;
-        
+
         const proficiencyScore = Math.min(60, (avgProficiency / 5) * 60); // Max 60% from proficiency
-        
+
         // Leadership calculation (matches PHP lines 644-662)
         const leadershipCompetencies = profiles.filter(p => {
           const name = (p.competency?.competency_name || '').toLowerCase();
@@ -2853,7 +2983,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
           const leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building', 'communication'];
           return leadershipKeywords.some(keyword => name.includes(keyword) || category.includes(keyword));
         });
-        
+
         let leadershipScore = 0;
         if (leadershipCompetencies.length > 0) {
           const leadershipProficiencySum = leadershipCompetencies.reduce((sum, leadership) => {
@@ -2876,10 +3006,10 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
           const avgLeadershipProficiency = leadershipProficiencySum / leadershipCompetencies.length;
           leadershipScore = Math.min(30, (avgLeadershipProficiency / 5) * 30); // Max 30% from leadership
         }
-        
+
         // Competency breadth (matches PHP line 665)
         const competencyBreadthScore = Math.min(20, (profiles.length / 15) * 20); // Max 20% from breadth, requires 15+ competencies
-        
+
         // Final calculation (matches PHP lines 667-672)
         readinessScore = Math.round(
           (proficiencyScore * 0.5) +
@@ -2891,7 +3021,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         // Baseline for employees with service experience but no competency/training data (matches PHP line 677)
         readinessScore = Math.round(serviceScore * 2); // Double the service score as base readiness
       }
-      
+
       // Ensure minimum score for active employees
       return Math.max(readinessScore, 5);
     }
@@ -3032,7 +3162,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
       return 'Requires extensive development';
     }
 
-    
+
     function selectCandidate(employeeId, employeeName, targetRole) {
       // Automatically open the Add Successor modal with pre-filled data
       const prefilledData = {
@@ -3041,7 +3171,7 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
         targetRole: targetRole,
         identifiedDate: new Date().toISOString().split('T')[0]
       };
-      
+
       // Show success notification first
       Swal.fire({
         title: 'Candidate Selected!',

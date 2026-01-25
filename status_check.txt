@@ -1,0 +1,22 @@
+﻿--- Current Status ---
+Employee: Renzemark Olea (ID: 1)
+  Skills field: communication skill
+
+  Competencies in DB: 1
+    - Communication Skill
+
+Employee: John Mark Custodio (ID: 2)
+  Skills field: Communication Skills
+
+Time Management
+
+Analytical Thinking
+
+Networking Skills
+  Competencies in DB: 4
+    - Communication Skills
+    - Time Management
+    - Analytical Thinking
+    - Networking Skills
+
+--- Done ---

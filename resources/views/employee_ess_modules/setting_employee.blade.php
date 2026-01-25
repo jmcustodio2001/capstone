@@ -169,7 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (typeof Swal !== 'undefined') {
           Swal.fire({
             title: 'Success!',
-            text: '{{ session('success') }}',
+            text: "{{ session('success') }}",
             icon: 'success',
             confirmButtonColor: '#198754',
             timer: 3000,
@@ -584,16 +584,13 @@ document.addEventListener('DOMContentLoaded', function() {
   // Form submission handler to show success message
   const settingsForm = document.getElementById('settings-form');
   if (settingsForm) {
-    settingsForm.addEventListener('submit', function(e) {
-      const employmentStatus = employmentStatusSelect ? employmentStatusSelect.value : null;
+      // CRITICAL: Prevent default submission immediately to stop page reload/freeze
+      e.preventDefault();
       
-      console.log('Form submitting with status:', employmentStatus);
-      console.log('Form action:', settingsForm.action);
-      console.log('Form method:', settingsForm.method);
+      const employmentStatus = employmentStatusSelect ? employmentStatusSelect.value : null;
       
       // Ensure the status field has a value
       if (employmentStatusSelect && !employmentStatusSelect.value) {
-        e.preventDefault();
         if (typeof Swal !== 'undefined') {
           Swal.fire({
             title: 'Error!',
@@ -607,23 +604,101 @@ document.addEventListener('DOMContentLoaded', function() {
         return false;
       }
       
-      // Show loading message
+      // Show loading message with Custom CSS Spinner
       if (typeof Swal !== 'undefined') {
         Swal.fire({
           title: 'Updating Settings...',
-          text: 'Please wait while we save your changes.',
-          icon: 'info',
+          html: `
+            <style>
+              .custom-loader {
+                width: 48px;
+                height: 48px;
+                border: 5px solid #FFF;
+                border-bottom-color: #0d6efd;
+                border-radius: 50%;
+                display: inline-block;
+                box-sizing: border-box;
+                animation: rotation 1s linear infinite;
+                margin: 20px auto;
+              }
+              @keyframes rotation {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+              }
+            </style>
+            <p class="mb-3">Please wait while we save your changes.</p>
+            <div class="d-flex justify-content-center">
+              <span class="custom-loader"></span>
+            </div>
+          `,
           allowOutsideClick: false,
-          showConfirmButton: false,
-          willOpen: () => {
-            Swal.showLoading();
-          }
+          allowEscapeKey: false,
+          showConfirmButton: false
         });
       }
-      
-      // Let the form submit normally
-      return true;
-    });
+
+      // Use AJAX submission
+      const formData = new FormData(settingsForm);
+
+      fetch(settingsForm.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json' 
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+           return response.text().then(text => {
+              try {
+                 const json = JSON.parse(text);
+                 if(json.success || json.message) {
+                    Swal.fire({
+                      title: 'Success!',
+                      text: json.message || 'Settings updated successfully.',
+                      icon: 'success',
+                      timer: 2000,
+                      showConfirmButton: false
+                    }).then(() => {
+                      window.location.reload(); 
+                    });
+                    return;
+                 }
+              } catch(e) {/* Not JSON */}
+              
+              Swal.fire({
+                title: 'Success!',
+                text: 'Settings updated successfully.',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+              }).then(() => {
+                window.location.reload();
+              });
+           });
+        } else {
+          return response.json().then(data => {
+            let errorMessage = 'Something went wrong.';
+            if (data.errors) {
+               errorMessage = Object.values(data.errors).flat().join('<br>');
+            } else if (data.message) {
+               errorMessage = data.message;
+            }
+            throw new Error(errorMessage);
+          }).catch(err => {
+             throw new Error(err.message || 'An error occurred while saving.');
+          });
+        }
+      })
+      .catch(error => {
+        Swal.fire({
+          title: 'Error!',
+          html: error.message,
+          icon: 'error',
+          confirmButtonText: 'Okay'
+        });
+      });
   }
 
 });

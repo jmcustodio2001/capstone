@@ -43,9 +43,9 @@ class EmployeeCompetencyProfileController extends Controller
                      
                      $skills = $emp['skills'] ?? null;
                      
-                     if ($empId && !empty($skills)) {
-                         $this->syncExternalSkillsString($empId, $skills);
-                     }
+                     // if ($empId && !empty($skills)) {
+                     //     $this->syncExternalSkillsString($empId, $skills);
+                     // }
                 }
             }
         } catch (\Exception $e) {
@@ -867,7 +867,7 @@ class EmployeeCompetencyProfileController extends Controller
                                 ($apiEmp['external_employee_id'] ?? '') === (string)$employeeId) {
                                 
                                 if (!empty($apiEmp['skills'])) {
-                                    $this->syncExternalSkillsString($employeeId, $apiEmp['skills']);
+                                    // $this->syncExternalSkillsString($employeeId, $apiEmp['skills']);
                                 }
                                 break;
                             }

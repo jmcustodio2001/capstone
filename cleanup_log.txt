@@ -1,0 +1,7 @@
+﻿Checking 2 employees...
+Employee: Renzemark Olea (1)
+  API Skills: Communication Skill
+  Local Competencies being removed: 1
+    - Removing: Customer Service Excellence
+
+Cleanup Complete.

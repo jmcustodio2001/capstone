@@ -42,47 +42,105 @@ class CompetencyGapAnalysisController extends Controller
         // Fix missing categories for existing competencies
         $this->fixMissingCategories();
 
-        // Eager load related employee and competency to avoid N+1 problem
-        // Only show accessible (active and non-expired) gaps by default
-        // Exclude gaps for destination training competencies
+        // Fetch employees from API endpoint (Consistent with Profile Controller)
+        $employeeMap = [];
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiData = $response->successful() ? $response->json() : [];
+            $apiEmployees = (isset($apiData['data']) && is_array($apiData['data'])) ? $apiData['data'] : $apiData;
+
+            if (is_array($apiEmployees)) {
+                foreach ($apiEmployees as $emp) {
+                    // Match the ID mapping logic from EmployeeCompetencyProfileController
+                    $empId = is_array($emp) 
+                        ? ($emp['external_employee_id'] ?? $emp['employee_id'] ?? $emp['id'] ?? null)
+                        : ($emp->external_employee_id ?? $emp->employee_id ?? $emp->id ?? null);
+                    
+                    if ($empId) {
+                        $employeeMap[$empId] = $emp;
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Failed to fetch employees from API in CompetencyGap: ' . $e->getMessage());
+        }
+
+        // Eager load related employee and competency
         $gaps = CompetencyGap::with(['employee', 'competency'])
             ->whereHas('competency', function($query) {
-                $query->where('category', '!=', 'Destination Knowledge')
-                    ->where('category', '!=', 'General')
-                    ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
-                    ->where('competency_name', 'NOT LIKE', '%destination%')
-                    ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%');
+                $query->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%');
             })
             ->accessible()
             ->get();
-        $employees = Employee::all()->map(function($emp) {
-            return [
-                'id' => $emp->employee_id,
-                'name' => $emp->first_name . ' ' . $emp->last_name
-            ];
-        });
-        // Exclude destination training related competencies from the competency gap view
-        $competencies = CompetencyLibrary::select('id', 'competency_name', 'description', 'category', 'rate')
-            ->where('category', '!=', 'Destination Knowledge')
-            ->where('category', '!=', 'General')
-            ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-            ->where('competency_name', 'NOT LIKE', '%ITALY%')
-            ->where('competency_name', 'NOT LIKE', '%Destination Knowledge -%')
-            ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
+
+        // Fetch expired gaps for display
+        $expiredGaps = CompetencyGap::with(['employee', 'competency'])
+            ->whereHas('competency', function($query) {
+                $query->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%');
+            })
+            ->expired()
             ->get();
 
-        // Check for existing training assignments for each employee-competency combination
-        $employeeTrainingAssignments = [];
+        // Map API data to active gaps for real name display
+        foreach ($gaps as $gap) {
+            if (isset($employeeMap[$gap->employee_id])) {
+                $apiEmp = $employeeMap[$gap->employee_id];
+                $employeeData = new \stdClass();
+                $employeeData->employee_id = $gap->employee_id;
+                $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
+                $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
+                $employeeData->profile_picture = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                $gap->setRelation('employee', $employeeData);
+            }
+        }
 
-        // Build a map of employee -> competency assignments to prevent duplicates
+        // Map API data to expired gaps
+        foreach ($expiredGaps as $gap) {
+            if (isset($employeeMap[$gap->employee_id])) {
+                $apiEmp = $employeeMap[$gap->employee_id];
+                $employeeData = new \stdClass();
+                $employeeData->employee_id = $gap->employee_id;
+                $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
+                $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
+                $employeeData->profile_picture = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                $gap->setRelation('employee', $employeeData);
+            }
+        }
+
+        // Prepare employees list for the "Add Gap" dropdown
+        $localEmployees = Employee::all();
+        $employees = [];
+        
+        foreach ($employeeMap as $id => $data) {
+            $employees[] = [
+                'id' => $id,
+                'name' => (is_array($data) ? ($data['first_name'] ?? '') . ' ' . ($data['last_name'] ?? '') : ($data->first_name ?? '') . ' ' . ($data->last_name ?? ''))
+            ];
+        }
+
+        foreach ($localEmployees as $emp) {
+            if (!isset($employeeMap[$emp->employee_id])) {
+                $employees[] = [
+                    'id' => $emp->employee_id,
+                    'name' => $emp->first_name . ' ' . $emp->last_name
+                ];
+            }
+        }
+
+        $competencies = CompetencyLibrary::select('id', 'competency_name', 'description', 'category', 'rate')
+            ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+            ->where('competency_name', 'NOT LIKE', '%ITALY%')
+            ->get();
+
+        // Training assignments check
+        $employeeTrainingAssignments = [];
         foreach ($gaps as $gap) {
             $employeeId = $gap->employee_id;
             $competencyId = $gap->competency_id;
-            $competencyName = $gap->competency->competency_name ?? '';
+            $competencyName = $gap->competency?->competency_name ?? '';
 
-            // Check if THIS SPECIFIC EMPLOYEE already has training assigned for THIS SPECIFIC COMPETENCY
-            // Use EmployeeTrainingDashboard with fuzzy matching on course titles to find related training
             $hasSpecificTraining = \App\Models\EmployeeTrainingDashboard::where('employee_training_dashboards.employee_id', $employeeId)
                 ->join('course_management', 'employee_training_dashboards.course_id', '=', 'course_management.course_id')
                 ->where(function($query) use ($competencyName) {
@@ -92,22 +150,8 @@ class CompetencyGapAnalysisController extends Controller
                 })
                 ->exists();
 
-            // Store the specific assignment status for this employee-competency pair
             $employeeTrainingAssignments[$employeeId . '_' . $competencyId] = $hasSpecificTraining;
         }
-
-        // Get expired gaps for display (also exclude destination training gaps)
-        $expiredGaps = CompetencyGap::with(['employee', 'competency'])
-            ->whereHas('competency', function($query) {
-                $query->where('category', '!=', 'Destination Knowledge')
-                    ->where('category', '!=', 'General')
-                    ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
-                    ->where('competency_name', 'NOT LIKE', '%destination%')
-                    ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%');
-            })
-            ->expired()
-            ->get();
 
         return view('competency_management.competency_gap', compact('gaps', 'employees', 'competencies', 'employeeTrainingAssignments', 'expiredGaps'));
     }
@@ -1613,84 +1657,106 @@ class CompetencyGapAnalysisController extends Controller
             $skippedGaps = 0;
             $errors = [];
 
-            // Get all competencies from the library (exclude destination training)
-            $competencies = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
-                ->where('category', '!=', 'General')
-                ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-                ->where('competency_name', 'NOT LIKE', '%ITALY%')
-                ->where('competency_name', 'NOT LIKE', '%destination%')
-                ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
-                ->get();
+            // 1. Fetch employees from API with consistent ID mapping
+            $employeeMap = [];
+            try {
+                $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+                $apiData = $response->successful() ? $response->json() : [];
+                $apiEmployees = (isset($apiData['data']) && is_array($apiData['data'])) ? $apiData['data'] : $apiData;
 
-            // Get all employees
-            $employees = Employee::all();
-
-            foreach ($employees as $employee) {
-                foreach ($competencies as $competency) {
-                    try {
-                        // Get employee's competency profile for this competency
-                        $profile = EmployeeCompetencyProfile::where('employee_id', $employee->employee_id)
-                            ->where('competency_id', $competency->id)
-                            ->first();
-
-                        // If profile exists, check if there's a gap
-                        if ($profile) {
-                            // Use the competency's rate as the required level (1-5 scale)
-                            $requiredRate = $competency->rate ?? 5;
-                            // Use the employee's proficiency level (1-5 scale)
-                            $currentProficiencyLevel = $profile->proficiency_level ?? 0;
-                            
-                            // Only create gap if employee's proficiency level is below the required rate
-                            if ($currentProficiencyLevel < $requiredRate) {
-                                $gap = $requiredRate - $currentProficiencyLevel;
-                                // Check if gap already exists
-                                $existingGap = CompetencyGap::where('employee_id', $employee->employee_id)
-                                    ->where('competency_id', $competency->id)
-                                    ->first();
-
-                                if ($existingGap) {
-                                    // Update existing gap
-                                    $existingGap->update([
-                                        'required_level' => $requiredRate,
-                                        'current_level' => $currentProficiencyLevel,
-                                        'gap' => $gap,
-                                        'gap_description' => "Auto-detected: {$employee->first_name} {$employee->last_name} needs to improve {$competency->competency_name} from level {$currentProficiencyLevel} to level {$requiredRate}",
-                                        'is_active' => 1,
-                                        'expired_date' => now()->addMonths(6)->format('Y-m-d')
-                                    ]);
-                                    $updatedGaps++;
-                                } else {
-                                    // Create new gap record
-                                    CompetencyGap::create([
-                                        'employee_id' => $employee->employee_id,
-                                        'competency_id' => $competency->id,
-                                        'required_level' => $requiredRate,
-                                        'current_level' => $currentProficiencyLevel,
-                                        'gap' => $gap,
-                                        'gap_description' => "Auto-detected: {$employee->first_name} {$employee->last_name} needs to improve {$competency->competency_name} from level {$currentProficiencyLevel} to level {$requiredRate}",
-                                        'is_active' => 1,
-                                        'expired_date' => now()->addMonths(6)->format('Y-m-d')
-                                    ]);
-                                    $createdGaps++;
-                                }
-                            } else {
-                                $skippedGaps++;
-                            }
+                if (is_array($apiEmployees)) {
+                    foreach ($apiEmployees as $emp) {
+                        $empId = is_array($emp) 
+                            ? ($emp['external_employee_id'] ?? $emp['employee_id'] ?? $emp['id'] ?? null)
+                            : ($emp->external_employee_id ?? $emp->employee_id ?? $emp->id ?? null);
+                        
+                        if ($empId) {
+                            $employeeMap[$empId] = $emp;
                         }
-                    } catch (\Exception $e) {
-                        $errors[] = "Error processing {$employee->employee_id} - {$competency->competency_name}: " . $e->getMessage();
-                        Log::error("Auto-detect gap error for {$employee->employee_id}: " . $e->getMessage());
                     }
+                }
+            } catch (\Exception $e) {
+                \Log::warning('API fetch failed in autoDetectGaps: ' . $e->getMessage());
+            }
+
+            // 2. Clear old auto-detected gaps to ensure a fresh, accurate sync
+            // This fixes the "30 gaps" issue where old records were sticking around
+            CompetencyGap::where('gap_description', 'LIKE', 'Auto-detected:%')->delete();
+
+            // 3. Process ONLY existing profiles for a 1:1 sync
+            $profiles = EmployeeCompetencyProfile::all();
+
+            if ($profiles->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No profiles found to synchronize. Please assess employees first.'
+                ]);
+            }
+
+            foreach ($profiles as $profile) {
+                try {
+                    $employeeId = $profile->employee_id;
+                    $competencyId = $profile->competency_id;
+
+                    $competency = CompetencyLibrary::find($competencyId);
+                    if (!$competency) continue;
+
+                    // Exclude restricted categories
+                    if (stripos($competency->competency_name, 'BESTLINK') !== false || 
+                        stripos($competency->competency_name, 'ITALY') !== false) {
+                        continue;
+                    }
+
+                    // 4. Resolve name accurately
+                    $firstName = 'Employee';
+                    $lastName = $employeeId;
+                    
+                    if (isset($employeeMap[$employeeId])) {
+                        $apiEmp = $employeeMap[$employeeId];
+                        $firstName = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Employee') : ($apiEmp->first_name ?? 'Employee');
+                        $lastName = is_array($apiEmp) ? ($apiEmp['last_name'] ?? $employeeId) : ($apiEmp->last_name ?? $employeeId);
+                    } else {
+                        $localEmp = Employee::where('employee_id', $employeeId)->first();
+                        if ($localEmp) {
+                            $firstName = $localEmp->first_name;
+                            $lastName = $localEmp->last_name;
+                        }
+                    }
+
+                    $requiredRate = $competency->rate ?? 5;
+                    $currentLevel = $profile->proficiency_level ?? 0;
+
+                    // Only create gap if level is actually below requirement
+                    if ($currentLevel < $requiredRate) {
+                        $gap = $requiredRate - $currentLevel;
+                        $gapDescription = "Auto-detected: {$firstName} {$lastName} needs improvement in {$competency->competency_name}";
+
+                        CompetencyGap::create([
+                            'employee_id' => $employeeId,
+                            'competency_id' => $competencyId,
+                            'required_level' => $requiredRate,
+                            'current_level' => $currentLevel,
+                            'gap' => $gap,
+                            'gap_description' => $gapDescription,
+                            'is_active' => 1,
+                            'expired_date' => now()->addMonths(6)->format('Y-m-d')
+                        ]);
+                        $createdGaps++;
+                    } else {
+                        $skippedGaps++;
+                    }
+                } catch (\Exception $e) {
+                    $errors[] = "Error processing Profile ID {$profile->id}: " . $e->getMessage();
                 }
             }
 
-            // Log single activity for the entire operation
+            // Log activity with accurate summary
             try {
                 ActivityLog::create([
-                    'admin_id' => Auth::id(),
+                    'user_id' => Auth::id() ?? 1,
                     'action' => 'Auto-Detect Competency Gaps',
                     'module' => 'Competency Gap Analysis',
-                    'description' => "Auto-detected competency gaps: Created {$createdGaps}, Updated {$updatedGaps}, Skipped {$skippedGaps}",
+                    'description' => "Accurate sync: Created {$createdGaps} gaps from " . $profiles->count() . " profiles.",
                     'ip_address' => request()->ip()
                 ]);
             } catch (\Exception $e) {
@@ -1699,11 +1765,10 @@ class CompetencyGapAnalysisController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Competency gaps auto-detection completed',
+                'message' => 'Gaps accurately synchronized with profiles.',
                 'created' => $createdGaps,
-                'updated' => $updatedGaps,
                 'skipped' => $skippedGaps,
-                'total_processed' => $createdGaps + $updatedGaps + $skippedGaps,
+                'total_profiles' => $profiles->count(),
                 'errors' => count($errors) > 0 ? $errors : null
             ]);
 

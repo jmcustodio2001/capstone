@@ -9,14 +9,89 @@ use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 use App\Models\CourseManagementNotification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class EmployeeCompetencyProfileController extends Controller
 {
     public function index()
     {
+        // 1. Fetch employees from API endpoint FIRST
+        $employees = [];
+        try {
+            $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $employees = $response->successful() ? $response->json() : [];
+
+            // Handle if response is wrapped in a data key
+            if (isset($employees['data']) && is_array($employees['data'])) {
+                $employees = $employees['data'];
+            } elseif (!is_array($employees)) {
+                $employees = [];
+            }
+
+            // 2. Sync skills for each employee found in API
+            if (is_array($employees)) {
+                foreach ($employees as $emp) {
+                     // Determine the ID to use - prioritize IDs that match our local format if possible, 
+                     // but broadly support the structure returned by the API
+                     $empId = $emp['employee_id'] ?? $emp['id'] ?? null;
+                     
+                     // Also check for external_employee_id if strictly using that
+                     if (empty($empId) && isset($emp['external_employee_id'])) {
+                         $empId = $emp['external_employee_id'];
+                     }
+                     
+                     $skills = $emp['skills'] ?? null;
+                     
+                     if ($empId && !empty($skills)) {
+                         $this->syncExternalSkillsString($empId, $skills);
+                     }
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::warning('Failed to fetch/sync employees from API: ' . $e->getMessage());
+            // Fallback to local database if API fails
+            $employees = Employee::all()->toArray();
+        }
+
+        // 3. NOW fetch profiles (including newly created ones from the sync)
         $profiles = EmployeeCompetencyProfile::with(['employee', 'competency'])->orderBy('id')->get();
-        $employees = Employee::all();
+
+        // Create a map of employee_id => employee data for quick lookup
+        $employeeMap = [];
+        foreach ($employees as $employee) {
+            $empId = is_array($employee) 
+                ? ($employee['external_employee_id'] ?? $employee['employee_id'] ?? $employee['id'] ?? null)
+                : ($employee->external_employee_id ?? $employee->employee_id ?? $employee->id ?? null);
+            
+            if ($empId) {
+                $employeeMap[$empId] = $employee;
+            }
+        }
+
+        // Attach employee data from API to each profile
+        foreach ($profiles as $profile) {
+            if (isset($employeeMap[$profile->employee_id])) {
+                $apiEmployee = $employeeMap[$profile->employee_id];
+                
+                // Create a temporary object to hold employee data
+                $employeeData = new \stdClass();
+                $employeeData->employee_id = $profile->employee_id;
+                $employeeData->first_name = is_array($apiEmployee) 
+                    ? ($apiEmployee['first_name'] ?? 'Unknown')
+                    : ($apiEmployee->first_name ?? 'Unknown');
+                $employeeData->last_name = is_array($apiEmployee) 
+                    ? ($apiEmployee['last_name'] ?? 'Employee')
+                    : ($apiEmployee->last_name ?? 'Employee');
+                $employeeData->profile_picture = is_array($apiEmployee) 
+                    ? ($apiEmployee['profile_picture'] ?? null)
+                    : ($apiEmployee->profile_picture ?? null);
+                
+                // Override the employee relationship with API data
+                $profile->setRelation('employee', $employeeData);
+            }
+        }
+
         // Exclude all destination training related competencies from the main competency dropdown
         $competencylibrary = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
             ->where('category', '!=', 'General')
@@ -25,7 +100,7 @@ class EmployeeCompetencyProfileController extends Controller
             ->where('competency_name', 'NOT LIKE', '%destination%')
             ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
             ->get();
-        
+
         // Get unique destination names from DestinationKnowledgeTraining
         $destinationTrainings = \App\Models\DestinationKnowledgeTraining::select('destination_name')
             ->distinct()
@@ -36,8 +111,31 @@ class EmployeeCompetencyProfileController extends Controller
             ->pluck('destination_name')
             ->unique()
             ->values();
+
+        // Sort employees by name
+        usort($employees, function($a, $b) {
+            $aName = (is_array($a) ? ($a['first_name'] ?? '') : ($a->first_name ?? '')) . ' ' . (is_array($a) ? ($a['last_name'] ?? '') : ($a->last_name ?? ''));
+            $bName = (is_array($b) ? ($b['first_name'] ?? '') : ($b->first_name ?? '')) . ' ' . (is_array($b) ? ($b['last_name'] ?? '') : ($b->last_name ?? ''));
+            return strcasecmp($aName, $bName);
+        });
+
+        // Keep a copy of all employees for the dropdown
+        $allEmployees = $employees;
+
+        // Manually paginate the employees array
+        $page = \Illuminate\Pagination\Paginator::resolveCurrentPage() ?: 1;
+        $perPage = 9; // Show 9 employees per page
+        $employeesCollection = collect($employees);
         
-        return view('competency_management.employee_competency_profiles', compact('profiles', 'employees', 'competencylibrary', 'destinationTrainings'));
+        $employees = new \Illuminate\Pagination\LengthAwarePaginator(
+            $employeesCollection->forPage($page, $perPage),
+            $employeesCollection->count(),
+            $perPage,
+            $page,
+            ['path' => \Illuminate\Pagination\Paginator::resolveCurrentPath()]
+        );
+
+        return view('competency_management.employee_competency_profiles', compact('profiles', 'employees', 'allEmployees', 'competencylibrary', 'destinationTrainings'));
     }
 
     /**
@@ -247,7 +345,7 @@ class EmployeeCompetencyProfileController extends Controller
     {
         // Handle destination training selections
         $competencyId = $request->input('competency_id');
-        
+
         if (substr($competencyId, 0, 12) === 'destination_') {
             // Extract destination name from the destinations array
             $destinationIndex = (int) str_replace('destination_', '', $competencyId);
@@ -260,14 +358,14 @@ class EmployeeCompetencyProfileController extends Controller
                 ->pluck('destination_name')
                 ->unique()
                 ->values();
-            
+
             if (!isset($destinationTrainings[$destinationIndex])) {
                 return redirect()->route('employee_competency_profiles.index')
                     ->with('error', 'Invalid destination selection.');
             }
-            
+
             $destinationName = $destinationTrainings[$destinationIndex];
-            
+
             // Create or find competency for this destination
             $competencyName = 'Destination Knowledge - ' . $destinationName;
             $competency = CompetencyLibrary::firstOrCreate(
@@ -277,16 +375,16 @@ class EmployeeCompetencyProfileController extends Controller
                     'category' => 'Destination Knowledge'
                 ]
             );
-            
+
             $competencyId = $competency->id;
         }
-        
+
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,employee_id',
-            'proficiency_level' => 'required|string|max:255',
+            'employee_id' => 'required|string',
+            'proficiency_level' => 'required|integer|between:1,5',
             'assessment_date' => 'required|date',
         ]);
-        
+
         $validated['competency_id'] = $competencyId;
 
         // Check for existing competency profile to prevent duplicates
@@ -316,7 +414,7 @@ class EmployeeCompetencyProfileController extends Controller
     {
         // Handle destination training selections
         $competencyId = $request->input('competency_id');
-        
+
         if (substr($competencyId, 0, 12) === 'destination_') {
             // Extract destination name from the destinations array
             $destinationIndex = (int) str_replace('destination_', '', $competencyId);
@@ -329,14 +427,14 @@ class EmployeeCompetencyProfileController extends Controller
                 ->pluck('destination_name')
                 ->unique()
                 ->values();
-            
+
             if (!isset($destinationTrainings[$destinationIndex])) {
                 return redirect()->route('employee_competency_profiles.index')
                     ->with('error', 'Invalid destination selection.');
             }
-            
+
             $destinationName = $destinationTrainings[$destinationIndex];
-            
+
             // Create or find competency for this destination
             $competencyName = 'Destination Knowledge - ' . $destinationName;
             $competency = CompetencyLibrary::firstOrCreate(
@@ -346,16 +444,16 @@ class EmployeeCompetencyProfileController extends Controller
                     'category' => 'Destination Knowledge'
                 ]
             );
-            
+
             $competencyId = $competency->id;
         }
-        
+
         $validated = $request->validate([
-            'employee_id' => 'required|exists:employees,employee_id',
-            'proficiency_level' => 'required|string|max:255',
+            'employee_id' => 'required|string',
+            'proficiency_level' => 'required|integer|between:1,5',
             'assessment_date' => 'required|date',
         ]);
-        
+
         $validated['competency_id'] = $competencyId;
 
         $profile = EmployeeCompetencyProfile::findOrFail($id);
@@ -465,22 +563,22 @@ class EmployeeCompetencyProfileController extends Controller
                 // Enhanced logic to prevent resetting proficiency level to 0%
                 // ALWAYS preserve manually set values - they should be FIXED and never reset
                 $existingLevel = (int) $profile->proficiency_level;
-                
+
                 // Check if this is a manually set proficiency level that should be preserved
                 $isManuallySet = false;
-                
+
                 // For destination competencies, check if manually set (level > 1 or recently assessed)
                 if (stripos($competencyName, 'Destination Knowledge') !== false) {
-                    $isManuallySet = $existingLevel > 1 || 
-                                   ($existingLevel >= 1 && $profile->assessment_date && 
+                    $isManuallySet = $existingLevel > 1 ||
+                                   ($existingLevel >= 1 && $profile->assessment_date &&
                                     \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 30);
                 } else {
                     // For non-destination competencies, be more conservative about manual detection
-                    $isManuallySet = $existingLevel > 1 || 
-                                   ($existingLevel >= 1 && $profile->assessment_date && 
+                    $isManuallySet = $existingLevel > 1 ||
+                                   ($existingLevel >= 1 && $profile->assessment_date &&
                                     \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 7);
                 }
-                
+
                 if ($isManuallySet) {
                     // PRESERVE manually set proficiency level - NEVER change it
                     $newProficiencyLevel = $existingLevel;
@@ -621,7 +719,7 @@ class EmployeeCompetencyProfileController extends Controller
         ];
 
         $name = strtolower($competencyName);
-        
+
         foreach ($highPrioritySkills as $skill) {
             if (stripos($name, strtolower($skill)) !== false) {
                 return 'High';
@@ -644,7 +742,7 @@ class EmployeeCompetencyProfileController extends Controller
     {
         try {
             $employee = Employee::where('employee_id', $employeeId)->first();
-            
+
             if (!$employee) {
                 return response()->json([
                     'success' => false,
@@ -654,7 +752,7 @@ class EmployeeCompetencyProfileController extends Controller
 
             // Check if employee already has competency profiles
             $existingCount = EmployeeCompetencyProfile::where('employee_id', $employeeId)->count();
-            
+
             if ($existingCount > 0) {
                 return response()->json([
                     'success' => false,
@@ -665,7 +763,7 @@ class EmployeeCompetencyProfileController extends Controller
             // Get basic competencies to initialize (common skills for all employees)
             $basicCompetencies = CompetencyLibrary::whereIn('competency_name', [
                 'Communication Skills',
-                'Customer Service Excellence', 
+                'Customer Service Excellence',
                 'Problem-Solving',
                 'Time Management',
                 'Teamwork',
@@ -746,12 +844,38 @@ class EmployeeCompetencyProfileController extends Controller
     {
         try {
             $employee = Employee::where('employee_id', $employeeId)->first();
-            
+
             if (!$employee) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Employee not found.'
                 ], 404);
+            }
+
+            // Sync skills from external API
+            try {
+                $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+                if ($response->successful()) {
+                    $apiData = $response->json();
+                    $employeesList = isset($apiData['data']) ? $apiData['data'] : $apiData;
+                    
+                    if (is_array($employeesList)) {
+                        foreach ($employeesList as $apiEmp) {
+                            $apiId = $apiEmp['employee_id'] ?? $apiEmp['id'] ?? null;
+                            // Match loosely to ensure we find the employee
+                            if ((string)$apiId === (string)$employeeId || 
+                                ($apiEmp['external_employee_id'] ?? '') === (string)$employeeId) {
+                                
+                                if (!empty($apiEmp['skills'])) {
+                                    $this->syncExternalSkillsString($employeeId, $apiEmp['skills']);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Failed to sync external skills: ' . $e->getMessage());
             }
 
             $skills = EmployeeCompetencyProfile::where('employee_id', $employeeId)
@@ -806,7 +930,7 @@ class EmployeeCompetencyProfileController extends Controller
 
         try {
             $profile = EmployeeCompetencyProfile::with(['employee', 'competency'])->findOrFail($id);
-            
+
             // Check if competency is already approved and active (proficiency level 5)
             if ($profile->proficiency_level >= 5) {
                 return response()->json([
@@ -830,7 +954,7 @@ class EmployeeCompetencyProfileController extends Controller
             $notification = CourseManagementNotification::create([
                 'competency_id' => $competency->id,
                 'competency_name' => $competency->competency_name,
-                'message' => 'Employee competency profile update: ' . $employee->first_name . ' ' . $employee->last_name . 
+                'message' => 'Employee competency profile update: ' . $employee->first_name . ' ' . $employee->last_name .
                            ' has proficiency level ' . $profile->proficiency_level . '/5 in "' . $competency->competency_name . '". ' .
                            ($activeCourses->count() > 0 ?
                            'Found ' . $activeCourses->count() . ' active courses that may be affected.' :
@@ -845,7 +969,7 @@ class EmployeeCompetencyProfileController extends Controller
             ActivityLog::createLog([
                 'module' => 'Employee Competency Profile',
                 'action' => 'notification',
-                'description' => 'Sent notification to course management about employee competency: ' . 
+                'description' => 'Sent notification to course management about employee competency: ' .
                                $employee->first_name . ' ' . $employee->last_name . ' - ' . $competency->competency_name .
                                ' (Level ' . $profile->proficiency_level . '/5, ' . $activeCourses->count() . ' active courses affected)',
                 'model_type' => EmployeeCompetencyProfile::class,
@@ -870,6 +994,65 @@ class EmployeeCompetencyProfileController extends Controller
                 'success' => false,
                 'message' => 'Failed to send notification: ' . $e->getMessage()
             ], 500);
+        }
+    }
+    /**
+     * Parse and sync skills string from external source
+     */
+    private function syncExternalSkillsString($employeeId, $skillsString)
+    {
+        if (empty($skillsString)) return;
+
+        // Split by newlines, commas, or semicolons
+        $skills = preg_split('/[\r\n,;]+/', $skillsString, -1, PREG_SPLIT_NO_EMPTY);
+        $currentDate = now();
+
+        foreach ($skills as $skillName) {
+            $skillName = trim($skillName);
+            if (empty($skillName)) continue;
+
+            // Clean up skill name
+            $skillName = ucwords(strtolower($skillName));
+
+            // Find or create competency in library
+            $competency = CompetencyLibrary::firstOrCreate(
+                ['competency_name' => $skillName],
+                [
+                    'description' => 'Auto-imported skill from employee profile',
+                    'category' => 'General'
+                ]
+            );
+
+            // Check if profile exists, if not create it
+            $profile = EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                ->where('competency_id', $competency->id)
+                ->first();
+
+            if (!$profile) {
+                EmployeeCompetencyProfile::create([
+                    'employee_id' => $employeeId,
+                    'competency_id' => $competency->id,
+                    'proficiency_level' => 5, // Set to Expert/100% as this is an acquired skill
+                    'assessment_date' => $currentDate
+                ]);
+
+                // Log the creation
+                ActivityLog::createLog([
+                    'module' => 'Competency Management',
+                    'action' => 'import',
+                    'description' => "Auto-imported skill '{$skillName}' at 100% proficiency for employee ID: {$employeeId}",
+                    'model_type' => EmployeeCompetencyProfile::class,
+                    'model_id' => 0, // Placeholder
+                ]);
+            } else {
+                // If profile exists, ensure it is updated to Level 5 (100%) since the employee possesses this skill
+                if ($profile->proficiency_level < 5) {
+                    $profile->update([
+                        'proficiency_level' => 5,
+                        'assessment_date' => $currentDate
+                    ]);
+                }
+            }
         }
     }
 }

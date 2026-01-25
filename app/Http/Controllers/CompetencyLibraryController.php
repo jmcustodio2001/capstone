@@ -28,15 +28,17 @@ class CompetencyLibraryController extends Controller
             ->where('competency_name', 'NOT LIKE', '%Destination Knowledge -%') // Only exclude auto-generated destination knowledge
             ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
             ->orderBy('id', 'desc')
-            ->get();
+            ->paginate(10);
 
         $employees = Employee::all();
         $gaps = CompetencyGap::with(['employee', 'competency'])->get();
+        $positions = \App\Models\OrganizationalPosition::all();
 
         return view('competency_management.competency_library', compact(
             'competencies',
             'employees',
-            'gaps'
+            'gaps',
+            'positions'
         ));
     }
 

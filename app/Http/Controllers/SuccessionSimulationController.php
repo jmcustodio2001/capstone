@@ -18,22 +18,30 @@ class SuccessionSimulationController extends Controller
 {
     public function index(): View
     {
-        $simulations = $this->getSimulations();
-        $employees = $this->getEmployeesList();
+        $apiEmployees = $this->getEmployeesFromAPI();
+        $employeesList = $this->convertToEmployeesList($apiEmployees);
+        
+        $simulations = $this->getSimulations($apiEmployees);
         $completedCertificates = $this->getCompletedCertificates();
         $certificateStatuses = $this->getCertificateStatuses($simulations);
         $positions = $this->getOrganizationalPositions();
-        $topCandidates = $this->getTopCandidatesForPositions($positions);
-        $readinessScores = $this->calculateReadinessScoresForPositions($topCandidates);
-        $dashboardMetrics = $this->calculateDashboardMetrics();
-        $scenarioData = $this->generateScenarioData($positions, $topCandidates, $dashboardMetrics);
+        
+        // Get paginated top candidates
+        $topUniqueCandidates = $this->getPaginatedUniqueCandidates($positions, $apiEmployees);
+        
+        // We still need the raw topCandidates for scores and metrics calculation
+        $allTopCandidates = $this->getTopCandidatesForPositions($positions, $apiEmployees);
+        $readinessScores = $this->calculateReadinessScoresForPositions($allTopCandidates);
+        $dashboardMetrics = $this->calculateDashboardMetrics($apiEmployees);
+        $scenarioData = $this->generateScenarioData($positions, $allTopCandidates, $dashboardMetrics);
 
         return view('succession_planning.succession_planning_dashboard_simulation_tools', [
             'simulations' => $simulations,
-            'employees' => $employees,
+            'employees' => $employeesList,
             'certificateStatuses' => $certificateStatuses,
             'positions' => $positions,
-            'topCandidates' => $topCandidates,
+            'topCandidates' => $allTopCandidates, // Keep for role chart
+            'topUniqueCandidates' => $topUniqueCandidates, // For paginated grid
             'readinessScores' => $readinessScores,
             'totalCandidates' => $dashboardMetrics['totalCandidates'],
             'readyLeaders' => $dashboardMetrics['readyLeaders'],
@@ -44,19 +52,119 @@ class SuccessionSimulationController extends Controller
         ]);
     }
 
-    private function getSimulations(): Collection
+    public function getCandidates($positionId)
     {
-        return SuccessionSimulation::with('employee')->orderByDesc('created_at')->get();
+        $positions = $this->getOrganizationalPositions();
+        $position = $positions->firstWhere('id', (int)$positionId);
+        
+        if (!$position) {
+            return response()->json(['error' => 'Position not found', 'candidates' => []], 404);
+        }
+
+        $apiEmployees = $this->getEmployeesFromAPI();
+        // Use existing logic to get candidates for this specific position
+        $allTopCandidates = $this->getTopCandidatesForPositions(collect([$position]), $apiEmployees);
+        
+        return response()->json([
+            'success' => true,
+            'position_name' => $position->position_title,
+            'candidates' => $allTopCandidates[$positionId] ?? []
+        ]);
+    }
+
+    private function getSimulations($apiEmployees = null)
+    {
+        $simulations = SuccessionSimulation::with('employee')->orderByDesc('created_at')->paginate(10, ['*'], 'sim_page');
+        
+        if ($apiEmployees) {
+            $empMap = collect($apiEmployees)->keyBy(function($e) {
+                return is_object($e) ? $e->employee_id : ($e['employee_id'] ?? $e['id'] ?? null);
+            });
+
+            foreach ($simulations->items() as $sim) {
+                if (!$sim->employee && isset($empMap[$sim->employee_id])) {
+                    $apiEmp = $empMap[$sim->employee_id];
+                    $sim->setRelation('employee', is_object($apiEmp) ? $apiEmp : (object)$apiEmp);
+                }
+            }
+        }
+
+        return $simulations;
+    }
+
+    private function getPaginatedUniqueCandidates($positions, $apiEmployees)
+    {
+        $uniqueCandidates = collect();
+        $topCandidates = $this->getTopCandidatesForPositions($positions, $apiEmployees);
+        
+        foreach($topCandidates as $positionId => $candidates) {
+            foreach($candidates as $candidate) {
+                if (!$uniqueCandidates->contains('employee_id', $candidate['employee_id'])) {
+                    $uniqueCandidates->push($candidate);
+                }
+            }
+        }
+        
+        $sortedCandidates = $uniqueCandidates->sortByDesc('readiness_score')->values();
+        
+        // Paginate the collection manually
+        $page = request()->get('cand_page', 1);
+        $perPage = 6; // Show 6 candidates per page (2 rows of 3)
+        
+        return new \Illuminate\Pagination\LengthAwarePaginator(
+            $sortedCandidates->forPage($page, $perPage),
+            $sortedCandidates->count(),
+            $perPage,
+            $page,
+            ['path' => request()->url(), 'query' => request()->query(), 'pageName' => 'cand_page']
+        );
+    }
+
+    private function convertToEmployeesList($employees): Collection
+    {
+        return collect($employees)->map(function($emp) {
+            $empId = is_object($emp) ? $emp->employee_id : ($emp['employee_id'] ?? $emp['id'] ?? 'N/A');
+            $fname = is_object($emp) ? $emp->first_name : ($emp['first_name'] ?? 'Unknown');
+            $lname = is_object($emp) ? $emp->last_name : ($emp['last_name'] ?? 'Employee');
+            return [
+                'id' => $empId,
+                'name' => $fname . ' ' . $lname
+            ];
+        });
     }
 
     private function getEmployeesList(): Collection
     {
-        return Employee::all()->map(function($emp) {
-            return [
-                'id' => $emp->employee_id,
-                'name' => $emp->first_name . ' ' . $emp->last_name
-            ];
-        });
+        $employees = $this->getEmployeesFromAPI();
+        return $this->convertToEmployeesList($employees);
+    }
+
+    private function getEmployeesFromAPI()
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                return collect($apiEmployees)->map(function($emp) {
+                    return (object) [
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'hire_date' => $emp['date_hired'] ?? $emp['hire_date'] ?? null
+                    ];
+                });
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API: ' . $e->getMessage());
+        }
+        return Employee::all();
     }
 
     private function getCompletedCertificates(): Collection
@@ -98,9 +206,17 @@ class SuccessionSimulationController extends Controller
             Log::info('EmployeeTraining records found: ' . $employeeTrainings->count());
             
             foreach ($employeeTrainings as $training) {
-                $employee = Employee::where('employee_id', $training->employee_id)->first();
+                // Try to find employee from API or local
+                $employees = $this->getEmployeesFromAPI();
+                $employee = collect($employees)->first(function($e) use ($training) {
+                    $eId = is_object($e) ? $e->employee_id : ($e['employee_id'] ?? $e['id'] ?? null);
+                    return $eId == $training->employee_id;
+                });
+
                 if ($employee) {
-                    $employeeName = $employee->first_name . ' ' . $employee->last_name;
+                    $fname = is_object($employee) ? $employee->first_name : ($employee['first_name'] ?? 'Unknown');
+                    $lname = is_object($employee) ? $employee->last_name : ($employee['last_name'] ?? 'Employee');
+                    $employeeName = $fname . ' ' . $lname;
                     
                     $certificates->push([
                         'employee_name' => $employeeName,
@@ -122,11 +238,11 @@ class SuccessionSimulationController extends Controller
         return $certificates;
     }
 
-    private function getCertificateStatuses(Collection $simulations): array
+    private function getCertificateStatuses($simulations): array
     {
         $certificateStatuses = [];
         
-        foreach ($simulations as $sim) {
+        foreach ($simulations->items() as $sim) {
             $latestCert = CompletedTraining::with('course')
                 ->where('employee_id', $sim->employee_id)
                 ->orderByDesc('completion_date')
@@ -174,25 +290,25 @@ class SuccessionSimulationController extends Controller
     private function getOrganizationalPositions(): Collection
     {
         return collect([
-            // Executive Level
-            (object)['id' => 1, 'position_title' => 'General Manager / CEO', 'department' => 'Executive', 'level' => 1],
+            // Core
+            (object)['id' => 1, 'position_title' => 'Travel Agent', 'department' => 'Core', 'level' => 4],
+            (object)['id' => 2, 'position_title' => 'Travel Staff', 'department' => 'Core', 'level' => 4],
             
-            // Management Level
-            (object)['id' => 2, 'position_title' => 'Operations Manager', 'department' => 'Operations', 'level' => 2],
-            (object)['id' => 3, 'position_title' => 'Sales & Marketing Manager', 'department' => 'Sales & Marketing', 'level' => 2],
-            (object)['id' => 4, 'position_title' => 'Finance Manager', 'department' => 'Finance', 'level' => 2],
-            (object)['id' => 5, 'position_title' => 'HR Manager', 'department' => 'Human Resources', 'level' => 2],
+            // Logistic
+            (object)['id' => 3, 'position_title' => 'Fleet Manager', 'department' => 'Logistic', 'level' => 3],
+            (object)['id' => 4, 'position_title' => 'Procurement Officer', 'department' => 'Logistic', 'level' => 4],
+            (object)['id' => 5, 'position_title' => 'Driver', 'department' => 'Logistic', 'level' => 4],
+            (object)['id' => 6, 'position_title' => 'Logistics Staff', 'department' => 'Logistic', 'level' => 4],
             
-            // Supervisory Level
-            (object)['id' => 6, 'position_title' => 'Tour Coordinator', 'department' => 'Operations', 'level' => 3],
-            (object)['id' => 7, 'position_title' => 'Customer Service Supervisor', 'department' => 'Customer Service', 'level' => 3],
-            (object)['id' => 8, 'position_title' => 'Tour Guide', 'department' => 'Operations', 'level' => 4],
+            // Financial
+            (object)['id' => 7, 'position_title' => 'Financial Staff', 'department' => 'Financial', 'level' => 4],
             
-            // Operational Level - These were missing!
-            (object)['id' => 9, 'position_title' => 'Travel Agent', 'department' => 'Operations', 'level' => 4],
-            (object)['id' => 10, 'position_title' => 'Reservation Officer', 'department' => 'Operations', 'level' => 4],
-            (object)['id' => 11, 'position_title' => 'Ticketing Officer', 'department' => 'Operations', 'level' => 4],
-            (object)['id' => 12, 'position_title' => 'Transport Coordinator', 'department' => 'Operations', 'level' => 4]
+            // Human Resource
+            (object)['id' => 8, 'position_title' => 'Hr Manager', 'department' => 'Human Resource', 'level' => 3],
+            (object)['id' => 9, 'position_title' => 'Hr Staff', 'department' => 'Human Resource', 'level' => 4],
+            
+            // Administrative
+            (object)['id' => 10, 'position_title' => 'Administrative Staff', 'department' => 'Administrative', 'level' => 4]
         ]);
     }
 
@@ -215,24 +331,32 @@ class SuccessionSimulationController extends Controller
                (min($totalCompetencies * 10, 100) * 0.3);
     }
 
-    private function getTopCandidatesForPositions(Collection $positions): array
+    private function getTopCandidatesForPositions(Collection $positions, $employees = null): array
     {
         $topCandidates = [];
+        if (!$employees) $employees = $this->getEmployeesFromAPI();
         
         foreach ($positions as $position) {
-            $candidates = Employee::with('competencyProfiles.competency')
-                ->get()
+            $candidates = collect($employees)
                 ->map(function($employee) {
-                    $readinessScore = $this->calculateReadinessScore($employee->competencyProfiles);
+                    $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+                    $fname = is_object($employee) ? $employee->first_name : ($employee['first_name'] ?? 'Unknown');
+                    $lname = is_object($employee) ? $employee->last_name : ($employee['last_name'] ?? 'Employee');
+                    
+                    $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')
+                        ->where('employee_id', $empId)
+                        ->get();
+                        
+                    $readinessScore = $this->calculateReadinessScore($competencyProfiles);
                     
                     return [
-                        'name' => $employee->first_name . ' ' . $employee->last_name,
-                        'employee_id' => $employee->employee_id,
+                        'name' => $fname . ' ' . $lname,
+                        'employee_id' => $empId,
                         'readiness_score' => round($readinessScore, 1)
                     ];
                 })
                 ->sortByDesc('readiness_score')
-                ->take(3);
+                ->values(); // Reset keys to ensure it's an array in JSON
 
             $topCandidates[$position->id] = $candidates;
         }
@@ -257,21 +381,23 @@ class SuccessionSimulationController extends Controller
         return $readinessScores;
     }
 
-    private function calculateDashboardMetrics(): array
+    private function calculateDashboardMetrics($employees = null): array
     {
-        $employees = Employee::with('competencyProfiles.competency')->get();
+        if (!$employees) $employees = $this->getEmployeesFromAPI();
         
-        $totalCandidates = $employees->filter(function($employee) {
-            return $employee->competencyProfiles->isNotEmpty();
-        })->count();
+        $totalCandidates = collect($employees)->count();
 
-        $readyLeaders = $employees->filter(function($employee) {
-            $readinessScore = $this->calculateReadinessScore($employee->competencyProfiles);
+        $readyLeaders = collect($employees)->filter(function($employee) {
+            $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+            $competencyProfiles = \App\Models\EmployeeCompetencyProfile::where('employee_id', $empId)->get();
+            $readinessScore = $this->calculateReadinessScore($competencyProfiles);
             return $readinessScore >= 80;
         })->count();
 
-        $inDevelopment = $employees->filter(function($employee) {
-            $readinessScore = $this->calculateReadinessScore($employee->competencyProfiles);
+        $inDevelopment = collect($employees)->filter(function($employee) {
+            $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+            $competencyProfiles = \App\Models\EmployeeCompetencyProfile::where('employee_id', $empId)->get();
+            $readinessScore = $this->calculateReadinessScore($competencyProfiles);
             return $readinessScore >= 40 && $readinessScore < 80;
         })->count();
 

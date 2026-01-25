@@ -83,12 +83,68 @@ class AdminController extends Controller
 
         $credentials = $request->only('email', 'password');
 
-        // Attempt to authenticate the user with admin guard
-        if (Auth::guard('admin')->attempt($credentials)) {
+        // attempt to authenticate via local db
+        $loginAttempt = Auth::guard('admin')->attempt($credentials);
+
+        // If local attempt failed, try external API
+        if (!$loginAttempt) {
+            try {
+                $response = Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/accounts');
+                if ($response->successful()) {
+                    $apiData = $response->json();
+                    // Handle wrapped data structure
+                    $systemAccounts = $apiData['data']['system_accounts'] ?? $apiData['system_accounts'] ?? [];
+
+                    foreach ($systemAccounts as $account) {
+                        // Check email and account type
+                        if (isset($account['employee']['email']) && 
+                            $account['employee']['email'] === $request->email && 
+                            ($account['account_type'] ?? '') === 'system') {
+                            
+                            $apiEmployee = $account['employee'];
+                            $apiPassword = $account['password'] ?? '';
+                            
+                            // Check if password matches (API has plaintext password)
+                            if ($apiPassword === $request->password) {
+                                // Find or create user
+                                $user = User::where('email', $request->email)->first();
+                                
+                                if (!$user) {
+                                    // Auto-provision admin
+                                    $user = User::create([
+                                        'name' => ($apiEmployee['first_name'] ?? '') . ' ' . ($apiEmployee['last_name'] ?? ''),
+                                        'email' => $apiEmployee['email'],
+                                        'password' => Hash::make($apiPassword),
+                                        'role' => 'admin', // Default role for system accounts
+                                        'profile_picture' => null
+                                    ]);
+                                    Log::info('Auto-provisioned admin user from external API', ['email' => $user->email]);
+                                } else {
+                                    // Update password
+                                    $user->password = Hash::make($apiPassword);
+                                    $user->save();
+                                    Log::info('Synced admin password from external API', ['email' => $user->email]);
+                                }
+                                
+                                // Login the user
+                                Auth::guard('admin')->login($user);
+                                $loginAttempt = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('External admin login check failed: ' . $e->getMessage());
+            }
+        }
+
+        // Check if authenticated (via local or external)
+        if ($loginAttempt) {
             $user = Auth::guard('admin')->user();
 
             // Check if user has admin role (case-insensitive)
-            if (strcasecmp($user->role, 'admin') === 0) {
+            if (strcasecmp($user->role, 'admin') === 0 || strcasecmp($user->role, 'superadmin') === 0) {
                 // Successful login - reset lockout counters
                 $request->session()->forget([$lockoutKey, $lockoutTimeKey]);
 

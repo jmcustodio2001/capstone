@@ -23,24 +23,51 @@ class SuccessionPlanningController extends Controller
 
     public function index()
     {
-        // Get all employees with their competency data
-        $employees = Employee::with(['competencyProfiles.competency'])->get();
+        // Get all employees from API with local fallback
+        $apiEmployees = $this->getEmployeesFromAPI();
+        
+        // Map to dropdown format [id, name] expected by the view
+        $employees = collect($apiEmployees)->map(function($emp) {
+            $empId = is_object($emp) ? $emp->employee_id : ($emp['employee_id'] ?? $emp['id'] ?? 'N/A');
+            $fname = is_object($emp) ? $emp->first_name : ($emp['first_name'] ?? 'Unknown');
+            $lname = is_object($emp) ? $emp->last_name : ($emp['last_name'] ?? 'Employee');
+            return [
+                'id' => $empId,
+                'name' => $fname . ' ' . $lname
+            ];
+        });
 
         // Get organizational positions
         $positions = OrganizationalPosition::where('is_active', true)->get();
 
-        // Automatically evaluate all employees for all positions
+        // Automatically evaluate all candidates using the API employee list
         $candidateEvaluations = $this->eligibilityService->evaluateAllCandidates();
 
         // Get existing simulations
         $simulations = SuccessionScenario::with('createdBy')->latest()->get();
 
-        // Calculate dashboard statistics
-        $totalCandidates = SuccessionCandidate::where('status', 'active')->count();
-        $readyLeaders = SuccessionCandidate::where('status', 'active')
-            ->where('readiness_score', '>=', 90)->count();
-        $inDevelopment = SuccessionCandidate::where('status', 'active')
-            ->whereBetween('readiness_score', [70, 89])->count();
+        // Calculate dashboard statistics from API employees
+        $totalCandidates = collect($apiEmployees)->filter(function($employee) {
+            $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+            return \App\Models\EmployeeCompetencyProfile::where('employee_id', $empId)->exists();
+        })->count();
+
+        $readyLeaders = 0;
+        $inDevelopment = 0;
+        
+        foreach ($apiEmployees as $employee) {
+            $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+            $competencyProfiles = \App\Models\EmployeeCompetencyProfile::where('employee_id', $empId)->get();
+            
+            // Just a rough estimate for dashboard metrics without full position-specific analysis
+            // Use average proficiency to estimate readiness (level 4-5 = ready, level 2-3 = in dev)
+            if ($competencyProfiles->isNotEmpty()) {
+                $avgProficiency = $competencyProfiles->avg('proficiency_level');
+                if ($avgProficiency >= 4) $readyLeaders++;
+                elseif ($avgProficiency >= 2) $inDevelopment++;
+            }
+        }
+
         $keyPositions = OrganizationalPosition::where('is_active', true)
             ->where('is_critical_position', true)->count();
 
@@ -53,7 +80,7 @@ class SuccessionPlanningController extends Controller
 
         foreach ($positions as $position) {
             $candidates = $this->eligibilityService->getCandidatesForPosition($position);
-            $topCandidates[$position->id] = collect($candidates)->take(3);
+            $topCandidates[$position->id] = collect($candidates)->values();
 
             // Calculate readiness score for this position (average of top 3 candidates)
             $scores = collect($candidates)->take(3)->pluck('readiness_score')->toArray();
@@ -151,7 +178,11 @@ class SuccessionPlanningController extends Controller
 
         $candidates = $this->eligibilityService->getCandidatesForPosition($position);
 
-        return response()->json($candidates);
+        return response()->json([
+            'success' => true,
+            'position_name' => $position->position_name,
+            'candidates' => $candidates
+        ]);
     }
 
     public function updateCandidateStatus(Request $request)
@@ -441,5 +472,33 @@ class SuccessionPlanningController extends Controller
                 'message' => 'No training data available'
             ]);
         }
+    }
+
+    private function getEmployeesFromAPI()
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                return collect($apiEmployees)->map(function($emp) {
+                    return (object) [
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'hire_date' => $emp['date_hired'] ?? $emp['hire_date'] ?? null
+                    ];
+                });
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in SuccessionPlanning: ' . $e->getMessage());
+        }
+        return Employee::all();
     }
 }

@@ -12,13 +12,24 @@ class SuccessionEligibilityService
 {
     public function evaluateAllCandidates()
     {
-        $employees = Employee::with(['competencyProfiles.competency'])->get();
+        $apiEmployees = $this->getEmployeesFromAPI();
+        $employees = is_array($apiEmployees) ? collect($apiEmployees) : $apiEmployees;
         $positions = OrganizationalPosition::where('is_active', true)->get();
         
         $evaluations = [];
         
         foreach ($employees as $employee) {
-            $evaluations[$employee->employee_id] = $this->evaluateEmployeeForAllPositions($employee);
+            $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+            if (!$empId) continue;
+
+            // Bridge API employee with local competency data
+            if (!isset($employee->competencyProfiles)) {
+                $employee->competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')
+                    ->where('employee_id', $empId)
+                    ->get();
+            }
+
+            $evaluations[$empId] = $this->evaluateEmployeeForAllPositions($employee);
         }
         
         return $evaluations;
@@ -56,19 +67,35 @@ class SuccessionEligibilityService
 
     public function getCandidatesForPosition($position)
     {
-        $employees = Employee::with(['competencyProfiles.competency'])->get();
+        $apiEmployees = $this->getEmployeesFromAPI();
+        $employees = is_array($apiEmployees) ? collect($apiEmployees) : $apiEmployees;
         $candidates = [];
         
         foreach ($employees as $employee) {
+            $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+            if (!$empId) continue;
+
+            // Bridge API employee with local competency data
+            if (!isset($employee->competencyProfiles)) {
+                $employee->competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')
+                    ->where('employee_id', $empId)
+                    ->get();
+            }
+
             $readinessData = $this->calculatePositionReadiness($employee, $position);
             
-            // Only include candidates with reasonable readiness (>= 50%)
-            if ($readinessData['score'] >= 50) {
+            // Include all candidates with any readiness (>= 0%)
+        if ($readinessData['score'] >= 0) {
+                $fname = is_object($employee) ? $employee->first_name : ($employee['first_name'] ?? 'Unknown');
+                $lname = is_object($employee) ? $employee->last_name : ($employee['last_name'] ?? 'Employee');
+                $pos = is_object($employee) ? ($employee->position ?? null) : ($employee['position'] ?? $employee['role'] ?? null);
+                $dept = is_object($employee) ? ($employee->department ?? null) : ($employee['department'] ?? null);
+
                 $candidates[] = [
-                    'employee_id' => $employee->employee_id,
-                    'name' => $employee->first_name . ' ' . $employee->last_name,
-                    'current_position' => $employee->position ?? 'Not specified',
-                    'department' => $employee->department ?? 'Not specified',
+                    'employee_id' => $empId,
+                    'name' => $fname . ' ' . $lname,
+                    'current_position' => $pos ?? 'Not specified',
+                    'department' => $dept ?? 'Not specified',
                     'readiness_score' => $readinessData['score'],
                     'readiness_level' => $readinessData['level'],
                     'competency_breakdown' => $readinessData['competency_breakdown'],
@@ -186,10 +213,21 @@ class SuccessionEligibilityService
 
     public function autoUpdateCandidates()
     {
-        $employees = Employee::with(['competencyProfiles.competency'])->get();
+        $apiEmployees = $this->getEmployeesFromAPI();
+        $employees = is_array($apiEmployees) ? collect($apiEmployees) : $apiEmployees;
         $positions = OrganizationalPosition::where('is_active', true)->get();
         
         foreach ($employees as $employee) {
+            $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
+            if (!$empId) continue;
+
+            // Bridge API employee with local competency data
+            if (!isset($employee->competencyProfiles)) {
+                $employee->competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')
+                    ->where('employee_id', $empId)
+                    ->get();
+            }
+
             foreach ($positions as $position) {
                 $readinessData = $this->calculatePositionReadiness($employee, $position);
                 
@@ -197,7 +235,7 @@ class SuccessionEligibilityService
                 if ($readinessData['score'] >= 60) {
                     SuccessionCandidate::updateOrCreate(
                         [
-                            'employee_id' => $employee->employee_id,
+                            'employee_id' => $empId,
                             'target_position_id' => $position->id
                         ],
                         [
@@ -212,5 +250,33 @@ class SuccessionEligibilityService
                 }
             }
         }
+    }
+
+    private function getEmployeesFromAPI()
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                return collect($apiEmployees)->map(function($emp) {
+                    return (object) [
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'hire_date' => $emp['date_hired'] ?? $emp['hire_date'] ?? null
+                    ];
+                });
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in SuccessionEligibilityService: ' . $e->getMessage());
+        }
+        return Employee::all();
     }
 }

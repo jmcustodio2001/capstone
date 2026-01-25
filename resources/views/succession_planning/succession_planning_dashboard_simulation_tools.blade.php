@@ -640,132 +640,45 @@
 
               @if(isset($positions) && count($positions) > 0)
                 @php
-                  $ceoPositions = $positions->where('level', 1);
-                  $executivePositions = $positions->where('level', 2);
-                  $managerPositions = $positions->where('level', 3);
+                  $departments = ['Core', 'Logistic', 'Financial', 'Human Resource', 'Administrative'];
                 @endphp
 
-          <!-- Executive Level -->
-          @if($ceoPositions->count() > 0)
-            <div class="row justify-content-center mb-4">
-              <div class="col-md-6">
-                <div class="role-node leader" data-position-id="1" onclick="showCandidates('1')" style="background-color: #ffffff;">
-                  <div class="readiness-score">{{ isset($readinessScores[1]) ? $readinessScores[1] : '0' }}%</div>
-                  <h5 class="mb-2" style="color: #000;">General Manager / CEO</h5>
-                  <p class="mb-2 badge text-bg-light border" style="color: #000;">Executive Level</p>
-                  <small class="d-block" style="color: #000;">Head of the company; makes strategic decisions for the entire business.</small>
+                <!-- Departmental Groups -->
+                <div class="row justify-content-center g-4">
+                  @foreach($departments as $deptName)
+                    @php
+                      $deptPositions = $positions->where('department', $deptName);
+                    @endphp
+                    @if($deptPositions->count() > 0)
+                      <div class="col-lg-4 col-md-6">
+                        <div class="card h-100 border-0 shadow-sm bg-light bg-opacity-50">
+                          <div class="card-header bg-white py-2 border-bottom text-center">
+                            <span class="fw-bold text-uppercase small text-muted">{{ $deptName }} Department</span>
+                          </div>
+                          <div class="card-body p-3">
+                            @foreach($deptPositions->sortBy('level') as $pos)
+                              <div class="role-node {{ $pos->level <= 3 ? 'manager' : 'successor' }} mb-3" onclick="showCandidates('{{ $pos->id }}')">
+                                <div class="readiness-score" style="width: 30px; height: 30px; font-size: 0.7rem;">{{ isset($readinessScores[$pos->id]) ? $readinessScores[$pos->id] : '0' }}%</div>
+                                <h6 class="mb-1 fw-bold">{{ $pos->position_title }}</h6>
+                                <small class="text-muted d-block">{{ $pos->level <= 3 ? 'Management' : 'Operational' }}</small>
+                              </div>
+                            @endforeach
+                          </div>
+                        </div>
+                      </div>
+                    @endif
+                  @endforeach
                 </div>
-              </div>
-            </div>
-          @endif
-
-          <!-- Management Level -->
-          <div class="row justify-content-center g-4 mb-4">
-            <div class="col-lg-3 col-md-6">
-              <div class="role-node manager" data-position-id="2" onclick="showCandidates('2')">
-                <div class="readiness-score">{{ isset($readinessScores[2]) ? $readinessScores[2] : '0' }}%</div>
-                <h6 class="mb-2">Operations Manager</h6>
-                <p class="mb-2 badge text-bg-light border">Operations</p>
-                <small class="d-block">Manages the day-to-day activities of tours, bookings, transport, and logistics.</small>
-              </div>
-            </div>
-            <div class="col-lg-3 col-md-6">
-              <div class="role-node manager" onclick="showCandidates('3')">
-                <div class="readiness-score">{{ isset($readinessScores[3]) ? $readinessScores[3] : '0' }}%</div>
-                <h6 class="mb-2">Sales & Marketing Manager</h6>
-                <p class="mb-2 badge text-bg-light border">Sales</p>
-                <small class="d-block">Promotes tour packages and drives company sales.</small>
-              </div>
-            </div>
-            <div class="col-lg-3 col-md-6">
-              <div class="role-node manager" onclick="showCandidates('4')">
-                <div class="readiness-score">{{ isset($readinessScores[4]) ? $readinessScores[4] : '0' }}%</div>
-                <h6 class="mb-2">Finance Manager</h6>
-                <p class="mb-2 badge text-bg-light border">Finance</p>
-                <small class="d-block">Handles budgeting, billing, payroll, and financial reporting.</small>
-              </div>
-            </div>
-            <div class="col-lg-3 col-md-6">
-              <div class="role-node manager" onclick="showCandidates('5')">
-                <div class="readiness-score">{{ isset($readinessScores[5]) ? $readinessScores[5] : '0' }}%</div>
-                <h6 class="mb-2">HR Manager</h6>
-                <p class="mb-2 badge text-bg-light border">Human Resources</p>
-                <small class="d-block">Oversees recruitment, training, and employee development.</small>
-              </div>
+              @else
+                <div class="text-center py-5">
+                  <i class="bi bi-diagram-3 display-4 text-dark mb-3"></i>
+                  <h5 class="text-muted">No organizational positions defined</h5>
+                  <p class="text-muted">Create organizational positions to see the role chart.</p>
+                </div>
+              @endif
             </div>
           </div>
-
-          <!-- Supervisory Level -->
-          <div class="row justify-content-center g-4 mb-4">
-            <div class="col-md-5">
-              <div class="role-node successor" data-position-id="6" onclick="showCandidates('6')">
-                <div class="readiness-score">{{ isset($readinessScores[6]) ? $readinessScores[6] : '0' }}%</div>
-                <h6 class="mb-2">Tour Coordinator</h6>
-                <p class="mb-2 badge text-bg-light border">Supervisory</p>
-                <small class="d-block">Organizes tour schedules, itineraries, and assigns tour guides.</small>
-              </div>
-            </div>
-            <div class="col-md-5">
-              <div class="role-node successor" data-position-id="7" onclick="showCandidates('7')">
-                <div class="readiness-score">{{ isset($readinessScores[7]) ? $readinessScores[7] : '0' }}%</div>
-                <h6 class="mb-2">Customer Service Supervisor</h6>
-                <p class="mb-2 badge text-bg-light border">Supervisory</p>
-                <small class="d-block">Handles client concerns, complaints, and ensures service quality.</small>
-              </div>
-            </div>
-          </div>
-
-          <!-- Operational Level -->
-          <div class="row justify-content-center g-4">
-            <div class="col-lg-2 col-md-4">
-              <div class="role-node successor" onclick="showCandidates('8')">
-                <div class="readiness-score">{{ isset($readinessScores[8]) ? $readinessScores[8] : '0' }}%</div>
-                <h6 class="mb-2">Tour Guide</h6>
-                <p class="mb-2 badge text-bg-light border">Operational</p>
-                <small class="d-block">Leads tours and provides assistance to tourists.</small>
-              </div>
-            </div>
-            <div class="col-lg-2 col-md-4">
-              <div class="role-node successor" onclick="showCandidates('9')">
-                <div class="readiness-score">{{ isset($readinessScores[9]) ? $readinessScores[9] : '0' }}%</div>
-                <h6 class="mb-2">Travel Agent</h6>
-                <p class="mb-2 badge text-bg-light border">Operational</p>
-                <small class="d-block">Arranges flights, accommodations, and visa assistance.</small>
-              </div>
-            </div>
-            <div class="col-lg-2 col-md-4">
-              <div class="role-node successor" onclick="showCandidates('10')">
-                <div class="readiness-score">{{ isset($readinessScores[10]) ? $readinessScores[10] : '0' }}%</div>
-                <h6 class="mb-2">Reservation Officer</h6>
-                <p class="mb-2 badge text-bg-light border">Operational</p>
-                <small class="d-block">Manages bookings and works with travel agent.</small>
-              </div>
-            </div>
-            <div class="col-lg-2 col-md-4">
-              <div class="role-node successor" onclick="showCandidates('11')">
-                <div class="readiness-score">{{ isset($readinessScores[11]) ? $readinessScores[11] : '0' }}%</div>
-                <h6 class="mb-2">Ticketing Officer</h6>
-                <p class="mb-2 badge text-bg-light border">Operational</p>
-                <small class="d-block">Issues flight tickets using GDS systems.</small>
-              </div>
-            </div>
-            <div class="col-lg-2 col-md-4">
-              <div class="role-node successor" onclick="showCandidates('12')">
-                <div class="readiness-score">{{ isset($readinessScores[12]) ? $readinessScores[12] : '0' }}%</div>
-                <h6 class="mb-2">Transport Coordinator</h6>
-                <p class="mb-2 badge text-bg-light border">Operational</p>
-                <small class="d-block">Manages pick-up/drop-off schedules.</small>
-              </div>
-            </div>
-          </div>
-        @else
-          <div class="text-center py-5">
-            <i class="bi bi-diagram-3 display-4 text-dark mb-3"></i>
-            <h5 class="text-muted">No organizational positions defined</h5>
-            <p class="text-muted">Create organizational positions to see the role chart.</p>
-          </div>
-        @endif
-      </div>
+        </div>
       </div>
     </div>
 
@@ -776,21 +689,7 @@
       </div>
       <div class="card-body">
         <div class="row" id="candidatesList">
-          @if(isset($topCandidates) && count($topCandidates) > 0)
-            @php
-              // Get unique candidates across all positions to avoid duplicates
-              $uniqueCandidates = collect();
-              foreach($topCandidates as $positionId => $candidates) {
-                foreach($candidates as $candidate) {
-                  if (!$uniqueCandidates->contains('employee_id', $candidate['employee_id'])) {
-                    $uniqueCandidates->push($candidate);
-                  }
-                }
-              }
-              // Sort by readiness score and take top 6 candidates only
-              $topUniqueCandidates = $uniqueCandidates->sortByDesc('readiness_score')->take(6);
-            @endphp
-
+          @if(isset($topUniqueCandidates) && $topUniqueCandidates->count() > 0)
             @foreach($topUniqueCandidates as $candidate)
               <div class="col-md-4 mb-3">
                 <div class="candidate-card card h-100">
@@ -871,6 +770,11 @@
             </div>
           @endif
         </div>
+        @if(isset($topUniqueCandidates) && $topUniqueCandidates->count() > 0)
+          <div class="d-flex justify-content-end mt-4">
+            {{ $topUniqueCandidates->appends(request()->except('cand_page'))->links('pagination::bootstrap-5') }}
+          </div>
+        @endif
       </div>
     </div>
 
@@ -1146,6 +1050,11 @@
             </tbody>
           </table>
         </div>
+        @if(isset($simulations) && $simulations->count() > 0)
+          <div class="d-flex justify-content-end mt-4">
+            {{ $simulations->appends(request()->except('sim_page'))->links('pagination::bootstrap-5') }}
+          </div>
+        @endif
       </div>
     </div>
   </main>
@@ -4200,12 +4109,14 @@
 
         if (!response.ok) throw new Error('Failed to fetch candidates');
 
-        const candidates = await response.json();
-        return candidates.map(candidate => ({
+        const responseData = await response.json();
+        const candidatesList = Array.isArray(responseData) ? responseData : (responseData.candidates || []);
+        
+        return candidatesList.map(candidate => ({
           name: candidate.name,
-          readiness: Math.round(candidate.readiness_score),
+          readiness: Math.round(candidate.readiness_score || 0),
           department: candidate.department,
-          experience: `${candidate.experience_years} years`,
+          experience: `${candidate.experience_years || 0} years`,
           employee_id: candidate.employee_id,
           competencies: candidate.competency_breakdown,
           strengths: candidate.strengths,

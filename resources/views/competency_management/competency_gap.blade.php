@@ -239,20 +239,22 @@
                 <div class="card h-100 shadow-sm border-0 gap-card" style="transition: all 0.3s ease;">
                   @php
                     $firstGap = $employeeGaps->first();
-                    $firstName = $firstGap->employee->first_name ?? 'Unknown';
-                    $lastName = $firstGap->employee->last_name ?? 'Employee';
+                    $employee = $firstGap->employee;
+                    
+                    $firstName = $employee?->first_name ?? 'Unknown';
+                    $lastName = $employee?->last_name ?? 'Employee';
                     $fullName = $firstName . ' ' . $lastName;
 
-                    // Check if profile picture exists - simplified approach
+                    // Check if profile picture exists - simplified approach with null safety
                     $profilePicUrl = null;
-                    if ($firstGap->employee->profile_picture) {
+                    if ($employee?->profile_picture) {
                         // Direct asset URL generation - Laravel handles the storage symlink
-                        $profilePicUrl = asset('storage/' . $firstGap->employee->profile_picture);
+                        $profilePicUrl = asset('storage/' . $employee->profile_picture);
                     }
 
                     // Generate consistent color based on employee name for fallback
                     $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-                    $employeeIdForColor = $firstGap->employee->employee_id ?? 'default';
+                    $employeeIdForColor = $employee?->employee_id ?? $employeeId ?? 'default';
                     $colorIndex = abs(crc32($employeeIdForColor)) % count($colors);
                     $bgColor = $colors[$colorIndex];
 
@@ -293,9 +295,10 @@
 
                     <!-- Collapsible Gaps Container -->
                     <div class="collapse" id="gaps-{{ $employeeId }}">
+                      <div class="gap-list" data-employee-id="{{ $employeeId }}" data-current-page="1">
                       <!-- All Competencies for this Employee -->
                       @foreach($employeeGaps as $gapIndex => $gap)
-                      <div class="competency-gap-item mb-4 {{ $gapIndex > 0 ? 'border-top pt-3' : '' }}">
+                      <div class="competency-gap-item mb-4 {{ $gapIndex > 0 ? 'border-top pt-3' : '' }}" data-item-index="{{ $gapIndex }}">
                         <!-- Competency Name -->
                         <h6 class="card-title fw-bold text-dark mb-3">
                           <span class="badge bg-secondary me-2">{{ $gapIndex + 1 }}</span>
@@ -318,10 +321,10 @@
                       <div class="mb-2">
                         <div class="d-flex justify-content-between align-items-center mb-1">
                           <small class="fw-semibold text-secondary">Rate</small>
-                          <small class="fw-bold text-warning">{{ round((($gap->competency->rate ?? 0)/5)*100) }}%</small>
+                          <small class="fw-bold text-warning">{{ round((($gap->competency?->rate ?? 0)/5)*100) }}%</small>
                         </div>
                         <div class="progress" style="height: 6px;">
-                          <div class="progress-bar bg-warning" style="width: {{ (($gap->competency->rate ?? 0)/5)*100 }}%"></div>
+                          <div class="progress-bar bg-warning" style="width: {{ (($gap->competency?->rate ?? 0)/5)*100 }}%"></div>
                         </div>
                       </div>
 
@@ -348,7 +351,7 @@
                         $progressSource = 'none';
 
                         if ($competencyProfile) {
-                          $competencyName = $gap->competency->competency_name;
+                          $competencyName = $gap->competency?->competency_name ?? 'N/A';
                           $storedProficiency = ($competencyProfile->proficiency_level / 5) * 100;
                           $actualProgress = 0;
 
@@ -554,7 +557,7 @@
                                 data-competency-name="{{ $gap->competency ? $gap->competency->competency_name : 'N/A' }}"
                                 data-competency-description="{{ $gap->competency ? $gap->competency->description : 'N/A' }}"
                                 data-competency-category="{{ $gap->competency ? $gap->competency->category : 'N/A' }}"
-                                data-competency-rate="{{ $gap->competency->rate ?? 'N/A' }}"
+                                data-competency-rate="{{ $gap->competency?->rate ?? 'N/A' }}"
                                 data-required-level="{{ $gap->required_level }}"
                                 data-current-level="{{ $currentLevel }}"
                                 data-current-percentage="{{ round($currentPercentage) }}"
@@ -613,6 +616,18 @@
                     </div>
                       </div> <!-- End competency-gap-item -->
                     @endforeach
+                      </div> <!-- End gap-list -->
+
+                      <!-- Pagination Controls -->
+                      <div class="gaps-pagination d-flex justify-content-center align-items-center gap-2 mt-3" id="gap-pagination-{{ $employeeId }}" style="display: none;">
+                          <button class="btn btn-sm btn-outline-secondary prev-gap-page-btn" data-employee-id="{{ $employeeId }}" disabled>
+                              <i class="bi bi-chevron-left"></i>
+                          </button>
+                          <span class="page-info small text-muted">Page <span class="current-page">1</span> of <span class="total-pages">1</span></span>
+                          <button class="btn btn-sm btn-outline-secondary next-gap-page-btn" data-employee-id="{{ $employeeId }}">
+                              <i class="bi bi-chevron-right"></i>
+                          </button>
+                      </div>
                     </div> <!-- End collapsible gaps container -->
                   </div>
                 </div>
@@ -1315,56 +1330,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const extendExpirationModal = new bootstrap.Modal(document.getElementById('extendExpirationModal'));
       const deleteConfirmationModal = new bootstrap.Modal(document.getElementById('deleteConfirmationModal'));
 
-      // Auto-Detect Gaps button handler
-      const autoDetectGapsBtn = document.getElementById('autoDetectGapsBtn');
-      if (autoDetectGapsBtn) {
-        autoDetectGapsBtn.addEventListener('click', function() {
-          const button = this;
-          const originalHtml = button.innerHTML;
+      // Auto-Detect Gaps button handler removed here to fix redeclaration error (moved to end of file)
 
-
-          // Show loading state
-          button.disabled = true;
-          button.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Detecting...';
-
-          fetch('{{ route("competency_gap_analysis.auto_detect_gaps") }}', {
-            method: 'POST',
-            headers: {
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            }
-          })
-          .then(response => response.json())
-          .then(data => {
-            if (data.success) {
-              showSuccessToast(`✅ ${data.message}\n📊 Created: ${data.created} | Updated: ${data.updated} | Skipped: ${data.skipped}`, 6000);
-
-              // Reload page to show new gaps
-              setTimeout(() => {
-                showInfoToast('🔄 Refreshing page to show detected gaps...', 2000);
-                setTimeout(() => {
-                  window.location.reload();
-                }, 2500);
-              }, 3000);
-            } else {
-              showErrorToast('❌ ' + (data.message || 'Failed to auto-detect gaps'), 4000);
-            }
-
-            // Reset button
-            button.disabled = false;
-            button.innerHTML = originalHtml;
-          })
-          .catch(error => {
-            console.error('Auto-detect error:', error);
-            showErrorToast('❌ Network error occurred during auto-detection', 4000);
-
-            // Reset button
-            button.disabled = false;
-            button.innerHTML = originalHtml;
-          });
-        });
-      }
 
       document.addEventListener('click', function(e) {
         if (e.target.closest('.extend-expiration-btn')) {
@@ -2724,7 +2691,266 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // Call reattach function after page loads
       reattachEventListeners();
+      
+      // ========== AUTO-DETECT GAPS FUNCTIONALITY ==========
+      const autoDetectGapsBtn = document.getElementById('autoDetectGapsBtn');
+      if (autoDetectGapsBtn) {
+        autoDetectGapsBtn.addEventListener('click', function() {
+          const btn = this;
+          const originalHtml = btn.innerHTML;
+          
+          // Show confirmation dialog with SweetAlert
+          Swal.fire({
+            title: '<i class="bi bi-magic text-info"></i> Auto-Detect Competency Gaps',
+            html: `
+              <div class="text-start">
+                <div class="alert alert-info border-start border-info border-4">
+                  <i class="bi bi-info-circle me-2 text-info"></i>
+                  <strong>What will happen:</strong>
+                  <div class="mt-2">
+                    <small class="text-muted">
+                      • System will scan all employee competency profiles<br>
+                      • Compare current proficiency levels with required competency rates<br>
+                      • Create gap records for employees below required levels<br>
+                      • Update existing gap records with latest data
+                    </small>
+                  </div>
+                </div>
+                
+                <div class="alert alert-warning border-start border-warning border-4 mt-3">
+                  <i class="bi bi-exclamation-triangle me-2 text-warning"></i>
+                  <strong>Note:</strong>
+                  <div class="mt-2">
+                    <small class="text-muted">
+                      This process may take a few moments depending on the number of employees and competencies.
+                    </small>
+                  </div>
+                </div>
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-magic me-1"></i>Start Auto-Detection',
+            cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
+            confirmButtonColor: '#17a2b8',
+            cancelButtonColor: '#6c757d',
+            width: '600px'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              // Show loading state
+              btn.disabled = true;
+              btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Detecting Gaps...';
+              
+              // Show processing dialog
+              Swal.fire({
+                title: 'Processing...',
+                html: '<i class="bi bi-hourglass-split"></i> Scanning employee competency profiles and detecting gaps...',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                willOpen: () => {
+                  Swal.showLoading();
+                }
+              });
+              
+              // Make the API call
+              fetch('{{ route("competency_gap_analysis.auto_detect_gaps") }}', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                  'Accept': 'application/json'
+                }
+              })
+              .then(response => response.json())
+              .then(data => {
+                // Reset button state
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                
+                if (data.success) {
+                  // Show success message with details
+                  Swal.fire({
+                    icon: 'success',
+                    title: 'Auto-Detection Complete!',
+                    html: `
+                      <div class="text-start">
+                        <div class="alert alert-success border-start border-success border-4">
+                          <i class="bi bi-check-circle me-2 text-success"></i>
+                          <strong>Results:</strong>
+                          <div class="mt-3">
+                            <div class="row g-2">
+                              <div class="col-4">
+                                <div class="card bg-light">
+                                  <div class="card-body text-center p-2">
+                                    <h4 class="text-success mb-0">${data.created || 0}</h4>
+                                    <small class="text-muted">Created</small>
+                                  </div>
+                                </div>
+                              </div>
+                              <div class="col-4">
+                                <div class="card bg-light">
+                                  <div class="card-body text-center p-2">
+                                    <h4 class="text-info mb-0">${data.updated || 0}</h4>
+                                    <small class="text-muted">Updated</small>
+                                  </div>
+                                </div>
+                              </div>
+                              <div class="col-4">
+                                <div class="card bg-light">
+                                  <div class="card-body text-center p-2">
+                                    <h4 class="text-secondary mb-0">${data.skipped || 0}</h4>
+                                    <small class="text-muted">Skipped</small>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                            <div class="mt-3 text-center">
+                              <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Total Processed: ${data.total_processed || 0}
+                              </small>
+                            </div>
+                          </div>
+                        </div>
+                        ${data.errors && data.errors.length > 0 ? `
+                          <div class="alert alert-warning border-start border-warning border-4 mt-2">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            <strong>Some errors occurred:</strong>
+                            <div class="mt-2" style="max-height: 150px; overflow-y: auto;">
+                              <small>${data.errors.join('<br>')}</small>
+                            </div>
+                          </div>
+                        ` : ''}
+                      </div>
+                    `,
+                    timer: 5000,
+                    timerProgressBar: true,
+                    showConfirmButton: true,
+                    confirmButtonText: '<i class="bi bi-check-lg me-1"></i>OK'
+                  }).then(() => {
+                    // Reload page to show new gap records
+                    window.location.reload();
+                  });
+                } else {
+                  Swal.fire({
+                    icon: 'error',
+                    title: 'Auto-Detection Failed',
+                    html: `
+                      <div class="alert alert-danger border-start border-danger border-4">
+                        <i class="bi bi-x-circle me-2 text-danger"></i>
+                        <strong>Error:</strong>
+                        <div class="mt-2">
+                          <small>${data.message || 'An error occurred during auto-detection'}</small>
+                        </div>
+                      </div>
+                    `,
+                    confirmButtonText: '<i class="bi bi-check-lg me-1"></i>OK',
+                    confirmButtonColor: '#dc3545'
+                  });
+                }
+              })
+              .catch(error => {
+                console.error('Auto-detect error:', error);
+                // Reset button state
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+                
+                Swal.fire({
+                  icon: 'error',
+                  title: 'Network Error',
+                  html: `
+                    <div class="alert alert-danger border-start border-danger border-4">
+                      <i class="bi bi-wifi-off me-2 text-danger"></i>
+                      <strong>Connection Error:</strong>
+                      <div class="mt-2">
+                        <small>Failed to connect to the server. Please check your internet connection and try again.</small>
+                      </div>
+                    </div>
+                  `,
+                  confirmButtonText: '<i class="bi bi-check-lg me-1"></i>OK',
+                  confirmButtonColor: '#dc3545'
+                });
+              });
+            }
+          });
+        });
+      }
     });
+
+    // ========== COMPETENCY GAPS CARD PAGINATION ==========
+    const GAPS_PER_PAGE = 5;
+
+    function initGapPagination() {
+      document.querySelectorAll('.gap-list').forEach(list => {
+        const empId = list.dataset.employeeId;
+        const items = list.querySelectorAll('.competency-gap-item');
+        const totalItems = items.length;
+        const totalPages = Math.ceil(totalItems / GAPS_PER_PAGE);
+        const paginationContainer = document.getElementById(`gap-pagination-${empId}`);
+
+        if (totalItems > GAPS_PER_PAGE) {
+            paginationContainer.style.display = 'flex';
+            paginationContainer.querySelector('.total-pages').textContent = totalPages;
+            showGapPage(empId, 1);
+        } else {
+            paginationContainer.style.display = 'none';
+        }
+      });
+    }
+
+    function showGapPage(empId, page) {
+      const list = document.querySelector(`.gap-list[data-employee-id="${empId}"]`);
+      if (!list) return;
+
+      const items = list.querySelectorAll('.competency-gap-item');
+      items.forEach((item, index) => {
+        const start = (page - 1) * GAPS_PER_PAGE;
+        const end = start + GAPS_PER_PAGE;
+        if (index >= start && index < end) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+      });
+
+      list.dataset.currentPage = page;
+      updateGapPaginationControls(empId, page);
+    }
+
+    function updateGapPaginationControls(empId, page) {
+      const paginationContainer = document.getElementById(`gap-pagination-${empId}`);
+      if (!paginationContainer) return;
+
+      const items = document.querySelectorAll(`.gap-list[data-employee-id="${empId}"] .competency-gap-item`);
+      const totalPages = Math.ceil(items.length / GAPS_PER_PAGE);
+
+      paginationContainer.querySelector('.current-page').textContent = page;
+      const prevBtn = paginationContainer.querySelector('.prev-gap-page-btn');
+      const nextBtn = paginationContainer.querySelector('.next-gap-page-btn');
+
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page >= totalPages;
+    }
+
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.prev-gap-page-btn, .next-gap-page-btn');
+      if (!btn) return;
+
+      e.preventDefault();
+      const empId = btn.dataset.employeeId;
+      const list = document.querySelector(`.gap-list[data-employee-id="${empId}"]`);
+      let currentPage = parseInt(list.dataset.currentPage) || 1;
+
+      if (btn.classList.contains('prev-gap-page-btn')) {
+        currentPage--;
+      } else {
+        currentPage++;
+      }
+
+      showGapPage(empId, currentPage);
+    });
+
+    // Initialize gap pagination on load
+    document.addEventListener('DOMContentLoaded', initGapPagination);
   </script>
 </body>
 </html>

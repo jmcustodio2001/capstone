@@ -153,21 +153,26 @@
               <label class="form-label">Target Role</label>
               <select id="targetRole" class="form-select" onchange="generateSuggestions()">
                 <option value="">Select Role to Analyze</option>
-                <option value="Travel Consultant" data-requirement="75">Travel Consultant (75% Required)</option>
-                <option value="Tour Guide" data-requirement="70">Tour Guide (70% Required)</option>
-                <option value="Travel Operations Manager" data-requirement="85">Travel Operations Manager (85% Required)</option>
-                <option value="Tour Package Designer" data-requirement="80">Tour Package Designer (80% Required)</option>
-                <option value="Customer Service Representative" data-requirement="65">Customer Service Representative (65% Required)</option>
-                <option value="Travel Sales Executive" data-requirement="75">Travel Sales Executive (75% Required)</option>
-                <option value="Destination Specialist" data-requirement="78">Destination Specialist (78% Required)</option>
-                <option value="Travel Coordinator" data-requirement="72">Travel Coordinator (72% Required)</option>
-                <option value="Tourism Marketing Manager" data-requirement="82">Tourism Marketing Manager (82% Required)</option>
-                <option value="Travel Agency Branch Manager" data-requirement="90">Travel Agency Branch Manager (90% Required)</option>
-                <option value="Corporate Travel Manager" data-requirement="88">Corporate Travel Manager (88% Required)</option>
-                <option value="Travel Product Manager" data-requirement="83">Travel Product Manager (83% Required)</option>
-                <option value="Tourism Business Development" data-requirement="85">Tourism Business Development (85% Required)</option>
-                <option value="Travel Quality Assurance" data-requirement="80">Travel Quality Assurance (80% Required)</option>
-                <option value="Senior Travel Advisor" data-requirement="87">Senior Travel Advisor (87% Required)</option>
+                <optgroup label="Core">
+                  <option value="Travel Agent" data-requirement="80">Travel Agent (80% Required)</option>
+                  <option value="Travel Staff" data-requirement="75">Travel Staff (75% Required)</option>
+                </optgroup>
+                <optgroup label="Logistic">
+                  <option value="Driver" data-requirement="70">Driver (70% Required)</option>
+                  <option value="fleet manager" data-requirement="85">fleet manager (85% Required)</option>
+                  <option value="Procurement Officer" data-requirement="80">Procurement Officer (80% Required)</option>
+                  <option value="Logistics Staff" data-requirement="75">Logistics Staff (75% Required)</option>
+                </optgroup>
+                <optgroup label="Financial">
+                  <option value="Financial Staff" data-requirement="80">Financial Staff (80% Required)</option>
+                </optgroup>
+                <optgroup label="Human Resource">
+                  <option value="Hr Manager" data-requirement="90">Hr Manager (90% Required)</option>
+                  <option value="Hr Staff" data-requirement="80">Hr Staff (80% Required)</option>
+                </optgroup>
+                <optgroup label="Administrative">
+                  <option value="Administrative Staff" data-requirement="75">Administrative Staff (75% Required)</option>
+                </optgroup>
               </select>
             </div>
             <div class="col-md-4">
@@ -183,11 +188,11 @@
               <label class="form-label">Filter by Department</label>
               <select id="departmentFilter" class="form-select" onchange="filterSuggestions()">
                 <option value="">All Departments</option>
-                <option value="Operations">Operations</option>
-                <option value="Sales">Sales</option>
-                <option value="Customer Service">Customer Service</option>
-                <option value="Marketing">Marketing</option>
-                <option value="Management">Management</option>
+                <option value="FINANCIAL">FINANCIAL</option>
+                <option value="CORE">CORE</option>
+                <option value="LOGISTICS">LOGISTICS</option>
+                <option value="HUMAN RESOURCE">HUMAN RESOURCE</option>
+                <option value="ADMINISTRATIVE">ADMINISTRATIVE</option>
               </select>
             </div>
           </div>
@@ -257,22 +262,27 @@
           <div class="col-md-3">
             <label class="form-label small">Filter by Role</label>
             <select id="roleFilter" class="form-select form-select-sm" onchange="applyFilters()">
-              <option value="">All Roles</option>
-              <option value="Travel Consultant">Travel Consultant (75% Required)</option>
-              <option value="Tour Guide">Tour Guide (70% Required)</option>
-              <option value="Travel Operations Manager">Travel Operations Manager (85% Required)</option>
-              <option value="Tour Package Designer">Tour Package Designer (80% Required)</option>
-              <option value="Customer Service Representative">Customer Service Representative (65% Required)</option>
-              <option value="Travel Sales Executive">Travel Sales Executive (75% Required)</option>
-              <option value="Destination Specialist">Destination Specialist (78% Required)</option>
-              <option value="Travel Coordinator">Travel Coordinator (72% Required)</option>
-              <option value="Tourism Marketing Manager">Tourism Marketing Manager (82% Required)</option>
-              <option value="Travel Agency Branch Manager">Travel Agency Branch Manager (90% Required)</option>
-              <option value="Corporate Travel Manager">Corporate Travel Manager (88% Required)</option>
-              <option value="Travel Product Manager">Travel Product Manager (83% Required)</option>
-              <option value="Tourism Business Development">Tourism Business Development (85% Required)</option>
-              <option value="Travel Quality Assurance">Travel Quality Assurance (80% Required)</option>
-              <option value="Senior Travel Advisor">Senior Travel Advisor (87% Required)</option>
+               <option value="">All Roles</option>
+              <optgroup label="Core">
+                <option value="Travel Agent">Travel Agent (80% Required)</option>
+                <option value="Travel Staff">Travel Staff (75% Required)</option>
+              </optgroup>
+              <optgroup label="Logistic">
+                <option value="Driver">Driver (70% Required)</option>
+                <option value="fleet manager">fleet manager (85% Required)</option>
+                <option value="Procurement Officer">Procurement Officer (80% Required)</option>
+                <option value="Logistics Staff">Logistics Staff (75% Required)</option>
+              </optgroup>
+              <optgroup label="Financial">
+                <option value="Financial Staff">Financial Staff (80% Required)</option>
+              </optgroup>
+              <optgroup label="Human Resource">
+                <option value="Hr Manager">Hr Manager (90% Required)</option>
+                <option value="Hr Staff">Hr Staff (80% Required)</option>
+              </optgroup>
+              <optgroup label="Administrative">
+                <option value="Administrative Staff">Administrative Staff (75% Required)</option>
+              </optgroup>
             </select>
           </div>
           <div class="col-md-3">
@@ -404,7 +414,7 @@
                 <td>
                   @php
                     // Calculate readiness score
-                    $profile = $successor->employee && $successor->employee->competencyProfiles ? $successor->employee->competencyProfiles : [];
+                    $profile = ($successor->employee && $successor->employee->competencyProfiles) ? $successor->employee->competencyProfiles : collect([]);
                     $avgProficiency = $profile->count() > 0 ? round($profile->avg('proficiency_level'), 1) : 0;
                     $leadershipCompetencies = $profile->filter(function($p) {
                       $category = strtolower($p->competency->category ?? '');
@@ -429,11 +439,15 @@
                     // Calculate years of service
                     $yearsOfService = 0;
                     $serviceScore = 0;
-                    if ($successor->employee && $successor->employee->hire_date) {
-                      $hireDate = \Carbon\Carbon::parse($successor->employee->hire_date);
-                      $exactYearsOfService = max(0, $hireDate->diffInYears(now(), true));
-                      $yearsOfService = floor($exactYearsOfService);
-                      $serviceScore = $exactYearsOfService > 0 ? min(20, $exactYearsOfService * 2) : 0;
+                    if ($successor->employee && isset($successor->employee->hire_date) && $successor->employee->hire_date) {
+                      try {
+                        $hireDate = \Carbon\Carbon::parse($successor->employee->hire_date);
+                        $yearsOfService = max(0, $hireDate->diffInYears(now()));
+                        $exactYearsOfService = $yearsOfService; // Use integer for score consistency
+                        $serviceScore = $exactYearsOfService > 0 ? min(20, $exactYearsOfService * 2) : 0;
+                      } catch (\Exception $e) {
+                          $serviceScore = 0;
+                      }
                     }
 
                     // Calculate readiness score
@@ -575,9 +589,10 @@
           </div>
           <div class="modal-body">
             @php
-              $profile = $successor->employee && $successor->employee->competencyProfiles ? $successor->employee->competencyProfiles : [];
+              $profile = ($successor->employee && $successor->employee->competencyProfiles) ? $successor->employee->competencyProfiles : collect([]);
               $avgProficiency = $profile->count() > 0 ? round($profile->avg('proficiency_level'), 1) : 0;
               $leadershipCompetencies = $profile->filter(function($p) {
+                if (!$p->competency) return false;
                 $category = strtolower($p->competency->category ?? '');
                 $name = strtolower($p->competency->competency_name ?? '');
 
@@ -644,13 +659,17 @@
               $yearsOfService = 0;
               $serviceScore = 0;
               $exactYearsOfService = 0;
-              if ($successor->employee && $successor->employee->hire_date) {
-                $hireDate = \Carbon\Carbon::parse($successor->employee->hire_date);
-                $exactYearsOfService = max(0, $hireDate->diffInYears(now(), true)); // Get exact years with decimals
-                $yearsOfService = floor($exactYearsOfService); // Get whole years for display
+              if ($successor->employee && isset($successor->employee->hire_date) && $successor->employee->hire_date) {
+                try {
+                    $hireDate = \Carbon\Carbon::parse($successor->employee->hire_date);
+                    $yearsOfService = max(0, $hireDate->diffInYears(now()));
+                    $exactYearsOfService = $yearsOfService;
 
-                // Service score: 2% per year, max 20% at 10+ years (0 for new hires)
-                $serviceScore = $exactYearsOfService > 0 ? min(20, $exactYearsOfService * 2) : 0;
+                    // Service score: 2% per year, max 20% at 10+ years (0 for new hires)
+                    $serviceScore = $exactYearsOfService > 0 ? min(20, $exactYearsOfService * 2) : 0;
+                } catch (\Exception $e) {
+                    $serviceScore = 0;
+                }
               }
 
               // BALANCED algorithm for realistic succession readiness scoring
@@ -781,7 +800,7 @@
                   {{ round($exactYearsOfService * 12) }} month{{ round($exactYearsOfService * 12) != 1 ? 's' : '' }}
                 @endif
                 ({{ $successor->employee && $successor->employee->hire_date ? $successor->employee->hire_date->format('M Y') : 'N/A' }} - Present)
-                contributes {{ round($serviceScore, 1) }}% to readiness score
+                contributes {{ round($serviceScore, 0) }}% to readiness score
               </div>
               @endif
             </div>
@@ -2602,95 +2621,65 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
 
     // Role-specific competency requirements for travel & tours with minimum percentage requirements
     const roleRequirements = {
-      'Travel Consultant': {
+      'Travel Agent': {
         required: ['Communication', 'Customer Service', 'Travel Knowledge', 'Sales'],
         preferred: ['Technical', 'Problem Solving', 'Cultural Awareness'],
-        weight: { communication: 30, customer_service: 25, sales: 20, travel_knowledge: 15, technical: 10 },
+        weight: { communication: 30, customer_service: 25, sales: 20, travel_knowledge: 25 },
+        minPercentage: 80
+      },
+      'Travel Staff': {
+        required: ['Communication', 'Organization', 'Travel Knowledge'],
+        preferred: ['Customer Service', 'Technical'],
+        weight: { communication: 30, organization: 30, travel_knowledge: 20, customer_service: 20 },
         minPercentage: 75
       },
-      'Tour Guide': {
-        required: ['Communication', 'Leadership', 'Cultural Knowledge', 'Public Speaking'],
-        preferred: ['Language Skills', 'History Knowledge', 'Emergency Management'],
-        weight: { communication: 25, leadership: 20, cultural_knowledge: 20, public_speaking: 15, language: 20 },
+      'Driver': {
+        required: ['Operations', 'Technical', 'Patience'],
+        preferred: ['Problem Solving', 'Customer Service'],
+        weight: { operations: 50, technical: 30, patience: 20 },
         minPercentage: 70
       },
-      'Travel Operations Manager': {
-        required: ['Management', 'Leadership', 'Operations', 'Strategic Planning'],
-        preferred: ['Technical', 'Analytics', 'Budget Management'],
-        weight: { management: 30, leadership: 25, operations: 20, strategic: 15, technical: 10 },
+      'fleet manager': {
+        required: ['Management', 'Operations', 'Leadership'],
+        preferred: ['Technical', 'Financial Planning'],
+        weight: { management: 30, operations: 30, leadership: 20, technical: 20 },
         minPercentage: 85
       },
-      'Tour Package Designer': {
-        required: ['Creative', 'Travel Knowledge', 'Planning', 'Customer Service'],
-        preferred: ['Technical', 'Marketing', 'Cultural Awareness'],
-        weight: { creative: 30, travel_knowledge: 25, planning: 20, customer_service: 15, technical: 10 },
+      'Procurement Officer': {
+        required: ['Negotiation', 'Planning', 'Analytics'],
+        preferred: ['Technical', 'Legal Knowledge'],
+        weight: { negotiation: 40, planning: 30, analytics: 30 },
         minPercentage: 80
       },
-      'Customer Service Representative': {
-        required: ['Communication', 'Customer Service', 'Problem Solving', 'Patience'],
-        preferred: ['Technical', 'Language Skills', 'Conflict Resolution'],
-        weight: { communication: 30, customer_service: 30, problem_solving: 20, patience: 20 },
-        minPercentage: 65
-      },
-      'Travel Sales Executive': {
-        required: ['Sales', 'Communication', 'Customer Service', 'Negotiation'],
-        preferred: ['Market Analysis', 'Relationship Building', 'Product Knowledge'],
-        weight: { sales: 35, communication: 25, customer_service: 20, negotiation: 20 },
+      'Logistics Staff': {
+        required: ['Operations', 'Organization', 'Planning'],
+        preferred: ['Technical', 'Communication'],
+        weight: { operations: 40, organization: 30, planning: 30 },
         minPercentage: 75
       },
-      'Destination Specialist': {
-        required: ['Travel Knowledge', 'Cultural Awareness', 'Communication', 'Research'],
-        preferred: ['Language Skills', 'History', 'Geography'],
-        weight: { travel_knowledge: 35, cultural_awareness: 25, communication: 20, research: 20 },
-        minPercentage: 78
-      },
-      'Travel Coordinator': {
-        required: ['Organization', 'Communication', 'Planning', 'Customer Service'],
-        preferred: ['Technical', 'Problem Solving', 'Time Management'],
-        weight: { organization: 30, communication: 25, planning: 25, customer_service: 20 },
-        minPercentage: 72
-      },
-      'Tourism Marketing Manager': {
-        required: ['Marketing', 'Creative', 'Strategic', 'Communication'],
-        preferred: ['Digital Marketing', 'Brand Management', 'Analytics'],
-        weight: { marketing: 30, creative: 25, strategic: 20, communication: 15, digital: 10 },
-        minPercentage: 82
-      },
-      'Travel Agency Branch Manager': {
-        required: ['Management', 'Leadership', 'Business Development', 'Strategic Planning'],
-        preferred: ['Financial Management', 'Team Building', 'Operations'],
-        weight: { management: 35, leadership: 30, business_development: 20, strategic: 15 },
-        minPercentage: 90
-      },
-      'Corporate Travel Manager': {
-        required: ['Management', 'Business Development', 'Client Relations', 'Strategic Planning'],
-        preferred: ['Financial Analysis', 'Contract Negotiation', 'Technology'],
-        weight: { management: 30, business_development: 25, client_relations: 25, strategic: 20 },
-        minPercentage: 88
-      },
-      'Travel Product Manager': {
-        required: ['Product Development', 'Market Analysis', 'Strategic Planning', 'Communication'],
-        preferred: ['Technical', 'Creative', 'Financial Analysis'],
-        weight: { product_development: 35, market_analysis: 25, strategic: 20, communication: 20 },
-        minPercentage: 83
-      },
-      'Tourism Business Development': {
-        required: ['Business Development', 'Strategic Planning', 'Market Analysis', 'Communication'],
-        preferred: ['Financial Management', 'Partnership Building', 'Innovation'],
-        weight: { business_development: 35, strategic: 25, market_analysis: 20, communication: 20 },
-        minPercentage: 85
-      },
-      'Travel Quality Assurance': {
-        required: ['Quality Management', 'Analysis', 'Communication', 'Problem Solving'],
-        preferred: ['Technical', 'Process Improvement', 'Training'],
-        weight: { quality_management: 35, analysis: 25, communication: 20, problem_solving: 20 },
+      'Financial Staff': {
+        required: ['Analytics', 'Financial Management', 'Organization'],
+        preferred: ['Technical', 'Economic Analysis'],
+        weight: { analytics: 40, financial_management: 30, organization: 30 },
         minPercentage: 80
       },
-      'Senior Travel Advisor': {
-        required: ['Travel Knowledge', 'Customer Service', 'Communication', 'Leadership'],
-        preferred: ['Mentoring', 'Training', 'Problem Solving'],
-        weight: { travel_knowledge: 30, customer_service: 25, communication: 25, leadership: 20 },
-        minPercentage: 87
+      'Hr Manager': {
+        required: ['Management', 'Leadership', 'Strategic Planning'],
+        preferred: ['Team Building', 'Communication'],
+        weight: { management: 30, leadership: 40, strategic_planning: 30 },
+        minPercentage: 90
+      },
+      'Hr Staff': {
+        required: ['Communication', 'Organization', 'Patience'],
+        preferred: ['Customer Service', 'Problem Solving'],
+        weight: { communication: 40, organization: 30, patience: 30 },
+        minPercentage: 80
+      },
+      'Administrative Staff': {
+        required: ['Organization', 'Communication', 'Planning'],
+        preferred: ['Technical', 'Problem Solving'],
+        weight: { organization: 40, communication: 30, planning: 30 },
+        minPercentage: 75
       }
     };
 

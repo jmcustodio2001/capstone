@@ -22,13 +22,25 @@ class EmployeeController extends Controller
     {
         $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees'); // Project A's endpoint
 
-        $employees = $response->successful() ? $response->json() : [];
+        $apiData = $response->successful() ? $response->json() : [];
+        
+        // Handle { success: true, data: [...] } structure
+        if (isset($apiData['data']) && is_array($apiData['data'])) {
+            $employees = $apiData['data'];
+        } else {
+            $employees = $apiData;
+        }
 
         // Normalize date field for each employee
-        foreach ($employees as &$employee) {
-            if (isset($employee['date_hired'])) {
-                $employee['hire_date'] = date('Y-m-d', strtotime($employee['date_hired']));
+        // Ensure $employees is an array before looping
+        if (is_array($employees)) {
+            foreach ($employees as &$employee) {
+                if (is_array($employee) && isset($employee['date_hired'])) {
+                    $employee['hire_date'] = date('Y-m-d', strtotime($employee['date_hired']));
+                }
             }
+        } else {
+            $employees = [];
         }
 
         // Generate next employee ID for the add form
@@ -274,12 +286,95 @@ class EmployeeController extends Controller
         $employee = Employee::where('email', $email)->first();
 
         if (!$employee) {
+            // Try to fetch from external API to provision account
+            try {
+                $response = Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/accounts');
+                
+                if ($response->successful()) {
+                    $apiData = $response->json();
+                    $essAccounts = $apiData['data']['ess_accounts'] ?? $apiData['ess_accounts'] ?? [];
+                    
+                    foreach ($essAccounts as $account) {
+                        // Check if matches email and is ESS type
+                        if (isset($account['employee']['email']) && 
+                            $account['employee']['email'] === $email && 
+                            ($account['account_type'] ?? '') === 'ess') {
+                            
+                            $apiEmployee = $account['employee'];
+                            
+                            // Generate new ID
+                            $newId = $this->generateNextEmployeeId();
+                            
+                            // Create new employee record
+                            $employee = Employee::create([
+                                'employee_id' => $newId,
+                                'first_name' => $apiEmployee['first_name'] ?? 'Unknown',
+                                'last_name' => $apiEmployee['last_name'] ?? 'Unknown',
+                                'email' => $apiEmployee['email'],
+                                'password' => Hash::make($account['password'] ?? '12345678'),
+                                'phone_number' => $apiEmployee['phone'] ?? null,
+                                'address' => $apiEmployee['address'] ?? null,
+                                'hire_date' => isset($apiEmployee['date_hired']) ? date('Y-m-d', strtotime($apiEmployee['date_hired'])) : null,
+                                'department_id' => $apiEmployee['department_id'] ?? null,
+                                'position' => $apiEmployee['position'] ?? null,
+                                'status' => 'Active',
+                                'profile_picture' => null // API has profile_picture but usually needs download
+                            ]);
+                            
+                            Log::info('Auto-provisioned employee from external API', [
+                                'email' => $email, 
+                                'new_id' => $newId
+                            ]);
+                            
+                            break;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('External API check failed: ' . $e->getMessage());
+            }
+        }
+
+        if (!$employee) {
             return $this->handleFailedLoginAttempt($request, $email, 'No account found with this email address.');
         }
 
         // Verify password first
         if (!Hash::check($request->password, $employee->password)) {
-            return $this->handleFailedLoginAttempt($request, $email, 'The password you entered is incorrect.');
+            // Try to sync password from external API if local check fails
+            $passwordSynced = false;
+            try {
+                $response = Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/accounts');
+                
+                if ($response->successful()) {
+                    $apiData = $response->json();
+                    $essAccounts = $apiData['data']['ess_accounts'] ?? $apiData['ess_accounts'] ?? [];
+                    
+                    foreach ($essAccounts as $account) {
+                        // Match email and account type
+                        if (isset($account['employee']['email']) && 
+                            $account['employee']['email'] === $email && 
+                            ($account['account_type'] ?? '') === 'ess') {
+                            
+                            // Check if input password matches API password (plaintext check)
+                            if (isset($account['password']) && $account['password'] === $request->password) {
+                                // Password matches API! Update local record.
+                                $employee->password = Hash::make($request->password);
+                                $employee->save();
+                                $passwordSynced = true;
+                                Log::info('Password synced from external API for', ['email' => $email]);
+                            }
+                            break;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error('API password check failed: ' . $e->getMessage());
+            }
+
+            if (!$passwordSynced) {
+                return $this->handleFailedLoginAttempt($request, $email, 'The password you entered is incorrect.');
+            }
         }
 
         // Password is correct, clear any failed attempts and lockout data

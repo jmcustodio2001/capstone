@@ -989,7 +989,7 @@ class EmployeeDashboardController extends Controller
     private function getEmployeeRewards($employeeId)
     {
         try {
-            $response = Http::get('https://hr1.jetlougetravel.com/api/give-rewards');
+            $response = Http::get('https://hr1.jetlougetravels-ph.com/api/give-rewards');
 
             if(!$response->successful()) {
                 error_log('Failed to fetch rewards from API for employee: ' . $employeeId);
@@ -1018,7 +1018,17 @@ class EmployeeDashboardController extends Controller
                             'description' => $rewardDescription,
                             'type' => $rewardType,
                             'created_at' => $createdAt,
-                            'employee_name' => $employeeName
+                            'employee_name' => $employeeName,
+                            'given_date' => $item['given_date'] ?? $createdAt,
+                            'given_by' => $item['given_by'] ?? 'N/A',
+                            'status' => $item['status'] ?? 'approved',
+                            'notes' => $item['notes'] ?? $item['reason'] ?? '',
+                            'reward' => (object)[
+                                'name' => $rewardName,
+                                'description' => $rewardDescription,
+                                'type' => $rewardType,
+                                'benefits' => $benefits
+                            ]
                         ]);
                     }
                 }
@@ -1034,7 +1044,7 @@ class EmployeeDashboardController extends Controller
 
     public function fetchGivenRewards() {
         try {
-            $response = Http::get('https://hr1.jetlougetravel.com/api/give-rewards');
+            $response = Http::get('https://hr1.jetlougetravels-ph.com/api/give-rewards');
 
             if(!$response->successful()) {
                 return response()->json([

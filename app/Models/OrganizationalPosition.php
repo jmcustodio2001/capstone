@@ -21,7 +21,10 @@ class OrganizationalPosition extends Model
         'min_experience_years',
         'min_readiness_score',
         'is_critical_position',
-        'is_active'
+        'is_active',
+        'qualification',
+        'employment_type',
+        'work_arrangement'
     ];
 
     protected $casts = [

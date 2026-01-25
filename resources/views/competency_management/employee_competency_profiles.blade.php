@@ -9,6 +9,8 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
   <style>
     .spin {
@@ -92,11 +94,11 @@
         width: 50px !important;
         height: 50px !important;
       }
-      
+
       .employee-competency-card .card-header h5 {
         font-size: 1rem;
       }
-      
+
       .employee-competency-card .btn {
         font-size: 0.8rem;
         padding: 0.375rem 0.5rem;
@@ -117,28 +119,28 @@
     .competency-profile-item {
       position: relative;
     }
-    
+
     .competency-profile-item.border-top {
       border-top: 1px solid #e9ecef !important;
       margin-top: 1rem !important;
       padding-top: 1rem !important;
     }
-    
+
     /* View All Competencies Button */
     .view-all-competencies-btn {
       transition: all 0.3s ease;
     }
-    
+
     .view-all-competencies-btn:hover {
       transform: translateY(-1px);
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    
+
     /* Toggle icon rotation */
     .view-all-competencies-btn .toggle-icon {
       transition: transform 0.3s ease;
     }
-    
+
     .view-all-competencies-btn[aria-expanded="true"] .toggle-icon {
       transform: rotate(180deg);
     }
@@ -188,6 +190,25 @@
       </div>
     @endif
 
+    @if(session('error'))
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    @endif
+
+    @if($errors->any())
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <strong>Validation Error:</strong>
+        <ul class="mb-0">
+          @foreach($errors->all() as $error)
+            <li>{{ $error }}</li>
+          @endforeach
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    @endif
+
     <div class="card shadow-sm border-0 mt-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Employee Competency Profile</h4>
@@ -199,8 +220,17 @@
             <div class="col-md-3">
               <select name="employee_id" class="form-control" id="employeeSelect" required>
                 <option value="">Select Employee</option>
-                @foreach($employees as $employee)
-                  <option value="{{ $employee->employee_id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
+                @foreach(($allEmployees ?? $employees) as $employee)
+                  @php
+                    $empId = is_array($employee)
+                      ? ($employee['external_employee_id'] ?? $employee['id'] ?? '')
+                      : ($employee->employee_id ?? $employee->id ?? '');
+                    $firstName = is_array($employee) ? ($employee['first_name'] ?? '') : ($employee->first_name ?? '');
+                    $lastName = is_array($employee) ? ($employee['last_name'] ?? '') : ($employee->last_name ?? '');
+                  @endphp
+                  @if($empId)
+                    <option value="{{ $empId }}">{{ $firstName }} {{ $lastName }}</option>
+                  @endif
                 @endforeach
               </select>
             </div>
@@ -232,7 +262,7 @@
               </button>
             </div>
           </div>
-          
+
           <!-- Skill Gap Detection Section -->
           <div id="skillGapSection" class="mt-4" style="display: none;">
             <div class="card border-warning">
@@ -262,27 +292,31 @@
             // Group profiles by employee
             $groupedProfiles = $profiles->groupBy('employee_id');
           @endphp
-          
-          @foreach($groupedProfiles as $employeeId => $employeeProfiles)
+
+          @foreach($employees as $employee)
             @php
-              $firstProfile = $employeeProfiles->first();
-            @endphp
-            @php
-              $firstName = $firstProfile->employee->first_name ?? 'Unknown';
-              $lastName = $firstProfile->employee->last_name ?? 'Employee';
+              $empId = is_array($employee)
+                ? ($employee['external_employee_id'] ?? $employee['employee_id'] ?? $employee['id'] ?? '')
+                : ($employee->employee_id ?? $employee->id ?? '');
+
+              if (!$empId) continue;
+
+              $employeeProfiles = $groupedProfiles->get($empId, collect());
+
+              $firstName = is_array($employee) ? ($employee['first_name'] ?? 'Unknown') : ($employee->first_name ?? 'Unknown');
+              $lastName = is_array($employee) ? ($employee['last_name'] ?? 'Employee') : ($employee->last_name ?? 'Employee');
               $fullName = $firstName . ' ' . $lastName;
 
-              // Check if profile picture exists - simplified approach
+              // Check if profile picture exists
+              $profilePic = is_array($employee) ? ($employee['profile_picture'] ?? null) : ($employee->profile_picture ?? null);
               $profilePicUrl = null;
-              if ($firstProfile->employee->profile_picture) {
-                  // Direct asset URL generation - Laravel handles the storage symlink
-                  $profilePicUrl = asset('storage/' . $firstProfile->employee->profile_picture);
+              if ($profilePic) {
+                  $profilePicUrl = asset('storage/' . $profilePic);
               }
 
-              // Generate consistent color based on employee name for fallback - vibrant colors like in the design
+              // Generate consistent color based on employee name for fallback
               $colors = ['FF9A56', 'FF6B9D', '4ECDC4', '45B7D1', 'FFA726', 'AB47BC', 'EF5350', '66BB6A', 'FFCA28', '26A69A'];
-              $employeeIdForColor = $firstProfile->employee->employee_id ?? 'default';
-              $colorIndex = abs(crc32($employeeIdForColor)) % count($colors);
+              $colorIndex = abs(crc32($empId)) % count($colors);
               $bgColor = $colors[$colorIndex];
 
               // Fallback to UI Avatars if no profile picture found
@@ -290,7 +324,6 @@
                   $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                  "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
               }
-
             @endphp
 
             <div class="col-lg-4 col-md-6 col-sm-12">
@@ -306,7 +339,7 @@
                       <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
                       <small class="text-dark fw-bold">
                         <i class="bi bi-person-badge me-1"></i>
-                        {{ $employeeProfiles->count() }} Competenc{{ $employeeProfiles->count() > 1 ? 'ies' : 'y' }}
+                        {{ $employeeProfiles->count() }} Competenc{{ $employeeProfiles->count() === 1 ? 'y' : 'ies' }}
                       </small>
                     </div>
                   </div>
@@ -316,22 +349,28 @@
                 <div class="card-body">
                   <!-- View All Competencies Button -->
                   <div class="d-grid mb-3">
-                    <button class="btn btn-outline-primary btn-sm view-all-competencies-btn" 
-                            type="button" 
-                            data-bs-toggle="collapse" 
-                            data-bs-target="#competencies-{{ $employeeId }}" 
-                            aria-expanded="false" 
-                            aria-controls="competencies-{{ $employeeId }}">
-                      <i class="bi bi-eye me-1"></i>View All {{ $employeeProfiles->count() }} Competenc{{ $employeeProfiles->count() > 1 ? 'ies' : 'y' }}
+                    <button class="btn btn-outline-primary btn-sm view-all-competencies-btn"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#competencies-{{ $empId }}"
+                            aria-expanded="false"
+                            aria-controls="competencies-{{ $empId }}">
+                      <i class="bi bi-eye me-1"></i>
+                      @if($employeeProfiles->count() > 0)
+                        View All {{ $employeeProfiles->count() }} Competenc{{ $employeeProfiles->count() === 1 ? 'y' : 'ies' }}
+                      @else
+                        No Competencies
+                      @endif
                       <i class="bi bi-chevron-down ms-1 toggle-icon"></i>
                     </button>
                   </div>
 
                   <!-- Collapsible Competencies Container -->
-                  <div class="collapse" id="competencies-{{ $employeeId }}">
+                  <div class="collapse" id="competencies-{{ $empId }}">
+                    <div class="competencies-list" data-employee-id="{{ $empId }}" data-current-page="1">
                     <!-- All Competencies for this Employee -->
-                    @foreach($employeeProfiles as $profileIndex => $profile)
-                      <div class="competency-profile-item mb-4 {{ $profileIndex > 0 ? 'border-top pt-3' : '' }}">
+                    @forelse($employeeProfiles as $profileIndex => $profile)
+                      <div class="competency-profile-item mb-4 {{ $profileIndex > 0 ? 'border-top pt-3' : '' }}" data-item-index="{{ $profileIndex }}">
                         <!-- Competency Name -->
                         <div class="mb-3">
                           <h6 class="text-muted mb-1">
@@ -365,17 +404,17 @@
                       </div>
                     </div>
                     <div class="progress" style="height: 12px;">
-                      <div class="progress-bar 
-                        @if($displayProgress >= 80) bg-success 
-                        @elseif($displayProgress >= 60) bg-info 
-                        @elseif($displayProgress >= 40) bg-warning 
-                        @else bg-danger 
-                        @endif" 
-                        data-progress="{{ round($displayProgress) }}" 
+                      <div class="progress-bar
+                        @if($displayProgress >= 80) bg-success
+                        @elseif($displayProgress >= 60) bg-info
+                        @elseif($displayProgress >= 40) bg-warning
+                        @else bg-danger
+                        @endif"
+                        data-progress="{{ round($displayProgress) }}"
                         style="width: 0%; transition: width 1s ease-in-out;"
-                        role="progressbar" 
-                        aria-valuenow="{{ round($displayProgress) }}" 
-                        aria-valuemin="0" 
+                        role="progressbar"
+                        aria-valuenow="{{ round($displayProgress) }}"
+                        aria-valuemin="0"
                         aria-valuemax="100">
                       </div>
                     </div>
@@ -413,40 +452,42 @@
                           </span>
                         </div>
 
+
                         <!-- Individual Action Buttons for this competency -->
                         <div class="d-flex justify-content-center gap-2 flex-wrap mb-3">
                           <!-- View Button -->
                           <button class="btn btn-info btn-sm view-btn"
-                                  data-employee-name="{{ $profile->employee->first_name }} {{ $profile->employee->last_name }}"
+                                  data-employee-name="{{ $firstName }} {{ $lastName }}"
                                   data-competency-name="{{ $profile->competency->competency_name }}"
                                   data-proficiency="{{ $profile->proficiency_level }}"
                                   data-assessment-date="{{ $profile->assessment_date }}"
                                   title="View Details">
                             <i class="bi bi-eye me-1"></i>View
                           </button>
-
-                          <!-- Delete Button -->
-                          <button type="button" class="btn btn-danger btn-sm delete-btn"
-                                  data-id="{{ $profile->id }}"
-                                  data-employee-name="{{ $profile->employee->first_name }} {{ $profile->employee->last_name }}"
-                                  data-competency-name="{{ $profile->competency->competency_name }}"
-                                  title="Delete Profile">
-                            <i class="bi bi-trash me-1"></i>Delete
-                          </button>
                         </div>
                       </div> <!-- End competency-profile-item -->
-                    @endforeach
+                    @empty
+                      <div class="text-center py-4">
+                        <i class="bi bi-info-circle text-muted mb-2 fs-3"></i>
+                        <p class="text-muted mb-0">No competency profiles found for this employee.</p>
+                      </div>
+                    @endforelse
+                    </div>
+
+                    <!-- Pagination Controls -->
+                    <div class="competencies-pagination d-flex justify-content-center align-items-center gap-2 mt-3" id="pagination-{{ $empId }}" style="display: none;">
+                        <button class="btn btn-sm btn-outline-secondary prev-page-btn" data-employee-id="{{ $empId }}" disabled>
+                            <i class="bi bi-chevron-left"></i>
+                        </button>
+                        <span class="page-info small text-muted">Page <span class="current-page">1</span> of <span class="total-pages">1</span></span>
+                        <button class="btn btn-sm btn-outline-secondary next-page-btn" data-employee-id="{{ $empId }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    </div>
                   </div> <!-- End collapsible competencies container -->
 
                   <!-- Employee-level Action Buttons -->
                   <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
-                    <!-- View Awards Button -->
-                    <button class="btn btn-outline-success btn-sm view-awards-btn"
-                            data-employee-id="{{ $firstProfile->employee->employee_id }}"
-                            data-employee-name="{{ $firstProfile->employee->first_name }} {{ $firstProfile->employee->last_name }}"
-                            title="View Awards">
-                      <i class="bi bi-trophy me-1"></i>Awards
-                    </button>
                   </div>
                 </div>
               </div>
@@ -454,121 +495,25 @@
           @endforeach
         </div>
 
-        @if($profiles->isEmpty())
+        @if(is_a($employees, 'Illuminate\Pagination\LengthAwarePaginator'))
+          <div class="mt-4 d-flex justify-content-center">
+            {{ $employees->links('pagination::bootstrap-5') }}
+          </div>
+        @endif
+
+        @if(method_exists($employees, 'total') ? $employees->total() === 0 : empty($employees))
           <div class="text-center py-5 empty-state">
             <div class="mb-4">
               <i class="bi bi-person-x display-1 text-muted"></i>
             </div>
-            <h4 class="text-muted">No Employee Competency Profiles Found</h4>
-            <p class="text-muted">Start by adding competency profiles for your employees using the form above.</p>
+            <h4 class="text-muted">No Employees Found</h4>
+            <p class="text-muted">There are no employees in the system to display competency profiles for.</p>
           </div>
         @endif
       </div>
     </div>
 
-    <!-- Employee Awards Management Section - Separate Section -->
-    <div class="card shadow-sm border-0 mt-4">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h4 class="fw-bold mb-0">
-          <i class="bi bi-award me-2"></i>Employee Awards Management
-        </h4>
-        <button type="button" class="btn btn-outline-primary btn-sm" id="toggleAwardsSection">
-          <i class="bi bi-chevron-up me-1"></i>Hide Awards
-        </button>
-      </div>
-      <div class="card-body" id="awardsManagementSection" style="display: block;">
-        
-        <!-- Award Request Form -->
-        <form id="awardRequestForm" class="mb-4">
-          @csrf
-          <div class="row g-3">
-            <div class="col-md-3">
-              <label class="form-label">Employee</label>
-              <select name="employee_id" class="form-control" required>
-                <option value="">Select Employee</option>
-                @foreach($employees as $employee)
-                  <option value="{{ $employee->employee_id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
-                @endforeach
-              </select>
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Award Type</label>
-              <select name="award_type" class="form-control" required>
-                <option value="">Select Award Type</option>
-                <option value="Employee of the Month">Employee of the Month</option>
-                <option value="Outstanding Performance">Outstanding Performance</option>
-                <option value="Customer Service Excellence">Customer Service Excellence</option>
-                <option value="Innovation Award">Innovation Award</option>
-                <option value="Team Player Award">Team Player Award</option>
-                <option value="Leadership Excellence">Leadership Excellence</option>
-                <option value="Perfect Attendance">Perfect Attendance</option>
-                <option value="Sales Achievement">Sales Achievement</option>
-                <option value="Safety Award">Safety Award</option>
-                <option value="Training Completion">Training Completion</option>
-                <option value="Years of Service">Years of Service</option>
-                <option value="Special Recognition">Special Recognition</option>
-              </select>
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Award Date</label>
-              <input type="date" name="award_date" class="form-control" required>
-            </div>
-            <div class="col-md-2">
-              <button type="button" class="btn btn-success w-100" id="submitAwardBtn" style="margin-top: 32px;">
-                <i class="bi bi-award me-1"></i>Request Award
-              </button>
-            </div>
-          </div>
-          <div class="row mt-3">
-            <div class="col-md-6">
-              <label class="form-label">Description</label>
-              <textarea name="description" placeholder="Award description (optional)" class="form-control" rows="2"></textarea>
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Notes</label>
-              <textarea name="notes" placeholder="Additional notes (optional)" class="form-control" rows="2"></textarea>
-            </div>
-          </div>
-        </form>
 
-        <!-- Awards Table -->
-        <div class="table-responsive">
-          <table class="table table-striped table-hover" id="awardsTable">
-            <thead class="table-light">
-              <tr>
-                <th class="text-dark fw-bold">Employee</th>
-                <th class="text-dark fw-bold">Award Type</th>
-                <th class="text-dark fw-bold">Award Date</th>
-                <th class="text-dark fw-bold">Status</th>
-                <th class="text-dark fw-bold">Awarded By</th>
-                <th class="text-dark fw-bold">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="awardsTableBody">
-              <!-- Awards will be loaded here -->
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Loading State -->
-        <div id="awardsLoadingState" class="text-center py-4" style="display: none;">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-          </div>
-          <p class="mt-2 text-muted">Loading awards...</p>
-        </div>
-
-        <!-- Empty State -->
-        <div id="awardsEmptyState" class="text-center py-5" style="display: none;">
-          <div class="mb-4">
-            <i class="bi bi-award display-1 text-muted"></i>
-          </div>
-          <h4 class="text-muted">No Awards Found</h4>
-          <p class="text-muted">Start by requesting awards for your employees using the form above.</p>
-        </div>
-
-      </div>
-    </div>
   </main>
 
   <!-- Edit Modal -->
@@ -588,7 +533,20 @@
               <select name="employee_id" class="form-control" required>
                 <option value="">Select Employee</option>
                 @foreach($employees as $employee)
-                  <option value="{{ $employee->employee_id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
+                  @php
+                    if (is_array($employee)) {
+                      $empId = $employee['external_employee_id'] ?? $employee['id'] ?? '';
+                      $firstName = $employee['first_name'] ?? '';
+                      $lastName = $employee['last_name'] ?? '';
+                    } else {
+                      $empId = $employee->employee_id ?? $employee->id ?? '';
+                      $firstName = $employee->first_name ?? '';
+                      $lastName = $employee->last_name ?? '';
+                    }
+                  @endphp
+                  @if($empId)
+                    <option value="{{ $empId }}">{{ $firstName }} {{ $lastName }}</option>
+                  @endif
                 @endforeach
               </select>
             </div>
@@ -652,8 +610,10 @@
     </div>
   </div>
 
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <script>
     // Initialize global objects to prevent undefined errors - MUST BE FIRST
     try {
@@ -712,6 +672,44 @@
       let passwordConfirmForm = null;
       let currentSkillGaps = [];
 
+      // Initialize Select2 for all employee selects
+      $('select[name="employee_id"]').select2({
+        theme: 'bootstrap-5',
+        placeholder: 'Search and select employee...',
+        allowClear: true,
+        width: '100%',
+        minimumInputLength: 1,
+        matcher: function(params, data) {
+          // If there are no search terms, return all of the data
+          if ($.trim(params.term) === '') {
+            return data;
+          }
+
+          // Do not display the item if there is no 'text' property
+          if (typeof data.text === 'undefined') {
+            return null;
+          }
+
+          // `params.term` should be the term that the user is searching for
+          // `data.text` is the text that is displayed for the data object
+          if (data.text.toLowerCase().indexOf(params.term.toLowerCase()) > -1) {
+            var modifiedData = $.extend({}, data, true);
+            return modifiedData;
+          }
+
+          // Return `null` if the term does not match
+          return null;
+        },
+        language: {
+          noResults: function() {
+            return 'No employee found';
+          }
+        },
+        dropdownCss: {
+          'min-width': '100%'
+        }
+      });
+
       // Initialize password confirmation modal
       try {
         const modalElement = document.getElementById('passwordConfirmModal');
@@ -736,16 +734,16 @@
         employeeSelect.addEventListener('change', function() {
           const selectedEmployeeId = this.value;
           const selectedEmployeeName = this.options[this.selectedIndex].text;
-          
+
           if (selectedEmployeeId) {
             const selectedEmployeeNameElement = document.getElementById('selectedEmployeeName');
             if (selectedEmployeeNameElement) {
               selectedEmployeeNameElement.textContent = selectedEmployeeName;
             }
-            
+
             // Show employee's existing skills first
             showEmployeeSkills(selectedEmployeeId, selectedEmployeeName);
-            
+
             // Then detect skill gaps
             detectSkillGaps(selectedEmployeeId, selectedEmployeeName);
           } else {
@@ -761,7 +759,7 @@
         if (!csrfToken) {
           return Promise.reject(new Error('CSRF token not available'));
         }
-        
+
         return fetch('{{ route("admin.check_password_verification") }}', {
           method: 'GET',
           headers: {
@@ -814,7 +812,7 @@
         if (!csrfToken) {
           return Promise.reject(new Error('CSRF token not available'));
         }
-        
+
         return fetch('{{ route("admin.verify_password") }}', {
           method: 'POST',
           headers: {
@@ -882,10 +880,10 @@
 
         pendingAction = callback;
         passwordConfirmForm.reset();
-        
+
         const passwordError = document.getElementById('passwordError');
         const confirmPassword = document.getElementById('confirmPassword');
-        
+
         if (passwordError) {
           passwordError.textContent = '';
         }
@@ -902,12 +900,12 @@
           e.preventDefault();
           const confirmPasswordElement = document.getElementById('confirmPassword');
           const passwordErrorElement = document.getElementById('passwordError');
-          
+
           if (!confirmPasswordElement || !passwordErrorElement) {
             console.error('Password confirmation elements not found');
             return;
           }
-          
+
           const password = confirmPasswordElement.value;
           const submitBtn = this.querySelector('button[type="submit"]');
           const originalText = submitBtn.innerHTML;
@@ -966,7 +964,7 @@
           const competencyId = this.getAttribute('data-competency-id');
           const proficiency = this.getAttribute('data-proficiency');
           const assessmentDate = this.getAttribute('data-assessment-date');
-          
+
           editProfileWithConfirmation(profileId, employeeId, competencyId, proficiency, assessmentDate);
         });
       });
@@ -1068,7 +1066,7 @@
           const profileId = this.getAttribute('data-id');
           const employeeName = this.getAttribute('data-employee-name');
           const competencyName = this.getAttribute('data-competency-name');
-          
+
           deleteProfileWithConfirmation(profileId, employeeName, competencyName);
         });
       });
@@ -1169,22 +1167,22 @@
           const form = document.createElement('form');
           form.method = 'POST';
           form.action = `/admin/employee-competency-profiles/${profileId}`;
-          
+
           const csrfToken = getCSRFToken();
           if (!csrfToken) {
             throw new Error('CSRF token not available');
           }
-          
+
           const csrfTokenInput = document.createElement('input');
           csrfTokenInput.type = 'hidden';
           csrfTokenInput.name = '_token';
           csrfTokenInput.value = csrfToken;
-          
+
           const methodField = document.createElement('input');
           methodField.type = 'hidden';
           methodField.name = '_method';
           methodField.value = 'DELETE';
-          
+
           form.appendChild(csrfTokenInput);
           form.appendChild(methodField);
           document.body.appendChild(form);
@@ -1211,7 +1209,7 @@
           const competencyName = this.getAttribute('data-competency-name');
           const proficiency = this.getAttribute('data-proficiency');
           const assessmentDate = this.getAttribute('data-assessment-date');
-          
+
           const proficiencyPercent = Math.round((proficiency / 5) * 100);
           const formattedDate = new Date(assessmentDate).toLocaleDateString('en-US', {
             year: 'numeric',
@@ -1257,7 +1255,7 @@
         button.addEventListener('click', function() {
           const employeeId = this.getAttribute('data-employee-id');
           const employeeName = this.getAttribute('data-employee-name');
-          
+
           viewEmployeeAwards(employeeId, employeeName);
         });
       });
@@ -1412,7 +1410,7 @@
 
       function addProfileWithConfirmation() {
         console.log('addProfileWithConfirmation function called');
-        
+
         // Validate required fields first
         const employeeSelect = addProfileForm.querySelector('select[name="employee_id"]');
         const competencySelect = addProfileForm.querySelector('select[name="competency_id"]');
@@ -1503,7 +1501,7 @@
           const competencyName = this.getAttribute('data-competency-name');
           const employeeName = this.getAttribute('data-employee-name');
           const proficiency = this.getAttribute('data-proficiency');
-          
+
           notifyCourseManagementWithConfirmation(profileId, competencyId, competencyName, employeeName, proficiency);
         });
       });
@@ -1594,7 +1592,7 @@
           if (!csrfToken) {
             throw new Error('Security token not available');
           }
-          
+
           return fetch(`/admin/employee-competency-profiles/${profileId}/notify-course-management`, {
             method: 'POST',
             headers: {
@@ -1750,7 +1748,7 @@
       function displayEmployeeSkills(skills, employeeName, totalSkills) {
         if (skills.length === 0) {
           const employeeId = document.getElementById('employeeSelect').value;
-          
+
           Swal.fire({
             title: `<i class="bi bi-person-badge text-primary"></i> Current Skills for ${employeeName}`,
             html: `
@@ -1795,18 +1793,18 @@
 
         skills.forEach(skill => {
           const proficiencyPercent = Math.round((skill.proficiency_level / 5) * 100);
-          const statusBadge = skill.proficiency_level >= 5 ? 
-            '<span class="badge bg-success">Expert</span>' : 
-            skill.proficiency_level >= 4 ? 
-            '<span class="badge bg-info">Advanced</span>' : 
-            skill.proficiency_level >= 3 ? 
-            '<span class="badge bg-warning">Proficient</span>' : 
-            skill.proficiency_level >= 2 ? 
-            '<span class="badge bg-secondary">Developing</span>' : 
+          const statusBadge = skill.proficiency_level >= 5 ?
+            '<span class="badge bg-success">Expert</span>' :
+            skill.proficiency_level >= 4 ?
+            '<span class="badge bg-info">Advanced</span>' :
+            skill.proficiency_level >= 3 ?
+            '<span class="badge bg-warning">Proficient</span>' :
+            skill.proficiency_level >= 2 ?
+            '<span class="badge bg-secondary">Developing</span>' :
             '<span class="badge bg-danger">Beginner</span>';
 
-          const progressBarColor = skill.proficiency_level >= 4 ? 'bg-success' : 
-                                   skill.proficiency_level >= 3 ? 'bg-info' : 
+          const progressBarColor = skill.proficiency_level >= 4 ? 'bg-success' :
+                                   skill.proficiency_level >= 3 ? 'bg-info' :
                                    skill.proficiency_level >= 2 ? 'bg-warning' : 'bg-danger';
 
           html += `
@@ -1860,13 +1858,13 @@
       function detectSkillGaps(employeeId, employeeName) {
         const skillGapSection = document.getElementById('skillGapSection');
         const skillGapContent = document.getElementById('skillGapsList');
-        
+
         // Check if elements exist
         if (!skillGapSection || !skillGapContent) {
           console.error('Skill gap elements not found');
           return;
         }
-        
+
         // Show loading state
         skillGapContent.innerHTML = `
           <div class="text-center py-4">
@@ -1923,7 +1921,7 @@
         })
         .catch(error => {
           console.error('Skill gap detection error:', error);
-          
+
           // Show user-friendly error message with fallback option
           skillGapContent.innerHTML = `
             <div class="alert alert-warning">
@@ -1947,13 +1945,13 @@
       // Function to display skill gaps
       function displaySkillGaps(skillGaps, totalGaps, employeeId, employeeName) {
         const skillGapContent = document.getElementById('skillGapsList');
-        
+
         // Check if element exists
         if (!skillGapContent) {
           console.error('skillGapsList element not found');
           return;
         }
-        
+
         if (skillGaps.length === 0) {
           skillGapContent.innerHTML = `
             <div class="alert alert-success">
@@ -1977,9 +1975,9 @@
         `;
 
         skillGaps.forEach(gap => {
-          const priorityClass = gap.priority === 'High' ? 'bg-danger' : 
+          const priorityClass = gap.priority === 'High' ? 'bg-danger' :
                                gap.priority === 'Medium' ? 'bg-warning' : 'bg-info';
-          
+
           html += `
             <div class="col-md-6">
               <div class="card border-warning">
@@ -1994,7 +1992,7 @@
                   <p class="card-text small text-muted">${gap.description || 'No description available'}</p>
                   <div class="d-flex justify-content-between align-items-center">
                     <small class="text-muted">Category: ${gap.category}</small>
-                    <button type="button" class="btn btn-outline-success btn-sm" 
+                    <button type="button" class="btn btn-outline-success btn-sm"
                             onclick="addSingleMissingSkill(${gap.competency_id}, '${gap.competency_name}', ${employeeId}, '${employeeName}')">
                       <i class="bi bi-plus me-1"></i>Add
                     </button>
@@ -2109,7 +2107,7 @@
           if (!csrfToken) {
             throw new Error('Security token not available');
           }
-        
+
           return fetch(`/admin/employee-competency-profiles/initialize-basic-skills/${employeeId}`, {
             method: 'POST',
             headers: {
@@ -2148,7 +2146,7 @@
                   <div class="mt-3">
                     <h6>Initialized Skills:</h6>
                     <ul class="list-unstyled">
-                      ${data.created_profiles.map(profile => 
+                      ${data.created_profiles.map(profile =>
                         `<li><i class="bi bi-check-circle text-success me-2"></i>${profile.competency_name} (Level ${profile.proficiency_level})</li>`
                       ).join('')}
                     </ul>
@@ -2162,7 +2160,7 @@
             }).then(() => {
               // Refresh the employee skills display
               showEmployeeSkills(employeeId, employeeName);
-              
+
               // Also refresh skill gaps
               detectSkillGaps(employeeId, employeeName);
             });
@@ -2183,765 +2181,13 @@
         });
       }
 
-      // ========== EMPLOYEE AWARDS MANAGEMENT FUNCTIONALITY ==========
-      
-      const toggleAwardsBtn = document.getElementById('toggleAwardsSection');
-      const awardsSection = document.getElementById('awardsManagementSection');
-      const submitAwardBtn = document.getElementById('submitAwardBtn');
-      const awardRequestForm = document.getElementById('awardRequestForm');
-      const awardsTable = document.getElementById('awardsTable');
-      const awardsTableBody = document.getElementById('awardsTableBody');
-      const awardsLoadingState = document.getElementById('awardsLoadingState');
-      const awardsEmptyState = document.getElementById('awardsEmptyState');
-
-      // Load awards automatically when page loads (since section is visible by default)
-      if (awardsTableBody) {
-        loadAllAwards();
-      }
-
-      // Toggle awards section
-      if (toggleAwardsBtn && awardsSection) {
-        toggleAwardsBtn.addEventListener('click', function() {
-          const isVisible = awardsSection.style.display !== 'none';
-          
-          if (isVisible) {
-            awardsSection.style.display = 'none';
-            this.innerHTML = '<i class="bi bi-chevron-down me-1"></i>Show Awards';
-          } else {
-            awardsSection.style.display = 'block';
-            this.innerHTML = '<i class="bi bi-chevron-up me-1"></i>Hide Awards';
-            loadAllAwards(); // Load awards when section is opened
-          }
-        });
-      }
-
-      // Submit award request
-      if (submitAwardBtn && awardRequestForm) {
-        submitAwardBtn.addEventListener('click', function(e) {
-          e.preventDefault();
-          submitAwardRequest();
-        });
-      }
-
-      // Function to submit award request with password confirmation
-      function submitAwardRequest() {
-        // Validate form first
-        const formData = new FormData(awardRequestForm);
-        const employeeId = formData.get('employee_id');
-        const awardType = formData.get('award_type');
-        const awardDate = formData.get('award_date');
-
-        if (!employeeId || !awardType || !awardDate) {
-          Swal.fire({
-            icon: 'warning',
-            title: 'Validation Error',
-            text: 'Please fill in all required fields before proceeding.',
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#ffc107'
-          });
-          return;
-        }
-
-        // Get employee name for display
-        const employeeSelect = awardRequestForm.querySelector('select[name="employee_id"]');
-        const employeeName = employeeSelect.options[employeeSelect.selectedIndex].text;
-
-        // Show password confirmation with SweetAlert
-        Swal.fire({
-          title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
-          html: `
-            <div class="text-start mb-3">
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle text-info"></i> 
-                For security purposes, please enter your password to request this award.
-              </p>
-              <div class="bg-light p-3 rounded mb-3">
-                <strong>Award Details:</strong><br>
-                <strong>Employee:</strong> ${employeeName}<br>
-                <strong>Award Type:</strong> ${awardType}<br>
-                <strong>Award Date:</strong> ${new Date(awardDate).toLocaleDateString()}
-              </div>
-            </div>
-            <input type="password" id="swal-award-password" class="swal2-input" placeholder="Enter your password" required>
-          `,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: '<i class="bi bi-award"></i> Request Award',
-          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
-          confirmButtonColor: '#198754',
-          cancelButtonColor: '#6c757d',
-          preConfirm: () => {
-            const password = document.getElementById('swal-award-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Password is required');
-              return false;
-            }
-            return password;
-          }
-        }).then((result) => {
-          if (result.isConfirmed) {
-            processAwardRequest(result.value, formData);
-          }
-        });
-      }
-
-      // Function to process award request
-      function processAwardRequest(password, formData) {
-        Swal.fire({
-          title: 'Processing...',
-          text: 'Submitting award request...',
-          icon: 'info',
-          allowOutsideClick: false,
-          showConfirmButton: false,
-          didOpen: () => {
-            Swal.showLoading();
-          }
-        });
-
-        // Show loading on button
-        submitAwardBtn.disabled = true;
-        submitAwardBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Submitting...';
-
-        // Prepare data
-        const requestData = {
-          employee_id: formData.get('employee_id'),
-          award_type: formData.get('award_type'),
-          award_name: formData.get('award_type'), // Use award_type as award_name
-          award_date: formData.get('award_date'),
-          description: formData.get('description') || '',
-          notes: formData.get('notes') || '',
-          password: password
-        };
-
-        // Submit request
-        const csrfToken = getCSRFToken();
-        if (!csrfToken) {
-          throw new Error('Security token not available');
-        }
-        
-        fetch('{{ route("employee_awards.store") }}', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(requestData)
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Award Request Submitted Successfully!',
-              html: `
-                <div class="text-start">
-                  <p><strong>Employee:</strong> ${data.award.employee ? data.award.employee.first_name + ' ' + data.award.employee.last_name : 'N/A'}</p>
-                  <p><strong>Award Type:</strong> ${data.award.award_type}</p>
-                  <p><strong>Status:</strong> <span class="badge bg-warning">Pending</span></p>
-                </div>
-              `,
-              confirmButtonText: 'Great!',
-              confirmButtonColor: '#198754',
-              timer: 5000,
-              timerProgressBar: true
-            });
-            awardRequestForm.reset();
-            loadAllAwards(); // Refresh the awards table
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Submission Failed',
-              text: data.message || 'Failed to submit award request. Please try again.',
-              confirmButtonText: 'Try Again',
-              confirmButtonColor: '#dc3545'
-            });
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Network Error',
-            text: 'A network error occurred. Please check your connection and try again.',
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#dc3545'
-          });
-        })
-        .finally(() => {
-          submitAwardBtn.disabled = false;
-          submitAwardBtn.innerHTML = '<i class="bi bi-award me-1"></i>Request Award';
-        });
-      }
-
-      // Function to load all awards
-      function loadAllAwards() {
-        console.log('Loading all awards...');
-        showAwardsLoading();
-
-        const csrfToken = getCSRFToken();
-        if (!csrfToken) {
-          console.error('CSRF token not available for awards loading');
-          showAwardsEmpty();
-          return;
-        }
-        
-        // Use the new simplified route to get all awards at once
-        fetch('{{ route("employee_awards.all") }}', {
-          method: 'GET',
-          headers: {
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json'
-          }
-        })
-        .then(response => {
-          console.log('Awards response status:', response.status);
-          return response.json();
-        })
-        .then(data => {
-          console.log('Awards response data:', data);
-          if (data.success) {
-            console.log('Found', data.total_awards, 'total awards');
-            displayAwards(data.awards);
-          } else {
-            console.log('No awards found, showing empty state');
-            showAwardsEmpty();
-          }
-        })
-        .catch(error => {
-          console.error('Error loading awards:', error);
-          showAwardsEmpty();
-        });
-      }
-
-      // Function to load awards for all employees (simplified version)
-      function loadAwardsForAllEmployees() {
-        console.log('Loading awards for all employees...');
-        const employees = @json($employees);
-        let allAwards = [];
-        let loadedCount = 0;
-
-        console.log('Total employees:', employees.length);
-
-        if (employees.length === 0) {
-          console.log('No employees found, showing empty state');
-          showAwardsEmpty();
-          return;
-        }
-
-        employees.forEach((employee, index) => {
-          console.log(`Loading awards for employee ${index + 1}/${employees.length}:`, employee.employee_id);
-          
-          const csrfToken = getCSRFToken();
-          if (!csrfToken) {
-            console.error('CSRF token not available for employee awards');
-            return;
-          }
-          
-          fetch(`/admin/employee-awards/employee/${employee.employee_id}`, {
-            method: 'GET',
-            headers: {
-              'X-CSRF-TOKEN': csrfToken,
-              'Accept': 'application/json'
-            }
-          })
-          .then(response => {
-            console.log(`Response for employee ${employee.employee_id}:`, response.status);
-            return response.json();
-          })
-          .then(data => {
-            console.log(`Data for employee ${employee.employee_id}:`, data);
-            if (data.success && data.awards && data.awards.length > 0) {
-              console.log(`Found ${data.awards.length} awards for employee ${employee.employee_id}`);
-              allAwards = allAwards.concat(data.awards);
-            }
-          })
-          .catch(error => {
-            console.error('Error loading awards for employee:', employee.employee_id, error);
-          })
-          .finally(() => {
-            loadedCount++;
-            console.log(`Loaded ${loadedCount}/${employees.length} employees`);
-            if (loadedCount === employees.length) {
-              console.log('All employees loaded, total awards found:', allAwards.length);
-              displayAwards(allAwards);
-            }
-          });
-        });
-      }
-
-      // Function to display awards in table
-      function displayAwards(awards) {
-        hideAwardsLoading();
-
-        if (!awards || awards.length === 0) {
-          showAwardsEmpty();
-          return;
-        }
-
-        // Sort awards by date (newest first)
-        awards.sort((a, b) => new Date(b.award_date) - new Date(a.award_date));
-
-        let html = '';
-        awards.forEach(award => {
-          const statusBadgeClass = getStatusBadgeClass(award.status);
-          const employeeName = award.employee ? 
-            `${award.employee.first_name} ${award.employee.last_name}` : 
-            'Unknown Employee';
-
-          html += `
-            <tr>
-              <td>${employeeName}</td>
-              <td>${award.award_type}</td>
-              <td>${new Date(award.award_date).toLocaleDateString()}</td>
-              <td><span class="badge ${statusBadgeClass}">${award.status.charAt(0).toUpperCase() + award.status.slice(1)}</span></td>
-              <td>${award.awarded_by}</td>
-              <td>
-                <div class="btn-group btn-group-sm">
-                  <button class="btn btn-outline-info btn-sm" onclick="viewAwardDetails(${award.id})" title="View Details">
-                    <i class="bi bi-eye"></i>
-                  </button>
-                  ${award.status === 'pending' ? `
-                    <button class="btn btn-outline-success btn-sm" onclick="updateAwardStatus(${award.id}, 'approved')" title="Approve">
-                      <i class="bi bi-check"></i>
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="updateAwardStatus(${award.id}, 'rejected')" title="Reject">
-                      <i class="bi bi-x"></i>
-                    </button>
-                  ` : ''}
-                  <button class="btn btn-outline-danger btn-sm" onclick="deleteAward(${award.id})" title="Delete">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          `;
-        });
-
-        if (awardsTableBody) {
-          awardsTableBody.innerHTML = html;
-        }
-        if (awardsTable) {
-          awardsTable.style.display = 'table';
-        }
-        if (awardsEmptyState) {
-          awardsEmptyState.style.display = 'none';
-        }
-      }
-
-      // Helper function to get status badge class
-      function getStatusBadgeClass(status) {
-        switch(status) {
-          case 'approved': return 'bg-success';
-          case 'rejected': return 'bg-danger';
-          case 'pending': return 'bg-warning';
-          default: return 'bg-secondary';
-        }
-      }
-
-      // Function to show loading state
-      function showAwardsLoading() {
-        if (awardsLoadingState) awardsLoadingState.style.display = 'block';
-        if (awardsTable) awardsTable.style.display = 'none';
-        if (awardsEmptyState) awardsEmptyState.style.display = 'none';
-      }
-
-      // Function to hide loading state
-      function hideAwardsLoading() {
-        if (awardsLoadingState) awardsLoadingState.style.display = 'none';
-      }
-
-      // Function to show empty state
-      function showAwardsEmpty() {
-        hideAwardsLoading();
-        if (awardsTable) awardsTable.style.display = 'none';
-        if (awardsEmptyState) awardsEmptyState.style.display = 'block';
-      }
-
-      // Function to view award details
-      window.viewAwardDetails = function(awardId) {
-        Swal.fire({
-          title: '<i class="bi bi-info-circle text-primary"></i> Loading Award Details',
-          html: `
-            <div class="text-center">
-              <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-              </div>
-              <p class="mt-2">Loading award details...</p>
-            </div>
-          `,
-          showConfirmButton: false,
-          allowOutsideClick: true,
-          width: '700px'
-        });
-
-        // Find the award details from the current awards data
-        const csrfToken = getCSRFToken();
-        if (!csrfToken) {
-          Swal.fire({
-            icon: 'error',
-            title: 'Security Error',
-            text: 'Security token not found. Please refresh the page and try again.',
-            confirmButtonText: 'OK'
-          });
-          return;
-        }
-        
-        fetch('{{ route("employee_awards.all") }}', {
-          method: 'GET',
-          headers: {
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json'
-          }
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success && data.awards) {
-            // Find the specific award
-            const award = data.awards.find(a => a.id == awardId);
-            if (award) {
-              displayAwardDetails(award);
-            } else {
-              Swal.fire({
-                icon: 'error',
-                title: 'Award Not Found',
-                text: 'The requested award could not be found.',
-                confirmButtonText: 'OK'
-              });
-            }
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Error',
-              text: 'Failed to load award details.',
-              confirmButtonText: 'OK'
-            });
-          }
-        })
-        .catch(error => {
-          console.error('Error loading award details:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Network Error',
-            text: 'Failed to load award details. Please try again.',
-            confirmButtonText: 'OK'
-          });
-        });
-      };
-
-      // Function to display award details
-      function displayAwardDetails(award) {
-        const statusBadgeClass = getStatusBadgeClass(award.status);
-        const statusText = award.status.charAt(0).toUpperCase() + award.status.slice(1);
-        const employeeName = award.employee ? 
-          `${award.employee.first_name} ${award.employee.last_name}` : 
-          'Unknown Employee';
-
-        Swal.fire({
-          title: '<i class="bi bi-award text-warning"></i> Award Details',
-          html: `
-            <div class="text-start">
-              <div class="row mb-3">
-                <div class="col-4"><strong>Award ID:</strong></div>
-                <div class="col-8">${award.id}</div>
-              </div>
-              <div class="row mb-3">
-                <div class="col-4"><strong>Employee:</strong></div>
-                <div class="col-8">${employeeName}</div>
-              </div>
-              <div class="row mb-3">
-                <div class="col-4"><strong>Award Type:</strong></div>
-                <div class="col-8">${award.award_type}</div>
-              </div>
-              <div class="row mb-3">
-                <div class="col-4"><strong>Award Name:</strong></div>
-                <div class="col-8">${award.award_name}</div>
-              </div>
-              <div class="row mb-3">
-                <div class="col-4"><strong>Award Date:</strong></div>
-                <div class="col-8">${new Date(award.award_date).toLocaleDateString()}</div>
-              </div>
-              <div class="row mb-3">
-                <div class="col-4"><strong>Status:</strong></div>
-                <div class="col-8"><span class="badge ${statusBadgeClass}">${statusText}</span></div>
-              </div>
-              <div class="row mb-3">
-                <div class="col-4"><strong>Awarded By:</strong></div>
-                <div class="col-8">${award.awarded_by}</div>
-              </div>
-              ${award.description ? `
-                <div class="row mb-3">
-                  <div class="col-4"><strong>Description:</strong></div>
-                  <div class="col-8">${award.description}</div>
-                </div>
-              ` : ''}
-              ${award.notes ? `
-                <div class="row mb-3">
-                  <div class="col-4"><strong>Notes:</strong></div>
-                  <div class="col-8">${award.notes}</div>
-                </div>
-              ` : ''}
-              <div class="row mb-3">
-                <div class="col-4"><strong>Created:</strong></div>
-                <div class="col-8">${new Date(award.created_at).toLocaleDateString()} ${new Date(award.created_at).toLocaleTimeString()}</div>
-              </div>
-            </div>
-          `,
-          confirmButtonText: '<i class="bi bi-check-lg"></i> Close',
-          confirmButtonColor: '#0d6efd',
-          width: '700px',
-          customClass: {
-            htmlContainer: 'text-start'
-          }
-        });
-      }
-
-      // Function to update award status
-      window.updateAwardStatus = function(awardId, status) {
-        const statusText = status.charAt(0).toUpperCase() + status.slice(1);
-        const statusColor = status === 'approved' ? 'success' : 'danger';
-        
-        Swal.fire({
-          title: `<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required`,
-          html: `
-            <div class="text-start mb-3">
-              <p class="text-muted mb-3">
-                <i class="bi bi-info-circle text-info"></i> 
-                For security purposes, please enter your password to ${status} this award.
-              </p>
-              <div class="alert alert-${statusColor} alert-sm" role="alert">
-                <i class="bi bi-${status === 'approved' ? 'check-circle' : 'x-circle'}"></i>
-                <strong>Action:</strong> ${statusText} Award
-              </div>
-            </div>
-            <input type="password" id="swal-status-password" class="swal2-input" placeholder="Enter your password" required>
-          `,
-          icon: 'question',
-          showCancelButton: true,
-          confirmButtonText: `<i class="bi bi-${status === 'approved' ? 'check' : 'x'}"></i> ${statusText} Award`,
-          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
-          confirmButtonColor: status === 'approved' ? '#198754' : '#dc3545',
-          cancelButtonColor: '#6c757d',
-          preConfirm: () => {
-            const password = document.getElementById('swal-status-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Password is required');
-              return false;
-            }
-            return password;
-          }
-        }).then((result) => {
-          if (result.isConfirmed) {
-            processStatusUpdate(awardId, status, result.value);
-          }
-        });
-      };
-
-      // Function to process status update
-      function processStatusUpdate(awardId, status, password) {
-        Swal.fire({
-          title: 'Processing...',
-          text: `Updating award status to ${status}...`,
-          icon: 'info',
-          allowOutsideClick: false,
-          showConfirmButton: false,
-          didOpen: () => {
-            Swal.showLoading();
-          }
-        });
-
-        const csrfToken = getCSRFToken();
-        if (!csrfToken) {
-          throw new Error('Security token not available');
-        }
-        
-        fetch(`/admin/employee-awards/${awardId}/status`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            status: status,
-            password: password
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: `Award ${status.charAt(0).toUpperCase() + status.slice(1)} Successfully!`,
-              html: `
-                <div class="text-start">
-                  <p><strong>Award:</strong> ${data.award.award_name}</p>
-                  <p><strong>Employee:</strong> ${data.award.employee ? data.award.employee.first_name + ' ' + data.award.employee.last_name : 'N/A'}</p>
-                  <p><strong>New Status:</strong> <span class="badge bg-${status === 'approved' ? 'success' : 'danger'}">${status.charAt(0).toUpperCase() + status.slice(1)}</span></p>
-                </div>
-              `,
-              confirmButtonText: 'Great!',
-              confirmButtonColor: '#198754',
-              timer: 4000,
-              timerProgressBar: true
-            });
-            loadAllAwards(); // Refresh the table
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Update Failed',
-              text: data.message || `Failed to ${status} award. Please try again.`,
-              confirmButtonText: 'Try Again',
-              confirmButtonColor: '#dc3545'
-            });
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Network Error',
-            text: 'A network error occurred. Please check your connection and try again.',
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#dc3545'
-          });
-        });
-      }
-
-      // Function to delete award
-      window.deleteAward = function(awardId) {
-        Swal.fire({
-          title: '<i class="bi bi-exclamation-triangle text-danger"></i> Delete Award?',
-          html: `
-            <div class="text-start mb-3">
-              <div class="alert alert-danger" role="alert">
-                <i class="bi bi-exclamation-triangle"></i>
-                <strong>Warning:</strong> This action cannot be undone!
-              </div>
-              <p class="text-muted mb-3">
-                Are you sure you want to permanently delete this award? This will remove all award data from the system.
-              </p>
-            </div>
-          `,
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonText: '<i class="bi bi-trash"></i> Yes, Delete Award',
-          cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
-          confirmButtonColor: '#dc3545',
-          cancelButtonColor: '#6c757d',
-          reverseButtons: true
-        }).then((result) => {
-          if (result.isConfirmed) {
-            // Show password confirmation
-            Swal.fire({
-              title: '<i class="bi bi-shield-lock text-warning"></i> Password Confirmation Required',
-              html: `
-                <div class="text-start mb-3">
-                  <p class="text-muted mb-3">
-                    <i class="bi bi-info-circle text-info"></i> 
-                    For security purposes, please enter your password to delete this award.
-                  </p>
-                  <div class="alert alert-danger alert-sm" role="alert">
-                    <i class="bi bi-trash"></i>
-                    <strong>Action:</strong> Delete Award Permanently
-                  </div>
-                </div>
-                <input type="password" id="swal-delete-password" class="swal2-input" placeholder="Enter your password" required>
-              `,
-              icon: 'question',
-              showCancelButton: true,
-              confirmButtonText: '<i class="bi bi-trash"></i> Delete Award',
-              cancelButtonText: '<i class="bi bi-x-circle"></i> Cancel',
-              confirmButtonColor: '#dc3545',
-              cancelButtonColor: '#6c757d',
-              preConfirm: () => {
-                const password = document.getElementById('swal-delete-password').value;
-                if (!password) {
-                  Swal.showValidationMessage('Password is required');
-                  return false;
-                }
-                return password;
-              }
-            }).then((passwordResult) => {
-              if (passwordResult.isConfirmed) {
-                processAwardDeletion(awardId, passwordResult.value);
-              }
-            });
-          }
-        });
-      };
-
-      // Function to process award deletion
-      function processAwardDeletion(awardId, password) {
-        Swal.fire({
-          title: 'Deleting...',
-          text: 'Removing award from system...',
-          icon: 'info',
-          allowOutsideClick: false,
-          showConfirmButton: false,
-          didOpen: () => {
-            Swal.showLoading();
-          }
-        });
-
-        const csrfToken = getCSRFToken();
-        if (!csrfToken) {
-          throw new Error('Security token not available');
-        }
-        
-        fetch(`/admin/employee-awards/${awardId}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken,
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            password: password
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.success) {
-            Swal.fire({
-              icon: 'success',
-              title: 'Award Deleted Successfully!',
-              text: 'The award has been permanently removed from the system.',
-              confirmButtonText: 'OK',
-              confirmButtonColor: '#198754',
-              timer: 3000,
-              timerProgressBar: true
-            });
-            loadAllAwards(); // Refresh the table
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Deletion Failed',
-              text: data.message || 'Failed to delete award. Please try again.',
-              confirmButtonText: 'Try Again',
-              confirmButtonColor: '#dc3545'
-            });
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Network Error',
-            text: 'A network error occurred. Please check your connection and try again.',
-            confirmButtonText: 'OK',
-            confirmButtonColor: '#dc3545'
-          });
-        });
-      }
-
       // Handle View All Competencies button toggle
       document.addEventListener('click', function(e) {
         if (e.target.closest('.view-all-competencies-btn')) {
           const btn = e.target.closest('.view-all-competencies-btn');
           const targetId = btn.getAttribute('data-bs-target');
           const collapseElement = document.querySelector(targetId);
-          
+
           // Update button text and icon when collapsed/expanded
           collapseElement.addEventListener('shown.bs.collapse', function() {
             const competencyCount = btn.textContent.match(/\d+/)[0];
@@ -2949,7 +2195,7 @@
             btn.innerHTML = `<i class="bi bi-eye-slash me-1"></i>Hide ${competencyCount} Competenc${competencyText} <i class="bi bi-chevron-up ms-1 toggle-icon"></i>`;
             btn.setAttribute('aria-expanded', 'true');
           });
-          
+
           collapseElement.addEventListener('hidden.bs.collapse', function() {
             const competencyCount = btn.textContent.match(/\d+/)[0];
             const competencyText = competencyCount > 1 ? 'ies' : 'y';
@@ -2960,6 +2206,84 @@
       });
 
     });
+
+    // ========== COMPETENCIES CARD PAGINATION ==========
+    const ITEMS_PER_PAGE = 5;
+
+    function initCardPagination() {
+      document.querySelectorAll('.competencies-list').forEach(list => {
+        const empId = list.dataset.employeeId;
+        const items = list.querySelectorAll('.competency-profile-item');
+        const totalItems = items.length;
+        const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
+        const paginationContainer = document.getElementById(`pagination-${empId}`);
+
+        if (totalItems > ITEMS_PER_PAGE) {
+            paginationContainer.style.display = 'flex';
+            paginationContainer.querySelector('.total-pages').textContent = totalPages;
+            showPage(empId, 1);
+        } else {
+            paginationContainer.style.display = 'none';
+        }
+      });
+    }
+
+    function showPage(empId, page) {
+      const list = document.querySelector(`.competencies-list[data-employee-id="${empId}"]`);
+      if (!list) return;
+
+      const items = list.querySelectorAll('.competency-profile-item');
+      items.forEach((item, index) => {
+        const start = (page - 1) * ITEMS_PER_PAGE;
+        const end = start + ITEMS_PER_PAGE;
+        if (index >= start && index < end) {
+            item.style.display = 'block';
+            // Fix border top issue: first item of the page shouldn't have top border/padding visually if it's not the very first item
+            // But we can leave styling as is for now, or remove border-top-class if it's the first visible item
+        } else {
+            item.style.display = 'none';
+        }
+      });
+
+      list.dataset.currentPage = page;
+      updatePaginationControls(empId, page);
+    }
+
+    function updatePaginationControls(empId, page) {
+      const paginationContainer = document.getElementById(`pagination-${empId}`);
+      if (!paginationContainer) return;
+
+      const items = document.querySelectorAll(`.competencies-list[data-employee-id="${empId}"] .competency-profile-item`);
+      const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
+
+      paginationContainer.querySelector('.current-page').textContent = page;
+      const prevBtn = paginationContainer.querySelector('.prev-page-btn');
+      const nextBtn = paginationContainer.querySelector('.next-page-btn');
+
+      prevBtn.disabled = page <= 1;
+      nextBtn.disabled = page >= totalPages;
+    }
+
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.prev-page-btn, .next-page-btn');
+      if (!btn) return;
+
+      e.preventDefault();
+      const empId = btn.dataset.employeeId;
+      const list = document.querySelector(`.competencies-list[data-employee-id="${empId}"]`);
+      let currentPage = parseInt(list.dataset.currentPage) || 1;
+
+      if (btn.classList.contains('prev-page-btn')) {
+        currentPage--;
+      } else {
+        currentPage++;
+      }
+
+      showPage(empId, currentPage);
+    });
+
+    // Initialize pagination on load
+    initCardPagination();
   </script>
 </body>
 </html>

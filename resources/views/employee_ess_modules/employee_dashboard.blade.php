@@ -804,7 +804,7 @@
       <div class="card-header d-flex justify-content-between align-items-center border-bottom">
         <h5 class="card-title mb-0"><i class="bi bi-award me-2"></i>Rewards & Recognition</h5>
         <div class="d-flex align-items-center gap-2">
-          <span class="badge bg-success" id="rewardsCountBadge">{{ isset($rewards) ? $rewards->count() : 0 }} Earned</span>
+          <span class="badge bg-success" id="rewardsCountBadge">{{ isset($rewards) ? $rewards->where('status', 'approved')->count() : 0 }} Earned</span>
           <button class="btn btn-sm btn-outline-primary" id="refreshRewardsBtn" onclick="fetchRewardsData()">
             <i class="bi bi-arrow-clockwise"></i>
           </button>
@@ -812,30 +812,49 @@
       </div>
       <div class="card-body">
         <div id="rewardsContainer">
-          @if(isset($rewards) && $rewards->count() > 0)
-            <div class="row g-3">
-              @foreach($rewards as $reward)
-              <div class="col-md-6 col-lg-4">
-                <div class="card h-100 shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                  <div class="card-body">
-                    <div class="d-flex align-items-start mb-3">
-                      <i class="bi bi-award me-2" style="font-size: 1.5rem;"></i>
-                      <div class="flex-grow-1">
-                        <h6 class="card-title mb-1">{{ $reward->name ?? 'Award' }}</h6>
-                        <small class="opacity-75">
-                          {{ $reward->employee_name ?? 'Employee' }}
-                        </small>
-                      </div>
-                    </div>
-
-                    <div class="mb-0">
-                      <small class="opacity-75">Benefits</small>
-                      <p class="small mb-0"><strong>{{ $reward->benefits ?? 'Certificate' }}</strong></p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              @endforeach
+          @if(isset($rewards) && $rewards->where('status', 'approved')->count() > 0)
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>Date Given</th>
+                    <th>Reward Name</th>
+                    <th>Type</th>
+                    <th>Benefits</th>
+                    <th>Given By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @foreach($rewards as $reward)
+                    @if($reward->status == 'approved')
+                      <tr>
+                        <td>
+                          <span class="fw-semibold">{{ \Carbon\Carbon::parse($reward->given_date)->format('M d, Y') }}</span>
+                        </td>
+                        <td>
+                          @php
+                            $rName = $reward->reward->name ?? $reward->name ?? 'Award';
+                            $rDesc = $reward->reward->description ?? '';
+                          @endphp
+                          <div class="fw-bold text-primary">{{ $rName }}</div>
+                          @if($rDesc)
+                            <small class="text-muted d-block" style="max-width: 250px;">{{ Str::limit($rDesc, 60) }}</small>
+                          @endif
+                        </td>
+                        <td>
+                          <span class="badge bg-outline-secondary border text-dark">{{ $reward->reward->type ?? 'N/A' }}</span>
+                        </td>
+                        <td>{{ $reward->reward->benefits ?? $reward->benefits ?? 'Certificate' }}</td>
+                        <td>
+                          <span class="badge bg-light text-dark border">
+                            <i class="bi bi-person me-1"></i>{{ ucfirst($reward->given_by ?? 'System') }}
+                          </span>
+                        </td>
+                      </tr>
+                    @endif
+                  @endforeach
+                </tbody>
+              </table>
             </div>
           @else
             <div class="text-center py-5">
@@ -1759,40 +1778,66 @@
           const rewards = data.data;
           let rewardsHtml = '';
 
-          if (Array.isArray(rewards) && rewards.length > 0) {
+            // Filter only approved rewards
+            const approvedRewards = rewards.filter(r => (r.status || 'approved').toLowerCase() === 'approved');
+            
             // Update badge count
-            countBadge.textContent = rewards.length + ' Earned';
+            countBadge.textContent = approvedRewards.length + ' Earned';
 
-            rewardsHtml = '<div class="row g-3">';
+            if (approvedRewards.length > 0) {
+              rewardsHtml = `
+              <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Date Given</th>
+                      <th>Reward Name</th>
+                      <th>Type</th>
+                      <th>Benefits</th>
+                      <th>Given By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+            `;
 
-            rewards.forEach(reward => {
+            approvedRewards.forEach(reward => {
               const rewardName = reward.reward?.name || reward.name || 'Award';
+              const rewardDesc = reward.reward?.description || '';
+              const rewardType = reward.reward?.type || 'N/A';
               const rewardBenefits = reward.reward?.benefits || reward.benefits || 'Certificate';
-              const employeeName = reward.employee_name || 'Employee';
+              const givenDate = reward.given_date ? new Date(reward.given_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+              const givenBy = reward.given_by || 'System';
+              const status = (reward.status || 'approved').toLowerCase();
+              const notes = reward.notes || reward.reason || 'No additional notes';
+
+              let badgeClass = 'bg-secondary';
+              if (status === 'approved') badgeClass = 'bg-success';
+              else if (status === 'pending') badgeClass = 'bg-warning text-dark';
+              else if (status === 'rejected') badgeClass = 'bg-danger';
 
               rewardsHtml += `
-                <div class="col-md-6 col-lg-4">
-                  <div class="card h-100 shadow-sm border-0" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-                    <div class="card-body">
-                      <div class="d-flex align-items-start mb-3">
-                        <i class="bi bi-award me-2" style="font-size: 1.5rem;"></i>
-                        <div class="flex-grow-1">
-                          <h6 class="card-title mb-1">${escapeHtml(rewardName)}</h6>
-                          <small class="opacity-75">${escapeHtml(employeeName)}</small>
-                        </div>
-                      </div>
-
-                      <div class="mb-0">
-                        <small class="opacity-75">Benefits</small>
-                        <p class="small mb-0"><strong>${escapeHtml(rewardBenefits)}</strong></p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <tr>
+                  <td><span class="fw-semibold">${escapeHtml(givenDate)}</span></td>
+                  <td>
+                    <div class="fw-bold text-primary">${escapeHtml(rewardName)}</div>
+                    ${rewardDesc ? `<small class="text-muted d-block" style="max-width: 250px;">${escapeHtml(rewardDesc.substring(0, 60))}${rewardDesc.length > 60 ? '...' : ''}</small>` : ''}
+                  </td>
+                  <td><span class="badge bg-outline-secondary border text-dark">${escapeHtml(rewardType)}</span></td>
+                  <td>${escapeHtml(rewardBenefits)}</td>
+                  <td>
+                    <span class="badge bg-light text-dark border">
+                      <i class="bi bi-person me-1"></i>${escapeHtml(givenBy.charAt(0).toUpperCase() + givenBy.slice(1))}
+                    </span>
+                  </td>
+                </tr>
               `;
             });
 
-            rewardsHtml += '</div>';
+            rewardsHtml += `
+                  </tbody>
+                </table>
+              </div>
+            `;
           } else {
             countBadge.textContent = '0 Earned';
             rewardsHtml = `

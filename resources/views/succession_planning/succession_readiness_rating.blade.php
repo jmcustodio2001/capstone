@@ -578,7 +578,7 @@
       const leadership = data.leadership_competencies_count || 0;
       const trainingProgress = data.training_progress || 0;
       const certificates = data.certificates_earned || 0;
-      const yearsOfService = data.years_of_service || 0;
+      const yearsOfService = parseFloat(data.years_of_service || 0);
 
       // Generate strengths and development areas
       const strengths = [];
@@ -650,7 +650,7 @@
               <p class="mb-2">${getSimpleRecommendation(readinessLevel)}</p>
               ${yearsOfService > 0 ? `<div class="small text-muted mb-2">
                 <i class="bi bi-calendar-check me-1"></i>
-                <strong>Tenure Advantage:</strong> ${yearsOfService} years of service contributes to overall readiness
+                <strong>Tenure Advantage:</strong> ${Math.floor(yearsOfService)} years of service contributes to overall readiness
               </div>` : ''}
               <button class="btn btn-primary btn-sm" onclick="applyToForm('${data.employee_id || ''}', '${readinessLevel}')">
                 <i class="bi bi-check-lg me-1"></i>Apply to Form
@@ -739,7 +739,7 @@
       const totalCompetencies = data.total_competencies_assessed || 0;
       const trainingProgress = data.training_progress || 0;
       const certificates = data.certificates_earned || 0;
-      const yearsOfService = data.years_of_service || 0;
+      const yearsOfService = parseFloat(data.years_of_service || 0).toFixed(1);
 
       let icon, colorClass, reasoning;
 
@@ -747,17 +747,17 @@
         case 'Ready Now':
           icon = 'bi-check-circle-fill';
           colorClass = 'text-success';
-          reasoning = `Ready for succession: ${Math.round(proficiency)}/5 competency, ${leadership} leadership skills, ${yearsOfService} years experience, ${Math.round(trainingProgress)}% training progress, ${data.destination_trainings_completed || 0} destination trainings`;
+          reasoning = `Ready for succession: ${Math.round(proficiency)}/5 competency, ${leadership} leadership skills, ${Math.floor(yearsOfService)} years experience, ${Math.round(trainingProgress)}% training progress, ${data.destination_trainings_completed || 0} destination trainings`;
           break;
         case 'Ready Soon':
           icon = 'bi-clock-fill';
           colorClass = 'text-warning';
-          reasoning = `Good potential: ${Math.round(proficiency)}/5 competency, ${leadership} leadership skills, ${yearsOfService} years experience, needs 3-6 months development`;
+          reasoning = `Good potential: ${Math.round(proficiency)}/5 competency, ${leadership} leadership skills, ${Math.floor(yearsOfService)} years experience, needs 3-6 months development`;
           break;
         case 'Needs Development':
           icon = 'bi-exclamation-triangle-fill';
           colorClass = 'text-danger';
-          reasoning = `Requires development: ${Math.round(proficiency)}/5 competency, ${leadership} leadership skills, ${yearsOfService} years experience, 6-12 months recommended`;
+          reasoning = `Requires development: ${Math.round(proficiency)}/5 competency, ${leadership} leadership skills, ${Math.floor(yearsOfService)} years experience, 6-12 months recommended`;
           break;
         default:
           icon = 'bi-question-circle-fill';
@@ -878,7 +878,7 @@
       const leadership = data.leadership_competencies_count || 0;
       const totalCompetencies = data.total_competencies_assessed || 0;
       const certificates = data.certificates_earned || 0;
-      const yearsOfService = data.years_of_service || 0;
+      const yearsOfService = parseFloat(data.years_of_service || 0);
       const totalCourses = data.total_courses_assigned || 0;
 
       // Debug logging
@@ -942,7 +942,7 @@
                         <i class="bi bi-calendar-check text-secondary me-2"></i>
                         <span class="text-muted">Experience:</span>
                       </div>
-                      <span class="fw-bold text-success">${yearsOfService} years</span>
+                      <span class="fw-bold text-success">${Math.floor(yearsOfService)} years</span>
                     </div>
                   </div>
                 </div>

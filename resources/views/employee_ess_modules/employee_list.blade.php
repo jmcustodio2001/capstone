@@ -253,19 +253,11 @@
                     </h6>
                     <div class="d-flex flex-wrap gap-2">
                       <span class="badge bg-info bg-opacity-10 text-info border border-info">
-                        <i class="bi bi-person-workspace me-1"></i>{{ $employee['role'] ?? 'N/A' }}
+                        <i class="bi bi-person-workspace me-1"></i>{{ $employee['position'] ?? 'N/A' }}
                       </span>
                       <span class="badge bg-success bg-opacity-10 text-success border border-success">
                         <i class="bi bi-building me-1"></i>
-                        @switch($employee['department_id'] ?? null)
-                          @case(1) Human Resources @break
-                          @case(2) Information Technology @break
-                          @case(3) Finance @break
-                          @case(4) Marketing @break
-                          @case(5) Operations @break
-                          @case(6) Customer Service @break
-                          @default {{ $employee['department_id'] ?? 'Not Assigned' }}
-                        @endswitch
+                        {{ $employee['department']['name'] ?? 'Not Assigned' }}
                       </span>
                     </div>
                   </div>
@@ -291,8 +283,9 @@
                 <!-- Card Footer with Action Buttons -->
                 <div class="card-footer bg-light border-0 p-3">
                   <div class="d-flex justify-content-center gap-2">
-                    <button class="btn btn-outline-info btn-sm flex-fill"
-                            onclick="viewEmployeeDetails('{{ $employee['employee_id'] ?? '' }}', '{{ ($employee['first_name'] ?? '') }} {{ ($employee['last_name'] ?? '') }}', '{{ $employee['email'] ?? '' }}', '{{ $employee['phone'] ?? '' }}', '{{ $employee['role'] ?? '' }}', '{{ $employee['department_id'] ?? '' }}', '{{ $employee['address'] ?? '' }}', '{{ isset($employee['hire_date']) && $employee['hire_date'] ? \Carbon\Carbon::parse($employee['hire_date'])->format('M d, Y') : 'N/A' }}')"
+                     <button class="btn btn-outline-info btn-sm flex-fill"
+                            onclick="viewEmployeeDetails(this)"
+                            data-employee="{{ json_encode($employee) }}"
                             title="View Details" data-bs-toggle="tooltip">
                       <i class="bi bi-eye me-1"></i>View
                     </button>
@@ -480,46 +473,131 @@
     @endif
 
     // View Employee Details
-    function viewEmployeeDetails(id, name, email, phone, position, department, address, hireDate) {
-      const departmentName = getDepartmentName(department);
+    // View Employee Details
+    function viewEmployeeDetails(source) {
+      let employee = source;
+      
+      // If source is an HTML element (the button), extract data from it
+      if (source && source.getAttribute) {
+        try {
+           const jsonData = source.getAttribute('data-employee');
+           employee = JSON.parse(jsonData);
+        } catch(e) {
+           console.error("Failed to parse employee data from attribute", e);
+           return;
+        }
+      }
+      // If it's already an object (legacy call or processed), keep it
+      else if (typeof employee === 'string') {
+          // Handle case where it might be passed as a string
+          try {
+              employee = JSON.parse(employee);
+          } catch (e) {
+              console.error("Error parsing employee data string", e);
+          }
+      }
+
+      const id = employee.id || employee.employee_id || 'N/A';
+      const fullName = employee.full_name || `${employee.first_name || ''} ${employee.middle_name || ''} ${employee.last_name || ''} ${employee.suffix_name || ''}`.trim().replace(/\s+/g, ' ');
+      const email = employee.email || 'N/A';
+      const phone = employee.phone || 'N/A';
+      const position = employee.position || 'N/A';
+      
+      let departmentName = 'N/A';
+      if (employee.department && employee.department.name) {
+          departmentName = employee.department.name;
+      } else if (employee.department_id) {
+          departmentName = getDepartmentName(employee.department_id);
+      }
+
+      const address = employee.address || 'N/A';
+      const dateHired = employee.date_hired ? new Date(employee.date_hired).toLocaleDateString() : (employee.start_date ? new Date(employee.start_date).toLocaleDateString() : 'N/A');
+      const birthDate = employee.birth_date ? new Date(employee.birth_date).toLocaleDateString() : 'N/A';
+      
+      // Additional fields
+      const age = employee.age || 'N/A';
+      const gender = employee.gender || 'N/A';
+      const civilStatus = employee.civil_status || 'N/A';
+      const skills = employee.skills || 'N/A';
+      const experience = employee.experience || 'N/A';
+      const education = employee.education || 'N/A';
+
 
       Swal.fire({
-        title: `👤 ${name}`,
+        title: `👤 ${fullName}`,
         html: `
           <div class="text-start">
             <div class="row g-3">
-              <div class="col-md-6">
+              <div class="col-md-4">
                 <strong>Employee ID:</strong><br>
                 <span class="text-muted">${id}</span>
               </div>
+              <div class="col-md-4">
+                <strong>Position:</strong><br>
+                <span class="text-muted">${position}</span>
+              </div>
+               <div class="col-md-4">
+                <strong>Department:</strong><br>
+                <span class="text-muted">${departmentName}</span>
+              </div>
+
               <div class="col-md-6">
                 <strong>Email:</strong><br>
                 <span class="text-muted">${email}</span>
               </div>
               <div class="col-md-6">
                 <strong>Phone:</strong><br>
-                <span class="text-muted">${phone || 'N/A'}</span>
+                <span class="text-muted">${phone}</span>
+              </div>
+
+              <div class="col-md-4">
+                <strong>Age:</strong><br>
+                <span class="text-muted">${age}</span>
+              </div>
+               <div class="col-md-4">
+                <strong>Gender:</strong><br>
+                <span class="text-muted">${gender}</span>
+              </div>
+               <div class="col-md-4">
+                <strong>Civil Status:</strong><br>
+                <span class="text-muted">${civilStatus}</span>
+              </div>
+
+               <div class="col-md-6">
+                <strong>Birth Date:</strong><br>
+                <span class="text-muted">${birthDate}</span>
               </div>
               <div class="col-md-6">
-                <strong>Position:</strong><br>
-                <span class="text-muted">${position || 'N/A'}</span>
+                <strong>Date Hired:</strong><br>
+                <span class="text-muted">${dateHired}</span>
               </div>
-              <div class="col-md-6">
-                <strong>Department:</strong><br>
-                <span class="text-muted">${departmentName}</span>
-              </div>
-              <div class="col-md-6">
+
+              <div class="col-md-12">
                 <strong>Address:</strong><br>
-                <span class="text-muted">${address || 'N/A'}</span>
+                <span class="text-muted">${address}</span>
               </div>
-              <div class="col-md-6">
-                <strong>Hire Date:</strong><br>
-                <span class="text-muted">${hireDate}</span>
+              
+              <div class="col-md-12">
+                  <hr class="my-2">
+                  <h6 class="fw-bold text-primary">Qualifications</h6>
+              </div>
+
+              <div class="col-md-12">
+                <strong>Education:</strong><br>
+                <span class="text-muted">${education}</span>
+              </div>
+               <div class="col-md-12">
+                <strong>Experience:</strong><br>
+                <span class="text-muted">${experience}</span>
+              </div>
+               <div class="col-md-12">
+                <strong>Skills:</strong><br>
+                <span class="text-muted" style="white-space: pre-wrap;">${skills}</span>
               </div>
             </div>
           </div>
         `,
-        width: '600px',
+        width: '700px',
         confirmButtonText: 'Close',
         confirmButtonColor: '#6c757d'
       });

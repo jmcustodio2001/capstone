@@ -23,17 +23,22 @@ class CourseManagementController extends Controller
     public function index()
     {
         try {
-            // Get existing courses from course_management table (exclude only actual destination training courses)
-            $courses = CourseManagement::where('course_title', 'NOT LIKE', '%Destination Training%')
-                ->where('course_title', 'NOT LIKE', '%destination training%')
+            // Get existing courses from course_management table
+            // Exclude destination-based courses (they appear in Accredited Training Centers section)
+            $courses = CourseManagement::where(function($query) {
+                    $query->whereNull('source_type')
+                          ->orWhere('source_type', '!=', 'destination_master');
+                })
                 ->get();
             
             // Auto-sync competencies from competency library as courses
             $this->syncCompetenciesToCourses();
             
-            // Refresh courses after sync (exclude only actual destination training courses)
-            $courses = CourseManagement::where('course_title', 'NOT LIKE', '%Destination Training%')
-                ->where('course_title', 'NOT LIKE', '%destination training%')
+            // Refresh courses after sync (exclude destination-based courses)
+            $courses = CourseManagement::where(function($query) {
+                    $query->whereNull('source_type')
+                          ->orWhere('source_type', '!=', 'destination_master');
+                })
                 ->get();
         } catch (\Exception $e) {
             Log::error('Error fetching courses: ' . $e->getMessage());

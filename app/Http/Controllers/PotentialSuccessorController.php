@@ -13,23 +13,134 @@ use Illuminate\Support\Facades\Auth;
 class PotentialSuccessorController extends Controller
 {
     // Removed duplicate index() method. Only the eager loading version remains below.
-        public function index()
-        {
-            // Eager load employee and their competency profiles and competencies
-            $successors = PotentialSuccessor::with(['employee.competencyProfiles.competency'])->latest()->paginate(10);
+    public function index()
+    {
+        // Eager load successors
+        $successors = PotentialSuccessor::latest()->paginate(10);
+        
+        // Fetch employees from API with local fallback
+        $employeeMap = [];
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                $employees = collect($apiEmployees)->map(function($emp) {
+                    return (object) [
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                        'department' => $emp['department'] ?? 'General',
+                        'status' => $emp['status'] ?? 'Active',
+                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'hire_date' => isset($emp['date_hired']) ? \Carbon\Carbon::parse($emp['date_hired']) : (isset($emp['hire_date']) ? \Carbon\Carbon::parse($emp['hire_date']) : null)
+                    ];
+                });
+            } else {
+                $employees = Employee::all();
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in PotentialSuccessor index: ' . $e->getMessage());
             $employees = Employee::all();
-            return view('succession_planning.potential_successor', compact('successors', 'employees'));
         }
+
+        // Create an employee map for quick lookup
+        foreach ($employees as $employee) {
+            $empId = is_object($employee) ? $employee->employee_id : $employee['employee_id'];
+            $employeeMap[$empId] = $employee;
+        }
+
+        // Attach API employee data to successors and fetch their competency profiles
+        foreach ($successors as $successor) {
+            if (isset($employeeMap[$successor->employee_id])) {
+                $apiEmployee = $employeeMap[$successor->employee_id];
+                
+                // Fetch local competency profiles for this employee
+                $profiles = EmployeeCompetencyProfile::with('competency')
+                    ->where('employee_id', $successor->employee_id)
+                    ->get();
+                
+                // Create a standard object that mimics the Employee model if needed
+                if (!is_object($apiEmployee)) {
+                    $apiEmployee = (object) $apiEmployee;
+                }
+                
+                // Set the relation and profiles
+                $apiEmployee->competencyProfiles = $profiles;
+                $successor->setRelation('employee', $apiEmployee);
+            }
+        }
+
+        return view('succession_planning.potential_successor', compact('successors', 'employees'));
+    }
 
     public function store(Request $request)
     {
         try {
             $request->validate([
-                'employee_id' => 'required|exists:employees,employee_id',
+                'employee_id' => 'required|string',
                 'potential_role' => 'required|string|max:255',
                 'identified_date' => 'required|date',
             ]);
             
+            // Check if employee exists locally
+            $employeeId = $request->input('employee_id');
+            $employee = Employee::where('employee_id', $employeeId)->first();
+
+            // If not found locally, try to fetch from API and sync
+            if (!$employee) {
+                try {
+                    $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+                    $apiEmployees = $response->successful() ? $response->json() : [];
+                    
+                    if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                        $apiEmployees = $apiEmployees['data'];
+                    }
+
+                    if (is_array($apiEmployees)) {
+                        foreach ($apiEmployees as $emp) {
+                            $apiEmpId = $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A';
+                            if ($apiEmpId == $employeeId) {
+                                // Create local employee record to satisfy foreign key
+                                $employee = Employee::create([
+                                    'employee_id' => $apiEmpId,
+                                    'first_name' => $emp['first_name'] ?? 'Unknown',
+                                    'last_name' => $emp['last_name'] ?? 'Employee',
+                                    'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                                    // Map other fields as best as possible
+                                    'email' => $emp['email'] ?? ($apiEmpId . '@jetlougetravels.com'),
+                                    'phone_number' => $emp['phone_number'] ?? null,
+                                    'address' => $emp['address'] ?? null,
+                                    'status' => $emp['status'] ?? 'Active',
+                                    'profile_picture' => $emp['profile_picture'] ?? null,
+                                    'hire_date' => isset($emp['date_hired']) ? \Carbon\Carbon::parse($emp['date_hired']) : (isset($emp['hire_date']) ? \Carbon\Carbon::parse($emp['hire_date']) : null),
+                                    'password' => \Illuminate\Support\Facades\Hash::make('password'), // Default password
+                                ]);
+                                break;
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::warning('Failed to fetch/sync employee from API in store: ' . $e->getMessage());
+                }
+            }
+
+            if (!$employee) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid employee ID. Employee not found in local database or external API.'
+                    ], 422);
+                }
+                return redirect()->back()->with('error', 'Invalid employee ID. Employee not found in system.');
+            }
+
+            // Create the potential successor record
             $successor = PotentialSuccessor::create($request->only(['employee_id', 'potential_role', 'identified_date']));
             
             // Log activity
@@ -157,11 +268,39 @@ class PotentialSuccessorController extends Controller
         $readinessFilter = $request->input('readiness_filter');
         $departmentFilter = $request->input('department_filter');
 
-        // Get all employees with their competency profiles
-        $employees = Employee::with(['competencyProfiles.competency'])->get();
+        // Fetch employees from API with local fallback
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                $employees = collect($apiEmployees)->map(function($emp) {
+                    return (object) [
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                        'department' => $emp['department'] ?? 'Operations',
+                        'status' => $emp['status'] ?? 'Active',
+                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'hire_date' => isset($emp['date_hired']) ? \Carbon\Carbon::parse($emp['date_hired']) : (isset($emp['hire_date']) ? \Carbon\Carbon::parse($emp['hire_date']) : null)
+                    ];
+                });
+            } else {
+                $employees = Employee::all();
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in AISuggestions: ' . $e->getMessage());
+            $employees = Employee::all();
+        }
 
         if ($employees->isEmpty()) {
             return response()->json([
+                'success' => false,
                 'error' => 'No employees found',
                 'message' => 'No employee data available for analysis.'
             ], 404);
@@ -172,18 +311,31 @@ class PotentialSuccessorController extends Controller
 
         $suggestions = [];
         foreach ($employees as $employee) {
-            $competencyProfiles = $employee->competencyProfiles;
+            // Fetch local competency profiles for this employee ID
+            $competencyProfiles = EmployeeCompetencyProfile::with('competency')
+                ->where('employee_id', $employee->employee_id)
+                ->get();
 
             if ($competencyProfiles->isEmpty()) {
                 continue; // Skip employees without competency data
             }
 
+            // Apply department filter if specified
+            if ($departmentFilter && isset($employee->department) && $employee->department !== $departmentFilter) {
+                continue;
+            }
+
             // Calculate suitability score based on real competency data
             $analysis = $this->analyzeEmployeeForRole($employee, $competencyProfiles, $roleRequirements);
 
-            // Apply filters
-            if ($readinessFilter && $analysis['readinessLevel'] !== $readinessFilter) {
-                continue;
+            // Apply readiness filters
+            if ($readinessFilter) {
+                $match = false;
+                if ($readinessFilter === 'high' && $analysis['suitabilityScore'] >= 90) $match = true;
+                if ($readinessFilter === 'medium' && $analysis['suitabilityScore'] >= 70 && $analysis['suitabilityScore'] < 90) $match = true;
+                if ($readinessFilter === 'low' && $analysis['suitabilityScore'] < 70) $match = true;
+                
+                if (!$match) continue;
             }
 
             $suggestions[] = $analysis;
@@ -203,7 +355,7 @@ class PotentialSuccessorController extends Controller
                 'suggestions' => $suggestions,
                 'targetRole' => $targetRole,
                 'totalCandidates' => count($suggestions),
-                'dataSource' => 'competency_profiles'
+                'dataSource' => 'api_employees'
             ]
         ]);
     }
@@ -211,41 +363,75 @@ class PotentialSuccessorController extends Controller
     private function getRoleRequirements($role)
     {
         $requirements = [
-            'Travel Consultant' => [
-                'required' => ['Communication', 'Customer Service', 'Technical'],
+            'Travel Agent' => [
+                'required' => ['Communication', 'Customer Service', 'Travel Knowledge'],
                 'preferred' => ['Sales', 'Problem Solving'],
-                'leadership_weight' => 0.2,
+                'communication_weight' => 0.4,
+                'customer_service_weight' => 0.3,
+                'travel_knowledge_weight' => 0.3
+            ],
+            'Travel Staff' => [
+                'required' => ['Communication', 'Organization', 'Travel Knowledge'],
+                'preferred' => ['Customer Service', 'Technical'],
+                'communication_weight' => 0.3,
+                'organization_weight' => 0.4,
+                'travel_knowledge_weight' => 0.3
+            ],
+            'Driver' => [
+                'required' => ['Operations', 'Technical', 'Patience'],
+                'preferred' => ['Problem Solving', 'Customer Service'],
+                'operations_weight' => 0.5,
                 'technical_weight' => 0.3,
-                'communication_weight' => 0.3,
-                'customer_service_weight' => 0.2
+                'patience_weight' => 0.2
             ],
-            'Tour Guide' => [
-                'required' => ['Communication', 'Leadership', 'Customer Service'],
-                'preferred' => ['Cultural Knowledge', 'Public Speaking'],
-                'leadership_weight' => 0.4,
-                'communication_weight' => 0.3,
-                'customer_service_weight' => 0.3
+            'fleet manager' => [
+                'required' => ['Management', 'Operations', 'Leadership'],
+                'preferred' => ['Technical', 'Financial Planning'],
+                'management_weight' => 0.4,
+                'operations_weight' => 0.3,
+                'leadership_weight' => 0.3
             ],
-            'Travel Operations Manager' => [
-                'required' => ['Management', 'Leadership', 'Strategic'],
-                'preferred' => ['Technical', 'Analytical'],
+            'Procurement Officer' => [
+                'required' => ['Negotiation', 'Planning', 'Analytics'],
+                'preferred' => ['Technical', 'Legal Knowledge'],
+                'negotiation_weight' => 0.4,
+                'planning_weight' => 0.3,
+                'analytics_weight' => 0.3
+            ],
+            'Logistics Staff' => [
+                'required' => ['Operations', 'Organization', 'Planning'],
+                'preferred' => ['Technical', 'Communication'],
+                'operations_weight' => 0.4,
+                'organization_weight' => 0.3,
+                'planning_weight' => 0.3
+            ],
+            'Financial Staff' => [
+                'required' => ['Analytics', 'Financial Management', 'Organization'],
+                'preferred' => ['Technical', 'Economic Analysis'],
+                'analytics_weight' => 0.4,
+                'financial_management_weight' => 0.4,
+                'organization_weight' => 0.2
+            ],
+            'Hr Manager' => [
+                'required' => ['Management', 'Leadership', 'Strategic Planning'],
+                'preferred' => ['Team Building', 'Communication'],
                 'leadership_weight' => 0.4,
                 'management_weight' => 0.3,
                 'strategic_weight' => 0.3
             ],
-            'Travel Sales Executive' => [
-                'required' => ['Sales', 'Communication', 'Customer Service'],
-                'preferred' => ['Negotiation', 'Relationship Building'],
-                'communication_weight' => 0.3,
-                'customer_service_weight' => 0.4,
-                'sales_weight' => 0.3
+            'Hr Staff' => [
+                'required' => ['Communication', 'Organization', 'Patience'],
+                'preferred' => ['Customer Service', 'Problem Solving'],
+                'communication_weight' => 0.4,
+                'organization_weight' => 0.3,
+                'patience_weight' => 0.3
             ],
-            'Tourism Marketing Manager' => [
-                'required' => ['Marketing', 'Creative', 'Strategic'],
-                'preferred' => ['Digital Marketing', 'Brand Management'],
-                'creative_weight' => 0.3,
-                'strategic_weight' => 0.4,
-                'marketing_weight' => 0.3
+            'Administrative Staff' => [
+                'required' => ['Organization', 'Communication', 'Planning'],
+                'preferred' => ['Technical', 'Problem Solving'],
+                'organization_weight' => 0.4,
+                'communication_weight' => 0.3,
+                'planning_weight' => 0.3
             ]
         ];
 
@@ -278,6 +464,8 @@ class PotentialSuccessorController extends Controller
 
         // Count leadership competencies using comprehensive detection
         $leadershipCompetencies = $competencyProfiles->filter(function($profile) {
+            if (!$profile->competency) return false;
+            
             $competencyName = strtolower($profile->competency->competency_name ?? '');
             $category = strtolower($profile->competency->category ?? '');
 
@@ -300,11 +488,11 @@ class PotentialSuccessorController extends Controller
         })->count();
 
         $communicationCompetencies = $competencyProfiles->filter(function($profile) {
-            return in_array($profile->competency->category, ['Communication', 'Behavioral']);
+            return $profile->competency && in_array($profile->competency->category, ['Communication', 'Behavioral']);
         })->count();
 
         $technicalCompetencies = $competencyProfiles->filter(function($profile) {
-            return in_array($profile->competency->category, ['Technical', 'Analytical']);
+            return $profile->competency && in_array($profile->competency->category, ['Technical', 'Analytical', 'Operations']);
         })->count();
 
         // Calculate role-specific suitability score
@@ -349,15 +537,42 @@ class PotentialSuccessorController extends Controller
 
     private function calculateRoleSuitability($avgProficiency, $leadership, $communication, $technical, $total, $requirements)
     {
-        // ULTRA-CONSERVATIVE algorithm to significantly lower suitability scores
-        $proficiencyScore = min(20, ($avgProficiency / 5) * 20); // Max 20% (was 100%)
-        $leadershipScore = min(12, $leadership * 2.4); // Max 12% (was 100%), requires 5+ leadership competencies
-        $totalCompetenciesScore = min(8, ($total / 75) * 8); // Max 8% (was 100%), requires 75+ competencies
+        // Role-specific weights from requirements
+        $lw = $requirements['leadership_weight'] ?? 0.2;
+        $cw = $requirements['communication_weight'] ?? 0.2;
+        $tw = $requirements['technical_weight'] ?? 0.2;
+        $mw = $requirements['management_weight'] ?? 0;
+        $sw = $requirements['strategic_weight'] ?? 0;
+        $ow = $requirements['operations_weight'] ?? 0;
+        $nw = $requirements['negotiation_weight'] ?? 0;
+        $aw = $requirements['analytics_weight'] ?? 0;
+        $fw = $requirements['financial_management_weight'] ?? 0;
+        $orgw = $requirements['organization_weight'] ?? 0;
+        $pw = $requirements['patience_weight'] ?? 0;
+        $tkw = $requirements['travel_knowledge_weight'] ?? 0;
 
-        // Ultra-conservative weighted scoring: 70% proficiency + 20% leadership + 10% total competencies
-        $readinessScore = ($proficiencyScore * 0.7) + ($leadershipScore * 0.2) + ($totalCompetenciesScore * 0.1);
+        // Base proficiency contribution (40%)
+        $proficiencyScore = ($avgProficiency / 5) * 100;
+        
+        // Competency match contribution (60%)
+        // We use a simplified model for the weighted contribution
+        $matchScore = 0;
+        $totalWeight = $lw + $cw + $tw + $mw + $sw + $ow + $nw + $aw + $fw + $orgw + $pw + $tkw;
+        
+        if ($totalWeight > 0) {
+            $matchScore += ($leadership > 0 ? 100 : 0) * ($lw / $totalWeight);
+            $matchScore += ($communication > 0 ? 100 : 0) * ($cw / $totalWeight);
+            $matchScore += ($technical > 0 ? 100 : 0) * ($tw / $totalWeight);
+            // ... add others as needed or use a more holistic approach
+            // For now, let's use a balanced approach between proficiency and breadth
+        } else {
+            $matchScore = ($total / 10) * 100;
+        }
 
-        return $readinessScore;
+        // Weighted calculation: 50% proficiency + 30% match/leadership + 20% breadth
+        $readinessScore = ($proficiencyScore * 0.5) + (min(100, $matchScore) * 0.3) + (min(100, ($total / 10) * 100) * 0.2);
+
+        return round($readinessScore);
     }
 
     private function getSuccessorRecommendation($readinessLevel, $score)
@@ -381,8 +596,31 @@ class PotentialSuccessorController extends Controller
     {
         $targetRole = $request->input('target_role');
 
-        // Get employees with competency and training data
-        $employees = Employee::with(['competencyProfiles.competency'])->get();
+        // Fetch employees from API with local fallback
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                $employees = collect($apiEmployees)->map(function($emp) {
+                    return (object) [
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A'
+                    ];
+                });
+            } else {
+                $employees = Employee::all();
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in predictive analytics: ' . $e->getMessage());
+            $employees = Employee::all();
+        }
         $trainingData = \App\Models\EmployeeTrainingDashboard::with('employee', 'course')->get();
 
         $analytics = [
@@ -402,10 +640,15 @@ class PotentialSuccessorController extends Controller
         $competencyGaps = [];
 
         foreach ($employees as $employee) {
-            if ($employee->competencyProfiles->isEmpty()) continue;
+            // Fetch local competency profiles for this employee
+            $competencyProfiles = EmployeeCompetencyProfile::with('competency')
+                ->where('employee_id', $employee->employee_id)
+                ->get();
+
+            if ($competencyProfiles->isEmpty()) continue;
 
             $roleRequirements = $this->getRoleRequirements($targetRole);
-            $analysis = $this->analyzeEmployeeForRole($employee, $employee->competencyProfiles, $roleRequirements);
+            $analysis = $this->analyzeEmployeeForRole($employee, $competencyProfiles, $roleRequirements);
 
             $totalScore += $analysis['suitabilityScore'];
 
@@ -464,14 +707,51 @@ class PotentialSuccessorController extends Controller
             return response()->json(['error' => 'Employee ID required'], 400);
         }
 
-        $employee = Employee::with(['competencyProfiles.competency'])->where('employee_id', $employeeId)->first();
+        // Try to find employee info from API first
+        $employee = null;
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees)) {
+                foreach ($apiEmployees as $emp) {
+                    $empId = $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A';
+                    if ($empId == $employeeId) {
+                        $employee = (object) [
+                        'employee_id' => $empId,
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                        'department' => $emp['department'] ?? 'Operations',
+                        'status' => $emp['status'] ?? 'Active'
+                    ];
+                        break;
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employee from API in development paths: ' . $e->getMessage());
+        }
+
+        if (!$employee) {
+            $employee = Employee::where('employee_id', $employeeId)->first();
+        }
 
         if (!$employee) {
             return response()->json(['error' => 'Employee not found'], 404);
         }
 
+        // Fetch local competency profiles
+        $competencyProfiles = EmployeeCompetencyProfile::with('competency')
+            ->where('employee_id', $employeeId)
+            ->get();
+
         $roleRequirements = $this->getRoleRequirements($targetRole);
-        $analysis = $this->analyzeEmployeeForRole($employee, $employee->competencyProfiles, $roleRequirements);
+        $analysis = $this->analyzeEmployeeForRole($employee, $competencyProfiles, $roleRequirements);
 
         // Get training history
         $trainingHistory = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)

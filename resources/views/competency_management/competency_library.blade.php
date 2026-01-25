@@ -346,6 +346,91 @@
       </div>
     @endif
 
+    <!-- Position List Section -->
+    <div class="card shadow-sm border-0 mt-4">
+      <div class="card-header d-flex justify-content-between align-items-center bg-white py-3">
+        <h4 class="fw-bold mb-0 text-primary"></i>Position List</h4>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th class="fw-bold" style="width: 5%;">ID</th>
+                <th class="fw-bold" style="width: 10%;">DEPARTMENT</th>
+                <th class="fw-bold" style="width: 25%;">POSITION DESCRIPTION</th>
+                <th class="fw-bold" style="width: 35%;">POSITION QUALIFICATION</th>
+                <th class="fw-bold" style="width: 10%;">TYPE</th>
+                <th class="fw-bold" style="width: 15%;">ARRANGEMENT</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse($positions as $pos)
+                <tr>
+                  <td class="fw-bold text-secondary ps-3">{{ $loop->iteration }}</td>
+                  <td class="fw-bold text-dark">
+                    {{ $pos->department }}
+                  </td>
+                  <td>
+                    <div class="fw-bold text-dark">{{ $pos->position_name }}</div>
+                    <small class="text-muted d-block">{{ $pos->description }}</small>
+                  </td>
+                  <td>
+                    @if($pos->qualification)
+                      <span class="text-muted small">{{ $pos->qualification }}</span>
+                    @else
+                      @php
+                        $compNames = [];
+                        if ($pos->required_competencies && is_array($pos->required_competencies)) {
+                            foreach($pos->required_competencies as $rc) {
+                                $c = \App\Models\CompetencyLibrary::find($rc['competency_id']);
+                                if ($c) $compNames[] = $c->competency_name;
+                            }
+                        }
+                      @endphp
+                      
+                      @if(count($compNames) > 0)
+                        <div class="d-flex flex-wrap gap-1 mb-1">
+                          @foreach($compNames as $name)
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" style="font-size: 0.75rem;">{{ $name }}</span>
+                          @endforeach
+                        </div>
+                      @endif
+                      
+                      @if($pos->min_experience_years > 0)
+                        <div class="small">
+                          <i class="bi bi-clock-history me-1 text-warning"></i>
+                          <span class="text-muted">Min Experience:</span> 
+                          <span class="fw-semibold text-dark">{{ $pos->min_experience_years }} years</span>
+                        </div>
+                      @else
+                        <span class="text-muted small">No specific qualifications listed</span>
+                      @endif
+                    @endif
+                  </td>
+                  <td class="fw-medium">
+                    {{ $pos->employment_type ?? 'Full-Time' }}
+                  </td>
+                  <td class="text-muted small">
+                    {{ $pos->work_arrangement ?? 'On-site' }}
+                  </td>
+                </tr>
+              @empty
+                <tr>
+                  <td colspan="5" class="text-center py-4">
+                    <div class="text-muted">
+                      <i class="bi bi-folder2-open display-4 d-block mb-2"></i>
+                      No positions found in the organization.
+                    </div>
+                  </td>
+                </tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Competency List Section -->
     <div class="card shadow-sm border-0 mt-4">
       <div class="card-header">
@@ -378,7 +463,7 @@
                   @endphp
                   <tr class="competency-row">
                     <td class="text-center">
-                      <span class="row-number">{{ $index + 1 }}</span>
+                      <span class="row-number">{{ $competencies->firstItem() + $loop->index }}</span>
                     </td>
                     <td>
                       <div class="competency-name">{{ $comp->competency_name }}</div>
@@ -420,6 +505,9 @@
           @if($loop->last)
                 </tbody>
               </table>
+            </div>
+            <div class="card-footer bg-white border-0 py-3 d-flex justify-content-end">
+              {{ $competencies->links('pagination::bootstrap-5') }}
             </div>
           @endif
         @empty

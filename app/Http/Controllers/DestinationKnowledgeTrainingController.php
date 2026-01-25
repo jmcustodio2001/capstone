@@ -296,8 +296,57 @@ foreach ($destinations as $destination) {
         //     $this->updateProgressFromCompetencyGap($destination);
         // }
 
-        // Get all employees for destination knowledge training
-        $employees = Employee::all();
+        // Get all employees for destination knowledge training (Fetch from API with local fallback)
+        $employeeMap = [];
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+            
+            // Handle if response is wrapped in a data key
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                $employees = collect($apiEmployees)->map(function($emp) {
+                    return (object) [
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                        'profile_picture' => $emp['profile_picture'] ?? null
+                    ];
+                });
+            } else {
+                $employees = Employee::all();
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in index: ' . $e->getMessage());
+            $employees = Employee::all();
+        }
+
+        // Create an employee map for quick lookup
+        foreach ($employees as $employee) {
+            $empId = is_object($employee) ? $employee->employee_id : $employee['employee_id'];
+            $employeeMap[$empId] = $employee;
+        }
+
+        // Attach API employee data to destinations if local relationship is null
+        foreach ($destinations as $destination) {
+            if (!$destination->employee && isset($employeeMap[$destination->employee_id])) {
+                $apiEmployee = $employeeMap[$destination->employee_id];
+                
+                // Create a standard object that mimics the Employee model
+                $employeeData = new \stdClass();
+                $employeeData->employee_id = $destination->employee_id;
+                $employeeData->first_name = is_object($apiEmployee) ? $apiEmployee->first_name : ($apiEmployee['first_name'] ?? 'Unknown');
+                $employeeData->last_name = is_object($apiEmployee) ? $apiEmployee->last_name : ($apiEmployee['last_name'] ?? 'Employee');
+                $employeeData->profile_picture = is_object($apiEmployee) ? $apiEmployee->profile_picture : ($apiEmployee['profile_picture'] ?? null);
+                
+                // Set the relation
+                $destination->setRelation('employee', $employeeData);
+            }
+        }
 
         // Get destination masters for auto-population (with fallback if table doesn't exist)
         try {
@@ -326,7 +375,32 @@ foreach ($destinations as $destination) {
             $notifications = collect(); // Return empty collection
         }
 
-        return view('training_management.destination_knowledge_training', compact('destinations', 'employees', 'destinationMasters', 'possibleDestinations', 'notifications'));
+        // Fetch Orientation Training Data from External API
+        $orientationTrainings = [];
+        try {
+            // Disable SSL verification for development/testing environments
+            $response = \Illuminate\Support\Facades\Http::withoutVerifying()->get('https://hr1.jetlougetravels-ph.com/api/orientation-schedule');
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                
+                // Handle both direct array and wrapped 'data' structure
+                if (isset($data['data']) && is_array($data['data'])) {
+                    $orientationTrainings = $data['data'];
+                } elseif (is_array($data)) {
+                    $orientationTrainings = $data;
+                }
+                
+                // Log for debugging
+                \Illuminate\Support\Facades\Log::info('Orientation API Response count: ' . count($orientationTrainings));
+            } else {
+                \Illuminate\Support\Facades\Log::error('Orientation API failed with status: ' . $response->status());
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to fetch orientation trainings: ' . $e->getMessage());
+        }
+
+        return view('training_management.destination_knowledge_training', compact('destinations', 'employees', 'destinationMasters', 'possibleDestinations', 'notifications', 'orientationTrainings'));
     }
 
     /**
@@ -369,23 +443,97 @@ foreach ($destinations as $destination) {
                 'position' => 'required|string'
             ]);
 
-            $position = $request->input('position');
+            $position = strtoupper($request->input('position'));
             
-            // Get employees by position
-            $employees = Employee::where('position', $position)
-                ->select('employee_id', 'first_name', 'last_name', 'position')
-                ->orderBy('first_name')
-                ->orderBy('last_name')
-                ->get();
+            // Try to fetch employees from API first
+            $employees = [];
+            try {
+                $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+                $apiEmployees = $response->successful() ? $response->json() : [];
+                
+                // Handle if response is wrapped in a data key
+                if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                    $apiEmployees = $apiEmployees['data'];
+                }
+
+                if (is_array($apiEmployees)) {
+                    foreach ($apiEmployees as $emp) {
+                        // Check multiple possible fields for position/role AND department with type safety
+                        $rawPosition = $emp['role'] ?? $emp['position'] ?? $emp['job_title'] ?? '';
+                        $empPosition = is_string($rawPosition) ? strtoupper($rawPosition) : '';
+                        
+                        $rawDepartment = $emp['department'] ?? $emp['department_name'] ?? '';
+                        if (is_array($rawDepartment)) {
+                             // Handle case where department is an object/array (e.g. ['id'=>1, 'name'=>'Core'])
+                             $empDepartment = strtoupper($rawDepartment['name'] ?? $rawDepartment['department_name'] ?? ''); 
+                        } else {
+                             $empDepartment = is_string($rawDepartment) ? strtoupper($rawDepartment) : '';
+                        }
+                        
+                        // Handle "ACCOUNTANT" and "Travel Agent" (AGENT) etc.
+                        $match = ($empPosition === $position || $empDepartment === $position);
+                        
+                        // Special cases for mapping if needed
+                        if (!$match) {
+                            if ($position === 'AGENT' && (strpos($empPosition, 'AGENT') !== false || strpos($empPosition, 'TRAVEL AGENT') !== false)) $match = true;
+                            if ($position === 'COORDINATOR' && strpos($empPosition, 'COORDINATOR') !== false) $match = true;
+                            if ($position === 'CONSULTANT' && strpos($empPosition, 'CONSULTANT') !== false) $match = true;
+                            if ($position === 'GUIDE' && strpos($empPosition, 'GUIDE') !== false) $match = true;
+                        }
+
+                        if ($match) {
+                            $employees[] = [
+                                'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                                'first_name' => $emp['first_name'] ?? 'Unknown',
+                                'last_name' => $emp['last_name'] ?? 'Employee',
+                                'position' => $empPosition ?: $position
+                            ];
+                        }
+                    }
+                }
+            } catch (\Exception $apiException) {
+                \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in getEmployeesByPosition: ' . $apiException->getMessage());
+                // Fallback to local database
+                $localEmployees = \App\Models\Employee::where('position', $position)
+                    ->orWhere('position', strtolower($position))
+                    ->orWhere('department_id', $position)
+                    ->select('employee_id', 'first_name', 'last_name', 'position')
+                    ->get();
+                
+                foreach ($localEmployees as $emp) {
+                    $employees[] = [
+                        'employee_id' => $emp->employee_id,
+                        'first_name' => $emp->first_name,
+                        'last_name' => $emp->last_name,
+                        'position' => $emp->position
+                    ];
+                }
+            }
+            
+            // If still empty and it's a "known" position, try to return some local data without position filter if total count is small
+            if (empty($employees)) {
+                $allLocal = \App\Models\Employee::select('employee_id', 'first_name', 'last_name', 'position')->limit(10)->get();
+                foreach ($allLocal as $emp) {
+                    // Only add if position matches (case insensitive)
+                    if (strtoupper($emp->position) === $position) {
+                        $employees[] = [
+                            'employee_id' => $emp->employee_id,
+                            'first_name' => $emp->first_name,
+                            'last_name' => $emp->last_name,
+                            'position' => $emp->position
+                        ];
+                    }
+                }
+            }
 
             return response()->json([
                 'success' => true,
                 'employees' => $employees,
-                'count' => $employees->count()
+                'count' => count($employees)
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error fetching employees by position: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Error fetching employees by position: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching employees: ' . $e->getMessage()
@@ -409,12 +557,9 @@ foreach ($destinations as $destination) {
                 throw new \Exception('No employees selected. Please select at least one employee.');
             }
 
-            // Validate that all employee IDs exist
-            $validEmployees = Employee::whereIn('employee_id', $employeeIds)->pluck('employee_id')->toArray();
-            $invalidEmployees = array_diff($employeeIds, $validEmployees);
-            
-            if (!empty($invalidEmployees)) {
-                throw new \Exception('Invalid employee IDs: ' . implode(', ', $invalidEmployees));
+            // Validate that we have at least one employee ID (skipping local db existence check for API compatibility)
+            if (empty($employeeIds)) {
+                throw new \Exception('Please select at least one employee.');
             }
 
             $createdRecords = [];

@@ -511,7 +511,7 @@ if (typeof window.trans === 'undefined') {
                 $headerColor = $headerColors[$statusKey] ?? 'linear-gradient(135deg, #6c7b95, #8fa4c7)';
               @endphp
 
-              <div class="col-12 col-md-6 col-lg-4" data-destination-id="{{ $record->id }}">
+              <div class="col-6 col-lg-4 col-xl-3" data-destination-id="{{ $record->id }}">
                 <div class="destination-card h-100">
                   <!-- Card Header with Gradient -->
                   <div class="card-header" style="background: {{ $headerColor }}; color: white; padding: 1rem; position: relative;">
@@ -561,7 +561,7 @@ if (typeof window.trans === 'undefined') {
                             <i class="bi bi-info-circle me-2"></i>Training Details
                           </h6>
                           <div class="bg-light p-3 rounded">
-                            <p class="mb-2"><strong>Details:</strong> {{ $record->details }}</p>
+                            <p class="mb-2" style="white-space: normal; word-wrap: break-word; overflow-wrap: break-word;"><strong>Details:</strong> {{ $record->details }}</p>
                             <p class="mb-0">
                               <strong>Delivery Mode:</strong>
                               @if($record->delivery_mode)
@@ -917,16 +917,58 @@ if (typeof window.trans === 'undefined') {
                   <th>Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td colspan="6" class="text-center py-5">
-                    <div class="mb-3">
-                      <i class="bi bi-calendar display-1 text-muted"></i>
-                    </div>
-                    <p class="text-muted mb-0">No orientations scheduled</p>
-                  </td>
-                </tr>
-              </tbody>
+                <tbody id="orientationTableBody">
+                  @forelse($orientationTrainings as $orientation)
+                    <tr>
+                      <td>
+                        <div class="d-flex align-items-center">
+                           <div class="rounded-circle border d-flex align-items-center justify-content-center me-2" style="width: 40px; height: 40px; background: #e9ecef;">
+                              <span class="fw-bold text-secondary">{{ substr($orientation['employee_name'] ?? 'U', 0, 1) }}</span>
+                           </div>
+                           <div>
+                              <div class="fw-bold">{{ $orientation['employee_name'] ?? 'Unknown' }}</div>
+                              <small class="text-muted">{{ $orientation['email'] ?? '' }}</small>
+                           </div>
+                        </div>
+                      </td>
+                      <td>
+                          @if(isset($orientation['orientation_date']))
+                            {{ \Carbon\Carbon::parse($orientation['orientation_date'])->format('M d, Y h:i A') }}
+                          @else
+                            <span class="text-muted">N/A</span>
+                          @endif
+                      </td>
+                      <td>{{ $orientation['location'] ?? 'N/A' }}</td>
+                      <td>{{ $orientation['facilitator'] ?? 'N/A' }}</td>
+                      <td>
+                          @php
+                              $status = strtolower($orientation['status'] ?? 'scheduled');
+                              $badgeClass = 'bg-secondary';
+                              if($status == 'scheduled') $badgeClass = 'bg-primary';
+                              elseif($status == 'completed') $badgeClass = 'bg-success';
+                              elseif($status == 'cancelled') $badgeClass = 'bg-danger';
+                          @endphp
+                          <span class="badge {{ $badgeClass }}">{{ ucfirst($orientation['status'] ?? 'Scheduled') }}</span>
+                      </td>
+                      <td>
+                          <button type="button" class="btn btn-sm btn-outline-warning" 
+                                  onclick="openEditOrientationModal({{ json_encode($orientation['id'] ?? '') }}, {{ json_encode($orientation['status'] ?? '') }}, {{ json_encode($orientation['employee_name'] ?? '') }})"
+                                  title="Edit Status">
+                              <i class="bi bi-pencil"></i>
+                          </button>
+                      </td>
+                    </tr>
+                  @empty
+                    <tr>
+                      <td colspan="6" class="text-center py-5">
+                        <div class="mb-3">
+                          <i class="bi bi-calendar display-1 text-muted"></i>
+                        </div>
+                        <p class="text-muted mb-0">No orientations scheduled</p>
+                      </td>
+                    </tr>
+                  @endforelse
+                </tbody>
             </table>
           </div>
         </div>
@@ -958,15 +1000,11 @@ if (typeof window.trans === 'undefined') {
                   <label class="form-label" for="position">Position*</label>
                   <select class="form-select" name="position" id="position" required onchange="loadEmployeesByPosition()">
                     <option value="">Select Position</option>
-                    <option value="EMPLOYEE">Employee</option>
-                    <option value="MANAGER">Manager</option>
-                    <option value="STAFF">Staff</option>
-                    <option value="SUPERVISOR">Supervisor</option>
-                    <option value="COORDINATOR">Coordinator</option>
-                    <option value="AGENT">Travel Agent</option>
-                    <option value="CONSULTANT">Travel Consultant</option>
-                    <option value="GUIDE">Tour Guide</option>
-                    <option value="DRIVER">Driver</option>
+                    <option value="HUMAN RESOURCE">HUMAN RESOURCE</option>
+                    <option value="CORE">CORE</option>
+                    <option value="LOGISTICS">LOGISTICS</option>
+                    <option value="FINANCIAL">FINANCIAL</option>
+                    <option value="ADMINISTRATIVE">ADMINISTRATIVE</option>
                   </select>
                 </div>
                 <div class="mb-3" id="employeeListContainer" style="display: none;">
@@ -1353,11 +1391,230 @@ if (typeof window.trans === 'undefined') {
         </div>
       </div>
 
+      <!-- Edit Orientation Status Modal -->
+      <div class="modal fade" id="editOrientationModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header bg-warning bg-opacity-10">
+              <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>Edit Orientation Status</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label fw-bold">Employee</label>
+                <input type="text" class="form-control" id="orientationEmployeeName" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-bold">Current Status</label>
+                <input type="text" class="form-control" id="orientationCurrentStatus" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-bold">Update Status To:</label>
+                <div class="d-grid gap-2">
+                  <button type="button" class="btn btn-outline-primary" onclick="updateOrientationStatus('scheduled')">
+                    <i class="bi bi-calendar-check me-2"></i>Set as Scheduled
+                  </button>
+                  <button type="button" class="btn btn-outline-success" onclick="updateOrientationStatus('completed')">
+                    <i class="bi bi-check-circle me-2"></i>Set as Completed
+                  </button>
+                  <button type="button" class="btn btn-outline-danger" onclick="updateOrientationStatus('cancelled')">
+                    <i class="bi bi-x-circle me-2"></i>Set as Cancelled
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      </div>
+
+      <!-- Toast Notification Container -->
+      <div class="position-fixed top-0 end-0 p-3" style="z-index: 11000;">
+        <div id="orientationToast" class="toast align-items-center border-0" role="alert" aria-live="assertive" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body fw-bold" id="orientationToastBody">
+              <!-- Message will be inserted here -->
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  
+  <script>
+    let currentOrientationId = null;
+
+    // Function to show toast notification
+    function showOrientationToast(message, type = 'success') {
+      const toastEl = document.getElementById('orientationToast');
+      const toastBody = document.getElementById('orientationToastBody');
+      
+      // Set message
+      toastBody.textContent = message;
+      
+      // Set color based on type
+      toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning', 'text-bg-info');
+      if (type === 'success') {
+        toastEl.classList.add('text-bg-success');
+      } else if (type === 'error') {
+        toastEl.classList.add('text-bg-danger');
+      } else if (type === 'warning') {
+        toastEl.classList.add('text-bg-warning');
+      } else {
+        toastEl.classList.add('text-bg-info');
+      }
+      
+      // Show toast
+      const toast = new bootstrap.Toast(toastEl, {
+        autohide: true,
+        delay: 4000
+      });
+      toast.show();
+    }
+
+    // Function to open edit orientation modal
+    window.openEditOrientationModal = function(id, status, employeeName) {
+      currentOrientationId = id;
+      document.getElementById('orientationEmployeeName').value = employeeName;
+      document.getElementById('orientationCurrentStatus').value = status.charAt(0).toUpperCase() + status.slice(1);
+      new bootstrap.Modal(document.getElementById('editOrientationModal')).show();
+    }
+
+    // Function to update orientation status via PATCH API
+    window.updateOrientationStatus = async function(newStatus) {
+      if (!currentOrientationId) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'No orientation selected',
+          confirmButtonColor: '#d33'
+        });
+        return;
+      }
+
+      try {
+        // Show loading state
+        const modal = bootstrap.Modal.getInstance(document.getElementById('editOrientationModal'));
+        const buttons = document.querySelectorAll('#editOrientationModal button[onclick]');
+        buttons.forEach(btn => {
+          btn.disabled = true;
+          btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>' + btn.textContent;
+        });
+
+        // Log the request details for debugging
+        console.log('Updating orientation status:', {
+          id: currentOrientationId,
+          newStatus: newStatus,
+          url: `https://hr1.jetlougetravels-ph.com/api/orientation-schedule/${currentOrientationId}/status`
+        });
+
+        // Send PATCH request to external API
+        const response = await fetch(`https://hr1.jetlougetravels-ph.com/api/orientation-schedule/${currentOrientationId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            status: newStatus
+          })
+        });
+
+        // Log the response for debugging
+        console.log('API Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok
+        });
+
+        if (response.ok) {
+          // Success
+          const responseData = await response.json().catch(() => ({}));
+          console.log('Success response data:', responseData);
+          modal.hide();
+          
+          // Show specific success message based on status
+          let successTitle = '';
+          let successMessage = '';
+          
+          if (newStatus === 'scheduled') {
+            successTitle = 'Scheduled!';
+            successMessage = 'Orientation has been set as Scheduled successfully!';
+          } else if (newStatus === 'completed') {
+            successTitle = 'Completed!';
+            successMessage = 'Orientation has been set as Completed successfully!';
+          } else if (newStatus === 'cancelled') {
+            successTitle = 'Cancelled!';
+            successMessage = 'Orientation has been set as Cancelled successfully!';
+          } else {
+            successTitle = 'Success!';
+            successMessage = 'Orientation status updated successfully!';
+          }
+          
+          // Show SweetAlert2 success notification
+          Swal.fire({
+            icon: 'success',
+            title: successTitle,
+            text: successMessage,
+            timer: 2000,
+            showConfirmButton: false
+          }).then(() => {
+            window.location.reload();
+          });
+        } else {
+          // Error - try to get detailed error message
+          let errorMessage = '';
+          try {
+            const errorData = await response.json();
+            console.error('Error response data:', errorData);
+            errorMessage = errorData.message || errorData.error || JSON.stringify(errorData);
+          } catch (e) {
+            // If JSON parsing fails, try to get text
+            const errorText = await response.text();
+            console.error('Error response text:', errorText);
+            errorMessage = errorText || response.statusText;
+          }
+          
+          Swal.fire({
+            icon: 'error',
+            title: 'Failed to Update',
+            text: errorMessage,
+            confirmButtonColor: '#d33'
+          });
+          
+          // Re-enable buttons
+          buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerHTML = btn.innerHTML.replace(/<span[^>]*><\/span>/g, '');
+          });
+        }
+      } catch (error) {
+        console.error('Update error:', error);
+        
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Error updating status: ' + error.message,
+          confirmButtonColor: '#d33'
+        });
+        
+        // Re-enable buttons
+        const buttons = document.querySelectorAll('#editOrientationModal button[onclick]');
+        buttons.forEach(btn => {
+          btn.disabled = false;
+          btn.innerHTML = btn.innerHTML.replace(/<span[^>]*><\/span>/g, '');
+        });
+      }
+    }
+  </script>
+
   <script>
   document.addEventListener('DOMContentLoaded', function() {
     // Ensure cards are visible after page load

@@ -42,6 +42,9 @@ class CompetencyGapAnalysisController extends Controller
         // Fix missing categories for existing competencies
         $this->fixMissingCategories();
 
+        // Auto-fix expired dates (NULL or > 180 days)
+        $this->fixExpiredDates();
+
         // Fetch employees from API endpoint (Consistent with Profile Controller)
         $employeeMap = [];
         try {
@@ -72,7 +75,8 @@ class CompetencyGapAnalysisController extends Controller
                     ->where('competency_name', 'NOT LIKE', '%ITALY%');
             })
             ->accessible()
-            ->get();
+            ->orderBy('employee_id')
+            ->paginate(12);
 
         // Fetch expired gaps for display
         $expiredGaps = CompetencyGap::with(['employee', 'competency'])
@@ -132,7 +136,9 @@ class CompetencyGapAnalysisController extends Controller
         $competencies = CompetencyLibrary::select('id', 'competency_name', 'description', 'category', 'rate')
             ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
             ->where('competency_name', 'NOT LIKE', '%ITALY%')
-            ->get();
+            ->where('category', '!=', 'Destination Knowledge')
+            ->where('description', '!=', 'Auto-imported skill from employee profile')
+            ->paginate(10, ['*'], 'competencies_page');
 
         // Training assignments check
         $employeeTrainingAssignments = [];
@@ -173,6 +179,7 @@ class CompetencyGapAnalysisController extends Controller
 
             Log::info('Table exists, proceeding with validation...');
 
+            $maxDate = now()->addDays(30)->endOfDay()->toDateTimeString();
             $validated = $request->validate([
                 'employee_id'    => 'required|exists:employees,employee_id',
                 'competency_id'  => 'required|exists:competency_library,id',
@@ -180,14 +187,14 @@ class CompetencyGapAnalysisController extends Controller
                 'current_level'  => 'required|integer|min:0|max:5',
                 'gap'            => 'required|integer',
                 'gap_description'=> 'nullable|string|max:1000',
-                'expired_date'   => 'nullable|date',
+                'expired_date'   => 'nullable|date|before_or_equal:' . $maxDate,
             ]);
 
             Log::info('Validation passed. Validated Data: ', $validated);
 
             // Set default expired date if not provided
             if (!isset($validated['expired_date']) || empty($validated['expired_date'])) {
-                $validated['expired_date'] = now()->addDays(30);
+                $validated['expired_date'] = now()->addMonth();
                 Log::info('Set default expired_date: ' . $validated['expired_date']->format('Y-m-d H:i:s'));
             } else {
                 // Convert string date to Carbon object if it exists
@@ -278,6 +285,7 @@ class CompetencyGapAnalysisController extends Controller
                 }
                 return redirect()->back()->with('error', 'Cannot update this competency gap as it has already been assigned to training.');
             }
+            $maxDate = now()->addDays(30)->endOfDay()->toDateTimeString();
             $validated = $request->validate([
                 'employee_id'    => 'required|exists:employees,employee_id',
                 'competency_id'  => 'required|exists:competency_library,id',
@@ -285,7 +293,7 @@ class CompetencyGapAnalysisController extends Controller
                 'current_level'  => 'required|integer|min:0|max:5',
                 'gap'            => 'required|integer',
                 'gap_description'=> 'nullable|string|max:1000',
-                'expired_date'   => 'nullable|date',
+                'expired_date'   => 'nullable|date|before_or_equal:' . $maxDate,
             ]);
             $gap->update($validated);
 
@@ -570,9 +578,16 @@ class CompetencyGapAnalysisController extends Controller
                 ->where('training_title', $competencyGap->competency->competency_name)
                 ->first();
 
+            // Find matching course ID for this competency
+            $courseRecord = \App\Models\CourseManagement::where('course_title', $competencyGap->competency->competency_name)
+                ->orWhere('course_title', 'LIKE', '%' . $competencyGap->competency->competency_name . '%')
+                ->first();
+            $courseId = $courseRecord ? $courseRecord->course_id : null;
+
             // Prepare accurate data from competency gap
             $upcomingData = [
                 'employee_id' => $competencyGap->employee_id,
+                'course_id' => $courseId,
                 'training_title' => $competencyGap->competency->competency_name,
                 'start_date' => now(), // Start immediately when assigned
                 'end_date' => $competencyGap->expired_date ?: now()->addMonths(3), // Use gap expiration or 3 months
@@ -977,11 +992,27 @@ class CompetencyGapAnalysisController extends Controller
             $gap = CompetencyGap::findOrFail($id);
 
             $request->validate([
-                'extension_days' => 'required|integer|min:1|max:30'
+                'extension_days' => 'required|integer|min:1|max:60'
             ]);
 
-            $extensionDays = $request->extension_days;
-            $gap->expired_date = now()->addDays($extensionDays);
+            $extensionDays = (int) $request->extension_days;
+
+            // Determine a proper base date for extension:
+            // - If current expiry is in the future, add from that date
+            // - If absent or in the past, add from now
+            $baseDate = now();
+            if ($gap->expired_date) {
+                try {
+                    $currentExpiry = \Carbon\Carbon::parse($gap->expired_date);
+                    $baseDate = $currentExpiry->isFuture() ? $currentExpiry : now();
+                } catch (\Exception $e) {
+                    // Fallback to now if parsing fails
+                    $baseDate = now();
+                }
+            }
+
+            $newExpiry = $baseDate->copy()->addDays($extensionDays);
+            $gap->expired_date = $newExpiry;
             $gap->is_active = true; // Reactivate if it was expired
             $gap->save();
 
@@ -1055,28 +1086,49 @@ class CompetencyGapAnalysisController extends Controller
     public function fixExpiredDates()
     {
         try {
-            // Find all competency gaps with NULL expired_date
-            $gapsWithoutExpiredDate = CompetencyGap::whereNull('expired_date')->get();
-
             $updated = 0;
+            $limitDate = now()->addDays(30);
 
+            // 1. Fix NULL expired_date (Set to 1 month from now)
+            $gapsWithoutExpiredDate = CompetencyGap::whereNull('expired_date')->get();
             foreach ($gapsWithoutExpiredDate as $gap) {
-                // Set expiration date to 30 days from now for existing records
-                $gap->expired_date = now()->addDays(30);
-                $gap->is_active = true; // Ensure they're active
+                $gap->expired_date = now()->addMonth();
+                $gap->is_active = true;
                 $gap->save();
                 $updated++;
             }
 
-            // Log the fix
-            ActivityLog::create([
-                'user_id' => Auth::id(),
-                'action' => 'bulk_fix',
-                'module' => 'Competency Gap Management',
-                'description' => "Fixed expiration dates for {$updated} competency gap records. All gaps now have proper expiration dates.",
-                'model_type' => null,
-                'model_id' => null,
-            ]);
+            // 2. Fix expired_date > 180 days (Cap at 30 days from now)
+            // Targeting the 180-day bug while allowing reasonable extensions
+            $bugThresholdDate = now()->addDays(180);
+            $longExpirationGaps = CompetencyGap::where('expired_date', '>', $bugThresholdDate)->get();
+            foreach ($longExpirationGaps as $gap) {
+                $gap->expired_date = now()->addMonth();
+                $gap->save();
+                $updated++;
+            }
+
+            // 3. Fix "Feb 25" records (approx 30 days) to "Feb 26" (1 month)
+            // This corrects the records we just set to 30 days if the user prefers 1 month (Jan 26 -> Feb 26)
+            $thirtyDayDate = now()->addDays(30)->startOfDay();
+            $thirtyDayGaps = CompetencyGap::whereDate('expired_date', $thirtyDayDate)->get();
+            foreach ($thirtyDayGaps as $gap) {
+                $gap->expired_date = now()->addMonth();
+                $gap->save();
+                $updated++;
+            }
+
+            if ($updated > 0) {
+                // Log the fix
+                ActivityLog::create([
+                    'user_id' => Auth::id() ?? 1,
+                    'action' => 'bulk_fix',
+                    'module' => 'Competency Gap Management',
+                    'description' => "Fixed expiration dates for {$updated} competency gap records (NULL, >180 days, or adjusted to 1 month).",
+                    'model_type' => null,
+                    'model_id' => null,
+                ]);
+            }
 
             return response()->json([
                 'success' => true,
@@ -1236,7 +1288,8 @@ class CompetencyGapAnalysisController extends Controller
         try {
             $request->validate([
                 'gap_id' => 'required|integer|exists:competency_gaps,id',
-                'employee_id' => 'required|string|exists:employees,employee_id',
+                // Relaxed validation: rely on the gap record to identify the employee
+                'employee_id' => 'nullable', 
                 'competency' => 'required|string',
                 'expired_date' => 'nullable|string'
             ]);
@@ -1244,13 +1297,62 @@ class CompetencyGapAnalysisController extends Controller
             // Find the competency gap record
             $competencyGap = CompetencyGap::with(['employee', 'competency'])->findOrFail($request->gap_id);
 
-            // Get the employee record
-            $employee = Employee::where('employee_id', $request->employee_id)->first();
-            if (!$employee) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Employee not found with employee_id: ' . $request->employee_id
-                ], 404);
+            // Get the employee record directly from the relationship
+            $employee = $competencyGap->employee;
+            $employeeName = 'Unknown Employee';
+            $employeeDatabaseId = trim($competencyGap->employee_id);
+
+            if ($employee) {
+                $employeeName = $employee->first_name . ' ' . $employee->last_name;
+                $employeeDatabaseId = $employee->employee_id;
+            } else {
+                // Fallback: Try to find manually using the ID from the gap record
+                // 1. Direct match on employee_id (trimming whitespace)
+                $employeeId = trim($competencyGap->employee_id);
+                $employee = Employee::where('employee_id', $employeeId)->first();
+                
+                // 2. If numeric, try padded versions (common issue with imported data)
+                if (!$employee && is_numeric($employeeId)) {
+                    $paddings = [3, 4, 5, 6]; // Try common zero-padding lengths
+                    foreach ($paddings as $length) {
+                        $paddedId = str_pad($employeeId, $length, '0', STR_PAD_LEFT);
+                        $employee = Employee::where('employee_id', $paddedId)->first();
+                        if ($employee) break;
+                    }
+                }
+
+                // 3. Fallback: Check 'id' column if it exists (in case of legacy ID usage)
+                if (!$employee && Schema::hasColumn('employees', 'id')) {
+                    $employee = Employee::where('id', $employeeId)->first();
+                }
+
+                // 4. Fallback: Search by name if provided (Handles corrupted/mismatched IDs)
+                if (!$employee && $request->has('employee_name')) {
+                    $nameParts = explode(' ', $request->employee_name);
+                    // Try exact match on First + Last name if only 2 parts, or search first/last
+                    if (count($nameParts) >= 2) {
+                        $firstName = $nameParts[0];
+                        $lastName = end($nameParts); // Last part as last name
+                        
+                        $employee = Employee::where('first_name', 'LIKE', "%{$firstName}%")
+                                          ->where('last_name', 'LIKE', "%{$lastName}%")
+                                          ->first();
+                        
+                        if ($employee) {
+                            Log::info("AssignTraining: Found employee by name '{$request->employee_name}' (ID: {$employee->employee_id}) after ID lookup failed.");
+                        }
+                    }
+                }
+
+                // If still not found, we will proceed with the raw ID and let the DB FK constraint handle validity
+                // This handles cases where Eloquent fails but the data is valid in DB
+                if ($employee) {
+                    $employeeName = $employee->first_name . ' ' . $employee->last_name;
+                    $employeeDatabaseId = $employee->employee_id;
+                } else {
+                     Log::warning("AssignTraining: Employee model not found for Gap ID {$competencyGap->id}, using raw ID: {$employeeId}");
+                     // We continue execution instead of returning 404
+                }
             }
             
             // The employees table uses string employee_id, but upcoming_trainings expects integer
@@ -1288,7 +1390,8 @@ class CompetencyGapAnalysisController extends Controller
                 }
             }
             
-            $employeeDatabaseId = $employee->employee_id; // Use the string employee_id
+            // $employeeDatabaseId is already set above
+
 
             // Get current user for assigned_by field
             $assignedBy = 'Admin User';
@@ -1322,9 +1425,16 @@ class CompetencyGapAnalysisController extends Controller
                 Log::info("Expiration date comparison - Request: {$requestDate}, Gap: {$gapDate}, Using: {$expirationDate}");
             }
 
+            // Find matching course ID for this competency
+            $courseRecord = \App\Models\CourseManagement::where('course_title', $request->competency)
+                ->orWhere('course_title', 'LIKE', '%' . $request->competency . '%')
+                ->first();
+            $courseId = $courseRecord ? $courseRecord->course_id : null;
+
             // Prepare training data using the database ID
             $trainingData = [
                 'employee_id' => $employeeDatabaseId, // Use database ID, not employee_id string
+                'course_id' => $courseId,
                 'training_title' => $request->competency,
                 'start_date' => now(),
                 'end_date' => $expirationDate, // Use the exact expiration date from competency gap
@@ -1355,7 +1465,7 @@ class CompetencyGapAnalysisController extends Controller
                 'user_id' => Auth::id(),
                 'module' => 'Competency Management',
                 'action' => 'assign_training',
-                'description' => "Assigned '{$request->competency}' training to {$competencyGap->employee->first_name} {$competencyGap->employee->last_name} from competency gap analysis. Assigned by: {$assignedBy}",
+                'description' => "Assigned '{$request->competency}' training to {$employeeName} from competency gap analysis. Assigned by: {$assignedBy}",
                 'model_type' => CompetencyGap::class,
                 'model_id' => $competencyGap->id,
             ]);

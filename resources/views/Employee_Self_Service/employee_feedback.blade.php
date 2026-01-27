@@ -119,8 +119,8 @@
         <div class="card border-0 shadow-sm h-100">
           <div class="card-body text-center">
             <div class="d-flex align-items-center justify-content-center mb-2">
-              <div class="bg-success bg-opacity-10 rounded-circle p-3">
-                <i class="bi bi-star-fill fs-4 text-success"></i>
+              <div class="bg-primary bg-opacity-10 rounded-circle p-3">
+                <i class="bi bi-star-fill fs-4 text-primary"></i>
               </div>
             </div>
             <h3 class="fw-bold mb-1" id="avgRating">{{ number_format($avgRating ?? 0, 1) }}</h3>
@@ -132,8 +132,8 @@
         <div class="card border-0 shadow-sm h-100">
           <div class="card-body text-center">
             <div class="d-flex align-items-center justify-content-center mb-2">
-              <div class="bg-warning bg-opacity-10 rounded-circle p-3">
-                <i class="bi bi-calendar-week fs-4 text-warning"></i>
+              <div class="bg-primary bg-opacity-10 rounded-circle p-3">
+                <i class="bi bi-calendar-week fs-4 text-primary"></i>
               </div>
             </div>
             <h3 class="fw-bold mb-1" id="thisWeekFeedback">{{ $thisWeekFeedback ?? 0 }}</h3>
@@ -145,8 +145,8 @@
         <div class="card border-0 shadow-sm h-100">
           <div class="card-body text-center">
             <div class="d-flex align-items-center justify-content-center mb-2">
-              <div class="bg-info bg-opacity-10 rounded-circle p-3">
-                <i class="bi bi-hand-thumbs-up fs-4 text-info"></i>
+              <div class="bg-primary bg-opacity-10 rounded-circle p-3">
+                <i class="bi bi-hand-thumbs-up fs-4 text-primary"></i>
               </div>
             </div>
             <h3 class="fw-bold mb-1" id="recommendationRate">{{ number_format($recommendationRate ?? 0, 1) }}%</h3>
@@ -263,45 +263,18 @@
                               // Check if it's base64 encoded data (starts with data:image)
                               if (strpos($profilePicture, 'data:image') === 0) {
                                   $hasProfilePicture = true;
-                                  $profilePicturePath = $profilePicture; // Use base64 data directly
+                                  $profilePicturePath = $profilePicture;
                               }
-                              // Check if it's a very long string (likely encoded filename)
-                              elseif (strlen($profilePicture) > 50) {
-                                  // Try to decode if it looks like base64
-                                  $decoded = base64_decode($profilePicture, true);
-                                  if ($decoded !== false && strlen($decoded) < 100) {
-                                      // It's a base64 encoded filename
-                                      $actualFilename = $decoded;
-                                  } else {
-                                      // It's probably an encoded filename, try to extract extension
-                                      $actualFilename = $employee->employee_id . '.jpg'; // Default fallback
-                                  }
-
-                                  // Check multiple possible paths with the actual filename
-                                  $possiblePaths = [
-                                      'storage/employee_photos/' . $actualFilename,
-                                      'assets/employee_photos/' . $actualFilename,
-                                      'uploads/employee_photos/' . $actualFilename,
-                                      'storage/employee_photos/' . $employee->employee_id . '.jpg',
-                                      'storage/employee_photos/' . $employee->employee_id . '.png',
-                                      'assets/employee_photos/' . $employee->employee_id . '.jpg',
-                                      'assets/employee_photos/' . $employee->employee_id . '.png'
-                                  ];
-
-                                  foreach ($possiblePaths as $path) {
-                                      if (file_exists(public_path($path))) {
-                                          $hasProfilePicture = true;
-                                          $profilePicturePath = asset($path);
-                                          break;
-                                      }
-                                  }
-                              }
-                              // Regular filename
                               else {
+                                  // Clean up filename (remove any path if it's there, but keep it for testing)
+                                  $filenameOnly = basename($profilePicture);
+                                  
                                   $possiblePaths = [
-                                      'storage/employee_photos/' . $profilePicture,
-                                      'assets/employee_photos/' . $profilePicture,
-                                      'uploads/employee_photos/' . $profilePicture
+                                      'storage/' . $profilePicture,
+                                      'storage/profile_pictures/' . $filenameOnly,
+                                      'storage/employee_photos/' . $filenameOnly,
+                                      'assets/employee_photos/' . $filenameOnly,
+                                      'uploads/employee_photos/' . $filenameOnly
                                   ];
 
                                   foreach ($possiblePaths as $path) {
@@ -326,6 +299,7 @@
 
                               foreach ($commonFilenames as $filename) {
                                   $possiblePaths = [
+                                      'storage/profile_pictures/' . $filename,
                                       'storage/employee_photos/' . $filename,
                                       'assets/employee_photos/' . $filename,
                                       'uploads/employee_photos/' . $filename
@@ -350,9 +324,9 @@
                                data-bs-toggle="tooltip"
                                data-bs-placement="top"
                                title="Employee Profile: {{ $employeeName }}"
-                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                               onerror="this.style.display='none'; this.nextElementSibling.style.setProperty('display', 'flex', 'important');">
                           <div class="avatar-sm bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
-                               style="width: 40px; height: 40px; display: none; border: 2px solid #007bff;"
+                               style="width: 40px; height: 40px; display: none !important; border: 2px solid #007bff;"
                                data-bs-toggle="tooltip"
                                data-bs-placement="top"
                                title="Employee Profile: {{ $employeeName }}">
@@ -434,9 +408,15 @@
                       <button class="btn btn-info btn-sm" data-bs-toggle="modal" data-bs-target="#viewFeedbackModal" onclick="viewFeedbackDetails({{ optional($feedback)->id ?? 0 }})" title="View Details">
                         <i class="bi bi-eye"></i>
                       </button>
-                      <button class="btn btn-success btn-sm" onclick="markAsReviewedWithConfirmation({{ optional($feedback)->id ?? 0 }})" title="Mark as Reviewed">
-                        <i class="bi bi-check-circle"></i>
-                      </button>
+                      @if(!(optional($feedback)->admin_reviewed ?? false))
+                        <button class="btn btn-success btn-sm" onclick="markAsReviewedWithConfirmation({{ optional($feedback)->id ?? 0 }})" title="Mark as Reviewed">
+                          <i class="bi bi-check-circle"></i>
+                        </button>
+                      @else
+                        <button class="btn btn-secondary btn-sm" title="Already Reviewed" disabled>
+                          <i class="bi bi-check-all"></i>
+                        </button>
+                      @endif
                       <button class="btn btn-warning btn-sm" onclick="respondToFeedbackWithConfirmation({{ optional($feedback)->id ?? 0 }})" title="Respond">
                         <i class="bi bi-reply"></i>
                       </button>
@@ -460,49 +440,48 @@
                           $compInitials = substr($compEmployee->first_name ?? 'U', 0, 1) . substr($compEmployee->last_name ?? 'U', 0, 1);
                         @endphp
 
-                        @if($compProfilePicture && file_exists(public_path('storage/employee_photos/' . $compProfilePicture)))
-                          <img src="{{ asset('storage/employee_photos/' . $compProfilePicture) }}"
+                        @php
+                          $compHasProfilePicture = false;
+                          $compProfilePicturePath = '';
+                          
+                          if ($compProfilePicture) {
+                              if (strpos($compProfilePicture, 'data:image') === 0) {
+                                  $compHasProfilePicture = true;
+                                  $compProfilePicturePath = $compProfilePicture;
+                              } else {
+                                  $compFilenameOnly = basename($compProfilePicture);
+                                  $compPossiblePaths = [
+                                      'storage/' . $compProfilePicture,
+                                      'storage/profile_pictures/' . $compFilenameOnly,
+                                      'storage/employee_photos/' . $compFilenameOnly,
+                                      'assets/employee_photos/' . $compFilenameOnly,
+                                      'uploads/employee_photos/' . $compFilenameOnly,
+                                      'storage/profile_pictures/' . ($compEmployee->employee_id ?? '') . '.jpg',
+                                      'storage/profile_pictures/' . ($compEmployee->employee_id ?? '') . '.png'
+                                  ];
+                                  
+                                  foreach ($compPossiblePaths as $path) {
+                                      if (!empty($path) && file_exists(public_path($path))) {
+                                          $compHasProfilePicture = true;
+                                          $compProfilePicturePath = asset($path);
+                                          break;
+                                      }
+                                  }
+                              }
+                          }
+                        @endphp
+
+                        @if($compHasProfilePicture)
+                          <img src="{{ $compProfilePicturePath }}"
                                alt="{{ $compEmployeeName }}"
                                class="rounded-circle employee-avatar"
                                style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
                                data-bs-toggle="tooltip"
                                data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}"
-                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                               onerror="this.style.display='none'; this.nextElementSibling.style.setProperty('display', 'flex', 'important');">
                           <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
-                               style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               title="Employee Profile: {{ $compEmployeeName }}">
-                            <span class="text-info fw-bold">{{ $compInitials }}</span>
-                          </div>
-                        @elseif($compProfilePicture && file_exists(public_path('assets/employee_photos/' . $compProfilePicture)))
-                          <img src="{{ asset('assets/employee_photos/' . $compProfilePicture) }}"
-                               alt="{{ $compEmployeeName }}"
-                               class="rounded-circle employee-avatar"
-                               style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               title="Employee Profile: {{ $compEmployeeName }}"
-                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
-                               style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               title="Employee Profile: {{ $compEmployeeName }}">
-                            <span class="text-info fw-bold">{{ $compInitials }}</span>
-                          </div>
-                        @elseif($compProfilePicture && file_exists(public_path('uploads/employee_photos/' . $compProfilePicture)))
-                          <img src="{{ asset('uploads/employee_photos/' . $compProfilePicture) }}"
-                               alt="{{ $compEmployeeName }}"
-                               class="rounded-circle employee-avatar"
-                               style="width: 40px; height: 40px; object-fit: cover; border: 2px solid #17a2b8;"
-                               data-bs-toggle="tooltip"
-                               data-bs-placement="top"
-                               title="Employee Profile: {{ $compEmployeeName }}"
-                               onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                          <div class="avatar-sm bg-info bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center"
-                               style="width: 40px; height: 40px; display: none; border: 2px solid #17a2b8;"
+                               style="width: 40px; height: 40px; display: none !important; border: 2px solid #17a2b8;"
                                data-bs-toggle="tooltip"
                                data-bs-placement="top"
                                title="Employee Profile: {{ $compEmployeeName }}">
@@ -575,9 +554,15 @@
                           <i class="bi bi-reply"></i>
                         </button>
                       @endif
-                      <button class="btn btn-success btn-sm" onclick="markCompetencyRequestAsReviewedWithConfirmation({{ $request->id }})" title="Mark as Reviewed">
-                        <i class="bi bi-check-circle"></i>
-                      </button>
+                      @if($request->status != 'reviewed' && $request->status != 'completed')
+                        <button class="btn btn-success btn-sm" onclick="markCompetencyRequestAsReviewedWithConfirmation({{ $request->id }})" title="Mark as Reviewed">
+                          <i class="bi bi-check-circle"></i>
+                        </button>
+                      @else
+                        <button class="btn btn-secondary btn-sm" title="Already Reviewed" disabled>
+                          <i class="bi bi-check-all"></i>
+                        </button>
+                      @endif
                     </div>
                   </td>
                 </tr>
@@ -611,7 +596,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button class="btn btn-success" onclick="markCurrentAsReviewed()">Mark as Reviewed</button>
+          <button class="btn btn-success" id="modalMarkAsReviewedBtn" onclick="markCurrentAsReviewed()">Mark as Reviewed</button>
         </div>
       </div>
     </div>
@@ -624,163 +609,7 @@
   <script>
     let currentFeedbackId = null;
 
-    // Secure Password verification function using custom modal
-    async function verifyAdminPassword() {
-      return new Promise((resolve) => {
-        // Create custom modal HTML
-        const modalHtml = `
-          <div class="modal fade" id="passwordModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-            <div class="modal-dialog modal-dialog-centered">
-              <div class="modal-content">
-                <div class="modal-header bg-warning text-dark">
-                  <h5 class="modal-title">
-                    <i class="bi bi-shield-lock me-2"></i>Admin Password Required
-                  </h5>
-                </div>
-                <div class="modal-body">
-                  <div class="alert alert-info">
-                    <i class="bi bi-info-circle me-2"></i>
-                    <strong>Security Verification</strong><br>
-                    This action requires admin password verification for security purposes.
-                  </div>
-                  <div class="mb-3">
-                    <label for="securePasswordInput" class="form-label fw-bold">Enter admin password:</label>
-                    <input type="password" class="form-control" id="securePasswordInput" placeholder="Enter admin password" minlength="6" autocomplete="current-password">
-                    <div class="form-text">
-                      <i class="bi bi-info-circle me-1"></i>Password must be at least 6 characters long
-                    </div>
-                  </div>
-                  <div id="passwordError" class="alert alert-danger d-none"></div>
-                </div>
-                <div class="modal-footer">
-                  <button type="button" class="btn btn-secondary" id="cancelPasswordBtn">
-                    <i class="bi bi-x-circle me-1"></i>Cancel
-                  </button>
-                  <button type="button" class="btn btn-warning" id="verifyPasswordBtn">
-                    <i class="bi bi-unlock me-1"></i>Verify Password
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
 
-        // Remove existing modal if any
-        const existingModal = document.getElementById('passwordModal');
-        if (existingModal) {
-          existingModal.remove();
-        }
-
-        // Add modal to body
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        // Get modal elements
-        const modal = document.getElementById('passwordModal');
-        const passwordInput = document.getElementById('securePasswordInput');
-        const verifyBtn = document.getElementById('verifyPasswordBtn');
-        const cancelBtn = document.getElementById('cancelPasswordBtn');
-        const errorDiv = document.getElementById('passwordError');
-
-        // Initialize Bootstrap modal
-        const bsModal = new bootstrap.Modal(modal);
-
-        // Show modal
-        bsModal.show();
-
-        // Focus on input after modal is shown
-        modal.addEventListener('shown.bs.modal', () => {
-          passwordInput.focus();
-        });
-
-        // Handle Enter key
-        passwordInput.addEventListener('keypress', (e) => {
-          if (e.key === 'Enter') {
-            verifyBtn.click();
-          }
-        });
-
-        // Handle verify button click
-        verifyBtn.addEventListener('click', async () => {
-          const password = passwordInput.value;
-
-          // Clear previous errors
-          errorDiv.classList.add('d-none');
-
-          // Validate password
-          if (!password || password.trim() === '') {
-            showError('Password is required');
-            return;
-          }
-
-          if (password.length < 6) {
-            showError('Password must be at least 6 characters long');
-            return;
-          }
-
-          // Show loading
-          verifyBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
-          verifyBtn.disabled = true;
-
-          try {
-            const response = await fetch('/admin/verify-password', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-              },
-              body: JSON.stringify({ password: password })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-              // Success - close modal and resolve
-              bsModal.hide();
-              modal.addEventListener('hidden.bs.modal', () => {
-                modal.remove();
-              });
-              resolve(true);
-            } else {
-              // Invalid password
-              showError('Invalid password. Please try again.');
-              resetButton();
-            }
-          } catch (error) {
-            console.error('Password verification error:', error);
-            showError('Unable to verify password. Please try again.');
-            resetButton();
-          }
-        });
-
-        // Handle cancel button click
-        cancelBtn.addEventListener('click', () => {
-          bsModal.hide();
-          modal.addEventListener('hidden.bs.modal', () => {
-            modal.remove();
-          });
-          resolve(false);
-        });
-
-        // Handle modal close (X button or backdrop)
-        modal.addEventListener('hidden.bs.modal', () => {
-          modal.remove();
-          resolve(false);
-        });
-
-        // Helper functions
-        function showError(message) {
-          errorDiv.textContent = message;
-          errorDiv.classList.remove('d-none');
-          passwordInput.focus();
-        }
-
-        function resetButton() {
-          verifyBtn.innerHTML = '<i class="bi bi-unlock me-1"></i>Verify Password';
-          verifyBtn.disabled = false;
-          passwordInput.focus();
-        }
-      });
-    }
 
     // View Feedback Details
     function viewFeedbackDetails(feedbackId) {
@@ -861,6 +690,14 @@
             </div>
           `;
           document.getElementById('viewFeedbackContent').innerHTML = content;
+          
+          // Toggle Mark as Reviewed button in modal footer
+          const markAsReviewedBtn = document.getElementById('modalMarkAsReviewedBtn');
+          if (data.admin_reviewed) {
+            markAsReviewedBtn.style.display = 'none';
+          } else {
+            markAsReviewedBtn.style.display = 'block';
+          }
         })
         .catch(error => {
           console.error('Error:', error);
@@ -887,10 +724,7 @@
       });
 
       if (confirmed.isConfirmed) {
-        const passwordVerified = await verifyAdminPassword();
-        if (passwordVerified) {
-          await markAsReviewed(feedbackId);
-        }
+        await markAsReviewed(feedbackId);
       }
     }
 
@@ -977,12 +811,8 @@
       }
     }
 
-    // Respond to Feedback with Confirmation
     async function respondToFeedbackWithConfirmation(feedbackId) {
-      const passwordVerified = await verifyAdminPassword();
-      if (passwordVerified) {
-        await showRespondToFeedbackForm(feedbackId);
-      }
+      await showRespondToFeedbackForm(feedbackId);
     }
 
     // Show Respond to Feedback Form
@@ -1131,12 +961,9 @@
       window.location.href = `${window.location.pathname}?${params.toString()}`;
     }
 
-    // Enhanced Export Feedback with Password Verification
+    // Enhanced Export Feedback
     async function exportFeedback() {
-      const passwordVerified = await verifyAdminPassword();
-      if (passwordVerified) {
-        await showExportOptions();
-      }
+      await showExportOptions();
     }
 
     // Show Export Options
@@ -1483,6 +1310,14 @@
           `;
           document.getElementById('viewFeedbackContent').innerHTML = content;
 
+          // Toggle Mark as Reviewed button in modal footer
+          const markAsReviewedBtn = document.getElementById('modalMarkAsReviewedBtn');
+          if (data.status === 'reviewed' || data.status === 'completed') {
+            markAsReviewedBtn.style.display = 'none';
+          } else {
+            markAsReviewedBtn.style.display = 'block';
+          }
+
           // Show modal
           const modal = new bootstrap.Modal(document.getElementById('viewFeedbackModal'));
           modal.show();
@@ -1493,12 +1328,8 @@
         });
     }
 
-    // Respond to Competency Request with Confirmation
     async function respondToCompetencyRequestWithConfirmation(requestId) {
-      const passwordVerified = await verifyAdminPassword();
-      if (passwordVerified) {
-        await showRespondToCompetencyRequestForm(requestId);
-      }
+      await showRespondToCompetencyRequestForm(requestId);
     }
 
     // Show Respond to Competency Request Form
@@ -1627,10 +1458,7 @@
       });
 
       if (confirmed.isConfirmed) {
-        const passwordVerified = await verifyAdminPassword();
-        if (passwordVerified) {
-          await markCompetencyRequestAsReviewed(requestId);
-        }
+        await markCompetencyRequestAsReviewed(requestId);
       }
     }
 
@@ -1771,20 +1599,36 @@
               <div class="text-start">
                 <div class="row">
                   <div class="col-md-4 text-center">
-                    ${employee.profile_picture || employee.photo ? `
-                      <img src="/storage/employee_photos/${employee.profile_picture || employee.photo}"
-                           alt="${employee.first_name || 'Unknown'} ${employee.last_name || 'User'}"
-                           class="rounded-circle mx-auto mb-3"
-                           style="width: 80px; height: 80px; object-fit: cover; border: 3px solid #007bff;"
-                           onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                      <div class="avatar-lg bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 80px; height: 80px; display: none; border: 3px solid #007bff;">
-                        <span class="text-primary fw-bold fs-2">${employee.first_name?.charAt(0) || 'U'}${employee.last_name?.charAt(0) || 'U'}</span>
-                      </div>
-                    ` : `
+                    ${(() => {
+                      const profilePic = employee.profile_picture || employee.photo;
+                      if (!profilePic) return '';
+                      
+                      // Handle possible paths in JS
+                      const filename = profilePic.split('/').pop();
+                      const paths = [
+                        `/storage/${profilePic}`,
+                        `/storage/profile_pictures/${filename}`,
+                        `/storage/employee_photos/${filename}`,
+                        `/assets/employee_photos/${filename}`
+                      ];
+                      
+                      // We can't use file_exists in JS easily, but we can use onerror to try next
+                      return `
+                        <img src="/storage/${profilePic}"
+                             alt="${employee.first_name || 'Unknown'} ${employee.last_name || 'User'}"
+                             class="rounded-circle mx-auto mb-3"
+                             style="width: 80px; height: 80px; object-fit: cover; border: 3px solid #007bff;"
+                             onerror="this.onerror=function(){this.src='/storage/profile_pictures/${filename}'; this.onerror=function(){this.src='/storage/employee_photos/${filename}'; this.onerror=function(){this.style.display='none'; this.nextElementSibling.style.setProperty('display', 'flex', 'important');}}};">
+                        <div class="avatar-lg bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 80px; height: 80px; display: none !important; border: 3px solid #007bff;">
+                          <span class="text-primary fw-bold fs-2">${employee.first_name?.charAt(0) || 'U'}${employee.last_name?.charAt(0) || 'U'}</span>
+                        </div>
+                      `;
+                    })()}
+                    ${!(employee.profile_picture || employee.photo) ? `
                       <div class="avatar-lg bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center mx-auto mb-3" style="width: 80px; height: 80px; border: 3px solid #007bff;">
                         <span class="text-primary fw-bold fs-2">${employee.first_name?.charAt(0) || 'U'}${employee.last_name?.charAt(0) || 'U'}</span>
                       </div>
-                    `}
+                    ` : ''}
                     <h6 class="fw-bold">${employee.first_name || 'Unknown'} ${employee.last_name || 'User'}</h6>
                     <small class="text-muted">${employee.employee_id || 'N/A'}</small>
                   </div>

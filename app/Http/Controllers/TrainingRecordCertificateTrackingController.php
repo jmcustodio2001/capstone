@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class TrainingRecordCertificateTrackingController extends Controller
 {
@@ -28,7 +29,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             // This ensures that all auto-generated certificates appear in the table
             $certificates = TrainingRecordCertificateTracking::with(['employee', 'course'])
                 ->orderBy('created_at', 'desc')
-                ->get();
+                ->paginate(5);
             
             // Get all completed trainings from various sources for debugging purposes
             $completedTrainingEmployees = $this->getCompletedTrainingEmployees();
@@ -302,513 +303,230 @@ class TrainingRecordCertificateTrackingController extends Controller
     public function autoGenerateMissingCertificates()
     {
         try {
-            // EMERGENCY FIX: Ensure table structure is correct before proceeding
+            // Ensure table exists first
             if (!$this->ensureTableStructure()) {
-                return redirect()->route('training_record_certificate_tracking.index')
-                    ->with('error', 'Failed to ensure proper table structure. Please contact administrator.');
+                return redirect()->back()->with('error', 'Failed to verify table structure.');
             }
-
-            $createdCount = 0;
-            $skippedCount = 0;
-            $errorCount = 0;
-            $certificateController = new \App\Http\Controllers\CertificateGenerationController();
-
-            // 1. Get completed trainings from the main completed_trainings table
-            $completedTrainingsFromTable = \App\Models\CompletedTraining::with(['employee', 'course'])
-                ->get();
-
-            // 2. Get completed trainings from Employee Training Dashboard (100% progress)
-            $completedTrainings = \App\Models\EmployeeTrainingDashboard::with(['employee', 'course'])
-                ->where('progress', '>=', 100)
-                ->get();
-
-            // 3. Get completed destination knowledge trainings
-            $destinationTrainings = \App\Models\DestinationKnowledgeTraining::with('employee')
-                ->where('progress', '>=', 100)
-                ->get();
-
-            // 4. Get completed customer service trainings (if table exists)
-            $customerServiceTrainings = collect();
-            try {
-                $customerServiceTrainings = \App\Models\CustomerServiceSalesSkillsTraining::with('employee')
-                    ->where('progress', '>=', 100)
-                    ->get();
-            } catch (\Exception $e) {
-                Log::info("Customer Service table not found, skipping: " . $e->getMessage());
-            }
-
-            // 5. Get completed training requests (approved status indicates completion)
-            $completedTrainingRequests = \App\Models\TrainingRequest::with(['employee', 'course'])
-                ->where('status', 'approved')
-                ->get();
-
-            // 4. Get all employees to ensure we don't miss anyone
-            $allEmployees = \App\Models\Employee::all();
-
-            Log::info("=== CERTIFICATE TRACKING - ALL EMPLOYEES ANALYSIS ===");
-            Log::info("Total Employees: " . $allEmployees->count());
-            Log::info("Completed Trainings Table: " . $completedTrainingsFromTable->count());
-            Log::info("Employee Training Dashboard (100%): " . $completedTrainings->count());
-            Log::info("Destination Trainings (100%): " . $destinationTrainings->count());
-            Log::info("Customer Service Trainings (100%): " . $customerServiceTrainings->count());
-            Log::info("Training Requests (approved): " . $completedTrainingRequests->count());
-            Log::info("Existing Certificates: " . \App\Models\TrainingRecordCertificateTracking::count());
-
-            // === PROCESS 1: Main Completed Trainings Table ===
-            Log::info("Processing main completed trainings table...");
-            Log::info("Found " . $completedTrainingsFromTable->count() . " completed training records to process");
             
-            foreach ($completedTrainingsFromTable as $training) {
-                Log::info("Processing completed training: {$training->training_title} for employee {$training->employee_id}");
-                // Always try to get or create course by title if missing
-                $course = $training->course;
-                if (!$course && !empty($training->training_title)) {
-                    // Enhanced course matching - try multiple strategies
-                    $normalizedTitle = trim($training->training_title);
-                    
-                    // First try exact match
-                    $course = \App\Models\CourseManagement::where('course_title', $normalizedTitle)->first();
-                    
-                    // Then try partial match
-                    if (!$course) {
-                        $course = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $normalizedTitle . '%')->first();
-                    }
-                    
-                    // Then try reverse partial match
-                    if (!$course) {
-                        $course = \App\Models\CourseManagement::whereRaw('? LIKE CONCAT("%", course_title, "%")', [$normalizedTitle])->first();
-                    }
-                    
-                    // Create if still not found
-                    if (!$course) {
-                        $course = \App\Models\CourseManagement::create([
-                            'course_title' => $normalizedTitle,
-                            'course_description' => 'Auto-created from completed training: ' . $normalizedTitle,
-                            'start_date' => $training->completion_date ?? now(),
-                            'status' => 'Active',
-                            'duration_hours' => 8,
-                            'delivery_mode' => 'Mixed'
-                        ]);
-                        Log::info("Created new course for completed training: {$normalizedTitle}");
-                    }
-                    
-                    // Update the training record with course_id
-                    $training->course_id = $course->course_id;
-                    $training->save();
-                }
-                
-                // Fallback for missing employee: use employee_id as string
-                $employeeId = $training->employee_id;
-                if (empty($employeeId)) {
-                    $errorCount++;
-                    Log::warning("Skipping completed training - missing employee_id for training: {$training->completed_id}");
-                    continue;
-                }
-                
-                // Enhanced certificate tracking check - try multiple matching strategies
-                $existingCert = TrainingRecordCertificateTracking::where('employee_id', $employeeId)
-                    ->where(function($query) use ($training, $course) {
-                        if ($training->course_id) {
-                            $query->where('course_id', $training->course_id);
-                        } elseif ($course) {
-                            $query->where('course_id', $course->course_id);
-                        } else {
-                            // Match by training title if no course_id
-                            $query->whereHas('course', function($subQ) use ($training) {
-                                $normalizedTitle = trim(str_replace(['Training', 'Course', 'Program'], '', $training->training_title));
-                                $subQ->where('course_title', 'LIKE', '%' . $normalizedTitle . '%');
-                            });
-                        }
-                    })
-                    ->first();
-                    
-                if ($existingCert) {
-                    // Update existing certificate if it doesn't have a certificate file
-                    if (!$existingCert->certificate_url) {
-                        $certificateResult = $certificateController->generateCertificateOnCompletion(
-                            $employeeId,
-                            $course ? $course->course_id : $training->course_id,
-                            $training->completion_date
-                        );
-                        if ($certificateResult) {
-                            Log::info("Generated certificate file for existing tracking record: {$existingCert->id}");
-                        }
-                    }
-                    $skippedCount++;
-                    continue;
-                }
-                
-                // Generate certificate using the CertificateGenerationController
-                $certificateResult = $certificateController->generateCertificateOnCompletion(
-                    $employeeId,
-                    $course ? $course->course_id : $training->course_id,
-                    $training->completion_date
-                );
-                
-                if ($certificateResult) {
-                    $this->syncWithCompetencyProfile($employeeId, $course ? $course->course_title : $training->training_title, $training->completion_date);
-                    $createdCount++;
-                    Log::info("SUCCESS: Created certificate for {$employeeId} - {$training->training_title}");
-                } else {
-                    $errorCount++;
-                    Log::error("FAILED: Certificate generation for {$employeeId} - {$training->training_title}");
-                }
-            }
-
-            // === PROCESS 2: Training Requests (approved = completed) ===
-            Log::info("Processing approved training requests...");
-            foreach ($completedTrainingRequests as $request) {
-                if (!$request->employee) {
-                    $errorCount++;
-                    Log::warning("Skipping training request - missing employee data: Employee ID {$request->employee_id}");
-                    continue;
-                }
-
-                // Find or create course based on training title
-                $course = null;
-                if ($request->course_id) {
-                    $course = $request->course;
-                } else {
-                    // Find course by training title
-                    $course = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $request->training_title . '%')->first();
-
-                    if (!$course) {
-                        // Create course if it doesn't exist
-                        $course = \App\Models\CourseManagement::create([
-                            'course_title' => $request->training_title,
-                            'course_description' => 'Auto-created from training request: ' . $request->training_title,
-                            'duration_hours' => 8,
-                            'delivery_mode' => 'Mixed',
-                            'status' => 'Active'
-                        ]);
-                    }
-                }
-
-                if (!$course) {
-                    $errorCount++;
-                    Log::warning("Skipping training request - could not find or create course: {$request->training_title}");
-                    continue;
-                }
-
-                // Check if certificate tracking already exists
-                $existingCert = TrainingRecordCertificateTracking::where('employee_id', $request->employee_id)
-                    ->where('course_id', $course->course_id)
-                    ->first();
-
-                if ($existingCert) {
-                    $skippedCount++;
-                    continue;
-                }
-
-                // Create certificate tracking record directly (since training requests don't use CertificateGenerationController)
-                $certificateNumber = 'REQ-' . strtoupper(substr($request->employee_id, 0, 3)) . '-' . date('Y') . '-' . str_pad($createdCount + 1, 4, '0', STR_PAD_LEFT);
-
-                // Ensure table structure before creating record
-                $this->ensureTableStructure();
-                
-                TrainingRecordCertificateTracking::create([
-                    'employee_id' => $request->employee_id,
-                    'course_id' => $course->course_id,
-                    'training_date' => $request->requested_date,
-                    'certificate_number' => $certificateNumber,
-                    'certificate_expiry' => date('Y-m-d', strtotime($request->requested_date . ' +2 years')),
-                    'issue_date' => $request->requested_date,
-                    'status' => 'Pending Examination',
-                    'remarks' => 'Training completed - awaiting examination for certification',
-                    'certificate_url' => null
-                ]);
-
-                $this->syncWithCompetencyProfile($request->employee_id, $course->course_title, $request->requested_date);
-                $createdCount++;
-                Log::info("SUCCESS: Created certificate for {$request->employee->first_name} {$request->employee->last_name} ({$request->employee_id}) - {$course->course_title}");
-            }
-
-            // === PROCESS 3: Employee Training Dashboard completed trainings ===
-            Log::info("Processing Employee Training Dashboard completed trainings...");
-            foreach ($completedTrainings as $training) {
-                if (!$training->employee || !$training->course) {
-                    $errorCount++;
-                    Log::warning("Skipping training - missing employee or course data: Employee ID {$training->employee_id}, Course ID {$training->course_id}");
-                    continue;
-                }
-
-                // Check if certificate tracking already exists for this training
-                $existingCert = TrainingRecordCertificateTracking::where('employee_id', $training->employee_id)
-                    ->where('course_id', $training->course_id)
-                    ->first();
-
-                if ($existingCert) {
-                    // Update existing certificate if it doesn't have a certificate file
-                    if (!$existingCert->certificate_url) {
-                        $certificateResult = $certificateController->generateCertificateOnCompletion(
-                            $training->employee_id,
-                            $training->course_id,
-                            $training->updated_at->format('Y-m-d')
-                        );
-
-                        if ($certificateResult) {
-                            Log::info("Generated certificate file for existing tracking record: {$existingCert->id}");
-                        }
-                    }
-                    $skippedCount++;
-                    continue; // Skip if already exists
-                }
-
-                // Generate certificate using the CertificateGenerationController
-                $certificateResult = $certificateController->generateCertificateOnCompletion(
-                    $training->employee_id,
-                    $training->course_id,
-                    $training->updated_at->format('Y-m-d')
-                );
-
-                if ($certificateResult) {
-                    // Sync with Employee Competency Profile - CRITICAL for readiness rating
-                    $this->syncWithCompetencyProfile($training->employee_id, $training->course->course_title, $training->updated_at->format('Y-m-d'));
-                    $createdCount++;
-
-                    Log::info("SUCCESS: Created certificate for {$training->employee->first_name} {$training->employee->last_name} ({$training->employee_id}) - {$training->course->course_title}");
-                } else {
-                    $errorCount++;
-                    Log::error("FAILED: Certificate generation for {$training->employee_id} - {$training->course->course_title}");
-                }
-            }
-
-            // === PROCESS 2: Customer Service Sales Skills Training ===
-            Log::info("Processing Customer Service Sales Skills Training completed trainings...");
-            foreach ($customerServiceTrainings as $training) {
-                if (!$training->employee) {
-                    $errorCount++;
-                    Log::warning("Skipping customer service training - missing employee data: Employee ID {$training->employee_id}");
-                    continue;
-                }
-
-                // Find or create course for Customer Service Training
-                $course = \App\Models\CourseManagement::firstOrCreate(
-                    ['course_title' => 'Customer Service & Sales Skills Training'],
-                    [
-                        'course_description' => 'Comprehensive customer service and sales skills development program',
-                        'duration_hours' => 16,
-                        'delivery_mode' => 'Blended Learning',
-                        'status' => 'Active'
-                    ]
-                );
-
-                // Check if certificate tracking already exists
-                $existingCert = TrainingRecordCertificateTracking::where('employee_id', $training->employee_id)
-                    ->where('course_id', $course->course_id)
-                    ->first();
-
-                if ($existingCert) {
-                    $skippedCount++;
-                    continue;
-                }
-
-                // Create certificate tracking record
-                $certificateNumber = 'CS-' . strtoupper(substr($training->employee_id, 0, 3)) . '-' . date('Y') . '-' . str_pad($createdCount + 1, 4, '0', STR_PAD_LEFT);
-
-                TrainingRecordCertificateTracking::create([
-                    'employee_id' => $training->employee_id,
-                    'course_id' => $course->course_id,
-                    'training_date' => $training->updated_at->format('Y-m-d'),
-                    'certificate_number' => $certificateNumber,
-                    'certificate_expiry' => date('Y-m-d', strtotime('+2 years')),
-                    'issue_date' => $training->updated_at->format('Y-m-d'),
-                    'status' => 'Pending Examination',
-                    'remarks' => 'Training completed - awaiting examination for certification',
-                    'certificate_url' => null
-                ]);
-
-                // Sync with Employee Competency Profile
-                $this->syncWithCompetencyProfile($training->employee_id, 'Customer Service & Sales Skills Training', $training->updated_at->format('Y-m-d'));
-                $createdCount++;
-
-                Log::info("SUCCESS: Created Customer Service certificate for {$training->employee->first_name} {$training->employee->last_name} ({$training->employee_id})");
-            }
-
-            // === PROCESS 3: Destination Knowledge Training ===
-            Log::info("Processing Destination Knowledge Training completed trainings...");
-            foreach ($destinationTrainings as $training) {
-                if (!$training->employee) {
-                    $errorCount++;
-                    Log::warning("Skipping destination training - missing employee data: Employee ID {$training->employee_id}");
-                    continue;
-                }
-
-                // Check if certificate tracking already exists for this destination training
-                $existingCert = TrainingRecordCertificateTracking::whereHas('course', function($query) use ($training) {
-                    $query->where('course_title', 'LIKE', '%' . $training->destination_name . '%');
-                })->where('employee_id', $training->employee_id)->first();
-
-                if ($existingCert) {
-                    $skippedCount++;
-                    continue; // Skip if already exists
-                }
-
-                // Find or create course
-                $course = \App\Models\CourseManagement::where('course_title', 'LIKE', '%' . $training->destination_name . '%')->first();
-
-                if (!$course) {
-                    $course = \App\Models\CourseManagement::create([
-                        'course_title' => $training->destination_name . ' - Destination Knowledge',
-                        'course_description' => 'Destination Knowledge Training for ' . $training->destination_name,
-                        'duration_hours' => 8,
-                        'delivery_mode' => 'Online',
-                        'status' => 'Active'
-                    ]);
-                }
-
-                $certificateNumber = 'DEST-' . strtoupper(substr($training->employee_id, 0, 3)) . '-' . date('Y') . '-' . str_pad($createdCount + 1, 4, '0', STR_PAD_LEFT);
-
-                TrainingRecordCertificateTracking::create([
-                    'employee_id' => $training->employee_id,
-                    'course_id' => $course->course_id,
-                    'training_date' => $training->date_completed ?: $training->updated_at->format('Y-m-d'),
-                    'certificate_number' => $certificateNumber,
-                    'certificate_expiry' => date('Y-m-d', strtotime('+2 years')),
-                    'issue_date' => $training->date_completed ?: $training->updated_at->format('Y-m-d'),
-                    'status' => 'Pending Examination',
-                    'remarks' => 'Training completed - awaiting examination for certification',
-                    'certificate_url' => null
-                ]);
-
-                // Sync with Employee Competency Profile
-                $this->syncWithCompetencyProfile($training->employee_id, $training->destination_name, $training->date_completed ?: $training->updated_at->format('Y-m-d'));
-                $createdCount++;
-
-                Log::info("SUCCESS: Created Destination certificate for {$training->employee->first_name} {$training->employee->last_name} ({$training->employee_id}) - {$training->destination_name}");
-            }
-
-            // === PROCESS 6: ALL COURSES FROM COURSE MANAGEMENT ===
-            Log::info("Processing ALL courses from Course Management to ensure comprehensive coverage...");
-            $allCourses = \App\Models\CourseManagement::where('status', 'Active')->get();
-            Log::info("Found " . $allCourses->count() . " active courses in Course Management");
+            $employees = \App\Models\Employee::all();
+            $totalCreated = 0;
+            $totalEmployees = $employees->count();
             
-            foreach ($allCourses as $course) {
-                Log::info("Processing course: {$course->course_title} (ID: {$course->course_id})");
-                
-                // For each course, find employees who have completed it in any form
-                $employeesWithCompletedTraining = collect();
-                
-                // Check CompletedTraining table
-                $completedFromTable = \App\Models\CompletedTraining::where('course_id', $course->course_id)
-                    ->orWhere('training_title', 'LIKE', '%' . $course->course_title . '%')
-                    ->get();
-                foreach ($completedFromTable as $completed) {
-                    $employeesWithCompletedTraining->push([
-                        'employee_id' => $completed->employee_id,
-                        'completion_date' => $completed->completion_date,
-                        'source' => 'completed_training_table'
-                    ]);
-                }
-                
-                // Check EmployeeTrainingDashboard with 100% progress
-                $completedFromDashboard = \App\Models\EmployeeTrainingDashboard::where('course_id', $course->course_id)
-                    ->where('progress', '>=', 100)
-                    ->get();
-                foreach ($completedFromDashboard as $completed) {
-                    $employeesWithCompletedTraining->push([
-                        'employee_id' => $completed->employee_id,
-                        'completion_date' => $completed->updated_at->format('Y-m-d'),
-                        'source' => 'employee_training_dashboard'
-                    ]);
-                }
-                
-                // Check CompetencyCourseAssignment with 100% progress
-                $completedFromCompetency = \App\Models\CompetencyCourseAssignment::where('course_id', $course->course_id)
-                    ->where('progress', '>=', 100)
-                    ->get();
-                foreach ($completedFromCompetency as $completed) {
-                    $employeesWithCompletedTraining->push([
-                        'employee_id' => $completed->employee_id,
-                        'completion_date' => $completed->updated_at->format('Y-m-d'),
-                        'source' => 'competency_course_assignment'
-                    ]);
-                }
-                
-                // Remove duplicates by employee_id
-                $uniqueEmployees = $employeesWithCompletedTraining->unique('employee_id');
-                
-                Log::info("Found " . $uniqueEmployees->count() . " employees with completed training for course: {$course->course_title}");
-                
-                // Generate certificates for each employee who completed this course
-                foreach ($uniqueEmployees as $employeeData) {
-                    $employeeId = $employeeData['employee_id'];
-                    $completionDate = $employeeData['completion_date'];
-                    
-                    // Check if certificate tracking already exists
-                    $existingCert = TrainingRecordCertificateTracking::where('employee_id', $employeeId)
-                        ->where('course_id', $course->course_id)
-                        ->first();
-                    
-                    if ($existingCert) {
-                        // Update existing certificate if it doesn't have a certificate file
-                        if (!$existingCert->certificate_url) {
-                            $certificateResult = $certificateController->generateCertificateOnCompletion(
-                                $employeeId,
-                                $course->course_id,
-                                $completionDate
-                            );
-                            if ($certificateResult) {
-                                Log::info("Generated certificate file for existing tracking record: {$existingCert->id}");
-                            }
-                        }
-                        $skippedCount++;
-                        continue;
-                    }
-                    
-                    // Generate new certificate
-                    $certificateResult = $certificateController->generateCertificateOnCompletion(
-                        $employeeId,
-                        $course->course_id,
-                        $completionDate
-                    );
-                    
-                    if ($certificateResult) {
-                        $this->syncWithCompetencyProfile($employeeId, $course->course_title, $completionDate);
-                        $createdCount++;
-                        Log::info("SUCCESS: Created certificate for {$employeeId} - {$course->course_title} (from Course Management scan)");
-                    } else {
-                        $errorCount++;
-                        Log::error("FAILED: Certificate generation for {$employeeId} - {$course->course_title} (from Course Management scan)");
-                    }
+            Log::info("Starting comprehensive certificate sync for {$totalEmployees} employees");
+            
+            foreach ($employees as $employee) {
+                try {
+                    $createdForEmployee = $this->syncEmployeeCompletedTrainings($employee->employee_id);
+                    $totalCreated += $createdForEmployee;
+                } catch (\Exception $e) {
+                    Log::error("Failed to sync certificates for employee {$employee->employee_id}: " . $e->getMessage());
                 }
             }
 
-            // === FINAL SUMMARY ===
-            Log::info("=== CERTIFICATE TRACKING SUMMARY ===");
-            Log::info("Total employees processed: " . $allEmployees->count());
-            Log::info("Certificates created: {$createdCount}");
-            Log::info("Records skipped (already exist): {$skippedCount}");
-            Log::info("Errors encountered: {$errorCount}");
-
-            // Log activity
-            ActivityLog::create([
-                'user_id' => Auth::id() ?: 1,
-                'action' => 'bulk_create',
-                'module' => 'Training Record Certificate Tracking',
-                'description' => "Auto-generated certificate tracking for ALL EMPLOYEES and ALL COURSES: Created {$createdCount}, Skipped {$skippedCount}, Errors {$errorCount}. Sources: Completed Training Table, Training Requests, Employee Training Dashboard, Customer Service Training, Destination Knowledge Training, Course Management Scan.",
-            ]);
-
-            // Clean up duplicate certificates before syncing
-            $this->cleanupDuplicateCertificates();
+            return redirect()->back()->with('success', "Generation Complete! Certificate records have been synchronized for all employees. Created {$totalCreated} new records.");
             
-            // Force sync all existing certificates with competency profiles
-            $this->syncAllExistingCertificatesWithCompetency();
-
-            $successMessage = "Successfully processed ALL EMPLOYEES and ALL COURSES! ";
-            $successMessage .= "Created: {$createdCount} new certificates, ";
-            $successMessage .= "Skipped: {$skippedCount} existing records, ";
-            $successMessage .= "Errors: {$errorCount}. ";
-            $successMessage .= "Comprehensive scan completed: Completed Training Table, Training Requests, Employee Training Dashboard, Customer Service Training, Destination Knowledge Training, and ALL Course Management entries.";
-
-            return redirect()->route('training_record_certificate_tracking.index')
-                ->with('success', $successMessage);
-
         } catch (\Exception $e) {
-            return redirect()->route('training_record_certificate_tracking.index')
-                ->with('error', 'Error generating certificates: ' . $e->getMessage());
+            Log::error('Auto-generate certificates error: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error generating certificates: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Sync completed trainings for a single employee using logic from MyTrainingController
+     * Returns number of new certificates created
+     */
+    private function syncEmployeeCompletedTrainings($employeeId)
+    {
+        $createdCount = 0;
+
+        // 1. REPLICATE LOGIC FROM MyTrainingController to get COMPLETE list
+
+        // Get manually added completed trainings
+        $manualCompleted = \App\Models\CompletedTraining::where('employee_id', $employeeId)->get();
+
+        // Get system-completed trainings
+        $systemCompleted = \App\Models\EmployeeTrainingDashboard::with(['course'])
+            ->where('employee_id', $employeeId)
+            ->where(function($query) {
+                $query->where('status', 'Completed')
+                      ->orWhere('progress', '>=', 100);
+            })->get();
+
+        // Get completed destination knowledge trainings
+        $destinationTrainings = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
+              ->where(function($q) {
+                  $q->where('progress', '>=', 100)->orWhere('status', 'completed');
+              })
+              ->get();
+
+        // Get completed customer service trainings
+        $customerServiceTrainings = collect();
+        try {
+             $customerServiceTrainings = \App\Models\CustomerServiceSalesSkillsTraining::where('employee_id', $employeeId)
+                  ->whereNotNull('date_completed')
+                  ->where('date_completed', '!=', '1970-01-01')
+                  ->get();
+        } catch (\Exception $e) {}
+              
+        // Get competency course assignments
+        $competencyCompleted = \App\Models\CompetencyCourseAssignment::with(['course'])
+            ->where('employee_id', $employeeId)
+            ->where(function($q) {
+                $q->where('status', 'Completed')->orWhere('progress', '>=', 100);
+            })->get();
+
+        // 2. PROCESS EACH SOURCE
+        
+        // Manual
+        foreach ($manualCompleted as $training) {
+             if($this->processSingleTraining($employeeId, $training->training_title, $training->completion_date, $training->certificate_path, 'Manual')) {
+                 $createdCount++;
+             }
+        }
+
+        // System (Dashboard)
+        foreach ($systemCompleted as $training) {
+             $title = $training->course ? $training->course->course_title : 'Unknown System Training';
+             if($this->processSingleTraining($employeeId, $title, $training->updated_at, null, 'Dashboard')) {
+                 $createdCount++;
+             }
+        }
+
+        // Destination
+        foreach ($destinationTrainings as $training) {
+             if($this->processSingleTraining($employeeId, $training->destination_name, $training->updated_at, null, 'Destination Knowledge')) {
+                 $createdCount++;
+             }
+        }
+
+        // Customer Service
+        foreach ($customerServiceTrainings as $training) {
+             $completionDate = $training->date_completed ?? $training->updated_at;
+             $title = $training->skill_topic ?? 'Customer Service & Sales Skills Training';
+             if($this->processSingleTraining($employeeId, $title, $completionDate, null, 'Customer Service')) {
+                 $createdCount++;
+             }
+        }
+        
+        // Competency
+        foreach ($competencyCompleted as $comp) {
+            $title = $comp->course ? $comp->course->course_title : 'Competency Training';
+            if($this->processSingleTraining($employeeId, $title, $comp->updated_at, null, 'Competency Assignment')) {
+                $createdCount++;
+            }
+        }
+        
+        // Upcoming Training (Completed)
+        $upcoming = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
+            ->where('status', 'Completed')
+            ->get();
+            
+        foreach ($upcoming as $train) {
+            $date = $train->end_date ?? $train->updated_at;
+            if($this->processSingleTraining($employeeId, $train->training_title, $date, null, 'Upcoming Training')) {
+                $createdCount++;
+            }
+        }
+
+        return $createdCount;
+    }
+
+    /**
+     * Process a single training record and create certificate if missing
+     */
+    private function processSingleTraining($employeeId, $title, $date, $existingCertPath = null, $source = 'Unknown')
+    {
+        if (empty($title)) return false;
+        
+        $title = trim($title);
+        $date = $date instanceof \Carbon\Carbon ? $date : (\Carbon\Carbon::tryParse($date) ?? now());
+        
+        // 1. Find or Create Course
+        $course = \App\Models\CourseManagement::where('course_title', $title)->first();
+        
+        // Fuzzy match for Customer Service
+        if (!$course && stripos($title, 'Customer Service') !== false) {
+             $course = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Customer Service%')->first();
+        }
+        
+        if (!$course) {
+            // Create course if missing
+            try {
+                $course = \App\Models\CourseManagement::create([
+                    'course_title' => $title,
+                    'course_description' => "Auto-created from {$source} training",
+                    'status' => 'Active',
+                    'duration_hours' => 8,
+                    'delivery_mode' => 'Mixed',
+                    'start_date' => $date
+                ]);
+            } catch (\Exception $e) {
+                // Fallback to Uncategorized if creation fails
+               $course = \App\Models\CourseManagement::firstOrCreate(['course_title' => 'Uncategorized Training'], ['status'=>'Active']);
+            }
+        }
+        
+        if (!$course) return false;
+        
+        // 2. Check if certificate exists (by Course ID or Title Match)
+        $exists = TrainingRecordCertificateTracking::where('employee_id', $employeeId)
+            ->where(function($q) use ($course, $title) {
+                $q->where('course_id', $course->course_id)
+                  ->orWhereHas('course', function($sq) use ($title) {
+                      $sq->where('course_title', 'LIKE', $title);
+                  });
+            })->exists();
+            
+        if ($exists) return false;
+        
+        // 3. Create Certificate Record
+        try {
+            // Generate standard certificate number
+            $certNum = 'CERT-' . strtoupper(substr($employeeId, 0, 3)) . '-' . $date->format('Ymd') . '-' . rand(1000, 9999);
+            
+            // Format existing path if present
+            $certUrl = null;
+            if ($existingCertPath) {
+                $certUrl = $existingCertPath;
+                if (!str_starts_with($certUrl, '/storage/') && !str_starts_with($certUrl, '/')) {
+                     $certUrl = '/storage/' . $certUrl;
+                }
+                $certUrl = preg_replace('#/+#', '/', $certUrl);
+            }
+            
+            TrainingRecordCertificateTracking::create([
+                'employee_id' => $employeeId,
+                'course_id' => $course->course_id,
+                'training_date' => $date,
+                'certificate_number' => $certNum,
+                'certificate_expiry' => $date->copy()->addYears(2),
+                'issue_date' => $date,
+                'status' => 'Verified',
+                'remarks' => "Auto-synced from {$source} Records",
+                'certificate_url' => $certUrl
+            ]);
+            
+            // Sync competency
+            $this->syncWithCompetencyProfile($employeeId, $title, $date);
+            
+            Log::info("Synced certificate for {$employeeId}: {$title}");
+            return true;
+            
+        } catch (\Exception $e) {
+            Log::error("Failed to create certificate for {$employeeId} - {$title}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+
+
+
+
+
+
+
+
+
 
     private function cleanupDuplicateCertificates()
     {

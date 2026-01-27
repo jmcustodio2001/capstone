@@ -160,9 +160,9 @@
               </tr>
             </thead>
             <tbody>
-              @forelse($competencies->where('category', '!=', 'Destination Knowledge') as $index => $comp)
+              @forelse($competencies as $index => $comp)
                 <tr>
-                  <td>{{ $loop->iteration }}</td>
+                  <td>{{ $competencies->firstItem() + $index }}</td>
                   <td>{{ $comp->competency_name }}</td>
                   <td>{{ $comp->description }}</td>
                   <td>
@@ -204,6 +204,11 @@
               @endforelse
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination for Competency List -->
+        <div class="d-flex justify-content-center mt-3">
+          {{ $competencies->appends(request()->query())->links('pagination::bootstrap-5') }}
         </div>
       </div>
     </div>
@@ -511,8 +516,8 @@
                         @php
                           try {
                             $expiredDateRaw = trim($gap->expired_date);
-                            $expiredDateObj = \Carbon\Carbon::parse($expiredDateRaw);
-                            $now = \Carbon\Carbon::now();
+                            $expiredDateObj = \Carbon\Carbon::parse($expiredDateRaw)->startOfDay();
+                            $now = \Carbon\Carbon::now()->startOfDay();
                             $dateFormatted = $expiredDateObj->format('M d, Y');
                             $daysLeft = $now->diffInDays($expiredDateObj, false);
                             $isExpired = $now->gt($expiredDateObj);
@@ -641,12 +646,13 @@
               <i class="bi bi-inbox display-1 text-muted"></i>
             </div>
             <h5 class="text-muted mb-2">No Gap Records Found</h5>
-            <p class="text-muted mb-3">Get started by adding your first competency gap record.</p>
-            <button class="btn btn-primary" id="addGapBtn">
-              <i class="bi bi-plus-lg me-1"></i> Add Your First Gap Record
-            </button>
           </div>
         @endforelse
+
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-4">
+          {{ $gaps->links('pagination::bootstrap-5') }}
+        </div>
       </div>
     </div>
 
@@ -798,8 +804,8 @@
                 </div>
                 <div class="col-md-6">
                   <label for="add-expired-date" class="form-label">Expiration Date (Optional)</label>
-                  <input id="add-expired-date" type="datetime-local" name="expired_date" class="form-control">
-                  <small class="form-text text-muted">Leave empty for no expiration</small>
+                  <input id="add-expired-date" type="datetime-local" name="expired_date" class="form-control" max="{{ now()->addDays(30)->format('Y-m-d\TH:i') }}">
+                  <small class="form-text text-muted">Leave empty for no expiration (Max 30 days)</small>
                 </div>
               </div>
             </div>
@@ -916,40 +922,7 @@
             <strong>Warning:</strong> This action cannot be undone. The competency gap record will be permanently deleted.
           </div>
 
-          <!-- Security Section for Delete -->
-          <div class="row g-3 mt-3">
-            <div class="col-12">
-              <div class="alert alert-warning border-start border-warning border-4">
-                <i class="bi bi-shield-lock-fill me-2 text-warning"></i>
-                <strong>Sweet Security Verification:</strong> Please verify your password to delete this gap record.
-                <div class="mt-2">
-                  <small class="text-muted">
-                    <i class="bi bi-info-circle me-1"></i>
-                    This additional security step ensures only authorized administrators can delete competency gap records.
-                  </small>
-                </div>
-              </div>
-            </div>
-            <div class="col-md-6">
-              <label for="delete-admin-password" class="form-label fw-semibold">
-                <i class="bi bi-key me-1"></i>Verify Your Password*
-              </label>
-              <input id="delete-admin-password" type="password" class="form-control" required
-                     placeholder="Enter your admin password">
-              <small class="form-text text-muted">Required for security verification</small>
-            </div>
-            <div class="col-md-6">
-              <label for="delete-confirm-admin-password" class="form-label fw-semibold">
-                <i class="bi bi-key-fill me-1"></i>Confirm Password*
-              </label>
-              <input id="delete-confirm-admin-password" type="password" class="form-control" required
-                     placeholder="Confirm your password">
-              <small class="form-text text-muted">Re-enter password for confirmation</small>
-              <div id="delete-password-match-indicator" class="mt-1" style="display: none;">
-                <small id="delete-password-match-text"></small>
-              </div>
-            </div>
-          </div>
+          <!-- Security Section for Delete (Removed) -->
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1355,10 +1328,10 @@ document.addEventListener('DOMContentLoaded', function () {
           document.getElementById('delete-employee-name').textContent = employeeName;
           document.getElementById('delete-competency-name').textContent = competencyName;
 
-          // Clear password fields
-          document.getElementById('delete-admin-password').value = '';
-          document.getElementById('delete-confirm-admin-password').value = '';
-          document.getElementById('delete-password-match-indicator').style.display = 'none';
+          // Clear password fields (Removed)
+          // document.getElementById('delete-admin-password').value = '';
+          // document.getElementById('delete-confirm-admin-password').value = '';
+          // document.getElementById('delete-password-match-indicator').style.display = 'none';
 
           deleteConfirmationModal.show();
         }
@@ -1530,7 +1503,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       }
 
-      // Real-time password matching feedback for delete
+      // Real-time password matching feedback for delete (Removed)
+      /*
       function updateDeletePasswordMatchIndicator() {
         const password = document.getElementById('delete-admin-password').value;
         const confirmPassword = document.getElementById('delete-confirm-admin-password').value;
@@ -1550,6 +1524,7 @@ document.addEventListener('DOMContentLoaded', function () {
           text.innerHTML = '<i class="bi bi-x-circle-fill text-danger me-1"></i><span class="text-danger fw-semibold">Passwords do not match</span>';
         }
       }
+      */
 
       // Add event listeners for real-time validation
       const adminPasswordInput = document.getElementById('admin-password');
@@ -1563,11 +1538,13 @@ document.addEventListener('DOMContentLoaded', function () {
       if (editAdminPasswordInput) editAdminPasswordInput.addEventListener('input', updateEditPasswordMatchIndicator);
       if (editConfirmAdminPasswordInput) editConfirmAdminPasswordInput.addEventListener('input', updateEditPasswordMatchIndicator);
 
-      // Add event listeners for delete password validation
+      // Add event listeners for delete password validation (Removed)
+      /*
       const deleteAdminPasswordInput = document.getElementById('delete-admin-password');
       const deleteConfirmAdminPasswordInput = document.getElementById('delete-confirm-admin-password');
       if (deleteAdminPasswordInput) deleteAdminPasswordInput.addEventListener('input', updateDeletePasswordMatchIndicator);
       if (deleteConfirmAdminPasswordInput) deleteConfirmAdminPasswordInput.addEventListener('input', updateDeletePasswordMatchIndicator);
+      */
 
       // Add event listeners for verification password validation
       const verifyAdminPasswordInput = document.getElementById('verify-admin-password');
@@ -1621,7 +1598,8 @@ document.addEventListener('DOMContentLoaded', function () {
         return true;
       }
 
-      // Password validation for Delete Gap Form
+      // Password validation for Delete Gap Form (Removed)
+      /*
       function validateDeletePasswords() {
         const password = document.getElementById('delete-admin-password').value;
         const confirmPassword = document.getElementById('delete-confirm-admin-password').value;
@@ -1643,6 +1621,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         return true;
       }
+      */
 
       // Real-time password matching feedback for verification modal
       function updateVerifyPasswordMatchIndicator() {
@@ -2245,7 +2224,7 @@ document.addEventListener('DOMContentLoaded', function () {
       
       // ========== SWEETALERT FUNCTIONS FOR COMPETENCY GAP ACTIONS ==========
       
-      // Assign Training with SweetAlert and Password Verification
+      // Assign Training with SweetAlert
       function assignTrainingWithConfirmation(gapId, employeeId, employeeName, competency, expiredDate) {
         Swal.fire({
           title: '<i class="bi bi-calendar-plus text-success"></i> Assign Training',
@@ -2262,24 +2241,6 @@ document.addEventListener('DOMContentLoaded', function () {
                   </small>
                 </div>
               </div>
-              
-              <div class="alert alert-warning border-start border-warning border-4 mt-3">
-                <i class="bi bi-shield-lock-fill me-2 text-warning"></i>
-                <strong>Security Verification Required:</strong>
-                <div class="mt-2">
-                  <small class="text-muted">
-                    <i class="bi bi-info-circle me-1"></i>
-                    Please verify your admin password to assign this training.
-                  </small>
-                </div>
-              </div>
-              
-              <div class="mb-3">
-                <label for="assign-password" class="form-label fw-semibold">
-                  <i class="bi bi-key me-1"></i>Admin Password*
-                </label>
-                <input id="assign-password" type="password" class="form-control" placeholder="Enter your admin password" required>
-              </div>
             </div>
           `,
           showCancelButton: true,
@@ -2287,28 +2248,16 @@ document.addEventListener('DOMContentLoaded', function () {
           cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
           confirmButtonColor: '#198754',
           cancelButtonColor: '#6c757d',
-          width: '500px',
-          preConfirm: () => {
-            const password = document.getElementById('assign-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Please enter your admin password');
-              return false;
-            }
-            if (password.length < 6) {
-              Swal.showValidationMessage('Password must be at least 6 characters long');
-              return false;
-            }
-            return { password };
-          }
+          width: '500px'
         }).then((result) => {
           if (result.isConfirmed) {
-            submitTrainingAssignment(gapId, employeeId, competency, expiredDate, result.value.password);
+            submitTrainingAssignment(gapId, employeeId, competency, expiredDate, employeeName);
           }
         });
       }
       
       // Submit Training Assignment
-      function submitTrainingAssignment(gapId, employeeId, competency, expiredDate, password) {
+      function submitTrainingAssignment(gapId, employeeId, competency, expiredDate, employeeName) {
         Swal.fire({
           title: 'Processing...',
           html: '<i class="bi bi-hourglass-split"></i> Assigning training to employee...',
@@ -2331,7 +2280,7 @@ document.addEventListener('DOMContentLoaded', function () {
             employee_id: employeeId,
             competency: competency,
             expired_date: expiredDate,
-            admin_password: password
+            employee_name: employeeName
           })
         })
         .then(response => response.json())
@@ -2391,7 +2340,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
       }
       
-      // Unassign Training with SweetAlert and Password Verification
+      // Unassign Training with SweetAlert
       function unassignTrainingWithConfirmation(gapId, employeeName, competency) {
         Swal.fire({
           title: '<i class="bi bi-arrow-counterclockwise text-warning"></i> Unassign Training',
@@ -2408,24 +2357,6 @@ document.addEventListener('DOMContentLoaded', function () {
                   </small>
                 </div>
               </div>
-              
-              <div class="alert alert-danger border-start border-danger border-4 mt-3">
-                <i class="bi bi-shield-lock-fill me-2 text-danger"></i>
-                <strong>Security Verification Required:</strong>
-                <div class="mt-2">
-                  <small class="text-muted">
-                    <i class="bi bi-info-circle me-1"></i>
-                    Please verify your admin password to unassign this training.
-                  </small>
-                </div>
-              </div>
-              
-              <div class="mb-3">
-                <label for="unassign-password" class="form-label fw-semibold">
-                  <i class="bi bi-key me-1"></i>Admin Password*
-                </label>
-                <input id="unassign-password" type="password" class="form-control" placeholder="Enter your admin password" required>
-              </div>
             </div>
           `,
           showCancelButton: true,
@@ -2433,28 +2364,16 @@ document.addEventListener('DOMContentLoaded', function () {
           cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
           confirmButtonColor: '#ffc107',
           cancelButtonColor: '#6c757d',
-          width: '500px',
-          preConfirm: () => {
-            const password = document.getElementById('unassign-password').value;
-            if (!password) {
-              Swal.showValidationMessage('Please enter your admin password');
-              return false;
-            }
-            if (password.length < 6) {
-              Swal.showValidationMessage('Password must be at least 6 characters long');
-              return false;
-            }
-            return { password };
-          }
+          width: '500px'
         }).then((result) => {
           if (result.isConfirmed) {
-            submitTrainingUnassignment(gapId, result.value.password);
+            submitTrainingUnassignment(gapId);
           }
         });
       }
       
       // Submit Training Unassignment
-      function submitTrainingUnassignment(gapId, password) {
+      function submitTrainingUnassignment(gapId) {
         Swal.fire({
           title: 'Processing...',
           html: '<i class="bi bi-hourglass-split"></i> Unassigning training from employee...',
@@ -2472,9 +2391,7 @@ document.addEventListener('DOMContentLoaded', function () {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             'Accept': 'application/json'
           },
-          body: JSON.stringify({
-            admin_password: password
-          })
+          body: JSON.stringify({})
         })
         .then(response => response.json())
         .then(data => {

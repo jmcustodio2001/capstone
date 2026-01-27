@@ -182,7 +182,7 @@
         <h4 class="fw-bold mb-0">Training Records</h4>
         <div class="d-flex gap-2">
           <button class="btn btn-success" onclick="autoGenerateWithConfirmation()">
-            <i class="bi bi-magic me-1"></i> Auto-Generate Missing Certificates
+            <i class="bi bi-magic me-1"></i> Generate Certificates
           </button>
           <button class="btn btn-info" onclick="previewCertificateTemplate()">
             <i class="bi bi-eye me-1"></i> Preview Template
@@ -191,319 +191,195 @@
       </div>
       <div class="card-body">
         <div class="row g-4">
-        @php
-          // Group certificates by employee and deduplicate by course
-          $groupedCertificates = $certificates->groupBy('employee_id')->map(function($employeeCertificates) {
-            // For each employee, keep only the latest certificate per course
-            return $employeeCertificates->groupBy('course_id')->map(function($courseCertificates) {
-              // Sort by created_at desc and take the first (latest) one
-              return $courseCertificates->sortByDesc('created_at')->first();
-            })->values(); // Reset keys to get a clean collection
-          });
-        @endphp
-        
-        @forelse($groupedCertificates as $employeeId => $employeeCertificates)
-          @php
-            // Get employee data from first certificate
-            $firstCertificate = $employeeCertificates->first();
-            $employee = $firstCertificate->employee ?? null;
-            $firstName = $employee->first_name ?? 'Unknown';
-            $lastName = $employee->last_name ?? 'Employee';
-            $fullName = $firstName . ' ' . $lastName;
-            $initials = strtoupper(substr($firstName, 0, 1)) . strtoupper(substr($lastName, 0, 1));
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th scope="col">Employee</th>
+                <th scope="col">Course / Training</th>
+                <th scope="col">Date Completed</th>
+                <th scope="col">Certificate No.</th>
+                <th scope="col">Expiry</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse($certificates as $certificate)
+                @php
+                  // Employee Data
+                  $employee = $certificate->employee;
+                  $firstName = $employee->first_name ?? 'Unknown';
+                  $lastName = $employee->last_name ?? 'Employee';
+                  $fullName = $firstName . ' ' . $lastName;
+                  $initials = strtoupper(substr($firstName, 0, 1)) . strtoupper(substr($lastName, 0, 1));
+                  
+                  // Profile Pic
+                  $profilePicUrl = null;
+                  if ($employee && $employee->profile_picture) {
+                      $profilePicUrl = asset('storage/' . $employee->profile_picture);
+                  }
+                  
+                  $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
+                  $colorIndex = abs(crc32($certificate->employee_id ?? '0')) % count($colors);
+                  $bgColor = $colors[$colorIndex];
+                  
+                  if (!$profilePicUrl) {
+                      $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
+                                     "&size=100&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+                  }
 
-            // Check if profile picture exists safely
-            $profilePicUrl = null;
-            if ($employee && $employee->profile_picture) {
-                $profilePicUrl = asset('storage/' . $employee->profile_picture);
-            }
+                  // Expiry Logic
+                  $expiryDate = null;
+                  if ($certificate->training_date) {
+                      try {
+                          $completionDate = \Carbon\Carbon::parse($certificate->training_date);
+                          $course = $certificate->course ?? null;
+                          $courseTitle = $course && $course->course_title ? strtolower($course->course_title) : '';
 
-            // Generate consistent color based on employee ID for fallback
-            $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
-            $colorIndex = abs(crc32($employeeId)) % count($colors);
-            $bgColor = $colors[$colorIndex];
-
-            // Fallback to UI Avatars if no profile picture found
-            if (!$profilePicUrl) {
-                $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
-                               "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
-            }
-          @endphp
-
-          <div class="col-12">
-            <div class="certificate-card h-100" style="border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); transition: all 0.3s ease;">
-              <!-- Employee Header -->
-              <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center">
-                  <div class="d-flex align-items-center">
-                    <div class="me-3">
-                      <img src="{{ $profilePicUrl }}"
-                           alt="{{ $firstName }} {{ $lastName }}"
-                           class="rounded-circle border"
-                           style="width: 60px; height: 60px; object-fit: cover;"
-                           onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($initials) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
-                    </div>
-                    <div>
-                      <h4 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h4>
-                      <div class="d-flex align-items-center gap-2">
-                        <small class="text-muted">
-                          <i class="bi bi-person-badge me-1"></i>ID: {{ $employeeId ?? 'N/A' }}
-                        </small>
-                        <span class="badge bg-primary px-2 py-1">
-                          <i class="bi bi-award me-1"></i>{{ $employeeCertificates->count() }} Certificate{{ $employeeCertificates->count() > 1 ? 's' : '' }}
-                        </span>
-                        @if(!$employee)
-                          <span class="badge bg-danger">Employee record not found</span>
-                        @endif
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#certificates-{{ $employeeId }}" aria-expanded="false">
-                      <i class="bi bi-eye me-1"></i>View Certificates
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Collapsible Certificates Grid -->
-              <div class="collapse" id="certificates-{{ $employeeId }}">
-                <div class="card-body p-4">
-                  <div class="row g-3">
-                  @foreach($employeeCertificates as $certificate)
-                    @php
-                      // Calculate accurate expiry date based on completion date and course type
-                      $expiryDate = null;
-                      if ($certificate->training_date) {
-                          try {
-                              $completionDate = \Carbon\Carbon::parse($certificate->training_date);
-                              $course = $certificate->course ?? null;
-                              $courseTitle = $course && $course->course_title ? strtolower($course->course_title) : '';
-
-                              if (strpos($courseTitle, 'safety') !== false || strpos($courseTitle, 'security') !== false) {
-                                  $expiryDate = $completionDate->copy()->addYear();
-                              } elseif (strpos($courseTitle, 'leadership') !== false || strpos($courseTitle, 'management') !== false) {
-                                  $expiryDate = $completionDate->copy()->addYears(3);
-                              } elseif (strpos($courseTitle, 'technical') !== false || strpos($courseTitle, 'software') !== false) {
-                                  $expiryDate = $completionDate->copy()->addYears(2);
-                              } elseif (strpos($courseTitle, 'destination') !== false || strpos($courseTitle, 'location') !== false) {
-                                  $expiryDate = $completionDate->copy()->addMonths(18);
-                              } else {
-                                  $expiryDate = $completionDate->copy()->addYears(2);
-                              }
-                          } catch (\Exception $e) {
-                              $expiryDate = null;
-                          }
-                      }
-                      
-                      if (!$expiryDate && $certificate->certificate_expiry) {
-                          try {
-                              $expiryDate = \Carbon\Carbon::parse($certificate->certificate_expiry);
-                          } catch (\Exception $e) {
-                              $expiryDate = null;
-                          }
-                      }
-
-                      // Calculate expiry status
-                      $expiryStatus = 'valid';
-                      $expiryText = 'No expiry';
-                      $expiryClass = 'text-muted';
-                      if ($expiryDate) {
-                          $now = \Carbon\Carbon::now();
-                          $daysUntilExpiry = $now->diffInDays($expiryDate, false);
-                          
-                          if ($daysUntilExpiry < 0) {
-                              $expiryStatus = 'expired';
-                              $expiryText = $expiryDate->format('M d, Y') . ' (EXPIRED)';
-                              $expiryClass = 'text-danger fw-bold';
-                          } elseif ($daysUntilExpiry <= 30) {
-                              $expiryStatus = 'expiring-soon';
-                              $expiryText = $expiryDate->format('M d, Y') . ' (Expires soon)';
-                              $expiryClass = 'text-warning fw-bold';
-                          } elseif ($daysUntilExpiry <= 90) {
-                              $expiryStatus = 'expiring';
-                              $expiryText = $expiryDate->format('M d, Y') . ' (' . $daysUntilExpiry . ' days left)';
-                              $expiryClass = 'text-info fw-bold';
+                          if (strpos($courseTitle, 'safety') !== false || strpos($courseTitle, 'security') !== false) {
+                              $expiryDate = $completionDate->copy()->addYear();
+                          } elseif (strpos($courseTitle, 'leadership') !== false || strpos($courseTitle, 'management') !== false) {
+                              $expiryDate = $completionDate->copy()->addYears(3);
+                          } elseif (strpos($courseTitle, 'technical') !== false || strpos($courseTitle, 'software') !== false) {
+                              $expiryDate = $completionDate->copy()->addYears(2);
+                          } elseif (strpos($courseTitle, 'destination') !== false || strpos($courseTitle, 'location') !== false) {
+                              $expiryDate = $completionDate->copy()->addMonths(18);
                           } else {
-                              $expiryStatus = 'valid';
-                              $expiryText = $expiryDate->format('M d, Y') . ' (Valid)';
-                              $expiryClass = 'text-success';
+                              $expiryDate = $completionDate->copy()->addYears(2);
                           }
+                      } catch (\Exception $e) { $expiryDate = null; }
+                  }
+                  
+                  if (!$expiryDate && $certificate->certificate_expiry) {
+                      try { $expiryDate = \Carbon\Carbon::parse($certificate->certificate_expiry); } catch (\Exception $e) {}
+                  }
+
+                  // Expiry Status
+                  $expiryStatus = 'valid';
+                  $expiryText = 'No expiry';
+                  $expiryClass = 'text-muted';
+                  if ($expiryDate) {
+                      $now = \Carbon\Carbon::now();
+                      $daysUntilExpiry = $now->diffInDays($expiryDate, false);
+                      
+                      if ($daysUntilExpiry < 0) {
+                          $expiryStatus = 'expired';
+                          $expiryText = $expiryDate->format('M d, Y');
+                          $expiryClass = 'text-danger fw-bold';
+                      } elseif ($daysUntilExpiry <= 30) {
+                          $expiryStatus = 'expiring-soon';
+                          $expiryText = $expiryDate->format('M d, Y');
+                          $expiryClass = 'text-warning fw-bold';
+                      } else {
+                          $expiryStatus = 'valid';
+                          $expiryText = $expiryDate->format('M d, Y');
+                          $expiryClass = 'text-success';
                       }
-
-                      // Remarks logic
-                      $remarkText = 'No remarks';
-                      $remarkClass = 'text-muted';
-                      if($certificate->status) {
-                        switch(strtolower($certificate->status)) {
-                          case 'completed':
-                            $remarkText = 'Passed';
-                            $remarkClass = 'text-success fw-semibold';
-                            break;
-                          case 'expired':
-                            $remarkText = 'Failed';
-                            $remarkClass = 'text-danger fw-semibold';
-                            break;
-                          case 'pending':
-                            $remarkText = 'In Progress';
-                            $remarkClass = 'text-warning fw-semibold';
-                            break;
-                          case 'pending examination':
-                            $remarkText = 'Awaiting Exam';
-                            $remarkClass = 'text-info fw-semibold';
-                            break;
-                          default:
-                            if($certificate->remarks && !empty($certificate->remarks)) {
-                              $remarkText = $certificate->remarks;
-                              $remarkClass = 'text-dark';
-                            }
-                        }
-                      } elseif($certificate->remarks && !empty($certificate->remarks)) {
-                        $remarkText = $certificate->remarks;
-                        $remarkClass = 'text-dark';
-                      }
-                    @endphp
-
-                    <!-- Individual Certificate Card -->
-                    <div class="col-md-6 col-lg-4">
-                      <div class="card h-100 border-0 shadow-sm" style="border-radius: 8px;">
-                        <!-- Certificate Header -->
-                        <div class="card-header bg-light border-0">
-                          <div class="d-flex justify-content-between align-items-center">
-                            <div class="d-flex align-items-center gap-2">
-                              <span class="badge bg-light text-dark px-2 py-1">
-                                <i class="bi bi-hash me-1"></i>{{ $certificate->id }}
-                              </span>
-                              @if($certificate->status == 'Completed')
-                                <span class="badge bg-success px-2 py-1">
-                                  <i class="bi bi-check-circle me-1"></i>Completed
-                                </span>
-                              @elseif($certificate->status == 'Pending' || $certificate->status == 'Pending Examination')
-                                <span class="badge bg-warning px-2 py-1">
-                                  <i class="bi bi-clock me-1"></i>{{ $certificate->status }}
-                                </span>
-                              @else
-                                <span class="badge bg-danger px-2 py-1">
-                                  <i class="bi bi-x-circle me-1"></i>{{ $certificate->status }}
-                                </span>
-                              @endif
-                            </div>
-                          </div>
-                        </div>
-
-                        <!-- Certificate Body -->
-                        <div class="card-body p-3">
-                          <!-- Course Information -->
-                          <div class="mb-3">
-                            <h6 class="fw-bold text-primary mb-2">
-                              <i class="bi bi-book me-1"></i>Course Information
-                            </h6>
-                            <p class="mb-1 fw-semibold small">
-                              @if($certificate->course && isset($certificate->course->course_title))
-                                {{ $certificate->course->course_title }}
-                              @elseif($certificate->course_id)
-                                <span class="text-muted">Course ID: {{ $certificate->course_id }}</span>
-                              @else
-                                <span class="text-muted">No course</span>
-                              @endif
-                            </p>
-                            <small class="text-muted">
-                              <i class="bi bi-calendar-check me-1"></i>
-                              Completed: 
-                              @if($certificate->training_date)
-                                {{ \Carbon\Carbon::parse($certificate->training_date)->format('M d, Y') }}
-                              @else
-                                <span class="text-muted">Not set</span>
-                              @endif
-                            </small>
-                          </div>
-
-                          <!-- Certificate Details -->
-                          <div class="mb-3">
-                            <h6 class="fw-bold text-success mb-2">
-                              <i class="bi bi-award me-1"></i>Certificate Details
-                            </h6>
-                            <p class="mb-1 small">
-                              <strong>Number:</strong>
-                              @if($certificate->certificate_number)
-                                {{ $certificate->certificate_number }}
-                              @else
-                                <span class="text-muted">No number</span>
-                              @endif
-                            </p>
-                            <p class="mb-0 small">
-                              <strong>Expiry:</strong>
-                              <span class="{{ $expiryClass }}">{{ $expiryText }}</span>
-                            </p>
-                          </div>
-
-                          <!-- Remarks -->
-                          <div class="mb-3">
-                            <h6 class="fw-bold text-secondary mb-2">
-                              <i class="bi bi-chat-text me-1"></i>Remarks
-                            </h6>
-                            <span class="{{ $remarkClass }} small">{{ $remarkText }}</span>
-                          </div>
-
-                          <!-- Certificate Actions -->
-                          <div class="text-center">
-                            @if($certificate->certificate_url)
-                              <div class="d-flex gap-1 justify-content-center">
-                                <a href="{{ route('certificates.view', $certificate->id) }}" target="_blank" class="btn btn-outline-primary btn-sm">
-                                  <i class="bi bi-eye"></i> View
-                                </a>
-                                <button class="btn btn-outline-success btn-sm" onclick="downloadCertificatePDF({{ $certificate->id }})">
-                                  <i class="bi bi-file-earmark-pdf"></i> Download PDF
-                                </button>
-                              </div>
-                            @else
-                              @if($certificate->employee_id && $certificate->course_id)
-                                <button class="btn btn-outline-warning btn-sm" onclick="generateCertificateWithConfirmation('{{ $certificate->employee_id }}', '{{ $certificate->course_id }}', '{{ $certificate->id }}')">
-                                  <i class="bi bi-magic me-1"></i> Generate Certificate
-                                </button>
-                              @else
-                                <span class="text-muted small">
-                                  <i class="bi bi-exclamation-triangle me-1"></i>Missing data for generation
-                                </span>
-                              @endif
-                            @endif
-                          </div>
-                        </div>
-
-                        <!-- Certificate Footer -->
-                        <div class="card-footer bg-transparent border-0 pt-0">
-                          <div class="d-flex justify-content-center gap-1">
-                            <button class="btn btn-outline-primary btn-sm" onclick="editCertificateWithConfirmation({{ $certificate->id }})" title="Edit Record">
-                              <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-outline-danger btn-sm" onclick="deleteCertificateWithConfirmation({{ $certificate->id }})" title="Delete Record">
-                              <i class="bi bi-trash"></i>
-                            </button>
-                          </div>
-                        </div>
+                  }
+                @endphp
+                <tr>
+                  <!-- Employee Column -->
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <img src="{{ $profilePicUrl }}" alt="{{ $initials }}" class="rounded-circle me-2 border" width="40" height="40">
+                      <div>
+                        <div class="fw-bold text-dark">{{ $fullName }}</div>
+                        <small class="text-muted">ID: {{ $certificate->employee_id ?? 'N/A' }}</small>
                       </div>
                     </div>
-                  @endforeach
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+                  </td>
+                  
+                  <!-- Course Column -->
+                  <td>
+                    <div class="fw-semibold text-primary">
+                      @if($certificate->course && isset($certificate->course->course_title))
+                        {{Str::limit($certificate->course->course_title, 30)}}
+                      @elseif($certificate->course_id)
+                        Course ID: {{ $certificate->course_id }}
+                      @else
+                        <span class="text-muted">No course</span>
+                      @endif
+                    </div>
+                  </td>
+                  
+                  <!-- Date Completed -->
+                  <td>
+                    @if($certificate->training_date)
+                      {{ \Carbon\Carbon::parse($certificate->training_date)->format('M d, Y') }}
+                    @else
+                      <span class="text-muted">-</span>
+                    @endif
+                  </td>
 
-        @empty
-          <div class="col-12">
-            <div class="text-center py-5">
-              <div class="mb-4">
-                <i class="bi bi-file-earmark-text display-1 text-muted"></i>
-              </div>
-              <h4 class="text-muted mb-3">No Certificate Records Found</h4>
-              <p class="text-muted mb-4">Get started by adding your first certificate record</p>
-              <button class="btn btn-primary btn-lg" onclick="addCertificateWithConfirmation()">
-                <i class="bi bi-plus-lg me-2"></i> Add Your First Record
-              </button>
-            </div>
-          </div>
-        @endforelse
+                  <!-- Certificate Number -->
+                  <td>
+                    <span class="badge bg-light text-dark border">
+                      {{ $certificate->certificate_number ?? 'N/A' }}
+                    </span>
+                  </td>
+
+                  <!-- Expiry -->
+                  <td>
+                    <span class="{{ $expiryClass }} small">
+                      {{ $expiryText }}
+                    </span>
+                  </td>
+
+                  <!-- Status -->
+                  <td>
+                    @if(strtolower($certificate->status) == 'completed')
+                      <span class="badge bg-success">Completed</span>
+                    @elseif(strtolower($certificate->status) == 'pending')
+                      <span class="badge bg-warning text-dark">Pending</span>
+                    @else
+                      <span class="badge bg-secondary">{{ ucfirst($certificate->status) }}</span>
+                    @endif
+                  </td>
+
+                  <!-- Actions -->
+                  <td>
+                    <div class="btn-group btn-group-sm">
+                      @if($certificate->certificate_url)
+                        <a href="{{ route('certificates.view', $certificate->id) }}" target="_blank" class="btn btn-outline-primary" title="View">
+                          <i class="bi bi-eye"></i>
+                        </a>
+                        <button class="btn btn-outline-success" onclick="downloadCertificatePDF({{ $certificate->id }})" title="Download">
+                          <i class="bi bi-download"></i>
+                        </button>
+                      @else
+                        @if($certificate->employee_id && $certificate->course_id)
+                          <button class="btn btn-outline-warning" onclick="generateCertificateWithConfirmation('{{ $certificate->employee_id }}', '{{ $certificate->course_id }}', '{{ $certificate->id }}')" title="Generate">
+                            <i class="bi bi-magic"></i>
+                          </button>
+                        @endif
+                      @endif
+                      <button class="btn btn-outline-primary" onclick="editCertificateWithConfirmation({{ $certificate->id }})" title="Edit">
+                        <i class="bi bi-pencil"></i>
+                      </button>
+                      <button class="btn btn-outline-danger" onclick="deleteCertificateWithConfirmation({{ $certificate->id }})" title="Delete">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              @empty
+                <tr>
+                  <td colspan="7" class="text-center py-5">
+                    <div class="mb-3">
+                      <i class="bi bi-file-earmark-text display-1 text-muted"></i>
+                    </div>
+                    <h5 class="text-muted">No Certificate Records Found</h5>
+                  </td>
+                </tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+        
+        <!-- Pagination Links -->
+        <div class="d-flex justify-content-center mt-4">
+            {{ $certificates->links('pagination::bootstrap-5') }}
         </div>
       </div>
     </div>
@@ -791,65 +667,10 @@
 
     // ===== SWEETALERT FUNCTIONS =====
 
-    // Add Certificate with Password Confirmation
+    // Add Certificate without Password Confirmation
     async function addCertificateWithConfirmation() {
-      const { value: password } = await Swal.fire({
-        title: 'Security Verification Required',
-        text: 'Please enter your password to continue.',
-        input: 'password',
-        inputPlaceholder: 'Enter your password',
-        showCancelButton: true,
-        confirmButtonText: 'Continue',
-        cancelButtonText: 'Cancel',
-        confirmButtonColor: '#0d6efd',
-        cancelButtonColor: '#6c757d',
-        inputValidator: (value) => {
-          if (!value) {
-            return 'Password is required';
-          }
-          if (value.length < 3) {
-            return 'Password must be at least 3 characters long';
-          }
-        }
-      });
-
-      if (password) {
-        // Verify password first
-        try {
-
-          const formData = new FormData();
-          formData.append('password', password);
-          formData.append('email', window.adminEmail || '');
-          const response = await fetch('/admin/verify-password', {
-            method: 'POST',
-            headers: {
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            },
-            body: formData
-          });
-
-          const result = await response.json();
-
-          if (result.success) {
-            showAddCertificateForm(password);
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Invalid Password',
-              text: 'The password you entered is incorrect. Please try again.',
-              confirmButtonColor: '#dc3545'
-            });
-          }
-        } catch (error) {
-          console.error('Password verification error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Verification Failed',
-            text: 'Unable to verify password. Please try again.',
-            confirmButtonColor: '#dc3545'
-          });
-        }
-      }
+      // Directly show the add certificate form without password verification
+      showAddCertificateForm('');
     }
 
     // Show Add Certificate Form
@@ -912,7 +733,6 @@
               <label class="form-label fw-semibold">Remarks</label>
               <textarea class="form-control" name="remarks" rows="3" placeholder="Optional remarks or notes"></textarea>
             </div>
-            <input type="hidden" name="password_verification" value="${password}">
           </form>
         `,
         showCancelButton: true,
@@ -1006,64 +826,10 @@
 
     // View Certificate Details function removed - no longer needed
 
-    // Edit Certificate with Password Confirmation
+    // Edit Certificate without Password Confirmation
     async function editCertificateWithConfirmation(certificateId) {
-      const { value: password } = await Swal.fire({
-        title: 'Security Verification Required',
-        text: 'Please enter your password to continue.',
-        input: 'password',
-        inputPlaceholder: 'Enter your password',
-        showCancelButton: true,
-        confirmButtonText: 'Continue',
-        cancelButtonText: 'Cancel',
-        confirmButtonColor: '#0d6efd',
-        cancelButtonColor: '#6c757d',
-        inputValidator: (value) => {
-          if (!value) {
-            return 'Password is required';
-          }
-          if (value.length < 3) {
-            return 'Password must be at least 3 characters long';
-          }
-        }
-      });
-
-      if (password) {
-        try {
-
-          const formData = new FormData();
-          formData.append('password', password);
-          formData.append('email', window.adminEmail || '');
-          const response = await fetch('/admin/verify-password', {
-            method: 'POST',
-            headers: {
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            },
-            body: formData
-          });
-
-          const result = await response.json();
-
-          if (result.success) {
-            showEditCertificateForm(certificateId, password);
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Invalid Password',
-              text: 'The password you entered is incorrect. Please try again.',
-              confirmButtonColor: '#dc3545'
-            });
-          }
-        } catch (error) {
-          console.error('Password verification error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Verification Failed',
-            text: 'Unable to verify password. Please try again.',
-            confirmButtonColor: '#dc3545'
-          });
-        }
-      }
+      // Directly show the edit certificate form without password verification
+      showEditCertificateForm(certificateId, '');
     }
 
     // Show Edit Certificate Form
@@ -1146,7 +912,6 @@
                 <textarea class="form-control" name="remarks" rows="3" placeholder="Optional remarks or notes">${certificate.remarks || ''}</textarea>
               </div>
               <input type="hidden" name="certificate_id" value="${certificateId}">
-              <input type="hidden" name="password_verification" value="${password}">
             </form>
           `,
           showCancelButton: true,
@@ -1218,21 +983,14 @@
       }
     }
 
-    // Delete Certificate with Password Confirmation
+    // Delete Certificate without Password Confirmation
     async function deleteCertificateWithConfirmation(certificateId) {
-      const { value: password } = await Swal.fire({
+      const result = await Swal.fire({
         title: '⚠️ Delete Certificate Record',
         html: `
           <div class="text-start">
             <p class="mb-3"><i class="bi bi-exclamation-triangle text-warning"></i> <strong>Warning:</strong></p>
             <p class="text-muted mb-3">You are about to permanently delete this certificate record. This action cannot be undone and will remove all associated data.</p>
-            <p class="mb-3"><i class="bi bi-shield-check text-primary"></i> <strong>Security Notice:</strong></p>
-            <p class="text-muted small mb-3">Deleting certificate records requires admin verification to prevent unauthorized data removal.</p>
-            <div class="mb-3">
-              <label class="form-label fw-semibold">Enter Admin Password:</label>
-              <input type="password" id="admin-password" class="form-control" placeholder="Your admin password" minlength="3">
-              <div class="form-text">Password must be at least 3 characters long</div>
-            </div>
           </div>
         `,
         showCancelButton: true,
@@ -1240,56 +998,11 @@
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#dc3545',
         cancelButtonColor: '#6c757d',
-        width: '500px',
-        preConfirm: () => {
-          const password = document.getElementById('admin-password').value;
-          if (!password) {
-            Swal.showValidationMessage('Please enter your admin password');
-            return false;
-          }
-          if (password.length < 3) {
-            Swal.showValidationMessage('Password must be at least 3 characters long');
-            return false;
-          }
-          return password;
-        }
+        width: '500px'
       });
 
-      if (password) {
-        try {
-
-          const formData = new FormData();
-          formData.append('password', password);
-          formData.append('email', window.adminEmail || '');
-          const response = await fetch('/admin/verify-password', {
-            method: 'POST',
-            headers: {
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            },
-            body: formData
-          });
-
-          const result = await response.json();
-
-          if (result.success) {
-            submitDeleteCertificate(certificateId);
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Invalid Password',
-              text: 'The password you entered is incorrect. Please try again.',
-              confirmButtonColor: '#dc3545'
-            });
-          }
-        } catch (error) {
-          console.error('Password verification error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Verification Failed',
-            text: 'Unable to verify password. Please try again.',
-            confirmButtonColor: '#dc3545'
-          });
-        }
+      if (result.isConfirmed) {
+        submitDeleteCertificate(certificateId);
       }
     }
 
@@ -1341,63 +1054,21 @@
       }
     }
 
-    // Auto-Generate with Password Confirmation
+    // Auto-Generate without Password Confirmation
     async function autoGenerateWithConfirmation() {
-      const { value: password } = await Swal.fire({
-        title: 'Security Verification Required',
-        text: 'Please enter your password to continue.',
-        input: 'password',
-        inputPlaceholder: 'Enter your password',
+      const result = await Swal.fire({
+        title: 'Auto-Generate Certificates',
+        text: 'Generate certificates for all completed trainings without certificates?',
+        icon: 'question',
         showCancelButton: true,
         confirmButtonText: 'Continue',
         cancelButtonText: 'Cancel',
         confirmButtonColor: '#198754',
-        cancelButtonColor: '#6c757d',
-        inputValidator: (value) => {
-          if (!value) {
-            return 'Password is required';
-          }
-          if (value.length < 3) {
-            return 'Password must be at least 3 characters long';
-          }
-        }
+        cancelButtonColor: '#6c757d'
       });
 
-      if (password) {
-        try {
-
-          const formData = new FormData();
-          formData.append('password', password);
-          formData.append('email', window.adminEmail || '');
-          const response = await fetch('/admin/verify-password', {
-            method: 'POST',
-            headers: {
-              'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-            },
-            body: formData
-          });
-
-          const result = await response.json();
-
-          if (result.success) {
-            submitAutoGenerate();
-          } else {
-            Swal.fire({
-              icon: 'error',
-              title: 'Invalid Password',
-              text: 'The password you entered is incorrect. Please try again.',
-              confirmButtonColor: '#dc3545'
-            });
-          }
-        } catch (error) {
-          console.error('Password verification error:', error);
-          Swal.fire({
-            icon: 'error',
-            title: 'Verification Failed',
-            text: 'Unable to verify password. Please try again.',
-            confirmButtonColor: '#dc3545'
-          });
-        }
+      if (result.isConfirmed) {
+        submitAutoGenerate();
       }
     }
 

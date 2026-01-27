@@ -346,6 +346,9 @@ if (typeof window.trans === 'undefined') {
           <div class="d-flex align-items-center gap-3">
             <h2 class="fw-bold mb-1">Accredited Training Centers</h2>
           </div>
+          <div class="d-flex gap-2">
+            <input type="text" id="possibleSearchInput" class="form-control form-control-sm" placeholder="Search center or destination..." style="max-width: 250px;">
+          </div>
         </div>
         <div class="card-body">
           @if($possibleDestinations->count() > 0)
@@ -482,10 +485,17 @@ if (typeof window.trans === 'undefined') {
                 $lastName = $record->employee->last_name ?? 'Employee';
                 $fullName = $firstName . ' ' . $lastName;
 
-                // Check if profile picture exists - simplified approach
+                // Check if profile picture exists - robust approach
                 $profilePicUrl = null;
-                if ($record->employee && $record->employee->profile_picture) {
-                    $profilePicUrl = asset('storage/' . $record->employee->profile_picture);
+                if ($record->employee && !empty($record->employee->profile_picture)) {
+                    $profilePic = $record->employee->profile_picture;
+                    if (strpos($profilePic, 'http') === 0) {
+                        $profilePicUrl = $profilePic;
+                    } elseif (strpos($profilePic, 'storage/') === 0) {
+                        $profilePicUrl = asset($profilePic);
+                    } else {
+                        $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                    }
                 }
 
                 // Generate consistent color based on employee name for fallback
@@ -852,7 +862,6 @@ if (typeof window.trans === 'undefined') {
                   </div>
                 </div>
               </div>
-
             @empty
               <div class="col-12">
                 <div class="text-center py-5">
@@ -861,12 +870,10 @@ if (typeof window.trans === 'undefined') {
                   </div>
                   <h4 class="text-muted mb-3">No Training Records Found</h4>
                   <p class="text-muted mb-4">Get started by adding your first destination knowledge training record</p>
-                  <button class="btn btn-primary btn-lg" onclick="confirmAction('add-new', 'Add New Training', 'Add new training record?')">
-                    <i class="bi bi-plus-lg me-2"></i> Add Your First Training Record
-                  </button>
                 </div>
               </div>
             @endforelse
+
           </div>
 
           <!-- Pagination for Destination Knowledge Training -->
@@ -903,6 +910,9 @@ if (typeof window.trans === 'undefined') {
           <div class="d-flex align-items-center gap-3">
             <h2 class="fw-bold mb-1">Orientation</h2>
           </div>
+          <div class="d-flex gap-2">
+            <input type="text" id="orientationSearchInput" class="form-control form-control-sm" placeholder="Search employee name..." style="max-width: 250px;">
+          </div>
         </div>
         <div class="card-body">
           <div class="table-responsive">
@@ -921,15 +931,38 @@ if (typeof window.trans === 'undefined') {
                   @forelse($orientationTrainings as $orientation)
                     <tr>
                       <td>
-                        <div class="d-flex align-items-center">
-                           <div class="rounded-circle border d-flex align-items-center justify-content-center me-2" style="width: 40px; height: 40px; background: #e9ecef;">
-                              <span class="fw-bold text-secondary">{{ substr($orientation['employee_name'] ?? 'U', 0, 1) }}</span>
-                           </div>
-                           <div>
-                              <div class="fw-bold">{{ $orientation['employee_name'] ?? 'Unknown' }}</div>
-                              <small class="text-muted">{{ $orientation['email'] ?? '' }}</small>
-                           </div>
-                        </div>
+                         <div class="d-flex align-items-center">
+                            @php
+                                $profilePic = $orientation['profile_picture'] ?? null;
+                                $nameParts = explode(' ', trim($orientation['employee_name'] ?? 'Unknown'));
+                                $firstName = $nameParts[0] ?? 'U';
+                                $lastName = count($nameParts) > 1 ? $nameParts[count($nameParts) - 1] : '';
+                                $initials = substr($firstName, 0, 1) . ($lastName ? substr($lastName, 0, 1) : '');
+                                
+                                $profilePicUrl = null;
+                                if ($profilePic) {
+                                    if (strpos($profilePic, 'http') === 0) {
+                                        $profilePicUrl = $profilePic;
+                                    } elseif (strpos($profilePic, 'storage/') === 0) {
+                                        $profilePicUrl = asset($profilePic);
+                                    } else {
+                                        $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                                    }
+                                }
+                            @endphp
+                            @if($profilePicUrl)
+                                <img src="{{ $profilePicUrl }}" class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;" 
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                            @endif
+                            <div class="rounded-circle border d-flex align-items-center justify-content-center me-2" 
+                                 style="width: 40px; height: 40px; background: #e9ecef; {{ $profilePicUrl ? 'display: none;' : '' }}">
+                               <span class="fw-bold text-secondary">{{ $initials }}</span>
+                            </div>
+                            <div>
+                               <div class="fw-bold">{{ $orientation['employee_name'] ?? 'Unknown' }}</div>
+                               <small class="text-muted">{{ $orientation['email'] ?? '' }}</small>
+                            </div>
+                         </div>
                       </td>
                       <td>
                           @if(isset($orientation['orientation_date']))
@@ -1921,51 +1954,7 @@ if (typeof window.trans === 'undefined') {
     });
   });
 
-  // Filter functionality - Updated for card layout
-  const applyFiltersBtn = document.getElementById('applyFilters');
-  if (applyFiltersBtn) {
-    applyFiltersBtn.addEventListener('click', function() {
-    const search = document.getElementById('searchInput').value.toLowerCase();
-    const progressFilter = document.getElementById('progressFilter').value;
-    const dateFilter = document.getElementById('dateFilter').value;
-    const cards = document.querySelectorAll('#destinationTableBody .col-12[data-destination-id]');
-
-    cards.forEach(cardCol => {
-      let show = true;
-      const card = cardCol.querySelector('.destination-card');
-
-      if (card) {
-        // Extract text content from card for filtering
-        const cardText = card.textContent.toLowerCase();
-        const employeeName = card.querySelector('.card-header h5')?.textContent.toLowerCase() || '';
-        const statusBadge = card.querySelector('.badge')?.textContent.toLowerCase() || '';
-
-        // Apply filters
-        if (search && !cardText.includes(search) && !employeeName.includes(search)) {
-          show = false;
-        }
-
-        if (progressFilter === 'completed' && !statusBadge.includes('completed')) {
-          show = false;
-        }
-
-        if (progressFilter === 'in-progress' && !statusBadge.includes('progress')) {
-          show = false;
-        }
-
-        if (progressFilter === 'not-started' && !statusBadge.includes('not started')) {
-          show = false;
-        }
-
-        if (dateFilter && !cardText.includes(dateFilter)) {
-          show = false;
-        }
-      }
-
-      cardCol.style.display = show ? '' : 'none';
-    });
-    });
-  }
+  // Consolidating filter functionality in setupFilters() below
 
   // Export Excel (basic CSV)
   const exportExcelBtn = document.getElementById('exportExcel');
@@ -2751,7 +2740,9 @@ if (typeof window.trans === 'undefined') {
     const progressFilter = document.getElementById('progressFilter');
     const dateFilter = document.getElementById('dateFilter');
     const applyFiltersBtn = document.getElementById('applyFilters');
-    const tableRows = document.querySelectorAll('table tbody tr:not(.empty-row)');
+    
+    // Select the card columns (they contain data-destination-id)
+    const cardCols = document.querySelectorAll('#destinationTableBody [data-destination-id]');
 
     // Check if all required elements exist
     if (!searchInput || !progressFilter || !dateFilter || !applyFiltersBtn) {
@@ -2761,34 +2752,65 @@ if (typeof window.trans === 'undefined') {
 
     function applyFilters() {
       const searchTerm = searchInput.value.toLowerCase();
-      const statusFilter = progressFilter.value.toLowerCase();
+      const statusFilterValue = progressFilter.value.toLowerCase();
       const dateFilterValue = dateFilter.value;
 
-      tableRows.forEach(row => {
-        const employeeName = row.querySelector('td:nth-child(2)')?.textContent.toLowerCase() || '';
-        const destination = row.querySelector('td:nth-child(3)')?.textContent.toLowerCase() || '';
-        const status = row.querySelector('.status-badge')?.textContent.toLowerCase() || '';
-        const createdDate = row.querySelector('td:nth-child(7)')?.textContent || '';
+      cardCols.forEach(col => {
+        const card = col.querySelector('.destination-card');
+        if (!card) return;
 
-        let showRow = true;
+        // Extracting text from specific card parts for better search
+        const employeeName = card.querySelector('.card-header h5')?.textContent.toLowerCase() || '';
+        const destinationName = card.querySelector('.card-header .badge')?.textContent.toLowerCase() || '';
+        const cardBodyText = card.querySelector('.card-body')?.textContent.toLowerCase() || '';
+        const allCardText = card.textContent.toLowerCase();
 
-        // Search filter
-        if (searchTerm && !employeeName.includes(searchTerm) && !destination.includes(searchTerm)) {
-          showRow = false;
+        // Get status - looking specifically for the status badge in card body
+        // It's the one with classes like bg-success, bg-primary, etc.
+        const statusBadge = Array.from(card.querySelectorAll('.card-body .badge')).find(badge => 
+          badge.classList.contains('bg-success') || 
+          badge.classList.contains('bg-primary') || 
+          badge.classList.contains('bg-secondary') || 
+          badge.classList.contains('bg-danger')
+        );
+        const statusText = statusBadge ? statusBadge.textContent.toLowerCase().trim() : '';
+
+        let show = true;
+
+        // Search Filter (Employee Name, Destination, or any text)
+        if (searchTerm) {
+          if (!employeeName.includes(searchTerm) && 
+              !destinationName.includes(searchTerm) && 
+              !allCardText.includes(searchTerm)) {
+            show = false;
+          }
         }
 
-        // Status filter
-        if (statusFilter && !status.includes(statusFilter)) {
-          showRow = false;
+        // Status Filter
+        if (show && statusFilterValue) {
+          if (statusFilterValue === 'completed' && !statusText.includes('completed')) show = false;
+          else if (statusFilterValue === 'in-progress' && !statusText.includes('on going') && !statusText.includes('progress')) show = false;
+          else if (statusFilterValue === 'not-started' && !statusText.includes('not started')) show = false;
+          else if (statusFilterValue === 'expired' && !statusText.includes('expired')) show = false;
         }
 
-        // Date filter
-        if (dateFilterValue && !createdDate.includes(dateFilterValue)) {
-          showRow = false;
+        // Date Filter (Matching against Created Date)
+        if (show && dateFilterValue) {
+          // Look for formatted date like YYYY-MM-DD in the text
+          if (!allCardText.includes(dateFilterValue)) {
+            show = false;
+          }
         }
 
-        row.style.display = showRow ? '' : 'none';
+        col.style.display = show ? '' : 'none';
       });
+
+      // Show/Hide Empty State Message
+      const visibleCards = Array.from(cardCols).filter(col => col.style.display !== 'none');
+      const emptyState = document.querySelector('#destinationTableBody .col-12 > div.text-center');
+      
+      // If we are filtering and find nothing, we might want to show a "No results matching your filters" message
+      // But for now, just let the table look empty or use existing empty state if possible
     }
 
     // Event listeners
@@ -2801,6 +2823,40 @@ if (typeof window.trans === 'undefined') {
 
     // Real-time search
     searchInput.addEventListener('input', applyFilters);
+  }
+
+  // Setup search for Possible Destinations Table
+  function setupPossibleDestinationsSearch() {
+    const searchInput = document.getElementById('possibleSearchInput');
+    const tableBody = document.getElementById('possibleDestinationsTableBody');
+    if (!searchInput || !tableBody) return;
+
+    searchInput.addEventListener('input', function() {
+      const searchTerm = this.value.toLowerCase();
+      const rows = tableBody.querySelectorAll('tr');
+
+      rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+      });
+    });
+  }
+
+  // Setup search for Orientation Table
+  function setupOrientationSearch() {
+    const searchInput = document.getElementById('orientationSearchInput');
+    const tableBody = document.getElementById('orientationTableBody');
+    if (!searchInput || !tableBody) return;
+
+    searchInput.addEventListener('input', function() {
+      const searchTerm = this.value.toLowerCase();
+      const rows = tableBody.querySelectorAll('tr');
+
+      rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(searchTerm) ? '' : 'none';
+      });
+    });
   }
 
   // Setup export functionality
@@ -2848,6 +2904,8 @@ if (typeof window.trans === 'undefined') {
     setupDeliveryModeHandler();
     setupAssignToUpcomingTraining();
     setupFilters();
+    setupPossibleDestinationsSearch();
+    setupOrientationSearch();
     setupExportButtons();
 
     setupDeletePossibleButtons();

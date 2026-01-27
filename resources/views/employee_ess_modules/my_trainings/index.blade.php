@@ -67,8 +67,12 @@
       color: #495057;
     }
     .badge {
-      font-size: 0.75em;
-      padding: 0.35em 0.65em;
+      font-size: 0.75rem;
+      padding: 0.5em 1em;
+      font-weight: 600;
+      border-radius: 50rem !important; /* Pill style */
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      letter-spacing: 0.02em;
     }
     .modal-content {
       border-radius: 12px;

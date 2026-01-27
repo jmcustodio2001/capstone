@@ -1434,29 +1434,7 @@
           return;
         }
 
-        // Always show password verification for security
-        Swal.fire({
-          title: 'Security Verification Required',
-          text: 'Please enter your password to add this competency profile.',
-          input: 'password',
-          inputPlaceholder: 'Enter your password',
-          showCancelButton: true,
-          confirmButtonText: '<i class="bi bi-plus-circle"></i> Add Profile',
-          cancelButtonText: 'Cancel',
-          confirmButtonColor: '#198754',
-          inputValidator: (value) => {
-            if (!value) {
-              return 'Password is required';
-            }
-          }
-        }).then((result) => {
-          if (result.isConfirmed) {
-            submitAddProfileForm(result.value);
-          }
-        });
-      }
-
-      function submitAddProfileForm(password) {
+        // Show loading state and submit
         Swal.fire({
           title: 'Processing...',
           text: 'Adding competency profile...',
@@ -1468,22 +1446,7 @@
           }
         });
 
-        // Verify password first
-        verifyPassword(password).then(() => {
-          // Password verified, submit the form
-          addProfileForm.submit();
-        }).catch(error => {
-          Swal.fire({
-            icon: 'error',
-            title: 'Authentication Failed',
-            text: error.message || 'Invalid password. Please try again.',
-            confirmButtonText: 'Try Again',
-            confirmButtonColor: '#dc3545'
-          }).then(() => {
-            // Retry the add process
-            addProfileWithConfirmation();
-          });
-        });
+        addProfileForm.submit();
       }
 
 

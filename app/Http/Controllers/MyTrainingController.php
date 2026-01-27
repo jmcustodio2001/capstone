@@ -1265,27 +1265,50 @@ class MyTrainingController extends Controller
         // Get approved training requests that should appear in progress
         $approvedRequests = TrainingRequest::with('course')
             ->where('employee_id', $employeeId)
-            ->where('status', 'Approved')
+            ->whereIn('status', ['Approved', 'Completed', 'Passed'])
             ->get()
             ->map(function($request) use ($employeeId) {
+                // If course_id is missing, try to find matching course by title
+                if (!$request->course_id) {
+                    $courseFound = \App\Models\CourseManagement::where('course_title', $request->training_title)
+                                ->orWhere('course_title', 'LIKE', '%' . $request->training_title . '%')
+                                ->first();
+                    if ($courseFound) {
+                        $request->course_id = $courseFound->course_id;
+                        $request->load('course');
+                    }
+                }
+
                 // Check if there's a corresponding training dashboard record for this course
-                $dashboardRecord = EmployeeTrainingDashboard::where('employee_id', $employeeId)
-                    ->where('course_id', $request->course_id)
-                    ->first();
+                $dashboardRecord = null;
+                if ($request->course_id) {
+                    $dashboardRecord = EmployeeTrainingDashboard::where('employee_id', $employeeId)
+                        ->where('course_id', $request->course_id)
+                        ->first();
+                }
 
                 // If dashboard record exists, use its progress; otherwise default to 0
                 $actualProgress = 0;
                 $lastUpdated = $request->updated_at->format('Y-m-d');
                 $canStartExam = true;
 
-                if ($dashboardRecord) {
-                    // Calculate combined exam/quiz progress instead of using raw progress
-                    $combinedProgress = ExamAttempt::calculateCombinedProgress($employeeId, $request->course_id);
+                if (in_array($request->status, ['Completed', 'Passed'])) {
+                    $actualProgress = 100;
+                    $canStartExam = false;
+                } else {
+                    // Calculate combined exam/quiz progress
+                    $combinedProgress = 0;
+                    if ($request->course_id) {
+                        $combinedProgress = ExamAttempt::calculateCombinedProgress($employeeId, $request->course_id);
+                    }
 
                     // Use combined progress if available, otherwise fall back to dashboard progress
                     $actualProgress = $combinedProgress > 0 ? $combinedProgress : ($dashboardRecord->progress ?? 0);
-                    $lastUpdated = $dashboardRecord->updated_at->format('Y-m-d H:i');
-                    $canStartExam = $actualProgress >= 75;
+                    
+                    if ($dashboardRecord) {
+                        $lastUpdated = $dashboardRecord->updated_at->format('Y-m-d H:i');
+                        $canStartExam = $actualProgress >= 75;
+                    }
                 }
 
                 // Calculate expired date for approved requests
@@ -1298,6 +1321,7 @@ class MyTrainingController extends Controller
                 }
 
                 return (object)[
+                    'employee_id' => $employeeId,
                     'progress_id' => 'request_' . $request->request_id,
                     'training_title' => $request->training_title,
                     'progress' => $actualProgress, // Fixed field name to match view
@@ -1308,7 +1332,7 @@ class MyTrainingController extends Controller
                     'course_id' => $request->course_id,
                     'request_id' => $request->request_id,
                     'can_start_exam' => $canStartExam,
-                    'exam_quiz_scores' => $dashboardRecord ? ExamAttempt::getBestScores($employeeId, $request->course_id) : null,
+                    'exam_quiz_scores' => ($request->course_id) ? ExamAttempt::getBestScores($employeeId, $request->course_id) : null,
                     'expired_date' => $expiredDate
                 ];
             });
@@ -1412,6 +1436,28 @@ class MyTrainingController extends Controller
                     return false;
                 }
                 return true;
+            })
+            ->map(function($request) use ($employeeId) {
+                // If course_id is missing, try to find matching course by title
+                if (!$request->course_id) {
+                    $course = CourseManagement::where('course_title', $request->training_title)
+                                ->orWhere('course_title', 'LIKE', '%' . $request->training_title . '%')
+                                ->first();
+                    if ($course) {
+                        $request->course_id = $course->course_id;
+                        $request->load('course'); // Reload course relation
+                    }
+                }
+
+                // Attach real-time progress if course exists
+                if ($request->course_id) {
+                    $combinedProgress = ExamAttempt::calculateCombinedProgress($employeeId, $request->course_id);
+                    $request->progress = $combinedProgress;
+                } else {
+                    $request->progress = 0;
+                }
+
+                return $request;
             });
 
         // Also get training requests from upcoming_trainings table that come from competency_gap
@@ -1419,6 +1465,11 @@ class MyTrainingController extends Controller
             ->where('source', 'competency_gap')
             ->get()
             ->map(function($training) {
+                // Find matching course ID for this competency
+                $course = \App\Models\CourseManagement::where('course_title', $training->training_title)
+                    ->orWhere('course_title', 'LIKE', '%' . $training->training_title . '%')
+                    ->first();
+
                 return (object)[
                     'id' => $training->upcoming_id,
                     'employee_id' => $training->employee_id,
@@ -1430,6 +1481,7 @@ class MyTrainingController extends Controller
                     'source' => $training->source,
                     'end_date' => $training->end_date,
                     'destination_training_id' => $training->destination_training_id,
+                    'course_id' => $course ? $course->course_id : $training->course_id,
                     'course' => null
                 ];
             });

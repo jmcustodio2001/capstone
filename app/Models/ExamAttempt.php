@@ -93,15 +93,15 @@ class ExamAttempt extends Model
     public static function calculateCombinedProgress($employeeId, $courseId)
     {
         try {
-            // Get the best exam score directly
+            // Get the best exam score directly (include both passed and failed attempts)
             $bestExamScore = self::where('employee_id', $employeeId)
                 ->where('course_id', $courseId)
                 ->where('type', 'exam')
-                ->where('status', 'completed')
+                ->whereIn('status', ['completed', 'failed'])
                 ->max('score');
             
             if ($bestExamScore === null) {
-                return 0; // No completed exam attempts
+                return 0; // No exam attempts found
             }
             
             $examScore = max(0, min(100, (float)$bestExamScore));

@@ -43,9 +43,7 @@ class EmployeeCompetencyProfileController extends Controller
                      
                      $skills = $emp['skills'] ?? null;
                      
-                     // if ($empId && !empty($skills)) {
-                     //     $this->syncExternalSkillsString($empId, $skills);
-                     // }
+                     // Auto-import removed to prevent duplication
                 }
             }
         } catch (\Exception $e) {
@@ -867,7 +865,7 @@ class EmployeeCompetencyProfileController extends Controller
                                 ($apiEmp['external_employee_id'] ?? '') === (string)$employeeId) {
                                 
                                 if (!empty($apiEmp['skills'])) {
-                                    // $this->syncExternalSkillsString($employeeId, $apiEmp['skills']);
+                                    // Auto-import removed
                                 }
                                 break;
                             }
@@ -996,63 +994,5 @@ class EmployeeCompetencyProfileController extends Controller
             ], 500);
         }
     }
-    /**
-     * Parse and sync skills string from external source
-     */
-    private function syncExternalSkillsString($employeeId, $skillsString)
-    {
-        if (empty($skillsString)) return;
-
-        // Split by newlines, commas, or semicolons
-        $skills = preg_split('/[\r\n,;]+/', $skillsString, -1, PREG_SPLIT_NO_EMPTY);
-        $currentDate = now();
-
-        foreach ($skills as $skillName) {
-            $skillName = trim($skillName);
-            if (empty($skillName)) continue;
-
-            // Clean up skill name
-            $skillName = ucwords(strtolower($skillName));
-
-            // Find or create competency in library
-            $competency = CompetencyLibrary::firstOrCreate(
-                ['competency_name' => $skillName],
-                [
-                    'description' => 'Auto-imported skill from employee profile',
-                    'category' => 'General'
-                ]
-            );
-
-            // Check if profile exists, if not create it
-            $profile = EmployeeCompetencyProfile::where('employee_id', $employeeId)
-                ->where('competency_id', $competency->id)
-                ->first();
-
-            if (!$profile) {
-                EmployeeCompetencyProfile::create([
-                    'employee_id' => $employeeId,
-                    'competency_id' => $competency->id,
-                    'proficiency_level' => 5, // Set to Expert/100% as this is an acquired skill
-                    'assessment_date' => $currentDate
-                ]);
-
-                // Log the creation
-                ActivityLog::createLog([
-                    'module' => 'Competency Management',
-                    'action' => 'import',
-                    'description' => "Auto-imported skill '{$skillName}' at 100% proficiency for employee ID: {$employeeId}",
-                    'model_type' => EmployeeCompetencyProfile::class,
-                    'model_id' => 0, // Placeholder
-                ]);
-            } else {
-                // If profile exists, ensure it is updated to Level 5 (100%) since the employee possesses this skill
-                if ($profile->proficiency_level < 5) {
-                    $profile->update([
-                        'proficiency_level' => 5,
-                        'assessment_date' => $currentDate
-                    ]);
-                }
-            }
-        }
-    }
+    // syncExternalSkillsString removed to prevent duplication
 }

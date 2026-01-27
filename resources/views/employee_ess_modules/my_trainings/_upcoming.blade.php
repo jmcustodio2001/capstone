@@ -121,9 +121,19 @@
 
                     if ($employeeId && $trainingTitle) {
                       // Enhanced matching logic for competency gaps
+                      // Normalize employee ID to handle potential zero-padding mismatches
+                      $rawEmployeeId = $employeeId;
+                      $unpaddedId = ltrim($rawEmployeeId, '0');
+                      
                       $competencyGaps = \App\Models\CompetencyGap::with('competency')
-                        ->where('employee_id', $employeeId)
-                        ->where('assigned_to_training', true)
+                        ->where(function($q) use ($rawEmployeeId, $unpaddedId) {
+                            $q->where('employee_id', $rawEmployeeId)
+                              ->orWhere('employee_id', $unpaddedId)
+                              ->orWhere('employee_id', str_pad($unpaddedId, 3, '0', STR_PAD_LEFT))
+                              ->orWhere('employee_id', str_pad($unpaddedId, 4, '0', STR_PAD_LEFT))
+                              ->orWhere('employee_id', str_pad($unpaddedId, 5, '0', STR_PAD_LEFT))
+                              ->orWhere('employee_id', str_pad($unpaddedId, 6, '0', STR_PAD_LEFT));
+                        })
                         ->get();
 
                       $matchedGap = null;
@@ -133,8 +143,16 @@
                           $competencyName = $gap->competency->competency_name;
 
                           // Try multiple matching strategies
+                          // Normalize strings: lowercase, remove extra spaces, handle ampersands
                           $cleanTrainingTitle = strtolower(trim(str_replace([' Training', ' Course', ' Program', ' Skills'], '', $trainingTitle)));
+                          $cleanTrainingTitle = str_replace('&', 'and', $cleanTrainingTitle);
+                          $cleanTrainingTitle = preg_replace('/[^a-z0-9\s]/', '', $cleanTrainingTitle); // Remove special chars
+                          $cleanTrainingTitle = preg_replace('/\s+/', ' ', $cleanTrainingTitle);
+                          
                           $cleanCompetencyName = strtolower(trim($competencyName));
+                          $cleanCompetencyName = str_replace('&', 'and', $cleanCompetencyName);
+                          $cleanCompetencyName = preg_replace('/[^a-z0-9\s]/', '', $cleanCompetencyName); // Remove special chars
+                          $cleanCompetencyName = preg_replace('/\s+/', ' ', $cleanCompetencyName);
 
                           // Strategy 1: Exact match after cleaning
                           if ($cleanTrainingTitle === $cleanCompetencyName) {

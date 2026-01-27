@@ -29,7 +29,11 @@
                 </span>
               </td>
               <td>
-                <span class="badge {{ ($r->status ?? 'Assigned') == 'Assigned' ? 'bg-info' : 'bg-secondary' }}">
+                <span class="badge {{ 
+                  ($r->status ?? 'Assigned') == 'Completed' ? 'bg-success' : 
+                  (($r->status ?? 'Assigned') == 'In Progress' ? 'bg-warning text-dark' : 
+                  (($r->status ?? 'Assigned') == 'Assigned' ? 'bg-info' : 'bg-secondary')) 
+                }}">
                   {{ $r->status ?? 'Assigned' }}
                 </span>
               </td>
@@ -50,17 +54,17 @@
                 </span>
               </td>
               <td class="text-center">
-                <button class="btn btn-outline-info btn-sm" onclick="viewTrainingRequest('{{ $r->training_title ?? 'N/A' }}', '{{ $r->source ?? 'N/A' }}')">
+                <button class="btn btn-outline-info btn-sm" onclick="viewTrainingRequest('{{ addslashes($r->training_title ?? 'N/A') }}', '{{ $r->source ?? 'N/A' }}', '{{ $r->status ?? 'Assigned' }}', '{{ isset($r->assigned_date) ? \Carbon\Carbon::parse($r->assigned_date)->format('M d, Y') : 'N/A' }}', '{{ isset($r->end_date) ? \Carbon\Carbon::parse($r->end_date)->format('M d, Y') : 'N/A' }}', '{{ addslashes($r->reason ?? 'N/A') }}')">
                   <i class="bi bi-eye"></i>
                 </button>
-                @if(($r->source ?? '') == 'competency_gap')
-                  <a href="/employee/exam/start/{{ $r->destination_training_id ?? 1 }}" class="btn btn-primary btn-sm" target="_blank">
+                @if(isset($r->course_id) || isset($r->destination_training_id))
+                  <a href="/employee/exam/start/{{ $r->course_id ?? $r->destination_training_id }}" class="btn btn-primary btn-sm" target="_blank">
                     <i class="fas fa-book"></i> Start Training
                   </a>
                 @else
-                  <a href="/employee/exam/start/{{ $r->course_id ?? 1 }}" class="btn btn-primary btn-sm" target="_blank">
-                    <i class="fas fa-book"></i> Start Training
-                  </a>
+                  <button class="btn btn-secondary btn-sm" disabled title="No course linked yet">
+                    <i class="fas fa-lock"></i> No Course
+                  </button>
                 @endif
               </td>
             </tr>
@@ -74,7 +78,59 @@
 </div>
 
 <script>
-function viewTrainingRequest(title, source) {
-  alert('Training: ' + title + '\nSource: ' + source);
+function viewTrainingRequest(title, source, status, assignedDate, endDate, reason) {
+  const sourceName = source.replace(/_/g, ' ').toUpperCase();
+  let statusBadge = '';
+  
+  if (status === 'Completed') statusBadge = '<span class="badge bg-success">Completed</span>';
+  else if (status === 'In Progress') statusBadge = '<span class="badge bg-warning text-dark">In Progress</span>';
+  else if (status === 'Assigned') statusBadge = '<span class="badge bg-info">Assigned</span>';
+  else statusBadge = `<span class="badge bg-secondary">${status}</span>`;
+
+  Swal.fire({
+    title: '<h4 class="fw-bold mb-0">Training Request Details</h4>',
+    html: `
+      <div class="text-start mt-3">
+        <div class="mb-3">
+          <label class="text-muted small fw-bold text-uppercase">Training Title</label>
+          <div class="fw-bold text-primary" style="font-size: 1.1rem;">${title}</div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-6">
+            <label class="text-muted small fw-bold text-uppercase">Source</label>
+            <div><span class="badge bg-light text-dark border">${sourceName}</span></div>
+          </div>
+          <div class="col-6">
+            <label class="text-muted small fw-bold text-uppercase">Status</label>
+            <div>${statusBadge}</div>
+          </div>
+        </div>
+        <div class="row mb-3">
+          <div class="col-6">
+            <label class="text-muted small fw-bold text-uppercase">Assigned Date</label>
+            <div class="fw-semibold"><i class="bi bi-calendar-check me-1 text-info"></i>${assignedDate}</div>
+          </div>
+          <div class="col-6">
+            <label class="text-muted small fw-bold text-uppercase">Expiration Date</label>
+            <div class="fw-semibold text-danger"><i class="bi bi-calendar-x me-1"></i>${endDate}</div>
+          </div>
+        </div>
+        <div class="mb-0">
+          <label class="text-muted small fw-bold text-uppercase">Reason / Notes</label>
+          <div class="p-3 bg-light rounded text-muted italic" style="border-left: 4px solid #0d6efd; font-style: italic;">
+            ${reason || 'No additional notes provided.'}
+          </div>
+        </div>
+      </div>
+    `,
+    showCloseButton: true,
+    showConfirmButton: true,
+    confirmButtonText: 'Close',
+    confirmButtonColor: '#0d6efd',
+    customClass: {
+      popup: 'rounded-4 shadow-lg border-0',
+      confirmButton: 'btn btn-primary px-4 py-2'
+    }
+  });
 }
 </script>

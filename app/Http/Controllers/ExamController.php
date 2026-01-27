@@ -393,17 +393,49 @@ class ExamController extends Controller
                     $this->updateCompetencyProfileFromExam($attempt, $progress);
                 }
                 
-                // Also update any training requests for this course
-                DB::table('training_requests')
+                // Match course title for title-based updates
+                $course = CourseManagement::find($attempt->course_id);
+                $courseTitle = $course ? $course->course_title : '';
+
+                // Also update any training requests for this course or title
+                $requestUpdated = DB::table('training_requests')
                     ->where('employee_id', $employeeId)
-                    ->where('course_id', $attempt->course_id)
-                    ->where('status', 'Approved')
+                    ->where(function($query) use ($attempt, $courseTitle) {
+                        $query->where('course_id', $attempt->course_id);
+                        if ($courseTitle) {
+                            $query->orWhere('training_title', $courseTitle)
+                                  ->orWhere('training_title', 'LIKE', '%' . $courseTitle . '%');
+                        }
+                    })
                     ->update([
+                        'status' => $status === 'Completed' ? 'Completed' : $status,
                         'updated_at' => now()
                     ]);
-                    
+
+                // Update upcoming_trainings
+                $upcomingUpdated = DB::table('upcoming_trainings')
+                    ->where('employee_id', $employeeId)
+                    ->where(function($query) use ($attempt, $courseTitle) {
+                        $query->where('course_id', $attempt->course_id);
+                        if ($courseTitle) {
+                            $query->orWhere('training_title', $courseTitle)
+                                  ->orWhere('training_title', 'LIKE', '%' . $courseTitle . '%');
+                        }
+                    })
+                    ->update([
+                        'status' => $status === 'Completed' ? 'Completed' : $status,
+                        'updated_at' => now()
+                    ]);
+
+                Log::info("Synced training completion status", [
+                    'employee_id' => $employeeId,
+                    'course_id' => $attempt->course_id,
+                    'upcoming_updated' => $upcomingUpdated,
+                    'requests_updated' => $requestUpdated
+                ]);
+
             } catch (\Exception $e) {
-                Log::warning("Failed to update employee_training_dashboard: " . $e->getMessage());
+                Log::warning("Failed to update extra training tables: " . $e->getMessage());
             }
             
             // Update destination knowledge training records with enhanced matching

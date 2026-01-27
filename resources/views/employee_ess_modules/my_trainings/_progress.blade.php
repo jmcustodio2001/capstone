@@ -59,19 +59,34 @@
 
             // Take only one item per unique training and add sequential ID
             $uniqueProgress = collect();
-            $sequentialId = 1;
+                $sequentialId = 1;
 
-            foreach ($groupedProgress as $group) {
-                // Get the most recent item (could be from approved request or competency gap)
-                $bestItem = $group->sortByDesc(function($item) {
-                    $updated = $item->last_updated ?? $item->updated_at ?? now();
-                    return strtotime($updated);
-                })->first();
+                foreach ($groupedProgress as $group) {
+                    // Get the item with the HIGHEST progress percentage
+                    // If progress is equal, pick the most recently updated one
+                    $bestItem = $group->sort(function($a, $b) {
+                        // First compare progress percentage (descending)
+                        $progressA = isset($a->progress_percentage) ? $a->progress_percentage : ($a->progress ?? 0);
+                        $progressB = isset($b->progress_percentage) ? $b->progress_percentage : ($b->progress ?? 0);
+                        
+                        // Check for explicit "Completed" or "Passed" status which implies 100%
+                        if (isset($a->status) && in_array($a->status, ['Completed', 'Passed'])) $progressA = 100;
+                        if (isset($b->status) && in_array($b->status, ['Completed', 'Passed'])) $progressB = 100;
+                        
+                        if ($progressA != $progressB) {
+                            return $progressB <=> $progressA; // Descending order of progress
+                        }
+                        
+                        // If progress is equal, compare timestamp (descending)
+                        $updatedA = $a->last_updated ?? $a->updated_at ?? now();
+                        $updatedB = $b->last_updated ?? $b->updated_at ?? now();
+                        return strtotime($updatedB) <=> strtotime($updatedA);
+                    })->first();
 
-                // Add sequential ID for display
-                $bestItem->display_id = $sequentialId++;
-                $uniqueProgress->push($bestItem);
-            }
+                    // Add sequential ID for display
+                    $bestItem->display_id = $sequentialId++;
+                    $uniqueProgress->push($bestItem);
+                }
 
             // Sort by display ID to maintain consistent order
             $uniqueProgress = $uniqueProgress->sortBy('display_id')->values();
@@ -153,11 +168,29 @@
                   $progressSource = 'none';
                   $employeeId = Auth::user()->employee_id;
 
+                  // Priority 0: Check if status is explicitly completed/passed (highest priority)
+                  if (isset($p->status) && in_array($p->status, ['Completed', 'Passed'])) {
+                    $progressValue = 100;
+                    $progressSource = 'status_check';
+                  }
+
                   // Priority 1: Check for exam progress (highest priority for real-time updates)
                   $examAttempt = null;
-                  if (isset($p->course_id) && $p->course_id) {
+                  $effectiveCourseId = $p->course_id ?? null;
+
+                  // Fallback: If course_id is missing, try to find it by title
+                  if (!$effectiveCourseId && isset($p->training_title)) {
+                    $foundCourse = \App\Models\CourseManagement::where('course_title', $p->training_title)
+                      ->orWhere('course_title', 'LIKE', '%' . $p->training_title . '%')
+                      ->first();
+                    if ($foundCourse) {
+                      $effectiveCourseId = $foundCourse->course_id;
+                    }
+                  }
+
+                  if ($effectiveCourseId) {
                     $examAttempt = \App\Models\ExamAttempt::where('employee_id', $employeeId)
-                      ->where('course_id', $p->course_id)
+                      ->where('course_id', $effectiveCourseId)
                       ->whereIn('status', ['completed', 'failed']) // Include both passed and failed attempts
                       ->orderBy('completed_at', 'desc')
                       ->first();
@@ -165,8 +198,13 @@
                     if ($examAttempt) {
                       // Use actual exam score for progress, but set to 100% if passed (>=80%)
                       $actualScore = round($examAttempt->score);
-                      $progressValue = $actualScore >= 80 ? 100 : $actualScore;
-                      $progressSource = 'exam';
+                      
+                      // Only overwrite if we don't already have a 100% status from Priority 0
+                      // OR if the exam is passed (which is also 100%)
+                      if ($progressValue < 100 || $actualScore >= 80) {
+                        $progressValue = $actualScore >= 80 ? 100 : $actualScore;
+                        $progressSource = 'exam';
+                      }
                     }
                   }
 
@@ -279,51 +317,20 @@
                   }
                 @endphp
 
-                <div class="progress" style="height: 20px;">
-                  <div class="progress-bar {{ $progressColor }}" role="progressbar" style="width: {{ $progressValue }}%">
-                    {{ $progressValue }}%
-                    @if($progressSource === 'exam' && $examAttempt)
-                      @if($examAttempt->score >= 80)
-                        <i class="bi bi-check-circle ms-1"></i>
-                      @else
-                        <i class="bi bi-x-circle ms-1"></i>
+                <div class="progress" style="height: 25px; border-radius: 15px; overflow: hidden; background-color: #f0f0f0; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                  <div class="progress-bar {{ $progressColor }} fw-bold" 
+                       role="progressbar" 
+                       style="width: {{ $progressValue }}%; transition: width 0.8s ease;">
+                    <div class="d-flex align-items-center justify-content-center w-100 h-100" style="gap: 6px; font-size: 0.9rem; text-shadow: 0 1px 1px rgba(0,0,0,0.2);">
+                      <span>{{ $progressValue }}%</span>
+                      @if($progressSource === 'exam' && $examAttempt)
+                        <i class="bi bi-{{ $examAttempt->score >= 80 ? 'check-circle-fill' : 'x-circle-fill' }}" style="font-size: 1rem;"></i>
+                      @elseif($progressValue >= 100)
+                        <i class="bi bi-check-circle-fill" style="font-size: 1rem;"></i>
                       @endif
-                    @endif
+                    </div>
                   </div>
                 </div>
-
-                {{-- Show progress source --}}
-                @if($progressSource !== 'none')
-                  <small class="text-muted d-block mt-1">
-                    @if($progressSource === 'exam')
-                      <i class="bi bi-mortarboard me-1"></i>Exam Score
-                    @elseif($progressSource === 'dashboard')
-                      <i class="bi bi-book me-1"></i>Training Dashboard
-                    @elseif($progressSource === 'approved_request_dashboard')
-                      <i class="bi bi-check-circle me-1"></i>Approved Request
-                    @elseif($progressSource === 'competency')
-                      <i class="bi bi-award me-1"></i>Competency Profile
-                    @elseif($progressSource === 'destination')
-                      <i class="bi bi-geo-alt me-1"></i>Destination Training
-                    @elseif($progressSource === 'system')
-                      <i class="bi bi-database me-1"></i>System Data
-                    @endif
-                  </small>
-                @endif
-
-                {{-- Show exam score if available --}}
-                @if($progressSource === 'exam' && $examAttempt)
-                  <small class="{{ $examAttempt->score >= 80 ? 'text-success' : 'text-danger' }} d-block mt-1">
-                    <i class="bi bi-{{ $examAttempt->score >= 80 ? 'check-circle' : 'x-circle' }} me-1"></i>
-                    Exam Score: {{ $examAttempt->score }}%
-                    @if($examAttempt->score >= 80)
-                      <span class="badge bg-success ms-1">PASSED</span>
-                    @else
-                      <span class="badge bg-danger ms-1">FAILED</span>
-                    @endif
-                    <br><span class="text-muted">({{ $examAttempt->completed_at->format('M d, Y') }})</span>
-                  </small>
-                @endif
               </td>
               <td>
                 @php
@@ -366,12 +373,6 @@
                   }
                 @endphp
                 <span class="badge {{ $statusClass }}">{{ $displayStatus }}</span>
-                <small class="d-block text-muted mt-1">{{ $currentProgressValue }}% Progress</small>
-                @if(!empty($improvementMessage))
-                  <small class="d-block text-warning mt-1">
-                    <i class="bi bi-exclamation-triangle me-1"></i>{{ $improvementMessage }}
-                  </small>
-                @endif
               </td>
               <td>
                 @php
@@ -402,7 +403,6 @@
                   <span class="fw-semibold">{{ $mostRecentUpdate->format('M d, Y') }}</span>
                   <small class="text-muted">
                     <i class="bi bi-clock me-1"></i>{{ $mostRecentUpdate->diffForHumans() }}
-                    <br><i class="bi bi-arrow-repeat me-1"></i>{{ $updateSource }}
                   </small>
                 </div>
               </td>
@@ -427,7 +427,6 @@
                   @if($showExpiredDate)
                     <div class="d-flex flex-column align-items-start">
                       <div><strong>{{ $dateFormatted }}</strong></div>
-                      <div class="text-muted small">{{ $timeFormatted }}</div>
                       <div class="w-100 mt-1">
                         @if(!$isExpired)
                           <span class="badge bg-info bg-opacity-10 text-info">
@@ -439,23 +438,7 @@
                           </span>
                         @endif
                       </div>
-                      {{-- Show expiration source --}}
-                      @if($expiredDateSource !== 'none')
-                        <div class="w-100 mt-1">
-                          <small class="text-muted">
-                            @if($expiredDateSource === 'competency_gap')
-                              <i class="bi bi-award me-1"></i>From Competency Gap
-                            @elseif($expiredDateSource === 'destination_competency_gap')
-                              <i class="bi bi-geo-alt me-1"></i>From Destination Gap
-                            @elseif($expiredDateSource === 'training_dashboard')
-                              <i class="bi bi-book me-1"></i>From Training Dashboard
-                            @elseif($expiredDateSource === 'approved_request')
-                              <i class="bi bi-check-circle me-1"></i>From Training Request
-                            @endif
-                          </small>
-                        </div>
-                      @endif
-                    </div>
+                     </div>
                   @else
                     <span class="badge bg-secondary bg-opacity-10 text-secondary">
                       <i class="bi bi-calendar-x"></i> Invalid Date

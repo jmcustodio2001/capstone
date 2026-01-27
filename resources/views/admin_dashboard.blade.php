@@ -160,13 +160,13 @@
           <!-- Primary Statistics -->
           <div class="col-xl-3 col-lg-4 col-md-6">
             <div class="card shadow-sm border-0 h-100">
-              <div class="card-header bg-primary text-dark border-0">
+              <div class="card-header bg-primary-subtle text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <h6 class="mb-0 text-dark">Total Employees</h6>
                     <small class="opacity-75 text-dark">Active workforce</small>
                   </div>
-                  <i class="bi bi-people text-dark" style="font-size: 24px;"></i>
+                  <i class="bi bi-people text-primary" style="font-size: 24px;"></i>
                 </div>
               </div>
               <div class="card-body">
@@ -177,13 +177,13 @@
 
           <div class="col-xl-3 col-lg-4 col-md-6">
             <div class="card shadow-sm border-0 h-100">
-              <div class="card-header bg-info text-dark border-0">
+              <div class="card-header bg-primary-subtle text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <h6 class="mb-0 text-dark">Active Courses</h6>
                     <small class="opacity-75 text-dark">Available training</small>
                   </div>
-                  <i class="bi bi-book text-dark" style="font-size: 24px;"></i>
+                  <i class="bi bi-book text-primary" style="font-size: 24px;"></i>
                 </div>
               </div>
               <div class="card-body">
@@ -194,13 +194,13 @@
 
           <div class="col-xl-3 col-lg-4 col-md-6">
             <div class="card shadow-sm border-0 h-100">
-              <div class="card-header bg-success text-dark border-0">
+              <div class="card-header bg-primary-subtle text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <h6 class="mb-0 text-dark">Training Sessions</h6>
                     <small class="opacity-75 text-dark">Ongoing sessions</small>
                   </div>
-                  <i class="bi bi-easel text-dark" style="font-size: 24px;"></i>
+                  <i class="bi bi-easel text-primary" style="font-size: 24px;"></i>
                 </div>
               </div>
               <div class="card-body">
@@ -211,13 +211,13 @@
 
           <div class="col-xl-3 col-lg-4 col-md-6">
             <div class="card shadow-sm border-0 h-100">
-              <div class="card-header bg-warning text-dark border-0">
+              <div class="card-header bg-primary-subtle text-dark border-0">
                 <div class="d-flex align-items-center justify-content-between">
                   <div>
                     <h6 class="mb-0 text-dark">Completed Trainings</h6>
                     <small class="opacity-75 text-dark">Total completions</small>
                   </div>
-                  <i class="bi bi-check-circle text-dark" style="font-size: 24px;"></i>
+                  <i class="bi bi-check-circle text-primary" style="font-size: 24px;"></i>
                 </div>
               </div>
               <div class="card-body">
@@ -233,7 +233,7 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
+                  <div class="stat-icon text-primary me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-diagram-3" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
@@ -249,7 +249,7 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
+                  <div class="stat-icon text-primary me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-trophy" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
@@ -265,7 +265,7 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
+                  <div class="stat-icon text-primary me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-clock-history" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
@@ -281,7 +281,7 @@
             <div class="card modern-card shadow-sm border-0 h-100">
               <div class="card-body p-4">
                 <div class="d-flex align-items-center">
-                  <div class="stat-icon text-dark me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
+                  <div class="stat-icon text-primary me-3" style="width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;">
                     <i class="bi bi-clipboard-check" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
@@ -300,7 +300,7 @@
             <div class="card performance-card shadow-sm border-0 h-100">
               <div class="card-header bg-transparent border-bottom-0 pb-0">
                 <h5 class="card-title mb-0 d-flex align-items-center">
-                  <i class="bi bi-graph-up text-dark me-2"></i>
+                  <i class="bi bi-graph-up text-primary me-2"></i>
                   Training Performance
                 </h5>
               </div>
@@ -343,7 +343,7 @@
             <div class="card performance-card shadow-sm border-0 h-100">
               <div class="card-header bg-transparent border-bottom-0 pb-0">
                 <h5 class="card-title mb-0 d-flex align-items-center">
-                  <i class="bi bi-people-fill text-dark me-2"></i>
+                  <i class="bi bi-people-fill text-primary me-2"></i>
                   Employee Engagement
                 </h5>
               </div>
@@ -406,7 +406,27 @@
                     <tr>
                       <td>
                         <div class="d-flex align-items-center">
-                          <img src="{{ $training->employee && $training->employee->profile_picture ? asset('storage/' . $training->employee->profile_picture) : 'https://ui-avatars.com/api/?name=' . urlencode(($training->employee ? $training->employee->first_name : 'User') ?? 'User') }}" class="rounded-circle me-2" width="32" height="32" alt="Trainer">
+                          @php
+                            $profilePic = $training->employee->profile_picture ?? null;
+                            $profilePicUrl = null;
+                            if ($profilePic) {
+                                if (strpos($profilePic, 'http') === 0) {
+                                    $profilePicUrl = $profilePic;
+                                } elseif (strpos($profilePic, 'storage/') === 0) {
+                                    $profilePicUrl = asset($profilePic);
+                                } else {
+                                    $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                                }
+                            }
+                            
+                            if (!$profilePicUrl) {
+                                $firstName = $training->employee->first_name ?? 'User';
+                                $profilePicUrl = 'https://ui-avatars.com/api/?name=' . urlencode($firstName) . '&background=007bff&color=ffffff&bold=true';
+                            }
+                          @endphp
+                          <img src="{{ $profilePicUrl }}" class="rounded-circle me-2" width="32" height="32" alt="Trainer"
+                               style="object-fit: cover;"
+                               onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($training->employee->first_name ?? 'User') }}&background=6c757d&color=ffffff&bold=true'">
                           <span>{{ $training->employee ? ($training->employee->first_name ?? 'N/A') : 'N/A' }} {{ $training->employee ? ($training->employee->last_name ?? '') : '' }}</span>
                         </div>
                       </td>
@@ -450,7 +470,27 @@
             <div class="card-body" style="max-height: 300px; overflow-y: auto;">
               @forelse($recentCompletedTrainings ?? [] as $completion)
               <div class="d-flex align-items-center mb-3 pb-2 border-bottom">
-                <img src="{{ isset($completion['employee']) && $completion['employee'] && $completion['employee']->profile_picture ? asset('storage/' . $completion['employee']->profile_picture) : 'https://ui-avatars.com/api/?name=' . urlencode((isset($completion['employee']) && $completion['employee'] ? $completion['employee']->first_name : 'User') ?? 'User') }}" class="rounded-circle me-3" width="40" height="40" alt="Employee">
+                @php
+                  $profilePic = isset($completion['employee']) && $completion['employee'] ? $completion['employee']->profile_picture : null;
+                  $profilePicUrl = null;
+                  if ($profilePic) {
+                      if (strpos($profilePic, 'http') === 0) {
+                          $profilePicUrl = $profilePic;
+                      } elseif (strpos($profilePic, 'storage/') === 0) {
+                          $profilePicUrl = asset($profilePic);
+                      } else {
+                          $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                      }
+                  }
+                  
+                  if (!$profilePicUrl) {
+                      $firstName = isset($completion['employee']) && $completion['employee'] ? $completion['employee']->first_name : 'User';
+                      $profilePicUrl = 'https://ui-avatars.com/api/?name=' . urlencode($firstName) . '&background=28a745&color=ffffff&bold=true';
+                  }
+                @endphp
+                <img src="{{ $profilePicUrl }}" class="rounded-circle me-3" width="40" height="40" alt="Employee"
+                     style="object-fit: cover;"
+                     onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($completion['employee']->first_name ?? 'User') }}&background=6c757d&color=ffffff&bold=true'">
                 <div class="flex-grow-1">
                   <h6 class="mb-1">{{ isset($completion['employee']) && $completion['employee'] ? $completion['employee']->first_name ?? 'N/A' : 'N/A' }} {{ isset($completion['employee']) && $completion['employee'] ? $completion['employee']->last_name ?? '' : '' }}</h6>
                   <p class="mb-1 small">{{ $completion['training_title'] ?? 'Training Course' }}</p>

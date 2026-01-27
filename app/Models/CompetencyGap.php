@@ -22,9 +22,9 @@ class CompetencyGap extends Model
     protected static function booted()
     {
         static::creating(function ($competencyGap) {
-            // Automatically set expiration date to 1 week from now when creating
+            // Automatically set expiration date to 1 month from now when creating
             if (!$competencyGap->expired_date) {
-                $competencyGap->expired_date = now()->addWeek();
+                $competencyGap->expired_date = now()->addMonth();
             }
             // Set as active by default
             if ($competencyGap->is_active === null) {

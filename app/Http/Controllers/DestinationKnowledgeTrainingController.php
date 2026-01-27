@@ -297,39 +297,59 @@ foreach ($destinations as $destination) {
         // }
 
         // Get all employees for destination knowledge training (Fetch from API with local fallback)
-        $employeeMap = [];
+        // Create an employee map for quick lookup, starting with local employees
+        $localEmployees = Employee::all();
+        $emailToLocalMap = [];
+        foreach ($localEmployees as $employee) {
+            $employeeMap[$employee->employee_id] = $employee;
+            if ($employee->email) {
+                $emailToLocalMap[strtolower($employee->email)] = $employee;
+            }
+        }
+
         try {
-            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
             
-            // Handle if response is wrapped in a data key
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }
 
             if (is_array($apiEmployees) && !empty($apiEmployees)) {
-                $employees = collect($apiEmployees)->map(function($emp) {
-                    return (object) [
-                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
-                        'first_name' => $emp['first_name'] ?? 'Unknown',
-                        'last_name' => $emp['last_name'] ?? 'Employee',
-                        'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
-                        'profile_picture' => $emp['profile_picture'] ?? null
-                    ];
-                });
-            } else {
-                $employees = Employee::all();
+                foreach ($apiEmployees as $emp) {
+                    $empId = $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? null;
+                    if ($empId) {
+                        $empEmail = strtolower($emp['email'] ?? '');
+                        // Check if we have a local record with this email to get the photo
+                        $localRef = $emailToLocalMap[$empEmail] ?? null;
+                        
+                        $profilePic = $emp['profile_picture'] ?? null;
+                        
+                        // Prioritize local photo if it exists
+                        if ($localRef && $localRef->profile_picture) {
+                            $profilePic = $localRef->profile_picture;
+                        } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
+                            // If it's an API photo, link it to the HR server
+                            $profilePic = 'http://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                        }
+                        
+                        if (!isset($employeeMap[$empId])) {
+                            $employeeMap[$empId] = (object) [
+                                'employee_id' => $empId,
+                                'first_name' => $emp['first_name'] ?? 'Unknown',
+                                'last_name' => $emp['last_name'] ?? 'Employee',
+                                'email' => $emp['email'] ?? null,
+                                'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                                'profile_picture' => $profilePic
+                            ];
+                        }
+                    }
+                }
             }
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('Failed to fetch employees from API in index: ' . $e->getMessage());
-            $employees = Employee::all();
         }
-
-        // Create an employee map for quick lookup
-        foreach ($employees as $employee) {
-            $empId = is_object($employee) ? $employee->employee_id : $employee['employee_id'];
-            $employeeMap[$empId] = $employee;
-        }
+        $employees = collect($employeeMap)->values();
 
         // Attach API employee data to destinations if local relationship is null
         foreach ($destinations as $destination) {

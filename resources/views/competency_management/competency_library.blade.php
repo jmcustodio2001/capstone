@@ -16,53 +16,53 @@
     .text-orange {
       color: #ff8c00 !important;
     }
-    
+
     /* Professional list styling */
     .competency-row {
       border-left: 3px solid transparent;
     }
-    
+
     /* Custom category colors */
     .bg-purple {
       background-color: #6f42c1 !important;
     }
-    
+
     .bg-pink {
       background-color: #e83e8c !important;
     }
-    
+
     /* Progress bar animations */
     .progress-bar {
       transition: width 0.6s ease;
     }
-    
+
     /* Button group styling */
     .btn-group .btn {
       border-radius: 0.375rem !important;
       margin-right: 2px;
     }
-    
+
     .btn-group .btn:last-child {
       margin-right: 0;
     }
-    
+
     /* Star rating styling */
     .bi-star-fill, .bi-star {
       font-size: 0.9rem;
     }
-    
+
     /* Empty state styling */
     .bi-inbox {
       opacity: 0.3;
     }
-    
+
     /* Professional table styling */
     .table {
       border-radius: 8px;
       overflow: hidden;
       box-shadow: 0 2px 12px rgba(0,0,0,0.08);
     }
-    
+
     .table th {
       background-color: #f8f9fa;
       color: #495057;
@@ -73,17 +73,17 @@
       letter-spacing: 0.5px;
       padding: 1rem 0.75rem;
     }
-    
+
     .table td {
       vertical-align: middle;
       padding: 1rem 0.75rem;
       border-color: #e9ecef;
     }
-    
+
     .table tbody tr {
       border-bottom: 1px solid #f1f3f4;
     }
-    
+
     .category-badge {
       font-size: 0.8rem;
       padding: 0.25rem 0.5rem;
@@ -92,32 +92,32 @@
       text-transform: none;
       letter-spacing: normal;
     }
-    
+
     .progress-sm {
       height: 8px;
       border-radius: 10px;
       background-color: #e9ecef;
     }
-    
+
     .progress-sm .progress-bar {
       border-radius: 10px;
     }
-    
+
     .star-rating {
       font-size: 0.9rem;
     }
-    
+
     .competency-name {
       font-weight: 600;
       color: #2c3e50;
       margin-bottom: 0.25rem;
     }
-    
+
     .competency-date {
       font-size: 0.8rem;
       color: #6c757d;
     }
-    
+
     .row-number {
       background: none;
       color: #495057;
@@ -126,12 +126,12 @@
       padding: 0.3rem 0.6rem;
       border-radius: 15px;
     }
-    
+
     .description-text {
       color: #495057;
       line-height: 1.4;
     }
-    
+
     .progress-percentage {
       font-weight: 700;
       font-size: 0.9rem;
@@ -388,7 +388,7 @@
                             }
                         }
                       @endphp
-                      
+
                       @if(count($compNames) > 0)
                         <div class="d-flex flex-wrap gap-1 mb-1">
                           @foreach($compNames as $name)
@@ -396,11 +396,11 @@
                           @endforeach
                         </div>
                       @endif
-                      
+
                       @if($pos->min_experience_years > 0)
                         <div class="small">
                           <i class="bi bi-clock-history me-1 text-warning"></i>
-                          <span class="text-muted">Min Experience:</span> 
+                          <span class="text-muted">Min Experience:</span>
                           <span class="fw-semibold text-dark">{{ $pos->min_experience_years }} years</span>
                         </div>
                       @else
@@ -453,55 +453,64 @@
                 </thead>
                 <tbody>
           @endif
-                  @php
-                    // Use single color for all categories (same as card header)
-                    $effectiveCategory = $comp->category ?? '';
-                    $colorClass = 'bg-primary'; // Single blue color for all badges
-                    $progressPercent = ($comp->rate ?? 0) * 20;
-                    $progressPercent = max(0, min(100, $progressPercent));
-                    $percentClass = $progressPercent >= 80 ? 'text-success' : ($progressPercent >= 50 ? 'text-warning' : 'text-danger');
-                  @endphp
-                  <tr class="competency-row">
-                    <td class="text-center">
-                      <span class="row-number">{{ $competencies->firstItem() + $loop->index }}</span>
-                    </td>
-                    <td>
-                      <div class="competency-name">{{ $comp->competency_name }}</div>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge category-badge {{ $colorClass }} text-white">
-                        {{ $effectiveCategory }}
-                      </span>
-                    </td>
-                    <td>
-                      <div class="description-text" title="{{ $comp->description }}">
-                        {{ Str::limit($comp->description, 85) }}
-                      </div>
-                    </td>
-                    <td>
-                      <div class="d-flex align-items-center mb-2">
-                        <span class="progress-percentage {{ $percentClass }} me-2">{{ $progressPercent }}%</span>
-                      </div>
-                      <div class="progress progress-sm">
-                        <div class="progress-bar {{ $progressPercent >= 80 ? 'bg-success' : ($progressPercent >= 50 ? 'bg-warning' : 'bg-danger') }}" 
-                             data-progress-width="{{ $progressPercent }}" 
-                             style="width: {{ $progressPercent }}%;">
-                        </div>
-                      </div>
-                    </td>
-                    <td class="text-center">
-                      <div class="star-rating mb-1">
-                        @for($i = 1; $i <= 5; $i++)
-                          @if($i <= ($comp->rate ?? 0))
-                            <i class="bi bi-star-fill text-warning"></i>
-                          @else
-                            <i class="bi bi-star text-muted"></i>
-                          @endif
-                        @endfor
-                      </div>
-                      <div class="small text-muted fw-semibold">({{ $comp->rate ?? 0 }}/5)</div>
-                    </td>
-                  </tr>
+
+          @php
+            // Detect if this competency is a 'skill' entry (case-insensitive, partial match)
+            $isSkill = Str::contains(Str::lower($comp->category ?? ''), 'skill');
+          @endphp
+
+          @if(!$isSkill)
+            @php
+              // Use single color for all categories (same as card header)
+              $effectiveCategory = $comp->category ?? '';
+              $colorClass = 'bg-primary'; // Single blue color for all badges
+              $progressPercent = ($comp->rate ?? 0) * 20;
+              $progressPercent = max(0, min(100, $progressPercent));
+              $percentClass = $progressPercent >= 80 ? 'text-success' : ($progressPercent >= 50 ? 'text-warning' : 'text-danger');
+            @endphp
+            <tr class="competency-row">
+              <td class="text-center">
+                <span class="row-number">{{ $competencies->firstItem() + $loop->index }}</span>
+              </td>
+              <td>
+                <div class="competency-name">{{ $comp->competency_name }}</div>
+              </td>
+              <td class="text-center">
+                <span class="badge category-badge {{ $colorClass }} text-white">
+                  {{ $effectiveCategory }}
+                </span>
+              </td>
+              <td>
+                <div class="description-text" title="{{ $comp->description }}">
+                  {{ Str::limit($comp->description, 85) }}
+                </div>
+              </td>
+              <td>
+                <div class="d-flex align-items-center mb-2">
+                  <span class="progress-percentage {{ $percentClass }} me-2">{{ $progressPercent }}%</span>
+                </div>
+                <div class="progress progress-sm">
+                  <div class="progress-bar {{ $progressPercent >= 80 ? 'bg-success' : ($progressPercent >= 50 ? 'bg-warning' : 'bg-danger') }}"
+                       data-progress-width="{{ $progressPercent }}"
+                       style="width: {{ $progressPercent }}%;">
+                  </div>
+                </div>
+              </td>
+              <td class="text-center">
+                <div class="star-rating mb-1">
+                  @for($i = 1; $i <= 5; $i++)
+                    @if($i <= ($comp->rate ?? 0))
+                      <i class="bi bi-star-fill text-warning"></i>
+                    @else
+                      <i class="bi bi-star text-muted"></i>
+                    @endif
+                  @endfor
+                </div>
+                <div class="small text-muted fw-semibold">({{ $comp->rate ?? 0 }}/5)</div>
+              </td>
+            </tr>
+          @endif
+
           @if($loop->last)
                 </tbody>
               </table>

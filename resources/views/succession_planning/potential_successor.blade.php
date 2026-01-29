@@ -133,10 +133,6 @@
           </div>
         </div>
         <div class="card-body">
-          <div class="alert alert-info">
-            <i class="bi bi-info-circle me-2"></i>
-            <strong>Enhanced Security:</strong> All successor management operations require admin password verification for security.
-          </div>
         </div>
       </div>
 

@@ -1073,7 +1073,7 @@ if (typeof window.trans === 'undefined') {
                           <label class="form-check-label d-flex align-items-center" for="emp_check_{{ $employee->employee_id }}">
                             <div class="ms-2">
                               <span class="fw-semibold d-block" style="font-size: 0.9rem;">{{ $employee->first_name }} {{ $employee->last_name }}</span>
-                              <small class="text-muted" style="font-size: 0.75rem;">ID: {{ $employee->employee_id }} | {{ $employee->position ?? 'No Position' }}</small>
+                              <small class="text-muted" style="font-size: 0.75rem;">ID: {{ $loop->iteration }} | {{ $employee->position ?? 'No Position' }}</small>
                             </div>
                           </label>
                         </div>

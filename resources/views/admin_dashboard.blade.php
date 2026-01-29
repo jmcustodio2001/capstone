@@ -10,7 +10,7 @@
   <!-- Bootstrap Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
-  
+
   <!-- Enhanced Dashboard Styles -->
   <style>
     .dashboard-card {
@@ -18,96 +18,96 @@
       border-radius: 15px;
       overflow: hidden;
     }
-    
+
     .dashboard-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 10px 25px rgba(0,0,0,0.15) !important;
     }
-    
+
     .modern-card {
       transition: all 0.3s ease;
       border-radius: 12px;
       border-left: 4px solid transparent;
     }
-    
+
     .modern-card:hover {
       transform: translateY(-3px);
       box-shadow: 0 8px 20px rgba(0,0,0,0.12) !important;
       border-left-color: var(--bs-primary);
     }
-    
+
     .performance-card {
       transition: all 0.3s ease;
       border-radius: 12px;
       background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
     }
-    
+
     .performance-card:hover {
       transform: translateY(-3px);
       box-shadow: 0 8px 20px rgba(0,0,0,0.1) !important;
     }
-    
+
     .stat-icon {
       transition: all 0.3s ease;
     }
-    
+
     .dashboard-card:hover .stat-icon {
       transform: scale(1.1);
     }
-    
+
     .progress {
       border-radius: 10px;
       overflow: hidden;
     }
-    
+
     .progress-bar {
       transition: width 0.6s ease;
     }
-    
+
     .card-title {
       font-weight: 600;
       color: #2c3e50;
     }
-    
+
     @media (max-width: 768px) {
       .dashboard-card .card-body {
         padding: 1.5rem !important;
       }
-      
+
       .dashboard-card h2 {
         font-size: 2rem !important;
       }
-      
+
       .modern-card h3 {
         font-size: 1.5rem !important;
       }
     }
-    
+
     /* Card Grid Animations */
     .row > [class*="col-"] {
       animation: fadeInUp 0.6s ease forwards;
       opacity: 0;
       transform: translateY(20px);
     }
-    
+
     .row > [class*="col-"]:nth-child(1) { animation-delay: 0.1s; }
     .row > [class*="col-"]:nth-child(2) { animation-delay: 0.2s; }
     .row > [class*="col-"]:nth-child(3) { animation-delay: 0.3s; }
     .row > [class*="col-"]:nth-child(4) { animation-delay: 0.4s; }
-    
+
     @keyframes fadeInUp {
       to {
         opacity: 1;
         transform: translateY(0);
       }
     }
-    
+
     /* Enhanced Quick Actions */
     .btn {
       transition: all 0.3s ease;
       border-radius: 8px;
     }
-    
+
     .btn:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -126,6 +126,53 @@
   <!-- Main Content -->
   <main id="main-content">
     <div class="container-fluid">
+      @php
+        // Compute filtered counts excluding auto-created items from employee API
+        try {
+          // Active courses (exclude descriptions created by API)
+          // Align filtering with Course Management view: exclude various auto-created/system descriptions
+          $filteredActiveCourses = \App\Models\CourseManagement::where('status', 'Active')
+            ->where(function($q){
+                $q->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%auto-created%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%auto created%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%api skills%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%employee api skills%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%auto-created from%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%(training:%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%(training:)%']);
+            })->count();
+
+          // Competencies (exclude auto-created competencies and count unique names)
+          $competencyQuery = \App\Models\CompetencyLibrary::where(function($q){
+                $q->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%auto-created%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%api skills%'])
+                  ->whereRaw("LOWER(COALESCE(description,'')) NOT LIKE ?", ['%(training:%']);
+          });
+          $filteredCompetencies = $competencyQuery->get()->groupBy(function($item){
+              return trim(strtolower($item->competency_name ?? ''));
+          })->filter()->count();
+
+          // Skills tracked: use same set as competencies (unique)
+          $filteredSkillsTracked = $filteredCompetencies;
+
+        } catch (\Throwable $e) {
+          // Fallback to provided variables if model queries fail — ensure numeric counts
+          $filteredActiveCourses = 0;
+          if (isset($activeCourses)) {
+            $filteredActiveCourses = is_numeric($activeCourses) ? $activeCourses : (is_countable($activeCourses) ? count($activeCourses) : 0);
+          } elseif (isset($courses)) {
+            $filteredActiveCourses = is_countable($courses) ? count($courses) : (method_exists($courses, 'count') ? $courses->count() : 0);
+          }
+
+          if (isset($competencies)) {
+            $filteredCompetencies = is_numeric($competencies) ? $competencies : (is_countable($competencies) ? count($competencies) : (method_exists($competencies, 'count') ? $competencies->count() : 0));
+          } else {
+            $filteredCompetencies = 0;
+          }
+
+          $filteredSkillsTracked = $filteredCompetencies;
+        }
+      @endphp
       <!-- Page Header -->
       <div class="page-header-container mb-4">
         <div class="d-flex justify-content-between align-items-center page-header">
@@ -187,7 +234,7 @@
                 </div>
               </div>
               <div class="card-body">
-                <h2 class="fw-bold mb-0 text-dark" style="font-size: 2.5rem;">{{ isset($activeCourses) ? $activeCourses : '0' }}</h2>
+                <h2 class="fw-bold mb-0 text-dark" style="font-size: 2.5rem;">{{ isset($filteredActiveCourses) ? $filteredActiveCourses : '0' }}</h2>
               </div>
             </div>
           </div>
@@ -253,7 +300,7 @@
                     <i class="bi bi-trophy" style="font-size: 28px;"></i>
                   </div>
                   <div class="flex-grow-1">
-                    <h3 class="fw-bold mb-1 text-dark" style="font-size: 2rem;">{{ isset($competencies) ? $competencies : '0' }}</h3>
+                    <h3 class="fw-bold mb-1 text-dark" style="font-size: 2rem;">{{ isset($filteredCompetencies) ? $filteredCompetencies : '0' }}</h3>
                     <p class="text-muted mb-0">Competencies</p>
                   </div>
                 </div>
@@ -310,8 +357,8 @@
                     <div class="text-center p-3 bg-light rounded">
                       @php
                         $completionRate = 0;
-                        if (isset($completedTrainings) && isset($totalEmployees) && isset($activeCourses)) {
-                          $totalPossibleCompletions = ($totalEmployees ?? 1) * ($activeCourses ?? 1);
+                        if (isset($completedTrainings) && isset($totalEmployees) && isset($filteredActiveCourses)) {
+                          $totalPossibleCompletions = ($totalEmployees ?? 1) * ($filteredActiveCourses ?? 1);
                           $completionRate = $totalPossibleCompletions > 0 ? min(round(($completedTrainings / $totalPossibleCompletions) * 100), 100) : 0;
                         }
                       @endphp
@@ -321,7 +368,7 @@
                   </div>
                   <div class="col-6">
                     <div class="text-center p-3 bg-light rounded">
-                      <h4 class="fw-bold text-dark mb-1">{{ isset($activeCourses) ? $activeCourses : '0' }}</h4>
+                      <h4 class="fw-bold text-dark mb-1">{{ isset($filteredActiveCourses) ? $filteredActiveCourses : '0' }}</h4>
                       <small class="text-muted">Active Courses</small>
                     </div>
                   </div>
@@ -357,7 +404,7 @@
                   </div>
                   <div class="col-6">
                     <div class="text-center p-3 bg-light rounded">
-                      <h4 class="fw-bold text-dark mb-1">{{ isset($competencies) ? $competencies : '0' }}</h4>
+                      <h4 class="fw-bold text-dark mb-1">{{ isset($filteredSkillsTracked) ? $filteredSkillsTracked : '0' }}</h4>
                       <small class="text-muted">Skills Tracked</small>
                     </div>
                   </div>
@@ -418,7 +465,7 @@
                                     $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
                                 }
                             }
-                            
+
                             if (!$profilePicUrl) {
                                 $firstName = $training->employee->first_name ?? 'User';
                                 $profilePicUrl = 'https://ui-avatars.com/api/?name=' . urlencode($firstName) . '&background=007bff&color=ffffff&bold=true';
@@ -482,7 +529,7 @@
                           $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
                       }
                   }
-                  
+
                   if (!$profilePicUrl) {
                       $firstName = isset($completion['employee']) && $completion['employee'] ? $completion['employee']->first_name : 'User';
                       $profilePicUrl = 'https://ui-avatars.com/api/?name=' . urlencode($firstName) . '&background=28a745&color=ffffff&bold=true';

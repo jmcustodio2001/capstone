@@ -16,73 +16,73 @@
       transition: all 0.3s ease !important;
       border: 1px solid #e9ecef !important;
     }
-    
+
     .gap-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15) !important;
       border-color: #007bff !important;
     }
-    
+
     /* Progress bar animations */
     .progress-bar {
       transition: width 0.6s ease;
     }
-    
+
     /* Button group styling */
     .btn-group .btn {
       border-radius: 0.375rem !important;
       margin-right: 2px;
     }
-    
+
     .btn-group .btn:last-child {
       margin-right: 0;
     }
-    
+
     /* Empty state styling */
     .bi-inbox {
       opacity: 0.3;
     }
-    
+
     /* Employee avatar styling */
     .gap-card .card-header img {
       border: 2px solid rgba(255,255,255,0.3) !important;
     }
-    
+
     /* Competency gap item styling */
     .competency-gap-item {
       position: relative;
     }
-    
+
     .competency-gap-item.border-top {
       border-top: 1px solid #e9ecef !important;
       margin-top: 1rem !important;
       padding-top: 1rem !important;
     }
-    
+
     /* Competency numbering badge */
     .competency-gap-item .badge {
       font-size: 0.7rem;
     }
-    
+
     /* View All Gaps Button */
     .view-all-gaps-btn {
       transition: all 0.3s ease;
     }
-    
+
     .view-all-gaps-btn:hover {
       transform: translateY(-1px);
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    
+
     /* Toggle icon rotation */
     .view-all-gaps-btn .toggle-icon {
       transition: transform 0.3s ease;
     }
-    
+
     .view-all-gaps-btn[aria-expanded="true"] .toggle-icon {
       transform: rotate(180deg);
     }
-    
+
     /* Collapse animation */
     .collapse {
       transition: all 0.3s ease;
@@ -160,7 +160,28 @@
               </tr>
             </thead>
             <tbody>
+              @php $seenCompetencies = []; @endphp
               @forelse($competencies as $index => $comp)
+                @php
+                  $descLower = Str::lower($comp->description ?? '');
+                  $isAutoCreated = Str::contains($descLower, 'auto-created')
+                               || Str::contains($descLower, 'auto created')
+                               || Str::contains($descLower, 'api skills')
+                               || Str::contains($descLower, 'employee api skills')
+                               || Str::contains($descLower, 'auto-created from')
+                               || Str::contains($descLower, '(training:)');
+                  $normalizedName = trim(strtolower($comp->competency_name ?? ''));
+                @endphp
+
+                @if($isAutoCreated)
+                  @continue
+                @endif
+
+                @if($normalizedName !== '' && in_array($normalizedName, $seenCompetencies))
+                  @continue
+                @endif
+                @php if($normalizedName !== '') $seenCompetencies[] = $normalizedName; @endphp
+
                 <tr>
                   <td>{{ $competencies->firstItem() + $index }}</td>
                   <td>{{ $comp->competency_name }}</td>
@@ -235,7 +256,7 @@
           // Group gaps by employee
           $groupedGaps = $gaps->groupBy('employee_id');
         @endphp
-        
+
         @forelse($groupedGaps as $employeeId => $employeeGaps)
           @if($loop->first)
             <div class="row g-4" id="gap-cards-container">
@@ -245,7 +266,7 @@
                   @php
                     $firstGap = $employeeGaps->first();
                     $employee = $firstGap->employee;
-                    
+
                     $firstName = $employee?->first_name ?? 'Unknown';
                     $lastName = $employee?->last_name ?? 'Employee';
                     $fullName = $firstName . ' ' . $lastName;
@@ -269,7 +290,7 @@
                                        "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
                     }
                   @endphp
-                  
+
                   <!-- Card Header with Employee Info -->
                   <div class="card-header bg-primary text-white border-0 py-3">
                     <div class="d-flex align-items-center">
@@ -283,15 +304,15 @@
                       </div>
                     </div>
                   </div>
-                  
+
                   <div class="card-body">
                     <!-- View All Gaps Button -->
                     <div class="d-grid mb-3">
-                      <button class="btn btn-outline-primary btn-sm view-all-gaps-btn" 
-                              type="button" 
-                              data-bs-toggle="collapse" 
-                              data-bs-target="#gaps-{{ $employeeId }}" 
-                              aria-expanded="false" 
+                      <button class="btn btn-outline-primary btn-sm view-all-gaps-btn"
+                              type="button"
+                              data-bs-toggle="collapse"
+                              data-bs-target="#gaps-{{ $employeeId }}"
+                              aria-expanded="false"
                               aria-controls="gaps-{{ $employeeId }}">
                         <i class="bi bi-eye me-1"></i>View All {{ $employeeGaps->count() }} Competency Gap{{ $employeeGaps->count() > 1 ? 's' : '' }}
                         <i class="bi bi-chevron-down ms-1 toggle-icon"></i>
@@ -587,7 +608,7 @@
                           </button>
                         @endif
                       </div>
-                      
+
                       <!-- Additional Action Buttons -->
                       <div class="mt-2">
                         @if($gap->expired_date)
@@ -936,7 +957,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.js"></script>
-  
+
   <!-- Load optional JavaScript files with error handling -->
   <script>
     // Function to safely load optional scripts
@@ -953,7 +974,7 @@
       };
       document.head.appendChild(script);
     }
-    
+
     // Load optional scripts
     loadOptionalScript('{{ asset('assets/js/admin_dashboard-script.js') }}');
     loadOptionalScript('{{ asset('js/csrf-refresh.js') }}');
@@ -1972,7 +1993,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Get current CSRF token and make the request
         const currentToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-        
+
         if (!currentToken) {
           console.error('CSRF token not found');
           btn.disabled = false;
@@ -2024,17 +2045,17 @@ document.addEventListener('DOMContentLoaded', function () {
           const employeeName = btn.getAttribute('data-employee-name');
           const competency = btn.getAttribute('data-competency');
           const expiredDate = btn.getAttribute('data-expired-date');
-          
+
           assignTrainingWithConfirmation(gapId, employeeId, employeeName, competency, expiredDate);
         }
-        
+
         // Unassign from Training button handler with SweetAlert and password verification
         if (e.target.closest('.unassign-training-btn')) {
           const btn = e.target.closest('.unassign-training-btn');
           const gapId = btn.getAttribute('data-id');
           const employeeName = btn.getAttribute('data-employee');
           const competency = btn.getAttribute('data-competency');
-          
+
           unassignTrainingWithConfirmation(gapId, employeeName, competency);
         }
       });
@@ -2057,11 +2078,11 @@ document.addEventListener('DOMContentLoaded', function () {
             assignedToTraining: this.getAttribute('data-assigned-to-training'),
             expiredDate: this.getAttribute('data-expired-date')
           };
-          
+
           viewGapDetails(gapData);
         });
       });
-      
+
       // View Gap Details with SweetAlert
       function viewGapDetails(gapData) {
         // Format expiration date
@@ -2072,7 +2093,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const now = new Date();
             const isExpired = now > expDate;
             const daysDiff = Math.ceil((expDate - now) / (1000 * 60 * 60 * 24));
-            
+
             expirationInfo = `
               <div class="d-flex align-items-center">
                 <strong>${expDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</strong>
@@ -2087,7 +2108,7 @@ document.addEventListener('DOMContentLoaded', function () {
             expirationInfo = 'Invalid Date';
           }
         }
-        
+
         // Format progress source
         const sourceLabels = {
           'manual': '<span class="badge bg-warning"><i class="bi bi-pencil"></i> Manual Entry</span>',
@@ -2096,15 +2117,15 @@ document.addEventListener('DOMContentLoaded', function () {
           'profile': '<span class="badge bg-secondary"><i class="bi bi-person"></i> Competency Profile</span>',
           'none': '<span class="badge bg-light text-dark"><i class="bi bi-question"></i> No Data</span>'
         };
-        
+
         const progressSourceLabel = sourceLabels[gapData.progressSource] || sourceLabels['none'];
-        
+
         // Determine gap status color
         const gapValue = parseInt(gapData.gapValue) || 0;
         const gapStatusColor = gapValue > 0 ? 'text-danger' : 'text-success';
         const gapStatusIcon = gapValue > 0 ? 'bi-exclamation-triangle' : 'bi-check-circle';
         const gapStatusText = gapValue > 0 ? `${gapValue} level(s) below required` : 'No gap - meets requirement';
-        
+
         Swal.fire({
           title: '<i class="bi bi-eye text-info"></i> Competency Gap Details',
           html: `
@@ -2122,7 +2143,7 @@ document.addEventListener('DOMContentLoaded', function () {
                   </div>
                 </div>
               </div>
-              
+
               <!-- Competency Information -->
               <div class="card mb-3">
                 <div class="card-header bg-light">
@@ -2134,7 +2155,7 @@ document.addEventListener('DOMContentLoaded', function () {
                       <strong><i class="bi bi-bookmark me-1"></i>Name:</strong> ${gapData.competencyName}
                     </div>
                     <div class="col-12">
-                      <strong><i class="bi bi-card-text me-1"></i>Description:</strong> 
+                      <strong><i class="bi bi-card-text me-1"></i>Description:</strong>
                       <div class="text-muted small mt-1">${gapData.competencyDescription || 'No description available'}</div>
                     </div>
                     <div class="col-6">
@@ -2146,7 +2167,7 @@ document.addEventListener('DOMContentLoaded', function () {
                   </div>
                 </div>
               </div>
-              
+
               <!-- Gap Analysis -->
               <div class="card mb-3">
                 <div class="card-header bg-light">
@@ -2186,7 +2207,7 @@ document.addEventListener('DOMContentLoaded', function () {
                   </div>
                 </div>
               </div>
-              
+
               <!-- Training Assignment Status -->
               <div class="card mb-3">
                 <div class="card-header bg-light">
@@ -2197,8 +2218,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div class="col-6">
                       <strong><i class="bi bi-check-square me-1"></i>Assigned to Training:</strong>
                       <div class="mt-1">
-                        ${gapData.assignedToTraining === 'Yes' ? 
-                          '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Yes</span>' : 
+                        ${gapData.assignedToTraining === 'Yes' ?
+                          '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Yes</span>' :
                           '<span class="badge bg-warning"><i class="bi bi-clock"></i> No</span>'
                         }
                       </div>
@@ -2221,9 +2242,9 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         });
       }
-      
+
       // ========== SWEETALERT FUNCTIONS FOR COMPETENCY GAP ACTIONS ==========
-      
+
       // Assign Training with SweetAlert
       function assignTrainingWithConfirmation(gapId, employeeId, employeeName, competency, expiredDate) {
         Swal.fire({
@@ -2255,7 +2276,7 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         });
       }
-      
+
       // Submit Training Assignment
       function submitTrainingAssignment(gapId, employeeId, competency, expiredDate, employeeName) {
         Swal.fire({
@@ -2267,7 +2288,7 @@ document.addEventListener('DOMContentLoaded', function () {
             Swal.showLoading();
           }
         });
-        
+
         fetch('{{ route("competency_gap_analysis.assign_to_training") }}', {
           method: 'POST',
           headers: {
@@ -2339,7 +2360,7 @@ document.addEventListener('DOMContentLoaded', function () {
           });
         });
       }
-      
+
       // Unassign Training with SweetAlert
       function unassignTrainingWithConfirmation(gapId, employeeName, competency) {
         Swal.fire({
@@ -2371,7 +2392,7 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         });
       }
-      
+
       // Submit Training Unassignment
       function submitTrainingUnassignment(gapId) {
         Swal.fire({
@@ -2383,7 +2404,7 @@ document.addEventListener('DOMContentLoaded', function () {
             Swal.showLoading();
           }
         });
-        
+
         fetch(`/admin/competency-gap-analysis/${gapId}/unassign-training`, {
           method: 'POST',
           headers: {
@@ -2461,7 +2482,7 @@ document.addEventListener('DOMContentLoaded', function () {
           });
         });
       }
-      
+
       // Re-attach event listeners after dynamic content updates
       function reattachEventListeners() {
         // Re-attach view gap button listeners
@@ -2482,24 +2503,24 @@ document.addEventListener('DOMContentLoaded', function () {
               assignedToTraining: this.getAttribute('data-assigned-to-training'),
               expiredDate: this.getAttribute('data-expired-date')
             };
-            
+
             viewGapDetails(gapData);
           });
         });
-        
+
         // Re-attach other button listeners as needed
         if (typeof setupAutoAssignButtons === 'function') {
           setupAutoAssignButtons();
         }
       }
-      
+
       // Function to refresh gap table (placeholder)
       function refreshGapTable() {
         console.log('Refreshing gap table...');
         // Simple page reload as fallback
         window.location.reload();
       }
-      
+
       // Function to refresh dashboard counts via AJAX
       function refreshDashboardCounts() {
         // Check if CSRF token exists
@@ -2508,14 +2529,14 @@ document.addEventListener('DOMContentLoaded', function () {
           console.warn('CSRF token not found, skipping dashboard refresh');
           return Promise.resolve();
         }
-        
+
         // Try both endpoints to ensure counts are updated
         const endpoints = [
           '/employee/my-trainings/get-counts',
           '/employee/dashboard/get-counts'
         ];
-        
-        return Promise.all(endpoints.map(endpoint => 
+
+        return Promise.all(endpoints.map(endpoint =>
           fetch(endpoint, {
             method: 'GET',
             headers: {
@@ -2538,7 +2559,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .then(results => {
           // Use the first successful result
           const data = results.find(result => result && result.success);
-          
+
           if (data && data.counts) {
             // Try multiple selectors to find dashboard count elements
             const selectors = [
@@ -2549,7 +2570,7 @@ document.addEventListener('DOMContentLoaded', function () {
               '.card:contains("Upcoming") .card-body h2',
               '.card:contains("Upcoming") h2'
             ];
-            
+
             // Update upcoming count
             selectors.forEach(selector => {
               try {
@@ -2562,7 +2583,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Ignore selector errors
               }
             });
-            
+
             // Also try to find and update by card content
             const cards = document.querySelectorAll('.card');
             cards.forEach(card => {
@@ -2575,7 +2596,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
               }
             });
-            
+
             console.log('Dashboard counts refresh attempted:', data.counts);
           }
         })
@@ -2590,14 +2611,14 @@ document.addEventListener('DOMContentLoaded', function () {
           const btn = e.target.closest('.view-all-gaps-btn');
           const targetId = btn.getAttribute('data-bs-target');
           const collapseElement = document.querySelector(targetId);
-          
+
           // Update button text and icon when collapsed/expanded
           collapseElement.addEventListener('shown.bs.collapse', function() {
             const gapCount = btn.textContent.match(/\d+/)[0];
             btn.innerHTML = `<i class="bi bi-eye-slash me-1"></i>Hide ${gapCount} Competency Gap${gapCount > 1 ? 's' : ''} <i class="bi bi-chevron-up ms-1 toggle-icon"></i>`;
             btn.setAttribute('aria-expanded', 'true');
           });
-          
+
           collapseElement.addEventListener('hidden.bs.collapse', function() {
             const gapCount = btn.textContent.match(/\d+/)[0];
             btn.innerHTML = `<i class="bi bi-eye me-1"></i>View All ${gapCount} Competency Gap${gapCount > 1 ? 's' : ''} <i class="bi bi-chevron-down ms-1 toggle-icon"></i>`;
@@ -2608,14 +2629,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // Call reattach function after page loads
       reattachEventListeners();
-      
+
       // ========== AUTO-DETECT GAPS FUNCTIONALITY ==========
       const autoDetectGapsBtn = document.getElementById('autoDetectGapsBtn');
       if (autoDetectGapsBtn) {
         autoDetectGapsBtn.addEventListener('click', function() {
           const btn = this;
           const originalHtml = btn.innerHTML;
-          
+
           // Show confirmation dialog with SweetAlert
           Swal.fire({
             title: '<i class="bi bi-magic text-info"></i> Auto-Detect Competency Gaps',
@@ -2633,7 +2654,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     </small>
                   </div>
                 </div>
-                
+
                 <div class="alert alert-warning border-start border-warning border-4 mt-3">
                   <i class="bi bi-exclamation-triangle me-2 text-warning"></i>
                   <strong>Note:</strong>
@@ -2656,7 +2677,7 @@ document.addEventListener('DOMContentLoaded', function () {
               // Show loading state
               btn.disabled = true;
               btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Detecting Gaps...';
-              
+
               // Show processing dialog
               Swal.fire({
                 title: 'Processing...',
@@ -2667,7 +2688,7 @@ document.addEventListener('DOMContentLoaded', function () {
                   Swal.showLoading();
                 }
               });
-              
+
               // Make the API call
               fetch('{{ route("competency_gap_analysis.auto_detect_gaps") }}', {
                 method: 'POST',
@@ -2682,7 +2703,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Reset button state
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
-                
+
                 if (data.success) {
                   // Show success message with details
                   Swal.fire({
@@ -2770,7 +2791,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Reset button state
                 btn.disabled = false;
                 btn.innerHTML = originalHtml;
-                
+
                 Swal.fire({
                   icon: 'error',
                   title: 'Network Error',

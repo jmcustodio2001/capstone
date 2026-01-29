@@ -423,7 +423,80 @@
                 </tr>
               </thead>
               <tbody id="skillsTableBody">
+                @php $seenSkills = []; @endphp
                 @foreach($skills as $skill)
+                  @php
+                    $descLower = Str::lower($skill->description ?? '');
+                    $isAutoCreated = Str::contains($descLower, 'auto-created')
+                                  || Str::contains($descLower, 'auto created')
+                                  || Str::contains($descLower, 'api skills')
+                                  || Str::contains($descLower, 'employee api skills')
+                                  || Str::contains($descLower, 'auto-created from')
+                                  || Str::contains($descLower, '(training:)');
+                    $normalizedSkill = trim(strtolower($skill->competency_name ?? ''));
+                  @endphp
+
+                  @if($isAutoCreated)
+                    @continue
+                  @endif
+
+                  @if($normalizedSkill !== '' && in_array($normalizedSkill, $seenSkills))
+                    @continue
+                  @endif
+                  @php if($normalizedSkill !== '') $seenSkills[] = $normalizedSkill; @endphp
+
+                  @php
+                    // Get the skill level from rate or default to average for the category
+                    $skillLevel = $skill->rate;
+                    if (!$skillLevel) {
+                        // Calculate category average if rate is not set
+                        $categoryAvg = App\Models\CompetencyLibrary::where('category', $skill->category)
+                            ->whereNotNull('rate')
+                            ->avg('rate') ?? 3; // Default to 3 if no category average
+                        $skillLevel = $categoryAvg;
+                    }
+
+                    // Calculate training progress based on skill level and any additional factors
+                    $baseProgress = $skillLevel * 20; // Convert 0-5 scale to percentage
+
+                    // Add bonuses for specific categories
+                    $categoryBonus = 0;
+                    if (in_array($skill->category, ['Sales', 'Customer Service'])) {
+                        $categoryBonus = 10; // Add 10% bonus for core skills
+                    } elseif (in_array($skill->category, ['Communication', 'Leadership'])) {
+                        $categoryBonus = 5; // Add 5% bonus for important soft skills
+                    }
+
+                    $trainingProgress = min(100, $baseProgress + $categoryBonus); // Cap at 100%
+
+                    // Calculate overall skill level and percentage
+                    $skillLevel = max($skillLevel, ($trainingProgress / 100 * 5));
+                    $skillPercentage = min(($skillLevel / 5) * 100, 100);
+
+                    // Generate star rating
+                    $fullStars = floor($skillLevel);
+                    $hasHalfStar = ($skillLevel - $fullStars) >= 0.5;
+                    $emptyStars = 5 - $fullStars - ($hasHalfStar ? 1 : 0);
+
+                    // Determine level class and text
+                    if ($skillLevel >= 4.5) {
+                        $levelClass = 'bg-success';
+                        $levelText = 'Expert';
+                        $progressClass = 'bg-success';
+                    } elseif ($skillLevel >= 3.5) {
+                        $levelClass = 'bg-info';
+                        $levelText = 'Advanced';
+                        $progressClass = 'bg-info';
+                    } elseif ($skillLevel >= 2.5) {
+                        $levelClass = 'bg-warning';
+                        $levelText = 'Intermediate';
+                        $progressClass = 'bg-warning';
+                    } else {
+                        $levelClass = 'bg-danger';
+                        $levelText = 'Needs Improvement';
+                        $progressClass = 'bg-danger';
+                    }
+                  @endphp
                   @php
                     // Get the skill level from rate or default to average for the category
                     $skillLevel = $skill->rate;

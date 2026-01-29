@@ -10,28 +10,28 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
   <style>
-    
-    
+
+
     /* Button group styling */
     .btn-group .btn {
       border-radius: 0.375rem !important;
       margin-right: 2px;
     }
-    
+
     .btn-group .btn:last-child {
       margin-right: 0;
     }
-    
+
     /* Empty state styling */
     .bi-inbox, .bi-book {
       opacity: 0.3;
     }
-    
+
     /* Course status badges */
     .status-active {
       background-color: #28a745 !important;
     }
-    
+
     .status-inactive {
       background-color: #6c757d !important;
     }
@@ -409,7 +409,25 @@
         <h4 class="fw-bold mb-0">Course List</h4>
       </div>
       <div class="card-body">
-        @forelse($courses as $course)
+        @php
+          // Sort courses for consistent arrangement and build a filtered list
+          $sorted = collect($courses)->sortBy('course_id')->values();
+
+          // Filter out auto-created/system courses but DO NOT deduplicate by title
+          $coursesToShow = $sorted->filter(function($c) {
+              $descLower = Str::lower($c->description ?? '');
+              $isAuto = Str::contains($descLower, 'auto-created')
+                     || Str::contains($descLower, 'auto created')
+                     || Str::contains($descLower, 'api skills')
+                     || Str::contains($descLower, 'employee api skills')
+                     || Str::contains($descLower, 'auto-created from')
+                     || Str::contains($descLower, '(training:)');
+              return !$isAuto && trim($c->course_title ?? '') !== '';
+          })->values();
+
+          $displayCourseCount = $coursesToShow->count();
+        @endphp
+        @forelse($coursesToShow as $course)
           @if($loop->first)
             <div class="table-responsive">
               <table class="table course-table">
@@ -476,10 +494,10 @@
         @endforelse
 
         <!-- Pagination (if needed) -->
-        @if($courses->count() > 0)
+        @if($displayCourseCount > 0)
         <div class="d-flex justify-content-between align-items-center mt-4">
           <div class="text-muted small">
-            Showing <span class="fw-semibold">{{ $courses->count() }}</span> course{{ $courses->count() != 1 ? 's' : '' }}
+            Showing <span class="fw-semibold">{{ $displayCourseCount }}</span> course{{ $displayCourseCount != 1 ? 's' : '' }}
           </div>
           <nav>
             <ul class="pagination pagination-sm mb-0">
@@ -801,7 +819,7 @@
       try {
         console.log('Attempting to approve request ID:', requestId);
         console.log('CSRF Token:', document.querySelector('meta[name="csrf-token"]').content);
-        
+
         const response = await fetch(`/admin/training-requests/${requestId}/approve`, {
           method: 'POST',
           headers: {
@@ -810,7 +828,7 @@
             'Accept': 'application/json'
           }
         });
-        
+
         console.log('Response status:', response.status);
         console.log('Response headers:', response.headers);
 
@@ -847,7 +865,7 @@
         console.error('Error approving request:', error);
         console.error('Error details:', error.message);
         console.error('Error stack:', error.stack);
-        
+
         let errorMessage = 'Error approving request';
         let technicalDetails = error.message;
 
@@ -1163,9 +1181,9 @@
     // View training request details function
     async function viewRequestDetails(requestId, employeeName, employeeId, trainingTitle, reason, status, requestedDate) {
       // Create detailed view modal with status badge styling
-      const statusBadgeClass = status === 'Approved' ? 'bg-success' : 
+      const statusBadgeClass = status === 'Approved' ? 'bg-success' :
                               status === 'Rejected' ? 'bg-danger' : 'bg-warning text-dark';
-      
+
       await Swal.fire({
         title: 'Training Request Details',
         html: `
@@ -1240,7 +1258,7 @@
             timer: 2000,
             timerProgressBar: true
           });
-          
+
           // Remove notification from UI
           const notificationItem = document.querySelector(`[data-notification-id="${notificationId}"]`);
           if (notificationItem) {
@@ -1312,12 +1330,12 @@
           const startDate = document.getElementById('swal-start-date').value;
           const status = document.getElementById('swal-status').value;
           const password = document.getElementById('swal-password').value;
-          
+
           if (!courseTitle || !startDate || !status || !password) {
             Swal.showValidationMessage('Please fill in all required fields');
             return false;
           }
-          
+
           return {
             course_title: courseTitle,
             description: description,
@@ -1377,12 +1395,12 @@
           const startDate = document.getElementById('swal-start-date').value;
           const status = document.getElementById('swal-status').value;
           const password = document.getElementById('swal-password').value;
-          
+
           if (!courseTitle || !startDate || !status || !password) {
             Swal.showValidationMessage('Please fill in all required fields');
             return false;
           }
-          
+
           return {
             course_title: courseTitle,
             description: description,
@@ -1522,10 +1540,10 @@
 
         console.log('Response status:', response.status);
         console.log('Response headers:', response.headers);
-        
+
         const responseText = await response.text();
         console.log('Raw response:', responseText);
-        
+
         let result;
         try {
           result = JSON.parse(responseText);
@@ -1533,7 +1551,7 @@
           console.error('Failed to parse JSON response:', e);
           throw new Error('Server returned invalid JSON response: ' + responseText.substring(0, 200));
         }
-        
+
         console.log('Parsed result:', result);
 
         if (response.ok && result.success) {
@@ -1545,14 +1563,14 @@
             timer: 3000,
             timerProgressBar: true
           });
-          
+
           // Reload page to show changes
           location.reload();
         } else {
           let errorMessage = 'Operation failed';
-          
+
           console.log('Operation failed. Response:', result);
-          
+
           if (result.errors) {
             errorMessage = Object.values(result.errors).flat().join('\n');
           } else if (result.message) {
@@ -1560,7 +1578,7 @@
           } else {
             errorMessage = `Server error (${response.status}): ${responseText.substring(0, 200)}`;
           }
-          
+
           await Swal.fire({
             title: 'Error',
             text: errorMessage,
@@ -1571,12 +1589,12 @@
       } catch (error) {
         console.error('Error submitting form:', error);
         console.error('Error stack:', error.stack);
-        
+
         let errorMessage = 'An unexpected error occurred. Please try again.';
         if (error.message) {
           errorMessage = error.message;
         }
-        
+
         await Swal.fire({
           title: 'Error',
           text: errorMessage,

@@ -67,9 +67,11 @@
         'On Leave' => 'bg-warning text-dark',
         default => 'bg-info'
       };
+      // Get the actual employee_id (primary key) from the model
+      $empId = $employee->getKey() ?? ($employee->employee_id ?? ($employee->id ?? 'N/A'));
     @endphp
     <span id="sidebar-status-badge" class="badge {{ $statusClass }} text-white mt-2" style="font-size: 0.85rem;">{{ $status }}</span>
-    <div class="text-muted small mt-1">Employee ID: {{ $employee->employee_id ?? 'EMP001' }}</div>
+    <div class="text-muted small mt-1">Employee ID: {{ $empId }}</div>
   </div>
 
   <!-- Navigation Menu -->

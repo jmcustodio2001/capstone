@@ -307,14 +307,31 @@ input:checked + .dark-mode-slider:before {
         <button class="btn btn-outline-light btn-sm d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
           @php
             $user = auth('employee')->user();
-            $profilePicture = $user && !empty($user->profile_picture) && Storage::disk('public')->exists($user->profile_picture)
-              ? Storage::url($user->profile_picture)
-              : asset('images/default-avatar.png');
+            $profilePicture = asset('images/default-avatar.png');
+            $firstName = $user->first_name ?? 'User';
+            $lastName = $user->last_name ?? '';
+            $fullName = trim($firstName . ' ' . $lastName);
+            
+            if ($user && !empty($user->profile_picture)) {
+                $pic = $user->profile_picture;
+                if (strpos($pic, 'http') === 0) {
+                    $profilePicture = $pic;
+                } elseif (Storage::disk('public')->exists($pic)) {
+                    $profilePicture = Storage::url($pic);
+                }
+            }
+            
+            // Generate consistent fallback color
+            $colors = ['FF9A56', 'FF6B9D', '4ECDC4', '45B7D1', 'FFA726', 'AB47BC', 'EF5350', '66BB6A', 'FFCA28', '26A69A'];
+            $colorIndex = abs(crc32($user->employee_id ?? 'default')) % count($colors);
+            $bgColor = $colors[$colorIndex];
+            $fallbackUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) . "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
           @endphp
           <img src="{{ $profilePicture }}"
-               alt="{{ $user ? ($user->first_name . ' ' . $user->last_name) : 'Profile' }}"
+               alt="{{ $fullName }}"
                class="rounded-circle"
-               style="width: 24px; height: 24px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2);">
+               style="width: 24px; height: 24px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2);"
+               onerror="this.onerror=null; this.src='{{ $fallbackUrl }}'">
           <div class="d-flex flex-column align-items-start d-none d-lg-block">
             <span class="small" style="line-height: 1;">{{ $user ? ($user->first_name . ' ' . $user->last_name) : 'User' }}</span>
           </div>

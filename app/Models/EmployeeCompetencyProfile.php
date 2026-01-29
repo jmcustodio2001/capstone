@@ -11,6 +11,7 @@ class EmployeeCompetencyProfile extends Model
         'competency_id',
         'proficiency_level',
         'assessment_date',
+        'created_from_api_skills',
     ];
 
     // Relationships

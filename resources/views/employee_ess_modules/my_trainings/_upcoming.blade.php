@@ -229,58 +229,42 @@
                   }
                 @endphp
 
-                @if($finalExpiredDate && $finalExpiredDate != '' && $finalExpiredDate != '0000-00-00 00:00:00' && $finalExpiredDate != '0000-00-00')
+                @if($finalExpiredDate && !empty(trim($finalExpiredDate)) && trim($finalExpiredDate) !== '0000-00-00 00:00:00' && trim($finalExpiredDate) !== '0000-00-00')
                   @php
                     try {
-                      $expiredDate = \Carbon\Carbon::parse($finalExpiredDate)->setTimezone('Asia/Shanghai');
-                      $now = \Carbon\Carbon::now()->setTimezone('Asia/Shanghai');
-                      $daysUntilExpiry = $now->diffInDays($expiredDate, false);
+                      $expiredDateRaw = trim($finalExpiredDate);
+                      $expiredDateObj = \Carbon\Carbon::parse($expiredDateRaw)->startOfDay();
+                      $now = \Carbon\Carbon::now()->startOfDay();
+                      $dateFormatted = $expiredDateObj->format('M d, Y');
+                      $daysLeft = $now->diffInDays($expiredDateObj, false);
+                      $isExpired = $now->gt($expiredDateObj);
                       $showExpiredDate = true;
-
-                      if ($daysUntilExpiry < 0) {
-                        $colorClass = 'text-danger fw-bold';
-                        $bgClass = 'bg-danger';
-                        $status = 'EXPIRED';
-                      } elseif ($daysUntilExpiry <= 7) {
-                        $colorClass = 'text-warning fw-bold';
-                        $bgClass = 'bg-warning';
-                        $status = 'URGENT';
-                      } elseif ($daysUntilExpiry <= 30) {
-                        $colorClass = 'text-info fw-bold';
-                        $bgClass = 'bg-info';
-                        $status = 'SOON';
-                      } else {
-                        $colorClass = 'text-success fw-bold';
-                        $bgClass = 'bg-success';
-                        $status = 'ACTIVE';
-                      }
                     } catch (Exception $e) {
                       $showExpiredDate = false;
                     }
                   @endphp
                   @if($showExpiredDate)
                     <div class="d-flex flex-column align-items-start">
-                      <div><strong class="{{ $colorClass }}">{{ $expiredDate->format('M d, Y') }}</strong></div>
-                      <div class="text-muted small">{{ $expiredDate->format('h:i A') }}</div>
-                      <div class="w-100 mt-1">
-                        @if($daysUntilExpiry >= 0)
-                          <span class="badge {{ $bgClass }} text-white">
-                            <i class="fas fa-clock me-1"></i>{{ floor($daysUntilExpiry) }} day{{ floor($daysUntilExpiry) == 1 ? '' : 's' }} left
+                      <div class="fw-semibold">{{ $dateFormatted }}</div>
+                      <div class="mt-1">
+                        @if(!$isExpired)
+                          <span class="badge bg-info bg-opacity-10 text-info">
+                            <i class="fas fa-clock me-1"></i>{{ floor(abs($daysLeft)) }} day{{ floor(abs($daysLeft)) == 1 ? '' : 's' }} left
                           </span>
                         @else
-                          <span class="badge bg-danger text-white">
-                            <i class="fas fa-exclamation-triangle me-1"></i>Expired {{ floor(abs($daysUntilExpiry)) }} day{{ floor(abs($daysUntilExpiry)) == 1 ? '' : 's' }} ago
+                          <span class="badge bg-danger bg-opacity-10 text-danger">
+                            <i class="fas fa-exclamation-triangle me-1"></i>Expired {{ floor(abs($daysLeft)) }} day{{ floor(abs($daysLeft)) == 1 ? '' : 's' }} ago
                           </span>
                         @endif
                       </div>
                     </div>
                   @else
-                    <span class="badge bg-secondary">
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary">
                       <i class="fas fa-calendar-times me-1"></i>Invalid Date
                     </span>
                   @endif
                 @else
-                  <span class="badge bg-secondary">
+                  <span class="badge bg-secondary bg-opacity-10 text-secondary">
                     <i class="fas fa-calendar-times me-1"></i>Not Set
                   </span>
                 @endif
@@ -339,9 +323,14 @@
 
                   // Check if expired using the calculated expired date from above
                   $isTrainingExpired = false;
-                  if ($finalExpiredDate) {
-                    $expiredDate = \Carbon\Carbon::parse($finalExpiredDate);
-                    $isTrainingExpired = \Carbon\Carbon::now()->gt($expiredDate);
+                  if ($finalExpiredDate && !empty(trim($finalExpiredDate)) && trim($finalExpiredDate) !== '0000-00-00 00:00:00' && trim($finalExpiredDate) !== '0000-00-00') {
+                    try {
+                        $expiredDateObj = \Carbon\Carbon::parse(trim($finalExpiredDate))->startOfDay();
+                        $now = \Carbon\Carbon::now()->startOfDay();
+                        $isTrainingExpired = $now->gt($expiredDateObj);
+                    } catch (Exception $e) {
+                        $isTrainingExpired = false;
+                    }
                   }
 
                   // Determine final status with expiry consideration
@@ -407,13 +396,16 @@
               </td>
               <td>
                 @php
-                  $assignedByName = null;
+                  $assignedByName = is_array($u) ? ($u['assigned_by_name'] ?? null) : ($u->assigned_by_name ?? null);
                   $assignedDate = is_array($u) ? ($u['assigned_date'] ?? null) : ($u->assigned_date ?? null);
-                  $assignedById = is_array($u) ? ($u['assigned_by'] ?? null) : ($u->assigned_by ?? null);
-                  if ($assignedById && is_numeric($assignedById)) {
-                    $adminUser = \App\Models\User::find($assignedById);
-                    if ($adminUser && !empty($adminUser->name)) {
-                      $assignedByName = $adminUser->name;
+                  
+                  if (empty($assignedByName)) {
+                    $assignedById = is_array($u) ? ($u['assigned_by'] ?? null) : ($u->assigned_by ?? null);
+                    if ($assignedById && is_numeric($assignedById)) {
+                      $adminUser = \App\Models\User::find($assignedById);
+                      if ($adminUser && !empty($adminUser->name)) {
+                        $assignedByName = $adminUser->name;
+                      }
                     }
                   }
                 @endphp

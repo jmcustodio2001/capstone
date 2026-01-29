@@ -12,11 +12,67 @@ use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 
 class CustomerServiceSalesSkillsTrainingController extends Controller
 {
     public function index()
     {
+        // Fetch all local employees to map emails to local profile pictures (consistent with Destination controller)
+        $localEmployees = Employee::all();
+        $emailToLocalMap = [];
+        foreach ($localEmployees as $localEmp) {
+            if ($localEmp->email) {
+                $emailToLocalMap[strtolower($localEmp->email)] = $localEmp;
+            }
+        }
+
+        // Fetch employees from API endpoint
+        $employeeMap = [];
+        try {
+            $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiData = $response->successful() ? $response->json() : [];
+            $apiEmployees = (isset($apiData['data']) && is_array($apiData['data'])) ? $apiData['data'] : $apiData;
+
+            if (is_array($apiEmployees)) {
+                foreach ($apiEmployees as $emp) {
+                    $empId = is_array($emp) 
+                        ? ($emp['employee_id'] ?? $emp['id'] ?? null)
+                        : ($emp->employee_id ?? $emp->id ?? null);
+                    
+                    if (empty($empId) && is_array($emp) && isset($emp['external_employee_id'])) {
+                        $empId = $emp['external_employee_id'];
+                    } elseif (empty($empId) && is_object($emp) && isset($emp->external_employee_id)) {
+                        $empId = $emp->external_employee_id;
+                    }
+
+                    if ($empId) {
+                        $empEmail = strtolower(is_array($emp) ? ($emp['email'] ?? '') : ($emp->email ?? ''));
+                        $localRef = $emailToLocalMap[$empEmail] ?? null;
+                        
+                        $profilePic = is_array($emp) ? ($emp['profile_picture'] ?? null) : ($emp->profile_picture ?? null);
+                        
+                        // Prioritize local photo if it exists
+                        if ($localRef && $localRef->profile_picture) {
+                            $profilePic = $localRef->profile_picture;
+                        } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
+                            $profilePic = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                        }
+                        
+                        if (is_array($emp)) {
+                            $emp['profile_picture'] = $profilePic;
+                        } elseif (is_object($emp)) {
+                            $emp->profile_picture = $profilePic;
+                        }
+                        
+                        $employeeMap[$empId] = $emp;
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to fetch employees from API in CustomerServiceSalesSkillsTraining: ' . $e->getMessage());
+        }
+
         // Removed redundant assignment to $records
         $employees = Employee::all();
 
@@ -40,14 +96,28 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
             ->get();
 
         // Fetch all gaps and recommend trainings
-        $gaps = CompetencyGap::with(['employee', 'competency'])
-            ->get()
-            ->map(function($gap) {
+        $gapsRecords = CompetencyGap::with(['employee', 'competency'])->get();
+
+        // Map API data to gaps for real name display
+        foreach ($gapsRecords as $gap) {
+            if (isset($employeeMap[$gap->employee_id])) {
+                $apiEmp = $employeeMap[$gap->employee_id];
+                $employeeData = new \stdClass();
+                $employeeData->employee_id = $gap->employee_id;
+                $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
+                $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
+                $employeeData->profile_picture = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                $gap->setRelation('employee', $employeeData);
+            }
+        }
+
+        $gaps = $gapsRecords->map(function($gap) {
                 $recommendedTraining = EmployeeTrainingDashboard::whereHas('course', function($q) use ($gap) {
                     $q->where('course_title', 'LIKE', '%' . $gap->competency->competency_name . '%');
                 })->first();
                 return (object) [
                     'employee' => $gap->employee,
+                    'employee_id' => $gap->employee_id,
                     'competency' => $gap->competency,
                     'required_level' => $gap->required_level,
                     'current_level' => $gap->current_level,
@@ -138,6 +208,17 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
             });
 
         foreach ($dashboardRecords as $record) {
+            // Populate employee relation from API if missing in local DB
+            if (!$record->employee && isset($employeeMap[$record->employee_id])) {
+                $apiEmp = $employeeMap[$record->employee_id];
+                $employeeData = new \stdClass();
+                $employeeData->employee_id = $record->employee_id;
+                $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
+                $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
+                $employeeData->profile_picture = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                $record->setRelation('employee', $employeeData);
+            }
+
             // Skip records without valid employee
             if (!$record->employee_id || !$record->employee) {
                 continue;
@@ -251,6 +332,17 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
             $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with(['employee', 'competency'])->get();
 
             foreach ($competencyProfiles as $profile) {
+                // Populate employee relation from API if missing in local DB
+                if (!$profile->employee && isset($employeeMap[$profile->employee_id])) {
+                    $apiEmp = $employeeMap[$profile->employee_id];
+                    $employeeData = new \stdClass();
+                    $employeeData->employee_id = $profile->employee_id;
+                    $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
+                    $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
+                    $employeeData->profile_picture = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                    $profile->setRelation('employee', $employeeData);
+                }
+
                 if (!$profile->employee || !$profile->competency) {
                     continue;
                 }
@@ -311,6 +403,7 @@ class CustomerServiceSalesSkillsTrainingController extends Controller
         $records = $uniqueRecords->map(function($item) {
             return (object)[
                 'employee' => $item->employee,
+                'employee_id' => $item->employee_id,
                 'training' => (object)[
                     'course_title' => $item->course ? $item->course->course_title : ($item->training_title ?? 'Training'),
                     'title' => $item->training_title ?? ($item->course ? $item->course->course_title : 'Training'),

@@ -307,11 +307,17 @@
               $lastName = is_array($employee) ? ($employee['last_name'] ?? 'Employee') : ($employee->last_name ?? 'Employee');
               $fullName = $firstName . ' ' . $lastName;
 
-              // Check if profile picture exists
+              // Check if profile picture exists - robust approach
               $profilePic = is_array($employee) ? ($employee['profile_picture'] ?? null) : ($employee->profile_picture ?? null);
               $profilePicUrl = null;
               if ($profilePic) {
-                  $profilePicUrl = asset('storage/' . $profilePic);
+                  if (strpos($profilePic, 'http') === 0) {
+                      $profilePicUrl = $profilePic;
+                  } elseif (strpos($profilePic, 'storage/') === 0) {
+                      $profilePicUrl = asset($profilePic);
+                  } else {
+                      $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                  }
               }
 
               // Generate consistent color based on employee name for fallback
@@ -319,7 +325,7 @@
               $colorIndex = abs(crc32($empId)) % count($colors);
               $bgColor = $colors[$colorIndex];
 
-              // Fallback to UI Avatars if no profile picture found
+              // Fallback to UI Avatars if no profile picture found or URL generation failed
               if (!$profilePicUrl) {
                   $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                  "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
@@ -334,7 +340,8 @@
                     <img src="{{ $profilePicUrl }}"
                          alt="{{ $firstName }} {{ $lastName }}"
                          class="rounded-circle me-3"
-                         style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);">
+                         style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);"
+                         onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode($fullName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
                     <div class="flex-grow-1">
                       <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
                       <small class="text-dark fw-bold">
@@ -411,7 +418,7 @@
                         @else bg-danger
                         @endif"
                         data-progress="{{ round($displayProgress) }}"
-                        style="width: 0%; transition: width 1s ease-in-out;"
+                        style="width: {{ $displayProgress }}%; transition: width 1s ease-in-out;"
                         role="progressbar"
                         aria-valuenow="{{ round($displayProgress) }}"
                         aria-valuemin="0"

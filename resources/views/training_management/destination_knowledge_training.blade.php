@@ -828,7 +828,6 @@ if (typeof window.trans === 'undefined') {
                                           data-employee-name="{{ $record->employee ? $record->employee->first_name . ' ' . $record->employee->last_name : 'Employee' }}"
                                           data-destination-name="{{ $record->destination_name }}"
                                           data-already-assigned="{{ $record->admin_approved_for_upcoming ? 'true' : 'false' }}"
-                                          onclick="confirmAction('assign-upcoming', 'Assign to Upcoming Training', 'Assign {{ $record->destination_name }} to {{ $record->employee ? $record->employee->first_name . ' ' . $record->employee->last_name : 'Employee' }} upcoming training?', {{ $record->id }})"
                                           title="Assign {{ $record->destination_name }} to {{ $record->employee ? $record->employee->first_name . ' ' . $record->employee->last_name : 'Employee' }}'s upcoming training list">
                                     <i class="bi bi-calendar-check me-1"></i> Assign to Upcoming
                                   </button>
@@ -938,7 +937,7 @@ if (typeof window.trans === 'undefined') {
                                 $firstName = $nameParts[0] ?? 'U';
                                 $lastName = count($nameParts) > 1 ? $nameParts[count($nameParts) - 1] : '';
                                 $initials = substr($firstName, 0, 1) . ($lastName ? substr($lastName, 0, 1) : '');
-                                
+
                                 $profilePicUrl = null;
                                 if ($profilePic) {
                                     if (strpos($profilePic, 'http') === 0) {
@@ -950,14 +949,19 @@ if (typeof window.trans === 'undefined') {
                                     }
                                 }
                             @endphp
-                            @if($profilePicUrl)
-                                <img src="{{ $profilePicUrl }}" class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;" 
-                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                            @endif
-                            <div class="rounded-circle border d-flex align-items-center justify-content-center me-2" 
-                                 style="width: 40px; height: 40px; background: #e9ecef; {{ $profilePicUrl ? 'display: none;' : '' }}">
-                               <span class="fw-bold text-secondary">{{ $initials }}</span>
-                            </div>
+                             @php
+                                 // Generate consistent color based on employee name for fallback
+                                 $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
+                                 $colorIndex = abs(crc32($orientation['employee_name'] ?? 'default')) % count($colors);
+                                 $bgColor = $colors[$colorIndex];
+
+                                 $fallbackUrl = "https://ui-avatars.com/api/?name=" . urlencode($orientation['employee_name'] ?? 'U') .
+                                               "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
+                             @endphp
+                             <img src="{{ $profilePicUrl ?: $fallbackUrl }}"
+                                  class="rounded-circle me-2"
+                                  style="width: 40px; height: 40px; object-fit: cover;"
+                                  onerror="this.onerror=null; this.src='{{ $fallbackUrl }}'">
                             <div>
                                <div class="fw-bold">{{ $orientation['employee_name'] ?? 'Unknown' }}</div>
                                <small class="text-muted">{{ $orientation['email'] ?? '' }}</small>
@@ -984,7 +988,7 @@ if (typeof window.trans === 'undefined') {
                           <span class="badge {{ $badgeClass }}">{{ ucfirst($orientation['status'] ?? 'Scheduled') }}</span>
                       </td>
                       <td>
-                          <button type="button" class="btn btn-sm btn-outline-warning" 
+                          <button type="button" class="btn btn-sm btn-outline-warning"
                                   onclick="openEditOrientationModal({{ json_encode($orientation['id'] ?? '') }}, {{ json_encode($orientation['status'] ?? '') }}, {{ json_encode($orientation['employee_name'] ?? '') }})"
                                   title="Edit Status">
                               <i class="bi bi-pencil"></i>
@@ -1033,31 +1037,54 @@ if (typeof window.trans === 'undefined') {
                   <label class="form-label" for="position">Position*</label>
                   <select class="form-select" name="position" id="position" required onchange="loadEmployeesByPosition()">
                     <option value="">Select Position</option>
-                    <option value="HUMAN RESOURCE">HUMAN RESOURCE</option>
-                    <option value="CORE">CORE</option>
-                    <option value="LOGISTICS">LOGISTICS</option>
-                    <option value="FINANCIAL">FINANCIAL</option>
-                    <option value="ADMINISTRATIVE">ADMINISTRATIVE</option>
+                    @php
+                        // Get unique positions from employees collection
+                        $uniquePositions = collect($employees)->pluck('position')->map(function($item) {
+                            return strtoupper(trim($item));
+                        })->filter()->unique()->sort()->values();
+                    @endphp
+                    @foreach($uniquePositions as $pos)
+                        <option value="{{ $pos }}">{{ $pos }}</option>
+                    @endforeach
                   </select>
                 </div>
-                <div class="mb-3" id="employeeListContainer" style="display: none;">
+                <!-- Unified Employee Selection Box -->
+                <div class="mb-3">
                   <div class="d-flex justify-content-between align-items-center mb-2">
-                    <label class="form-label mb-0">Employees in Selected Position</label>
-                    <div>
-                      <button type="button" class="btn btn-outline-primary btn-sm me-1" onclick="selectAllEmployees()">
-                        <i class="bi bi-check-all me-1"></i>Select All
+                    <label class="form-label mb-0">Select Employee(s)*</label>
+                    <div class="selection-controls">
+                      <button type="button" class="btn btn-outline-primary btn-sm px-2 py-0" onclick="selectAllVisibleEmployees()" style="font-size: 0.75rem;">
+                        <i class="bi bi-check-all"></i> All
                       </button>
-                      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="deselectAllEmployees()">
-                        <i class="bi bi-x-square me-1"></i>Deselect All
+                      <button type="button" class="btn btn-outline-secondary btn-sm px-2 py-0" onclick="deselectAllVisibleEmployees()" style="font-size: 0.75rem;">
+                        <i class="bi bi-x"></i> None
                       </button>
                     </div>
                   </div>
-                  <div class="border rounded p-3" style="max-height: 200px; overflow-y: auto;">
-                    <div id="employeeCheckboxList">
-                      <!-- Employee checkboxes will be loaded here -->
+                  <div class="employee-box border rounded bg-light" style="max-height: 250px; overflow-y: auto; padding: 10px;">
+                    <div class="input-group input-group-sm mb-2">
+                      <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+                      <input type="text" id="employeeSearchBox" class="form-control border-start-0" placeholder="Search employee name..." onkeyup="filterEmployeeBox()">
+                    </div>
+                    <div id="employeeSelectionList">
+                      @foreach($employees as $employee)
+                        <div class="form-check employee-checkbox-item" data-position="{{ strtoupper($employee->position ?? '') }}" data-name="{{ strtolower($employee->first_name . ' ' . $employee->last_name) }}">
+                          <input class="form-check-input employee-box-check" type="checkbox" value="{{ $employee->employee_id }}" id="emp_check_{{ $employee->employee_id }}" onchange="updateSelectedEmployeeIds()">
+                          <label class="form-check-label d-flex align-items-center" for="emp_check_{{ $employee->employee_id }}">
+                            <div class="ms-2">
+                              <span class="fw-semibold d-block" style="font-size: 0.9rem;">{{ $employee->first_name }} {{ $employee->last_name }}</span>
+                              <small class="text-muted" style="font-size: 0.75rem;">ID: {{ $employee->employee_id }} | {{ $employee->position ?? 'No Position' }}</small>
+                            </div>
+                          </label>
+                        </div>
+                      @endforeach
+                      <div id="noEmployeesFound" class="text-center text-muted py-3" style="display: none;">
+                        <i class="bi bi-person-x d-block fs-2"></i>
+                        <small>No employees match your criteria</small>
+                      </div>
                     </div>
                   </div>
-                  <small class="text-muted">Select employees to assign training to</small>
+                  <small class="text-muted">Filtered based on the Position selected above.</small>
                 </div>
                 <input type="hidden" name="employee_ids" id="employee_ids" value="">
                 <div class="mb-3">
@@ -1480,18 +1507,23 @@ if (typeof window.trans === 'undefined') {
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  
+
   <script>
     let currentOrientationId = null;
+
+    // Function to get CSRF token from meta tag
+    function getCsrfToken() {
+      return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    }
 
     // Function to show toast notification
     function showOrientationToast(message, type = 'success') {
       const toastEl = document.getElementById('orientationToast');
       const toastBody = document.getElementById('orientationToastBody');
-      
+
       // Set message
       toastBody.textContent = message;
-      
+
       // Set color based on type
       toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning', 'text-bg-info');
       if (type === 'success') {
@@ -1503,7 +1535,7 @@ if (typeof window.trans === 'undefined') {
       } else {
         toastEl.classList.add('text-bg-info');
       }
-      
+
       // Show toast
       const toast = new bootstrap.Toast(toastEl, {
         autohide: true,
@@ -1572,11 +1604,11 @@ if (typeof window.trans === 'undefined') {
           const responseData = await response.json().catch(() => ({}));
           console.log('Success response data:', responseData);
           modal.hide();
-          
+
           // Show specific success message based on status
           let successTitle = '';
           let successMessage = '';
-          
+
           if (newStatus === 'scheduled') {
             successTitle = 'Scheduled!';
             successMessage = 'Orientation has been set as Scheduled successfully!';
@@ -1590,7 +1622,7 @@ if (typeof window.trans === 'undefined') {
             successTitle = 'Success!';
             successMessage = 'Orientation status updated successfully!';
           }
-          
+
           // Show SweetAlert2 success notification
           Swal.fire({
             icon: 'success',
@@ -1614,14 +1646,14 @@ if (typeof window.trans === 'undefined') {
             console.error('Error response text:', errorText);
             errorMessage = errorText || response.statusText;
           }
-          
+
           Swal.fire({
             icon: 'error',
             title: 'Failed to Update',
             text: errorMessage,
             confirmButtonColor: '#d33'
           });
-          
+
           // Re-enable buttons
           buttons.forEach(btn => {
             btn.disabled = false;
@@ -1630,14 +1662,14 @@ if (typeof window.trans === 'undefined') {
         }
       } catch (error) {
         console.error('Update error:', error);
-        
+
         Swal.fire({
           icon: 'error',
           title: 'Error',
           text: 'Error updating status: ' + error.message,
           confirmButtonColor: '#d33'
         });
-        
+
         // Re-enable buttons
         const buttons = document.querySelectorAll('#editOrientationModal button[onclick]');
         buttons.forEach(btn => {
@@ -1650,6 +1682,49 @@ if (typeof window.trans === 'undefined') {
 
   <script>
   document.addEventListener('DOMContentLoaded', function() {
+    // Global CSRF token setup - add token to all fetch requests automatically
+    const originalFetch = window.fetch;
+    window.fetch = function(...args) {
+      const [resource, config] = args;
+      const csrfToken = getCsrfToken();
+
+      // Only add CSRF token to local requests (not external APIs)
+      if (typeof resource === 'string' && resource.startsWith('/')) {
+        // For non-GET requests, ensure CSRF token is included
+        const method = (config?.method || 'GET').toUpperCase();
+        if (method !== 'GET') {
+          config = config || {};
+          config.headers = config.headers || {};
+
+          // Don't override if already set
+          if (!config.headers['X-CSRF-TOKEN']) {
+            config.headers['X-CSRF-TOKEN'] = csrfToken;
+          }
+
+          args[1] = config;
+        }
+      }
+
+      return originalFetch.apply(this, args).catch(error => {
+        console.error('Fetch error:', error, 'Resource:', resource);
+        throw error;
+      }).then(response => {
+        // Check for 419 errors and handle them
+        if (response.status === 419) {
+          console.error('CSRF Token Mismatch (419) - Refreshing page to get new token');
+          Swal.fire({
+            icon: 'warning',
+            title: 'Session Expired',
+            text: 'Your session has expired. Please refresh the page and try again.',
+            confirmButtonText: 'Refresh Page'
+          }).then(() => {
+            window.location.reload();
+          });
+        }
+        return response;
+      });
+    };
+
     // Ensure cards are visible after page load
     ensureCardsVisible();
 
@@ -1703,6 +1778,14 @@ if (typeof window.trans === 'undefined') {
         const feedback = el.parentElement.querySelector('.invalid-feedback');
         if (feedback) feedback.remove();
       });
+
+      // Reset employee selection box
+      document.querySelectorAll('.employee-box-check').forEach(cb => cb.checked = false);
+      const searchBox = document.getElementById('employeeSearchBox');
+      if (searchBox) searchBox.value = '';
+      filterEmployeeBox(); // Show all
+      document.getElementById('employee_ids').value = '';
+
       // Hide duplicate warning
       document.getElementById('duplicateWarning').classList.add('d-none');
 
@@ -1880,18 +1963,15 @@ if (typeof window.trans === 'undefined') {
           } else {
             // Error case - show error but don't close modal
             if (data.message) {
-              formErrors.innerHTML = data.message;
-              formErrors.style.display = 'block';
-            }
-            alert(data.message || 'Failed to save record');
+            Swal.fire('Error', data.message || 'Failed to save record', 'error');
           }
-
+          }
         } catch (error) {
           console.error('Form submission error:', error);
           // Show error message
           formErrors.innerHTML = 'An error occurred while saving the record.';
           formErrors.style.display = 'block';
-          alert('An error occurred while saving the record.');
+          Swal.fire('Error', 'An error occurred while saving the record.', 'error');
         } finally {
           saveBtn.disabled = false;
           saveBtn.innerHTML = 'Save Record';
@@ -2019,75 +2099,66 @@ if (typeof window.trans === 'undefined') {
     }
   }, 500); // Small delay to ensure Bootstrap is fully loaded
 
-  // Function to load employees by selected position
-  function loadEmployeesByPosition() {
+  // Updated Function to load and filter employees in the box
+  window.loadEmployeesByPosition = function() {
+    window.filterEmployeeBox();
+  }
+
+  // New: Function to filter the employee selection box by position AND search text
+  window.filterEmployeeBox = function() {
     const positionSelect = document.getElementById('position');
-    const employeeListContainer = document.getElementById('employeeListContainer');
-    const employeeCheckboxList = document.getElementById('employeeCheckboxList');
-    const employeeIdsInput = document.getElementById('employee_ids');
+    const searchBox = document.getElementById('employeeSearchBox');
+    const selectedPosition = positionSelect ? positionSelect.value.toUpperCase().trim() : '';
+    const searchText = searchBox ? searchBox.value.toLowerCase().trim() : '';
 
-    const selectedPosition = positionSelect.value;
+    const items = document.querySelectorAll('.employee-checkbox-item');
+    let foundCount = 0;
 
-    if (!selectedPosition) {
-      employeeListContainer.style.display = 'none';
-      employeeCheckboxList.innerHTML = '';
-      employeeIdsInput.value = '';
-      return;
-    }
+    items.forEach(item => {
+      const itemPos = (item.getAttribute('data-position') || '').trim();
+      const itemName = (item.getAttribute('data-name') || '').trim();
 
-    // Show loading state
-    employeeCheckboxList.innerHTML = '<div class="text-center"><i class="bi bi-spinner-border"></i> Loading employees...</div>';
-    employeeListContainer.style.display = 'block';
+      const posMatch = !selectedPosition || itemPos === selectedPosition;
+      const nameMatch = !searchText || itemName.includes(searchText);
 
-    // Get CSRF token
-    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
-    // Fetch employees by position
-    fetch('/admin/destination-knowledge-training/employees-by-position', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': csrfToken,
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        position: selectedPosition
-      })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.success && data.employees) {
-        if (data.employees.length === 0) {
-          employeeCheckboxList.innerHTML = '<div class="text-muted text-center">No employees found for this position</div>';
-          return;
-        }
-
-        // Build checkbox list
-        let checkboxHtml = '';
-        data.employees.forEach(employee => {
-          checkboxHtml += `
-            <div class="form-check mb-2">
-              <input class="form-check-input employee-checkbox" type="checkbox"
-                     value="${employee.employee_id}"
-                     id="emp_${employee.employee_id}"
-                     onchange="updateSelectedEmployees()">
-              <label class="form-check-label" for="emp_${employee.employee_id}">
-                <strong>${employee.first_name} ${employee.last_name}</strong>
-                <small class="text-muted d-block">ID: ${employee.employee_id}</small>
-              </label>
-            </div>
-          `;
-        });
-
-        employeeCheckboxList.innerHTML = checkboxHtml;
+      if (posMatch && nameMatch) {
+        item.style.display = '';
+        foundCount++;
       } else {
-        employeeCheckboxList.innerHTML = '<div class="text-danger">Error loading employees: ' + (data.message || 'Unknown error') + '</div>';
+        item.style.display = 'none';
+        // Uncheck if hidden? (Optional, but usually better to leave it checked if user explicitly picked it)
       }
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      employeeCheckboxList.innerHTML = '<div class="text-danger">Error loading employees. Please try again.</div>';
     });
+
+    const noResults = document.getElementById('noEmployeesFound');
+    if (noResults) {
+      noResults.style.display = foundCount === 0 ? 'block' : 'none';
+    }
+  }
+
+  // New: Update hidden employee_ids input based on checked items in the box
+  window.updateSelectedEmployeeIds = function() {
+    const checkboxes = document.querySelectorAll('.employee-box-check:checked');
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+    document.getElementById('employee_ids').value = selectedIds.join(',');
+
+    // Trigger duplicate check if applicable
+    if (typeof checkForDuplicates === 'function') {
+      checkForDuplicates();
+    }
+  }
+
+  // New: Support bulk selection of ONLY visible (filtered) employees
+  window.selectAllVisibleEmployees = function() {
+    const visibleCheckboxes = document.querySelectorAll('.employee-checkbox-item[style=""] .employee-box-check, .employee-checkbox-item:not([style*="display: none"]) .employee-box-check');
+    visibleCheckboxes.forEach(cb => cb.checked = true);
+    window.updateSelectedEmployeeIds();
+  }
+
+  window.deselectAllVisibleEmployees = function() {
+    const visibleCheckboxes = document.querySelectorAll('.employee-checkbox-item[style=""] .employee-box-check, .employee-checkbox-item:not([style*="display: none"]) .employee-box-check');
+    visibleCheckboxes.forEach(cb => cb.checked = false);
+    window.updateSelectedEmployeeIds();
   }
 
   // Function to update selected employees hidden input
@@ -2164,9 +2235,18 @@ if (typeof window.trans === 'undefined') {
                   'Content-Type': 'application/json'
                 }
               })
-              .then(res => res.json())
+              .then(res => {
+                if (!res.ok) {
+                  console.error(`HTTP Error: ${res.status} ${res.statusText}`);
+                  throw new Error(`HTTP error! status: ${res.status}`);
+                }
+                return res.json();
+              })
+              .catch(error => {
+                console.error('Error updating training progress:', error);
+              })
               .then(data => {
-                if (data.success) {
+                if (data && data.success) {
                   // Update UI if needed
                   const row = document.querySelector(`tr[data-destination-id="${destinationId}"]`);
                   if (row) {
@@ -2207,8 +2287,7 @@ if (typeof window.trans === 'undefined') {
 
         // Check if already assigned
         if (alreadyAssigned === 'true') {
-          const message = 'This training is already assigned or in upcoming training for this employee.';
-          alert(message);
+          Swal.fire('Notice', 'This training is already assigned or in upcoming training for this employee.', 'info');
           return;
         }
 
@@ -2252,11 +2331,11 @@ if (typeof window.trans === 'undefined') {
                 }, 3000);
               }
             } else {
-              alert(data.message || 'Request failed.');
+              Swal.fire('Error', data.message || 'Request failed.', 'error');
             }
           } catch (error) {
             console.error('Request activation error:', error);
-            alert('Request failed: ' + (error.message || 'Please try again'));
+            Swal.fire('Error', 'Request failed: ' + (error.message || 'Please try again'), 'error');
           } finally {
             this.disabled = false;
             const buttonText = 'Request Training';
@@ -2330,35 +2409,45 @@ if (typeof window.trans === 'undefined') {
 
   // Delete Possible Destination function
   function deletePossibleDestination(id, destinationName) {
-    if (confirm(`Are you sure you want to delete "${destinationName}"?`)) {
-      fetch(`/admin/destination-knowledge-training/destroy-possible/${id}`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-          'Accept': 'application/json'
-        }
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          // Remove the row from the table
-          const tableBody = document.getElementById('possibleDestinationsTableBody');
-          const rows = tableBody.querySelectorAll('tr');
-
-          rows.forEach(row => {
-            if (row.cells[0].textContent == id) {
-              row.remove();
+    Swal.fire({
+      title: 'Are you sure?',
+      text: `Are you sure you want to delete "${destinationName}"?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        fetch(`/admin/destination-knowledge-training/destroy-possible/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+          }
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire('Deleted!', 'Destination has been deleted.', 'success');
+            // Remove the row from the table
+            const tableBody = document.getElementById('possibleDestinationsTableBody');
+            if (tableBody) {
+              const rows = tableBody.querySelectorAll('tr');
+              rows.forEach(row => {
+                if (row.cells[0].textContent == id) row.remove();
+              });
             }
-          });
-
-                  } else {
-                  }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to delete destination. Please try again.');
-      });
-    }
+          } else {
+            Swal.fire('Error', data.message || 'Failed to delete destination.', 'error');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          Swal.fire('Error', 'Failed to delete destination. Please try again.', 'error');
+        });
+      }
+    });
   }
 
   // Auto-populate destination details when destination is selected
@@ -2442,14 +2531,14 @@ if (typeof window.trans === 'undefined') {
                   durationInput.value = data.data.duration;
                   deliveryModeInput.value = data.data.delivery_mode;
 
-                  alert('Destination details loaded from database!');
+                  Swal.fire('Loaded', 'Destination details loaded from database!', 'success');
                 } else {
-                  alert('Please fill in the details manually.');
+                  Swal.fire('Info', 'Please fill in the details manually.', 'info');
                 }
               })
               .catch(error => {
                 console.error('Error fetching destination details:', error);
-                alert('Please fill in the destination details manually.');
+                Swal.fire('Info', 'Please fill in the destination details manually.', 'info');
               });
           }
         } else {
@@ -2588,148 +2677,89 @@ if (typeof window.trans === 'undefined') {
         const employeeName = this.getAttribute('data-employee-name');
         const destinationName = this.getAttribute('data-destination-name');
 
-        // Show password verification before proceeding
-        showPasswordVerification(() => {
-          // Disable button and show loading
-          this.disabled = true;
-          this.innerHTML = '<i class="bi bi-hourglass-split"></i> Assigning...';
+        // Bypass password verification and use a simple confirmation
+        Swal.fire({
+          title: 'Assign to Upcoming?',
+          text: `Assign ${destinationName} to ${employeeName} upcoming training?`,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Yes, assign it!'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            // Disable button and show loading
+            this.disabled = true;
+            this.innerHTML = '<i class="bi bi-hourglass-split"></i> Assigning...';
 
-          // Get CSRF token safely with multiple fallback methods
-          let csrfTokenValue = null;
-          const csrfToken = document.querySelector('meta[name="csrf-token"]');
+            // Get CSRF token safely with multiple fallback methods
+            let csrfTokenValue = null;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]');
 
-          if (csrfToken) {
-            csrfTokenValue = csrfToken.getAttribute('content') || csrfToken.content;
-          }
-
-          // Fallback: try to get from Laravel's global variable
-          if (!csrfTokenValue && typeof window.Laravel !== 'undefined' && window.Laravel.csrfToken) {
-            csrfTokenValue = window.Laravel.csrfToken;
-          }
-
-          // Fallback: try to get from form token if exists
-          if (!csrfTokenValue) {
-            const tokenInput = document.querySelector('input[name="_token"]');
-            if (tokenInput) {
-              csrfTokenValue = tokenInput.value;
-            }
-          }
-
-          if (!csrfTokenValue) {
-            console.error('CSRF token not found');
-            alert('Security token not found. Please refresh the page and try again.');
-            this.disabled = false;
-            this.innerHTML = '<i class="bi bi-calendar-check"></i> Assign to Upcoming Training';
-            return;
-          }
-
-          // Make AJAX request
-          fetch('{{ route("admin.destination-knowledge-training.assign-to-upcoming") }}', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': csrfTokenValue,
-              'Accept': 'application/json',
-              'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: JSON.stringify({
-              destination_id: destinationId
-            })
-          })
-          .then(response => {
-            console.log('Response status:', response.status);
-            console.log('Response headers:', response.headers);
-
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
+            if (csrfToken) {
+              csrfTokenValue = csrfToken.getAttribute('content') || csrfToken.content;
             }
 
-            return response.json();
-          })
-          .then(data => {
-            console.log('Response data:', data);
+            // Fallback: try to get from Laravel's global variable
+            if (!csrfTokenValue && typeof window.Laravel !== 'undefined' && window.Laravel.csrfToken) {
+              csrfTokenValue = window.Laravel.csrfToken;
+            }
 
-            if (data.success) {
-              // Show success notification
+            // Fallback: try to get from form token if exists
+            if (!csrfTokenValue) {
+              const tokenInput = document.querySelector('input[name="_token"]');
+              if (tokenInput) {
+                csrfTokenValue = tokenInput.value;
+              }
+            }
 
-              // Replace button with success badge
-              const parentTd = this.parentElement;
-              parentTd.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Approved for Upcoming</span>';
-
-              // Refresh page after 2 seconds to show updated status
-              setTimeout(() => {
-                window.location.reload();
-              }, 2000);
-            } else {
-              // Show error notification with detailed message
-              const errorMessage = data.message || 'Unknown error occurred';
-              console.error('Server error:', errorMessage);
-              alert(errorMessage);
-
-              // Reset button
+            if (!csrfTokenValue) {
+              console.error('CSRF token not found');
+              Swal.fire('Error', 'Security token not found. Please refresh the page and try again.', 'error');
               this.disabled = false;
               this.innerHTML = '<i class="bi bi-calendar-check"></i> Assign to Upcoming Training';
+              return;
             }
-          })
-          .catch(error => {
-            console.error('Network or parsing error:', error);
-            console.error('Error details:', error.message);
 
-            // Check if it's a CSRF token error and try to refresh
-            if (error.message.includes('419') || error.message.includes('CSRF') || error.message.includes('token')) {
-              console.log('CSRF token error detected, attempting to refresh token...');
-
-              // Try to refresh CSRF token
-              fetch('/csrf-refresh', {
-                method: 'GET',
-                headers: {
-                  'Accept': 'application/json',
-                  'X-Requested-With': 'XMLHttpRequest'
-                }
+            // Make AJAX request
+            fetch('{{ route("admin.destination-knowledge-training.assign-to-upcoming") }}', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfTokenValue,
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+              },
+              body: JSON.stringify({
+                destination_id: destinationId
               })
-              .then(response => response.json())
-              .then(data => {
-                if (data.csrf_token) {
-                  // Update meta tag
-                  const metaTag = document.querySelector('meta[name="csrf-token"]');
-                  if (metaTag) {
-                    metaTag.setAttribute('content', data.csrf_token);
-                  }
-                  // Update global variable
-                  if (window.Laravel) {
-                    window.Laravel.csrfToken = data.csrf_token;
-                  }
-                  alert('Security token refreshed. Please try again.');
-                }
-              })
-              .catch(() => {
-                alert('Please refresh the page and try again.');
-              });
-            }
-
-            // More specific error message
-            let errorMessage = 'Failed to assign training. ';
-            if (error.message.includes('HTTP error')) {
-              errorMessage += `Server returned ${error.message}. `;
-            } else if (error.message.includes('JSON')) {
-              errorMessage += 'Invalid response from server. ';
-            } else if (error.message.includes('419') || error.message.includes('CSRF')) {
-              errorMessage += 'Security token expired. Token has been refreshed, please try again. ';
-            } else {
-              errorMessage += 'Network error. ';
-            }
-            errorMessage += 'Please try again.';
-
-            alert(errorMessage);
-
-            // Reset button with dynamic text
-            this.disabled = false;
-            const isAlreadyAssigned = this.getAttribute('data-already-assigned') === 'true';
-            this.innerHTML = isAlreadyAssigned ?
-              '<i class="bi bi-calendar-check"></i> Re-assign to Upcoming' :
-              '<i class="bi bi-calendar-check"></i> Assign to Upcoming Training';
-          });
+            })
+            .then(response => {
+              if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+              return response.json();
+            })
+            .then(data => {
+              if (data.success) {
+                Swal.fire('Success!', data.message || 'Training has been assigned to upcoming training list successfully.', 'success');
+                // Replace button with success badge
+                const parentTd = this.parentElement;
+                parentTd.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Approved for Upcoming</span>';
+                setTimeout(() => window.location.reload(), 2000);
+              } else {
+                Swal.fire('Error', data.message || 'Unknown error occurred', 'error');
+                this.disabled = false;
+                this.innerHTML = '<i class="bi bi-calendar-check"></i> Assign to Upcoming Training';
+              }
+            })
+            .catch(error => {
+              console.error('Network or parsing error:', error);
+              Swal.fire('Error', 'Failed to assign training. Please try again.', 'error');
+              this.disabled = false;
+              this.innerHTML = '<i class="bi bi-calendar-check"></i> Assign to Upcoming Training';
+            });
+          }
         });
+
       });
     });
   }
@@ -2740,7 +2770,7 @@ if (typeof window.trans === 'undefined') {
     const progressFilter = document.getElementById('progressFilter');
     const dateFilter = document.getElementById('dateFilter');
     const applyFiltersBtn = document.getElementById('applyFilters');
-    
+
     // Select the card columns (they contain data-destination-id)
     const cardCols = document.querySelectorAll('#destinationTableBody [data-destination-id]');
 
@@ -2767,10 +2797,10 @@ if (typeof window.trans === 'undefined') {
 
         // Get status - looking specifically for the status badge in card body
         // It's the one with classes like bg-success, bg-primary, etc.
-        const statusBadge = Array.from(card.querySelectorAll('.card-body .badge')).find(badge => 
-          badge.classList.contains('bg-success') || 
-          badge.classList.contains('bg-primary') || 
-          badge.classList.contains('bg-secondary') || 
+        const statusBadge = Array.from(card.querySelectorAll('.card-body .badge')).find(badge =>
+          badge.classList.contains('bg-success') ||
+          badge.classList.contains('bg-primary') ||
+          badge.classList.contains('bg-secondary') ||
           badge.classList.contains('bg-danger')
         );
         const statusText = statusBadge ? statusBadge.textContent.toLowerCase().trim() : '';
@@ -2779,8 +2809,8 @@ if (typeof window.trans === 'undefined') {
 
         // Search Filter (Employee Name, Destination, or any text)
         if (searchTerm) {
-          if (!employeeName.includes(searchTerm) && 
-              !destinationName.includes(searchTerm) && 
+          if (!employeeName.includes(searchTerm) &&
+              !destinationName.includes(searchTerm) &&
               !allCardText.includes(searchTerm)) {
             show = false;
           }
@@ -2808,7 +2838,7 @@ if (typeof window.trans === 'undefined') {
       // Show/Hide Empty State Message
       const visibleCards = Array.from(cardCols).filter(col => col.style.display !== 'none');
       const emptyState = document.querySelector('#destinationTableBody .col-12 > div.text-center');
-      
+
       // If we are filtering and find nothing, we might want to show a "No results matching your filters" message
       // But for now, just let the table look empty or use existing empty state if possible
     }
@@ -2866,13 +2896,13 @@ if (typeof window.trans === 'undefined') {
 
     if (exportExcelBtn) {
       exportExcelBtn.addEventListener('click', function() {
-        alert('Excel export functionality coming soon...');
+        Swal.fire('Coming Soon', 'Excel export functionality is currently under development.', 'info');
       });
     }
 
     if (exportPdfBtn) {
       exportPdfBtn.addEventListener('click', function() {
-        alert('PDF export functionality coming soon...');
+        Swal.fire('Coming Soon', 'PDF export functionality is currently under development.', 'info');
       });
     }
   }
@@ -2940,10 +2970,29 @@ if (typeof window.trans === 'undefined') {
         let pendingAction = null;
 
         function confirmAction(actionType, title, message, id = null) {
-          // Skip confirmation dialog and go directly to password verification
-          showPasswordVerification(() => {
-            executeAction(actionType, id);
-          });
+          if (actionType === 'assign-upcoming') {
+            // Bypass password verification for assign-upcoming using SweetAlert
+            Swal.fire({
+              title: title,
+              text: message,
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonColor: '#3085d6',
+              cancelButtonColor: '#d33',
+              confirmButtonText: 'Yes, proceed!'
+            }).then((result) => {
+              if (result.isConfirmed) {
+                executeAction(actionType, id);
+              }
+            });
+          } else {
+            // For other sensitive actions (Delete, etc), still show password verification
+            // but wrapped in a nice confirmation if needed, or just go straight to password.
+            // Following existing pattern:
+            showPasswordVerification(() => {
+              executeAction(actionType, id);
+            });
+          }
         }
 
         function confirmDelete(destinationId, destinationName) {
@@ -3060,7 +3109,7 @@ if (typeof window.trans === 'undefined') {
           .then(response => response.json())
           .then(data => {
             if (data.success) {
-              alert(data.message || 'Training activation request has been submitted successfully.');
+              Swal.fire('Success', data.message || 'Training activation request has been submitted successfully.', 'success');
               if (data.redirect_url) {
                 window.location.href = data.redirect_url;
               } else {
@@ -3068,12 +3117,12 @@ if (typeof window.trans === 'undefined') {
                 window.location.reload();
               }
             } else {
-              alert(data.message || 'Failed to submit training activation request.');
+              Swal.fire('Error', data.message || 'Failed to submit training activation request.', 'error');
             }
           })
           .catch(error => {
             console.error('Error:', error);
-            alert('An error occurred while submitting the request. Please try again.');
+            Swal.fire('Error', 'An error occurred while submitting the request. Please try again.', 'error');
           });
         }
 
@@ -3093,37 +3142,13 @@ if (typeof window.trans === 'undefined') {
               destination_id: destinationId
             })
           })
-          .then(async response => {
-            if (!response.ok) {
-              let msg = 'An error occurred while assigning the training. Please try again.';
-              try {
-                const data = await response.json();
-                msg = data.message || msg;
-              } catch (e) {}
-              alert(msg);
-              throw new Error(msg);
-            }
-            return response.json();
-          })
-          .then(data => {
-            if (data.success) {
-              alert(data.message || 'Training has been assigned to upcoming training list successfully.');
-              window.location.reload();
-            } else {
-              alert(data.message || 'Failed to assign training to upcoming training list.');
-            }
-          })
-          .catch(error => {
-            console.error('Error:', error);
-            alert('An error occurred while assigning the training. Please try again.');
-          });
         }
 
         @if(session('success'))
                   @endif
 
         @if(session('error'))
-          alert('{{ session('error') }}');
+          Swal.fire('Error', '{{ session('error') }}', 'error');
         @endif
 
         // Pagination functionality

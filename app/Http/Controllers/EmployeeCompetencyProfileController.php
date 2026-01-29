@@ -16,6 +16,15 @@ class EmployeeCompetencyProfileController extends Controller
 {
     public function index()
     {
+        // Fetch all local employees to map emails to local profile pictures
+        $localEmployees = Employee::all();
+        $emailToLocalMap = [];
+        foreach ($localEmployees as $localEmp) {
+            if ($localEmp->email) {
+                $emailToLocalMap[strtolower($localEmp->email)] = $localEmp;
+            }
+        }
+
         // 1. Fetch employees from API endpoint FIRST
         $employees = [];
         try {
@@ -29,65 +38,25 @@ class EmployeeCompetencyProfileController extends Controller
                 $employees = [];
             }
 
+
             // 2. Sync skills for each employee found in API
             if (is_array($employees)) {
                 foreach ($employees as $emp) {
-                     // Determine the ID to use - prioritize IDs that match our local format if possible, 
-                     // but broadly support the structure returned by the API
+                     // Use the employee_id directly from API - no conversion
                      $empId = $emp['employee_id'] ?? $emp['id'] ?? null;
-                     
-                     // Also check for external_employee_id if strictly using that
-                     if (empty($empId) && isset($emp['external_employee_id'])) {
-                         $empId = $emp['external_employee_id'];
-                     }
                      
                      $skills = $emp['skills'] ?? null;
                      
-                     // Auto-import removed to prevent duplication
+                     // Auto-sync employee skills to competency profiles
+                     if ($empId && $skills && $skills !== 'N/A') {
+                         $this->syncEmployeeSkillsToCompetencies($empId, $skills);
+                     }
                 }
             }
         } catch (\Exception $e) {
             \Log::warning('Failed to fetch/sync employees from API: ' . $e->getMessage());
             // Fallback to local database if API fails
             $employees = Employee::all()->toArray();
-        }
-
-        // 3. NOW fetch profiles (including newly created ones from the sync)
-        $profiles = EmployeeCompetencyProfile::with(['employee', 'competency'])->orderBy('id')->get();
-
-        // Create a map of employee_id => employee data for quick lookup
-        $employeeMap = [];
-        foreach ($employees as $employee) {
-            $empId = is_array($employee) 
-                ? ($employee['external_employee_id'] ?? $employee['employee_id'] ?? $employee['id'] ?? null)
-                : ($employee->external_employee_id ?? $employee->employee_id ?? $employee->id ?? null);
-            
-            if ($empId) {
-                $employeeMap[$empId] = $employee;
-            }
-        }
-
-        // Attach employee data from API to each profile
-        foreach ($profiles as $profile) {
-            if (isset($employeeMap[$profile->employee_id])) {
-                $apiEmployee = $employeeMap[$profile->employee_id];
-                
-                // Create a temporary object to hold employee data
-                $employeeData = new \stdClass();
-                $employeeData->employee_id = $profile->employee_id;
-                $employeeData->first_name = is_array($apiEmployee) 
-                    ? ($apiEmployee['first_name'] ?? 'Unknown')
-                    : ($apiEmployee->first_name ?? 'Unknown');
-                $employeeData->last_name = is_array($apiEmployee) 
-                    ? ($apiEmployee['last_name'] ?? 'Employee')
-                    : ($apiEmployee->last_name ?? 'Employee');
-                $employeeData->profile_picture = is_array($apiEmployee) 
-                    ? ($apiEmployee['profile_picture'] ?? null)
-                    : ($apiEmployee->profile_picture ?? null);
-                
-                // Override the employee relationship with API data
-                $profile->setRelation('employee', $employeeData);
-            }
         }
 
         // Exclude all destination training related competencies from the main competency dropdown
@@ -125,8 +94,90 @@ class EmployeeCompetencyProfileController extends Controller
         $perPage = 9; // Show 9 employees per page
         $employeesCollection = collect($employees);
         
+        $paginatedEmployeesData = $employeesCollection->forPage($page, $perPage);
+        $paginatedEmployeeIds = $paginatedEmployeesData->map(function($emp) {
+            return is_array($emp) 
+                ? ($emp['employee_id'] ?? $emp['id'] ?? null)
+                : ($emp->employee_id ?? $emp->id ?? null);
+        })->filter()->toArray();
+
+        // Sync for these specific employees BEFORE fetching profiles for display
+        foreach ($paginatedEmployeesData as $key => $emp) {
+            $empId = is_array($emp) 
+                ? ($emp['employee_id'] ?? $emp['id'] ?? null)
+                : ($emp->employee_id ?? $emp->id ?? null);
+            
+            $email = is_array($emp) ? ($emp['email'] ?? null) : ($emp->email ?? null);
+            
+            if ($empId) {
+                $this->syncWithTrainingProgress($empId, $email);
+            }
+
+            // Resolve Profile Picture for Display
+            $empEmail = strtolower($email ?? '');
+            $localRef = $emailToLocalMap[$empEmail] ?? null;
+            $profilePic = is_array($emp) ? ($emp['profile_picture'] ?? null) : ($emp->profile_picture ?? null);
+            
+            $finalProfilePic = $profilePic;
+
+            if ($localRef && $localRef->profile_picture) {
+                // Local override exists
+                $finalProfilePic = $localRef->profile_picture;
+            } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
+                // It's a relative path from API, prepend external domain
+                $finalProfilePic = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+            }
+
+            // Update the item in the collection
+            if (is_array($emp)) {
+                $emp['profile_picture'] = $finalProfilePic;
+                $paginatedEmployeesData->put($key, $emp);
+            } else {
+                $paginatedEmployeesData[$key]->profile_picture = $finalProfilePic;
+            }
+        }
+
+        // Fetch profiles ONLY for the paginated employees for better performance
+        $profiles = EmployeeCompetencyProfile::with(['employee', 'competency'])
+            ->whereIn('employee_id', $paginatedEmployeeIds)
+            ->orderBy('id')->get();
+
+        // Create a map for employee data to attach to profiles
+        $employeeMap = [];
+        foreach ($allEmployees as $employee) {
+            $empId = is_array($employee) 
+                ? ($employee['employee_id'] ?? $employee['id'] ?? null)
+                : ($employee->employee_id ?? $employee->id ?? null);
+            if ($empId) $employeeMap[$empId] = $employee;
+        }
+
+        // Attach employee data from API to each profile
+        foreach ($profiles as $profile) {
+            if (isset($employeeMap[$profile->employee_id])) {
+                $apiEmployee = $employeeMap[$profile->employee_id];
+                $employeeData = new \stdClass();
+                $employeeData->employee_id = $profile->employee_id;
+                $employeeData->first_name = is_array($apiEmployee) ? ($apiEmployee['first_name'] ?? 'Unknown') : ($apiEmployee->first_name ?? 'Unknown');
+                $employeeData->last_name = is_array($apiEmployee) ? ($apiEmployee['last_name'] ?? 'Employee') : ($apiEmployee->last_name ?? 'Employee');
+                
+                // Improved photolink logic: Check local first then API
+                $empEmail = strtolower(is_array($apiEmployee) ? ($apiEmployee['email'] ?? '') : ($apiEmployee->email ?? ''));
+                $localRef = $emailToLocalMap[$empEmail] ?? null;
+                $profilePic = is_array($apiEmployee) ? ($apiEmployee['profile_picture'] ?? null) : ($apiEmployee->profile_picture ?? null);
+                
+                if ($localRef && $localRef->profile_picture) {
+                    $employeeData->profile_picture = $localRef->profile_picture;
+                } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
+                    $employeeData->profile_picture = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                } else {
+                    $employeeData->profile_picture = $profilePic;
+                }
+                $profile->setRelation('employee', $employeeData);
+            }
+        }
+
         $employees = new \Illuminate\Pagination\LengthAwarePaginator(
-            $employeesCollection->forPage($page, $perPage),
+            $paginatedEmployeesData,
             $employeesCollection->count(),
             $perPage,
             $page,
@@ -485,121 +536,187 @@ class EmployeeCompetencyProfileController extends Controller
 
     /**
      * Sync competency profiles with training progress - individual progress tracking per employee
+     * Robust version that checks multiple sources and handles ID mappings
      */
-    public function syncWithTrainingProgress()
+    public function syncWithTrainingProgress($employeeId = null, $email = null)
     {
         try {
             $updatedCount = 0;
-            $profiles = EmployeeCompetencyProfile::with(['employee', 'competency'])->get();
+            $query = EmployeeCompetencyProfile::with(['employee', 'competency']);
+            
+            if ($employeeId) {
+                $query->where('employee_id', $employeeId);
+            }
+            
+            $profiles = $query->get();
 
             foreach ($profiles as $profile) {
                 $competencyName = $profile->competency->competency_name;
-                $actualProgress = 0;
-                $examProgress = 0;
+                $empId = (string) $profile->employee_id;
+                
+                // Handle different employee ID formats (e.g., "2" vs "EMP002")
+                $possibleEmpIds = [$empId];
+                if (is_numeric($empId)) {
+                    $possibleEmpIds[] = 'EMP' . str_pad($empId, 3, '0', STR_PAD_LEFT);
+                } elseif (preg_match('/EMP(\d+)/i', $empId, $matches)) {
+                    $possibleEmpIds[] = (string) (int) $matches[1];
+                }
 
-                // Check destination knowledge training first for this specific employee
+                // Add identity matching via email if available
+                $empEmail = $email;
+                if (!$empEmail) {
+                    $localEmp = \App\Models\Employee::where('employee_id', $empId)->first();
+                    $empEmail = $localEmp ? $localEmp->email : null;
+                }
+
+                if ($empEmail) {
+                    $linkedLocalEmps = \App\Models\Employee::where('email', $empEmail)->pluck('employee_id')->toArray();
+                    foreach ($linkedLocalEmps as $lid) {
+                        $possibleEmpIds[] = (string) $lid;
+                    }
+                }
+
+                $possibleEmpIds = array_unique(array_filter($possibleEmpIds));
+
+                $actualProgress = 0;
+
+                // 1. Identify search terms for course titles
+                $searchTerms = [
+                    $competencyName,
+                    $competencyName . ' Training',
+                    str_replace(' Training', '', $competencyName),
+                    str_replace(' Course', '', $competencyName),
+                    str_replace(' Program', '', $competencyName),
+                    str_replace(' Skills', '', $competencyName)
+                ];
+                $searchTerms = array_unique(array_filter($searchTerms));
+
+                // 2. SEARCH SOURCES
+                
+                // Source A: Destination Knowledge Training (highest priority for location skills)
                 if (stripos($competencyName, 'Destination Knowledge') !== false) {
                     $locationName = str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $competencyName);
                     $locationName = trim($locationName);
 
                     if (!empty($locationName)) {
-                        $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $profile->employee_id)
-                            ->where(function($query) use ($locationName, $competencyName) {
-                                $query->where('destination_name', 'LIKE', '%' . $locationName . '%')
-                                      ->orWhere('destination_name', 'LIKE', '%' . strtoupper($locationName) . '%')
-                                      ->orWhere('destination_name', 'LIKE', '%' . strtolower($locationName) . '%')
-                                      ->orWhere('destination_name', $competencyName)
-                                      ->orWhere('destination_name', $locationName);
+                        $destinationRecord = \App\Models\DestinationKnowledgeTraining::whereIn('employee_id', $possibleEmpIds)
+                            ->where(function($q) use ($locationName, $competencyName) {
+                                $q->where('destination_name', 'LIKE', '%' . $locationName . '%')
+                                  ->orWhere('destination_name', 'LIKE', '%' . strtoupper($locationName) . '%')
+                                  ->orWhere('destination_name', 'LIKE', '%' . strtolower($locationName) . '%')
+                                  ->orWhere('destination_name', $competencyName)
+                                  ->orWhere('destination_name', $locationName);
                             })
-                            ->orderBy('progress', 'desc') // Get highest progress first
+                            ->orderBy('progress', 'desc')
                             ->first();
 
                         if ($destinationRecord) {
-                            $actualProgress = $destinationRecord->progress ?? 0;
+                            $actualProgress = max($actualProgress, $destinationRecord->progress ?? 0);
                         }
                     }
                 }
 
-                // Check employee training dashboard for this specific employee
-                if ($actualProgress == 0) {
-                    $trainingRecord = \App\Models\EmployeeTrainingDashboard::with('course')
-                        ->where('employee_id', $profile->employee_id)
-                        ->whereHas('course', function($query) use ($competencyName) {
-                            $searchTerms = [
-                                $competencyName,
-                                $competencyName . ' Training',
-                                str_replace(' Training', '', $competencyName),
-                                str_replace(' Course', '', $competencyName),
-                                str_replace(' Program', '', $competencyName)
-                            ];
+                if ($actualProgress < 100) {
+                    // Source B: Check all Course Management matches
+                    $matchingCourses = \App\Models\CourseManagement::where(function($q) use ($searchTerms) {
+                        foreach ($searchTerms as $term) {
+                            $q->orWhere('course_title', 'LIKE', '%' . $term . '%');
+                        }
+                    })->get();
 
-                            $query->where(function($q) use ($searchTerms) {
-                                foreach ($searchTerms as $term) {
-                                    $q->orWhere('course_title', 'LIKE', '%' . $term . '%');
-                                }
-                            });
-                        })
-                        ->orderBy('updated_at', 'desc')
-                        ->first();
-
-                    if ($trainingRecord) {
-                        $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($profile->employee_id, $trainingRecord->course_id);
-                        $trainingProgress = $trainingRecord->progress ?? 0;
-                        $actualProgress = $examProgress > 0 ? $examProgress : $trainingProgress;
+                    foreach ($matchingCourses as $course) {
+                        // Check Exam Attempts for this course (80% threshold)
+                        $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($empId, $course->course_id);
+                        // Also try other ID formats for exam attempts
+                        foreach ($possibleEmpIds as $pid) {
+                            if ($pid !== $empId) {
+                                $examProgress = max($examProgress, \App\Models\ExamAttempt::calculateCombinedProgress($pid, $course->course_id));
+                            }
+                        }
+                        
+                        // Check Training Dashboard progress
+                        $dashboardProgress = \App\Models\EmployeeTrainingDashboard::whereIn('employee_id', $possibleEmpIds)
+                            ->where('course_id', $course->course_id)
+                            ->max('progress') ?? 0;
+                            
+                        $actualProgress = max($actualProgress, $examProgress, (float)$dashboardProgress);
                     }
                 }
 
-                // Convert individual progress to proficiency level for THIS employee only
-                // Do not downgrade to 0. Keep at least current level or minimum 1 for existing profiles.
-                $computedLevel = null;
-                if ($actualProgress >= 90) $computedLevel = 5;
-                elseif ($actualProgress >= 70) $computedLevel = 4;
-                elseif ($actualProgress >= 50) $computedLevel = 3;
-                elseif ($actualProgress >= 30) $computedLevel = 2;
+                if ($actualProgress < 100) {
+                    // Source C: Check Completed Training table
+                    $completedRec = \App\Models\CompletedTraining::whereIn('employee_id', $possibleEmpIds)
+                        ->where(function($q) use ($searchTerms) {
+                            foreach ($searchTerms as $term) {
+                                $q->orWhere('training_title', 'LIKE', '%' . $term . '%');
+                            }
+                        })->first();
+                    if ($completedRec) $actualProgress = 100;
+                }
+
+                if ($actualProgress < 100) {
+                    // Source D: Check Training Requests
+                    $requestRec = \App\Models\TrainingRequest::whereIn('employee_id', $possibleEmpIds)
+                        ->where(function($q) use ($searchTerms) {
+                            foreach ($searchTerms as $term) {
+                                $q->orWhere('training_title', 'LIKE', '%' . $term . '%');
+                            }
+                        })
+                        ->whereIn('status', ['Completed', 'Passed', 'Approved'])
+                        ->first();
+                    if ($requestRec) {
+                        if (in_array($requestRec->status, ['Completed', 'Passed'])) {
+                            $actualProgress = 100;
+                        } elseif ($requestRec->course_id) {
+                            // If approved but not marked completed, check exam/dashboard for THAT course
+                            $exP = \App\Models\ExamAttempt::calculateCombinedProgress($empId, $requestRec->course_id);
+                            foreach ($possibleEmpIds as $pid) {
+                                $exP = max($exP, \App\Models\ExamAttempt::calculateCombinedProgress($pid, $requestRec->course_id));
+                            }
+                            $dashP = \App\Models\EmployeeTrainingDashboard::whereIn('employee_id', $possibleEmpIds)
+                                ->where('course_id', $requestRec->course_id)
+                                ->max('progress') ?? 0;
+                            $actualProgress = max($actualProgress, $exP, $dashP);
+                        }
+                    }
+                }
+
+                // Final progress cap and level conversion
+                $actualProgress = min(100, (float)$actualProgress);
+                
+                $computedLevel = 0;
+                if ($actualProgress >= 100) $computedLevel = 5;
+                elseif ($actualProgress >= 80) $computedLevel = 4;
+                elseif ($actualProgress >= 60) $computedLevel = 3;
+                elseif ($actualProgress >= 40) $computedLevel = 2;
                 elseif ($actualProgress > 0) $computedLevel = 1;
 
-                // Enhanced logic to prevent resetting proficiency level to 0%
-                // ALWAYS preserve manually set values - they should be FIXED and never reset
                 $existingLevel = (int) $profile->proficiency_level;
 
-                // Check if this is a manually set proficiency level that should be preserved
+                // Preservation logic for manual assessments
                 $isManuallySet = false;
-
-                // For destination competencies, check if manually set (level > 1 or recently assessed)
-                if (stripos($competencyName, 'Destination Knowledge') !== false) {
-                    $isManuallySet = $existingLevel > 1 ||
-                                   ($existingLevel >= 1 && $profile->assessment_date &&
-                                    \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 30);
-                } else {
-                    // For non-destination competencies, be more conservative about manual detection
-                    $isManuallySet = $existingLevel > 1 ||
-                                   ($existingLevel >= 1 && $profile->assessment_date &&
-                                    \Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 7);
-                }
-
-                if ($isManuallySet) {
-                    // PRESERVE manually set proficiency level - NEVER change it
-                    $newProficiencyLevel = $existingLevel;
-                } else {
-                    // Only update if not manually set
-                    if (is_null($computedLevel)) {
-                        // No training progress found, keep existing level but ensure minimum 1
-                        $newProficiencyLevel = max(1, $existingLevel);
-                    } else {
-                        // Training progress found, use computed level but ensure minimum 1
-                        $newProficiencyLevel = max(1, (int) $computedLevel);
+                if ($existingLevel > 1 && $profile->assessment_date) {
+                    if (\Carbon\Carbon::parse($profile->assessment_date)->diffInDays(now()) < 7) {
+                        $isManuallySet = true;
                     }
                 }
 
-                // Only update if proficiency level changed for this individual employee
-                if ($newProficiencyLevel != $profile->proficiency_level) {
+                // Determine final proficiency level
+                if ($isManuallySet && $computedLevel < $existingLevel) {
+                    $newProficiencyLevel = $existingLevel;
+                } else {
+                    $newProficiencyLevel = max($existingLevel, (int) $computedLevel);
+                }
+
+                // Update if progress improved
+                if ($newProficiencyLevel > $profile->proficiency_level) {
                     $oldProficiency = $profile->proficiency_level;
                     $profile->proficiency_level = $newProficiencyLevel;
                     $profile->assessment_date = now();
                     $profile->save();
 
-                    // Also update competency gap if exists
-                    $competencyGap = \App\Models\CompetencyGap::where('employee_id', $profile->employee_id)
+                    // Update competency gap
+                    $competencyGap = \App\Models\CompetencyGap::whereIn('employee_id', $possibleEmpIds)
                         ->where('competency_id', $profile->competency_id)
                         ->first();
 
@@ -611,12 +728,12 @@ class EmployeeCompetencyProfileController extends Controller
 
                     $updatedCount++;
 
-                    // Log the activity
+                    // Log activity
                     ActivityLog::create([
-                        'user_id' => Auth::id(),
+                        'user_id' => Auth::id() ?? 1,
                         'module' => 'Competency Management',
-                        'action' => 'sync_individual',
-                        'description' => "Updated {$competencyName} proficiency from {$oldProficiency} to {$newProficiencyLevel} based on individual progress {$actualProgress}% (exam: {$examProgress}%) for employee ID: {$profile->employee_id}",
+                        'action' => 'sync_individual_robust',
+                        'description' => "Updated {$competencyName} proficiency from {$oldProficiency} to {$newProficiencyLevel} based on detected progress {$actualProgress}% for employee ID: {$empId}",
                         'model_type' => EmployeeCompetencyProfile::class,
                         'model_id' => $profile->id,
                     ]);
@@ -994,5 +1111,215 @@ class EmployeeCompetencyProfileController extends Controller
             ], 500);
         }
     }
-    // syncExternalSkillsString removed to prevent duplication
+    /**
+     * Ensure destination knowledge trainings have corresponding competency profiles
+     */
+    private function ensureDestinationProfilesExist($employeeId, $email = null)
+    {
+        try {
+            $empId = (string) $employeeId;
+            $possibleEmpIds = [$empId];
+            
+            // Handle different employee ID formats
+            if (is_numeric($empId)) {
+                $possibleEmpIds[] = 'EMP' . str_pad($empId, 3, '0', STR_PAD_LEFT);
+            } elseif (preg_match('/EMP(\d+)/i', $empId, $matches)) {
+                $possibleEmpIds[] = (string) (int) $matches[1];
+            }
+
+            // Add identity matching via email if available
+            $empEmail = $email;
+            if (!$empEmail) {
+                $localEmp = \App\Models\Employee::where('employee_id', $empId)->first();
+                $empEmail = $localEmp ? $localEmp->email : null;
+            }
+
+            if ($empEmail) {
+                $linkedLocalEmps = \App\Models\Employee::where('email', $empEmail)->pluck('employee_id')->toArray();
+                foreach ($linkedLocalEmps as $lid) {
+                    $possibleEmpIds[] = (string) $lid;
+                }
+            }
+
+            $possibleEmpIds = array_unique(array_filter($possibleEmpIds));
+
+            // Get all destination trainings for these IDs
+            $destinationRecords = \App\Models\DestinationKnowledgeTraining::whereIn('employee_id', $possibleEmpIds)
+                ->get();
+
+            foreach ($destinationRecords as $record) {
+                $destinationName = trim(str_replace([' Training', 'Training'], '', $record->destination_name));
+                if (empty($destinationName)) continue;
+
+                $competencyName = 'Destination Knowledge - ' . $destinationName;
+                
+                // Ensure Competency Exists
+                $competency = CompetencyLibrary::firstOrCreate(
+                    ['competency_name' => $competencyName],
+                    [
+                        'description' => 'Knowledge and expertise about ' . $destinationName . ' destination',
+                        'category' => 'Destination Knowledge'
+                    ]
+                );
+
+                // Ensure Profile Exists for the PRIMARY employee ID (the one passed to this function)
+                $exists = EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                    ->where('competency_id', $competency->id)
+                    ->exists();
+
+                if (!$exists) {
+                    // Calculate initial proficiency
+                    $progress = $record->progress ?? 0;
+                    $proficiencyLevel = 0;
+                    
+                    if ($progress >= 90) $proficiencyLevel = 5;
+                    elseif ($progress >= 70) $proficiencyLevel = 4;
+                    elseif ($progress >= 50) $proficiencyLevel = 3;
+                    elseif ($progress >= 30) $proficiencyLevel = 2;
+                    elseif ($progress > 0) $proficiencyLevel = 1;
+
+                    EmployeeCompetencyProfile::create([
+                        'employee_id' => $employeeId,
+                        'competency_id' => $competency->id,
+                        'proficiency_level' => $proficiencyLevel,
+                        'assessment_date' => $record->updated_at ?? now(),
+                    ]);
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error in ensureDestinationProfilesExist: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Sync employee skills to competency profiles
+     * This ensures skills from the employee list are automatically tracked in competencies
+     * Uses API employee ID as the source of truth and only creates profiles for actual skills
+     */
+    private function syncEmployeeSkillsToCompetencies($employeeId, $skills)
+    {
+        try {
+            if (empty($skills) || $skills === 'N/A') {
+                return;
+            }
+
+            // Parse skills from various formats
+            $skillsList = $this->parseSkills($skills);
+
+            // If no valid skills found, delete any auto-created profiles for this employee
+            if (empty($skillsList)) {
+                // Remove only auto-created profiles (not manually added ones)
+                EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                    ->where('created_from_api_skills', true)
+                    ->delete();
+                return;
+            }
+
+            // Get all current auto-created profiles for this employee
+            $existingAutoProfiles = EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                ->where('created_from_api_skills', true)
+                ->with('competency')
+                ->get()
+                ->keyBy(function($profile) {
+                    return strtolower(trim($profile->competency->competency_name));
+                });
+
+            // Track which skills should have profiles
+            $skillsToKeep = [];
+
+            foreach ($skillsList as $skillName) {
+                $skillName = trim($skillName);
+                
+                if (empty($skillName) || strlen($skillName) < 2) {
+                    continue;
+                }
+
+                $skillKeyName = strtolower($skillName);
+                $skillsToKeep[$skillKeyName] = $skillName;
+
+                // Find or create competency in library
+                $competency = CompetencyLibrary::firstOrCreate(
+                    ['competency_name' => $skillName],
+                    [
+                        'description' => 'Auto-created from employee API skills',
+                        'category' => 'Technical Skills'
+                    ]
+                );
+
+                // Check if profile already exists
+                $existingProfile = EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                    ->where('competency_id', $competency->id)
+                    ->first();
+
+                if (!$existingProfile) {
+                    // Create new competency profile with max proficiency, marked as API-created
+                    EmployeeCompetencyProfile::create([
+                        'employee_id' => $employeeId,
+                        'competency_id' => $competency->id,
+                        'proficiency_level' => 5, // Max proficiency for listed skills
+                        'assessment_date' => now(),
+                        'created_from_api_skills' => true // Mark as auto-created from API
+                    ]);
+
+                    \Log::info("Created competency profile for API employee {$employeeId}: {$skillName}");
+                }
+            }
+
+            // Remove auto-created profiles that are no longer in the API skills list
+            foreach ($existingAutoProfiles as $keyName => $profile) {
+                if (!isset($skillsToKeep[$keyName])) {
+                    $profile->delete();
+                    \Log::info("Deleted obsolete competency profile for API employee {$employeeId}: {$profile->competency->competency_name}");
+                }
+            }
+
+        } catch (\Exception $e) {
+            \Log::error("Error syncing skills for employee {$employeeId}: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Parse skills from various formats (comma-separated, newline-separated, etc.)
+     */
+    private function parseSkills($skills): array
+    {
+        if (is_array($skills)) {
+            return $skills;
+        }
+
+        // Try JSON decode first
+        if (is_string($skills) && (str_starts_with($skills, '[') || str_starts_with($skills, '{'))) {
+            $decoded = json_decode($skills, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        // Split by common delimiters
+        $skillsList = [];
+        
+        // Try newline separation first
+        if (strpos($skills, "\n") !== false) {
+            $skillsList = explode("\n", $skills);
+        } 
+        // Try comma separation
+        elseif (strpos($skills, ',') !== false) {
+            $skillsList = explode(',', $skills);
+        }
+        // Try semicolon separation
+        elseif (strpos($skills, ';') !== false) {
+            $skillsList = explode(';', $skills);
+        }
+        // Try pipe separation
+        elseif (strpos($skills, '|') !== false) {
+            $skillsList = explode('|', $skills);
+        }
+        // Single skill
+        else {
+            $skillsList = [$skills];
+        }
+
+        // Clean up the skills and remove empty values
+        return array_filter(array_map('trim', $skillsList));
+    }
 }

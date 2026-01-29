@@ -17,8 +17,27 @@ class AdminDashboardController extends Controller
 {
     public function index()
     {
-        // Get dashboard statistics
-        $totalEmployees = Employee::count();
+        // Get dashboard statistics - fetch from API same as employee list
+        $totalEmployees = 0;
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            if ($response->successful()) {
+                $apiData = $response->json();
+                // Handle { success: true, data: [...] } structure
+                if (isset($apiData['data']) && is_array($apiData['data'])) {
+                    $totalEmployees = count($apiData['data']);
+                } elseif (is_array($apiData)) {
+                    $totalEmployees = count($apiData);
+                }
+            } else {
+                // Fallback to local database if API fails
+                $totalEmployees = Employee::count();
+            }
+        } catch (\Exception $e) {
+            // Fallback to local database if API call fails
+            $totalEmployees = Employee::count();
+        }
+
         $totalUsers = User::count();
         $activeCourses = CourseManagement::where('status', 'active')->count();
         $trainingSessions = EmployeeTrainingDashboard::count();
@@ -33,8 +52,8 @@ class AdminDashboardController extends Controller
         $activeTrainings = EmployeeTrainingDashboard::whereIn('status', ['Ongoing', 'In Progress', 'Scheduled'])->count();
         $pendingGapAnalyses = CompetencyGap::where('gap', '>', 0)->count();
         $trainingRequestsCount = TrainingRequest::count();
-        
-        
+
+
         // Get recent activities
         $recentEmployees = Employee::latest()->take(5)->get();
         $recentGapAnalyses = CompetencyGap::with('employee')
@@ -43,37 +62,37 @@ class AdminDashboardController extends Controller
             ->get();
         // Get recent trainings - SINGLE SOURCE with deduplication to prevent duplicates
         $recentTrainings = collect();
-        
+
         // Use ONLY EmployeeTrainingDashboard as single source of truth with deduplication
         $dashboardTrainings = EmployeeTrainingDashboard::with(['employee', 'course'])
             ->whereNotNull('training_date')
             ->latest('training_date')
             ->take(20) // Get more records to allow for deduplication
             ->get();
-        
+
         // Apply deduplication based on employee-course combination
         $uniqueTrainings = collect();
         $seenCombinations = [];
-        
+
         foreach ($dashboardTrainings as $training) {
             // Create multiple unique keys to catch all possible duplicates
             $uniqueKeys = [];
-            
+
             // Primary key: employee_id + course_id (if exists)
             if ($training->course_id) {
                 $uniqueKeys[] = $training->employee_id . '_course_' . $training->course_id;
             }
-            
+
             // Secondary key: employee_id + training_title (if exists)
             if ($training->training_title) {
                 $uniqueKeys[] = $training->employee_id . '_training_' . md5(strtolower(trim($training->training_title)));
             }
-            
+
             // Tertiary key: employee_id + course_title from relationship (if exists)
             if ($training->course && $training->course->course_title) {
                 $uniqueKeys[] = $training->employee_id . '_coursetitle_' . md5(strtolower(trim($training->course->course_title)));
             }
-            
+
             // Check if any of the unique keys have been seen before
             $isDuplicate = false;
             foreach ($uniqueKeys as $key) {
@@ -82,7 +101,7 @@ class AdminDashboardController extends Controller
                     break;
                 }
             }
-            
+
             // Only add if this is not a duplicate
             if (!$isDuplicate && !empty($uniqueKeys)) {
                 // Add all unique keys to seen combinations
@@ -90,18 +109,18 @@ class AdminDashboardController extends Controller
                     $seenCombinations[] = $key;
                 }
                 $uniqueTrainings->push($training);
-                
+
                 // Stop when we have 5 unique trainings
                 if ($uniqueTrainings->count() >= 5) {
                     break;
                 }
             }
         }
-        
+
         $recentTrainings = $uniqueTrainings->map(function($training) {
             // Get raw training_title from database to bypass accessor
             $rawTrainingTitle = $training->getAttributes()['training_title'] ?? null;
-            
+
             // Set display title with priority system - bypass problematic accessor
             if ($rawTrainingTitle) {
                 $training->display_title = $rawTrainingTitle;
@@ -121,7 +140,7 @@ class AdminDashboardController extends Controller
             } else {
                 $training->display_title = 'Training Session';
             }
-            
+
             // Calculate participant count for this specific training
             $participantCount = 1; // Default to 1 (the current participant)
             if ($training->course_id) {
@@ -133,15 +152,15 @@ class AdminDashboardController extends Controller
                     ->distinct('employee_id')
                     ->count('employee_id');
             }
-            
+
             $training->participant_count = max($participantCount, 1);
-            
+
             return $training;
         });
-        
+
         // Recent Completed Trainings from both sources
         $recentCompletedTrainings = collect();
-        
+
         try {
             // Get completed trainings from Employee Training Dashboard
             $dashboardCompleted = EmployeeTrainingDashboard::with(['employee', 'course'])
@@ -149,16 +168,16 @@ class AdminDashboardController extends Controller
                 ->latest('updated_at')
                 ->take(10)
                 ->get();
-            
+
             // Get completed trainings from Employee Self-Reported
             $employeeCompleted = \App\Models\CompletedTraining::with('employee')
                 ->latest('completion_date')
                 ->take(10)
                 ->get();
-            
+
             // Convert to arrays and merge
             $allCompletions = collect();
-            
+
             // Add dashboard completions
             foreach ($dashboardCompleted as $training) {
                 $allCompletions->push([
@@ -171,7 +190,7 @@ class AdminDashboardController extends Controller
                     'type' => 'dashboard'
                 ]);
             }
-            
+
             // Add employee completions
             foreach ($employeeCompleted as $training) {
                 $allCompletions->push([
@@ -184,12 +203,12 @@ class AdminDashboardController extends Controller
                     'type' => 'employee'
                 ]);
             }
-            
+
             // Sort by completion date and take 5
             $recentCompletedTrainings = $allCompletions->sortByDesc(function($item) {
                 return $item['completion_date'];
             })->take(5)->values();
-            
+
         } catch (\Exception $e) {
             Log::error('Error fetching recent completed trainings: ' . $e->getMessage());
             $recentCompletedTrainings = collect();
@@ -215,7 +234,7 @@ class AdminDashboardController extends Controller
 
         // Get top skills in demand based on competency gaps
         $topSkills = collect();
-        
+
         try {
             // Try to get competency gaps with relationships
             $topSkillsData = CompetencyGap::with('competency')
@@ -249,7 +268,7 @@ class AdminDashboardController extends Controller
                     ->orderByDesc('request_count')
                     ->take(5)
                     ->get();
-                
+
                 if ($trainingRequestsData->isNotEmpty()) {
                     $maxRequests = $trainingRequestsData->max('request_count');
                     $topSkills = $trainingRequestsData->map(function($request) use ($maxRequests) {
@@ -284,7 +303,7 @@ class AdminDashboardController extends Controller
 
         return view('admin_dashboard', compact(
             'totalEmployees',
-            'totalUsers', 
+            'totalUsers',
             'activeCourses',
             'trainingSessions',
             'employeeUsers',
@@ -360,35 +379,35 @@ class AdminDashboardController extends Controller
     {
         $duplicatesRemoved = 0;
         $totalRecords = EmployeeTrainingDashboard::count();
-        
+
         // Get all training records grouped by employee_id and course_id/training_title
         $allTrainings = EmployeeTrainingDashboard::with(['employee', 'course'])
             ->orderBy('created_at', 'desc') // Keep the most recent record
             ->get();
-        
+
         $seenCombinations = [];
         $duplicateIds = [];
         $debugInfo = [];
-        
+
         foreach ($allTrainings as $training) {
             // Create multiple unique keys to catch all possible duplicates
             $uniqueKeys = [];
-            
+
             // Primary key: employee_id + course_id (if exists)
             if ($training->course_id) {
                 $uniqueKeys[] = $training->employee_id . '_course_' . $training->course_id;
             }
-            
+
             // Secondary key: employee_id + training_title (if exists)
             if ($training->training_title) {
                 $uniqueKeys[] = $training->employee_id . '_training_' . md5(strtolower(trim($training->training_title)));
             }
-            
+
             // Tertiary key: employee_id + course_title from relationship (if exists)
             if ($training->course && $training->course->course_title) {
                 $uniqueKeys[] = $training->employee_id . '_coursetitle_' . md5(strtolower(trim($training->course->course_title)));
             }
-            
+
             // Check if any of the unique keys have been seen before
             $isDuplicate = false;
             $matchingKey = null;
@@ -399,7 +418,7 @@ class AdminDashboardController extends Controller
                     break;
                 }
             }
-            
+
             if ($isDuplicate) {
                 // This is a duplicate, mark for deletion
                 $duplicateIds[] = $training->id;
@@ -429,14 +448,14 @@ class AdminDashboardController extends Controller
                 ];
             }
         }
-        
+
         // Delete duplicate records
         if (!empty($duplicateIds)) {
             EmployeeTrainingDashboard::whereIn('id', $duplicateIds)->delete();
         }
-        
+
         $finalRecords = EmployeeTrainingDashboard::count();
-        
+
         return response()->json([
             'message' => 'Duplicate training records cleaned up successfully',
             'total_records_before' => $totalRecords,

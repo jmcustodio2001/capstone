@@ -22,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Register observer to auto-sync employee skills to competency profiles
+        \App\Models\Employee::observe(\App\Observers\EmployeeSkillObserver::class);
     }
 }

@@ -370,34 +370,62 @@
           $expiredTrainings = 0;
           
           foreach ($employeeRecords as $record) {
-              // Calculate progress for each record
-              $isApprovedRequest = isset($record->source) && $record->source == 'Training Request (Approved)';
-              $combinedProgress = 0;
-              
-              if ($isApprovedRequest) {
-                  $displayProgress = $record->progress ?? 0;
-              } else {
-                  $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $record->course_id);
-                  $displayProgress = $combinedProgress > 0 ? $combinedProgress : ($record->progress ?? 0);
+              // Calculate progress for each record using consistent logic with _progress.blade.php
+              $employeeId = $record->employee_id;
+              $displayProgress = (float)($record->progress ?? 0);
+              $effectiveCourseId = $record->course_id ?? null;
+              $trainingTitle = $record->training_title ?? ($record->course->course_title ?? '');
+
+              // 1. Try to find course_id by title if missing
+              if (!$effectiveCourseId && $trainingTitle) {
+                  $foundCourse = \App\Models\CourseManagement::where('course_title', $trainingTitle)
+                      ->orWhere('course_title', 'LIKE', '%' . $trainingTitle . '%')
+                      ->first();
+                  if ($foundCourse) {
+                      $effectiveCourseId = $foundCourse->course_id;
+                  }
               }
 
-              // Enhanced progress calculation with competency profile fallback
-              if ($displayProgress == 0) {
-                  $trainingTitle = $record->training_title ?? ($record->course->course_title ?? '');
-                  $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($trainingTitle) {
-                      $q->where('competency_name', $trainingTitle)
-                        ->orWhere('competency_name', 'LIKE', '%' . $trainingTitle . '%');
-                  })->where('employee_id', $record->employee_id)->first();
+              // 2. Check for exam progress (Priority 1)
+              if ($effectiveCourseId) {
+                  $combinedProgress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $effectiveCourseId);
+                  if ($combinedProgress > 0) {
+                      $displayProgress = max($displayProgress, (float)$combinedProgress);
+                  }
+              }
+
+              // 3. Check for competency-based progress (Priority 2)
+              if ($displayProgress < 100 && $trainingTitle) {
+                  $competencyName = str_replace([' Training', ' Course', ' Program'], '', $trainingTitle);
+                  $competencyProfile = \App\Models\EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                      ->whereHas('competency', function($q) use ($competencyName) {
+                          $q->where('competency_name', 'LIKE', '%' . $competencyName . '%');
+                      })->where('employee_id', $employeeId)->first();
                   
-                  if ($competencyProfile && $competencyProfile->proficiency_level) {
-                      $displayProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+                  if ($competencyProfile && $competencyProfile->proficiency_level > 0) {
+                      $compProgress = round(($competencyProfile->proficiency_level / 5) * 100);
+                      $displayProgress = max($displayProgress, (float)$compProgress);
+                  }
+              }
+
+              // 4. Check destination knowledge training progress (Priority 3)
+              if ($displayProgress < 100 && $trainingTitle) {
+                  $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
+                      ->where('destination_name', 'LIKE', '%' . $trainingTitle . '%')
+                      ->first();
+
+                  if ($destinationRecord && $destinationRecord->progress > 0) {
+                      $displayProgress = max($displayProgress, (float)$destinationRecord->progress);
                   }
               }
 
               $displayProgress = max(0, min(100, (int)$displayProgress));
               
               // Store the calculated progress in the record for JavaScript access
+              // Also update progress and status directly to ensure they are captured in @json
               $record->calculated_progress = $displayProgress;
+              $record->progress = $displayProgress;
+              $record->status = $displayProgress >= 80 ? 'Completed' : 'In Progress';
               
               // Check if expired
               $finalExpiredDate = $record->expired_date ?? ($record->course->expired_date ?? null);
@@ -410,6 +438,7 @@
               $totalProgress += $displayProgress;
               if ($isExpired && $displayProgress < 100) {
                   $expiredTrainings++;
+                  $record->status = 'Expired'; // Overwrite status if expired
               } elseif ($displayProgress >= 100) {
                   $completedTrainings++;
               } elseif ($displayProgress > 0) {
@@ -1598,7 +1627,7 @@
       
       progress = Math.max(0, Math.min(100, parseInt(progress) || 0));
       const progressColor = progress >= 100 ? 'success' : progress > 0 ? 'primary' : 'secondary';
-      const statusText = progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started';
+      const statusText = record.status || (progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started');
 
       // Check if expired
       const expiredDate = record.expired_date || (record.course && record.course.expired_date);

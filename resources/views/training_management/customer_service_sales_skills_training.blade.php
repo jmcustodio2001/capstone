@@ -244,11 +244,17 @@
             $lastName = $employee->last_name ?? 'Employee';
             $fullName = $firstName . ' ' . $lastName;
 
-            // Check if profile picture exists - simplified approach
+            // Check if profile picture exists - robust approach
             $profilePicUrl = null;
-            if ($employee && $employee->profile_picture) {
-                // Direct asset URL generation - Laravel handles the storage symlink
-                $profilePicUrl = asset('storage/' . $employee->profile_picture);
+            if ($employee && !empty($employee->profile_picture)) {
+                $profilePic = $employee->profile_picture;
+                if (strpos($profilePic, 'http') === 0) {
+                    $profilePicUrl = $profilePic;
+                } elseif (strpos($profilePic, 'storage/') === 0) {
+                    $profilePicUrl = asset($profilePic);
+                } else {
+                    $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                }
             }
 
             // Generate consistent color based on employee name for fallback
@@ -302,10 +308,10 @@
                       <img src="{{ $profilePicUrl }}"
                            alt="{{ $firstName }} {{ $lastName }}"
                            class="rounded-circle me-2"
-                           style="width: 40px; height: 40px; object-fit: cover;">
+                           style="width: 40px; height: 40px; object-fit: cover;" onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($firstName . ' ' . $lastName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
                       <div>
                         <div class="fw-semibold">{{ $firstName }} {{ $lastName }}</div>
-                        <small class="text-muted">ID: {{ $employee->employee_id ?? 'N/A' }}</small>
+                        <small class="text-muted">ID: {{ $employee->employee_id ?? $gap->employee_id ?? 'N/A' }}</small>
                       </div>
                     </div>
                   </td>
@@ -572,11 +578,17 @@
             $lastName = $employee->last_name ?? 'Employee';
             $fullName = $firstName . ' ' . $lastName;
 
-            // Check if profile picture exists - simplified approach
+            // Check if profile picture exists - robust approach
             $profilePicUrl = null;
-            if ($employee && $employee->profile_picture) {
-                // Direct asset URL generation - Laravel handles the storage symlink
-                $profilePicUrl = asset('storage/' . $employee->profile_picture);
+            if ($employee && !empty($employee->profile_picture)) {
+                $profilePic = $employee->profile_picture;
+                if (strpos($profilePic, 'http') === 0) {
+                    $profilePicUrl = $profilePic;
+                } elseif (strpos($profilePic, 'storage/') === 0) {
+                    $profilePicUrl = asset($profilePic);
+                } else {
+                    $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                }
             }
 
             // Generate consistent color based on employee name for fallback
@@ -697,10 +709,10 @@
                   <img src="{{ $profilePicUrl }}"
                        alt="{{ $firstName }} {{ $lastName }}"
                        class="rounded-circle me-3"
-                       style="width: 50px; height: 50px; object-fit: cover; border: 3px solid rgba(0,0,0,0.1);">
+                       style="width: 50px; height: 50px; object-fit: cover; border: 3px solid rgba(0,0,0,0.1);" onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($firstName . ' ' . $lastName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
                   <div class="flex-grow-1">
                     <h5 class="mb-1 fw-bold text-dark">{{ $firstName }} {{ $lastName }}</h5>
-                    <small class="text-muted">ID: {{ $employee->employee_id ?? 'N/A' }} • {{ $employeeRecords->count() }} Training(s)</small>
+                    <small class="text-muted">ID: {{ $employee->employee_id ?? $employeeId ?? 'N/A' }} • {{ $employeeRecords->count() }} Training(s)</small>
                   </div>
                   <div class="text-end">
                     <div class="fs-6 fw-bold text-primary">{{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}</div>

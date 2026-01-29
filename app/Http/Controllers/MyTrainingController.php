@@ -534,17 +534,35 @@ class MyTrainingController extends Controller
 
         // Get destination knowledge training assignments
         // CRITICAL FIX: Only show destination trainings that DON'T already exist in upcoming_trainings table
-        // This prevents duplicates when both controllers try to show the same training
+        // to avoid duplicates when merging manual and destination collections
         $existingUpcomingDestinations = UpcomingTraining::where('employee_id', $employeeId)
             ->where('source', 'destination_assigned')
             ->pluck('training_title')
             ->toArray();
 
-        $destinationAssigned = DestinationKnowledgeTraining::where('employee_id', $employeeId)
+        \Illuminate\Support\Facades\Log::info('Checking destination trainings for employee', [
+            'employee_id' => $employeeId,
+            'existing_upcoming' => $existingUpcomingDestinations
+        ]);
+
+        // Fetch potential alternative employee IDs (e.g. from external API) to ensure visibility
+        $possibleEmployeeIds = $this->getPossibleEmployeeIds($employeeId);
+        
+        \Illuminate\Support\Facades\Log::info('Checking visibility for possible IDs', [
+            'base' => $employeeId,
+            'all' => $possibleEmployeeIds
+        ]);
+
+        $destinationAssigned = DestinationKnowledgeTraining::whereIn('employee_id', $possibleEmployeeIds)
             ->where('admin_approved_for_upcoming', true) // Only show if explicitly approved via Auto-Assign button
             ->whereNotIn('status', ['completed', 'declined']) // Exclude completed and declined
             ->whereNotIn('destination_name', $existingUpcomingDestinations) // Exclude if already in upcoming_trainings table
             ->get();
+
+        \Illuminate\Support\Facades\Log::info('Found destination assigned trainings', [
+            'count' => $destinationAssigned->count(),
+            'titles' => $destinationAssigned->pluck('destination_name')->toArray()
+        ]);
 
         // Debug logging to help identify the issue
         Log::info('MyTrainingController debug info:', [
@@ -732,31 +750,31 @@ class MyTrainingController extends Controller
             // Note: destinationAssigned excluded from training requests - they have their own workflow
 
         // 2. For upcoming trainings view: include ALL trainings including destination trainings
+        // PRIORITY ORDER: 1. destinationAssigned, 2. manualUpcoming, 3. adminAssigned, 4. competencyAssigned
         $allTrainingsForUpcoming = collect()
+            ->merge($destinationAssigned->toArray()) // Highest priority for specialized UI
             ->merge($manualUpcoming->toArray())
             ->merge($adminAssigned->toArray())
-            ->merge($competencyAssigned->toArray())
-            ->merge($destinationAssigned->toArray());
+            ->merge($competencyAssigned->toArray());
+
+        \Illuminate\Support\Facades\Log::info('All combined trainings for upcoming', [
+            'total_count' => $allTrainingsForUpcoming->count(),
+            'sources' => $allTrainingsForUpcoming->pluck('source')->unique()->toArray(),
+            'titles' => $allTrainingsForUpcoming->pluck('training_title')->toArray()
+        ]);
 
         // SIMPLE and AGGRESSIVE deduplication for upcoming trainings (includes destination trainings)
         $seenTitles = [];
         $seenCourseIds = [];
         $upcoming = $allTrainingsForUpcoming->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
             $item = (object) $item;
-
-            // Get raw training title
-            $rawTitle = $item->training_title ?? '';
-
-            // Skip if training title is empty or generic
-            if (empty(trim($rawTitle)) || in_array(strtolower(trim($rawTitle)), ['training course', 'unknown course', 'unknown', 'course', 'n/a'])) {
-                return false;
-            }
-
+            
             // Normalize title for comparison
+            $rawTitle = $item->training_title ?? $item->course_title ?? '';
             $normalizedTitle = strtolower(trim($rawTitle));
             $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/i', '', $normalizedTitle);
             $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
-
+            
             // Check for duplicates by course_id first (most reliable)
             $courseId = $item->course_id ?? null;
             if ($courseId && in_array($courseId, $seenCourseIds)) {
@@ -765,19 +783,36 @@ class MyTrainingController extends Controller
 
             // Check for duplicates by normalized title
             if (in_array($normalizedTitle, $seenTitles)) {
+                \Illuminate\Support\Facades\Log::info('Deduplicating training by title', [
+                    'title' => $rawTitle,
+                    'normalized' => $normalizedTitle
+                ]);
                 return false; // Skip duplicate title
             }
 
-            // Add to seen lists
+            $seenTitles[] = $normalizedTitle;
             if ($courseId) {
                 $seenCourseIds[] = $courseId;
             }
-            $seenTitles[] = $normalizedTitle;
 
             return true;
         })->map(function($item) {
             return (object) $item;
         })->values(); // Reset array keys
+
+        \Illuminate\Support\Facades\Log::info('Final upcoming trainings after deduplication', [
+            'count' => $upcoming->count(),
+            'details' => $upcoming->map(function($item) {
+                return [
+                    'title' => $item->training_title ?? $item->course_title ?? 'N/A',
+                    'id' => $item->upcoming_id ?? $item->id ?? 'N/A',
+                    'source' => $item->source ?? 'N/A',
+                    'needs_response' => $item->needs_response ?? false,
+                    'dest_id' => $item->destination_training_id ?? 'N/A',
+                    'status' => $item->status ?? 'N/A'
+                ];
+            })->toArray()
+        ]);
 
         // Create deduplicated collection for training requests (excludes destination trainings)
         $seenTitlesForRequests = [];
@@ -2410,8 +2445,9 @@ class MyTrainingController extends Controller
             $employeeId = Auth::user()->employee_id;
             $training = DestinationKnowledgeTraining::findOrFail($request->training_id);
 
-            // Verify this training belongs to the authenticated employee
-            if ($training->employee_id !== $employeeId) {
+            // Verify this training belongs to the authenticated employee (check all possible IDs)
+            $possibleIds = $this->getPossibleEmployeeIds($employeeId);
+            if (!in_array((string)$training->employee_id, $possibleIds)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized access to training record.'
@@ -2672,8 +2708,9 @@ class MyTrainingController extends Controller
             $employeeId = Auth::user()->employee_id;
             $training = DestinationKnowledgeTraining::findOrFail($request->training_id);
 
-            // Verify this training belongs to the authenticated employee
-            if ($training->employee_id !== $employeeId) {
+            // Verify this training belongs to the authenticated employee (check all possible IDs)
+            $possibleIds = $this->getPossibleEmployeeIds($employeeId);
+            if (!in_array((string)$training->employee_id, $possibleIds)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized access to training record.'
@@ -2730,8 +2767,9 @@ class MyTrainingController extends Controller
             $employeeId = Auth::user()->employee_id;
             $training = DestinationKnowledgeTraining::with('employee')->findOrFail($trainingId);
 
-            // Verify this training belongs to the authenticated employee
-            if ($training->employee_id !== $employeeId) {
+            // Verify this training belongs to the authenticated employee (check all possible IDs)
+            $possibleIds = $this->getPossibleEmployeeIds($employeeId);
+            if (!in_array((string)$training->employee_id, $possibleIds)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Unauthorized access to training record.'
@@ -3705,5 +3743,36 @@ class MyTrainingController extends Controller
         }
     }
 
-
+    /**
+     * Get all possible employee IDs for the current user including API IDs
+     */
+    private function getPossibleEmployeeIds($baseEmployeeId)
+    {
+        $possibleIds = [$baseEmployeeId];
+        $employeeEmail = Auth::user()->email;
+        
+        if ($employeeEmail) {
+            try {
+                $apiResponse = \Illuminate\Support\Facades\Http::timeout(3)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+                if ($apiResponse->successful()) {
+                    $apiData = $apiResponse->json();
+                    $apiEntries = $apiData['data'] ?? $apiData;
+                    if (is_array($apiEntries)) {
+                        foreach ($apiEntries as $apiEmp) {
+                            if (isset($apiEmp['email']) && strtolower($apiEmp['email']) === strtolower($employeeEmail)) {
+                                $apiId = $apiEmp['employee_id'] ?? $apiEmp['id'] ?? null;
+                                if ($apiId && !in_array((string)$apiId, $possibleIds)) {
+                                    $possibleIds[] = (string)$apiId;
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::warning('Failed to fetch alternative IDs in helper: ' . $e->getMessage());
+            }
+        }
+        
+        return $possibleIds;
+    }
 }

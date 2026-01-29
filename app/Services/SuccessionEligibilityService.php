@@ -254,6 +254,19 @@ class SuccessionEligibilityService
 
     private function getEmployeesFromAPI()
     {
+        // Map local emails to local profile pictures
+        $emailToLocalMap = [];
+        try {
+            $localEmployees = \App\Models\Employee::all();
+            foreach ($localEmployees as $localEmp) {
+                if ($localEmp->email) {
+                    $emailToLocalMap[strtolower($localEmp->email)] = $localEmp;
+                }
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch local employees for mapping in SuccessionEligibilityService: ' . $e->getMessage());
+        }
+
         try {
             $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
@@ -263,13 +276,24 @@ class SuccessionEligibilityService
             }
 
             if (is_array($apiEmployees) && !empty($apiEmployees)) {
-                return collect($apiEmployees)->map(function($emp) {
+                return collect($apiEmployees)->map(function($emp) use ($emailToLocalMap) {
+                    $profilePic = $emp['profile_picture'] ?? null;
+                    $empEmail = strtolower($emp['email'] ?? '');
+                    
+                    // Prioritize local photo if it exists
+                    $localRef = $emailToLocalMap[$empEmail] ?? null;
+                    if ($localRef && $localRef->profile_picture) {
+                        $profilePic = $localRef->profile_picture;
+                    } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
+                        $profilePic = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                    }
+                    
                     return (object) [
                         'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
                         'first_name' => $emp['first_name'] ?? 'Unknown',
                         'last_name' => $emp['last_name'] ?? 'Employee',
                         'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
-                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'profile_picture' => $profilePic,
                         'hire_date' => $emp['date_hired'] ?? $emp['hire_date'] ?? null
                     ];
                 });

@@ -322,6 +322,12 @@ foreach ($destinations as $destination) {
                         $empEmail = strtolower($emp['email'] ?? '');
                         // Check if we have a local record with this email to get the photo
                         $localRef = $emailToLocalMap[$empEmail] ?? null;
+
+                        // If we have a local reference, skip adding this API record to avoid duplicates
+                        // unless the local record was somehow missed in the initial map (unlikely given logic above)
+                        if ($localRef) {
+                            continue;
+                        }
                         
                         $profilePic = $emp['profile_picture'] ?? null;
                         
@@ -329,8 +335,8 @@ foreach ($destinations as $destination) {
                         if ($localRef && $localRef->profile_picture) {
                             $profilePic = $localRef->profile_picture;
                         } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
-                            // If it's an API photo, link it to the HR server
-                            $profilePic = 'http://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                            // If it's an API photo, link it to the HR server (use HTTPS for better compatibility)
+                            $profilePic = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
                         }
                         
                         if (!isset($employeeMap[$empId])) {
@@ -587,52 +593,82 @@ foreach ($destinations as $destination) {
             $skippedRecords = [];
 
             // Loop through each employee ID and create/update records
-            foreach ($employeeIds as $employeeId) {
-                // Check for existing active record for this specific employee
-                $existingRecord = DestinationKnowledgeTraining::where('employee_id', $employeeId)
-                    ->where('destination_name', $validated['destination_name'])
-                    ->where('delivery_mode', $validated['delivery_mode'])
-                    ->where('is_active', true)
-                    ->first();
-
-                if ($existingRecord) {
-                    // Update existing record
-                    $existingRecord->update([
-                        'details' => $validated['details'],
-                        'objectives' => $validated['objectives'] ?? $existingRecord->objectives,
-                        'duration' => $validated['duration'] ?? $existingRecord->duration,
-                        'expired_date' => $validated['expired_date'] ?? $existingRecord->expired_date,
-                        'remarks' => $validated['remarks'] ?? $existingRecord->remarks,
-                        'is_active' => true
-                    ]);
-
-                    $updatedRecords[] = $existingRecord;
-                    Log::info('Updated existing record for employee: ' . $employeeId);
-                    continue;
-                }
-
-                // Convert progress level to percentage
-                $progressPercentage = $this->convertLevelToPercentage($validated['progress_level'] ?? 0);
-
-                // Only process progress for Online Training delivery mode
-                if (isset($validated['delivery_mode']) && $validated['delivery_mode'] === 'Online Training') {
-                    // Require progress_level for Online Training
-                    if (!isset($validated['progress_level'])) {
-                        throw new \Exception('Progress level is required for Online Training');
+        foreach ($employeeIds as $employeeId) {
+            // RESOLVE LOCAL EMPLOYEE ID: If this is an API ID, try to find matching local employee_id
+            $resolvedEmployeeId = $employeeId;
+            try {
+                // Fetch employee from API to get their email
+                $apiResponse = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+                if ($apiResponse->successful()) {
+                    $apiData = $apiResponse->json();
+                    $apiEmpRecords = $apiData['data'] ?? $apiData;
+                    if (is_array($apiEmpRecords)) {
+                        foreach ($apiEmpRecords as $apiEmp) {
+                            $apiEmpId = $apiEmp['employee_id'] ?? $apiEmp['id'] ?? null;
+                            if ((string)$apiEmpId === (string)$employeeId) {
+                                $apiEmail = $apiEmp['email'] ?? null;
+                                if ($apiEmail) {
+                                    // Match local employee by email
+                                    $localEmp = \App\Models\Employee::where('email', $apiEmail)->first();
+                                    if ($localEmp) {
+                                        Log::info("Resolved API employee ID {$employeeId} to local employee_id {$localEmp->employee_id} via email {$apiEmail}");
+                                        $resolvedEmployeeId = $localEmp->employee_id;
+                                    }
+                                }
+                                break;
+                            }
+                        }
                     }
-                } else {
-                    // For non-Online Training, set default progress values
-                    $progressPercentage = 0;
                 }
+            } catch (\Exception $mapEx) {
+                Log::warning('Failed to map employee ID during store: ' . $mapEx->getMessage());
+            }
 
-                // Auto-set status based on progress if not provided
-                $status = $validated['status'] ?? 'not-started';
+            // Check for existing active record for this specific resolved employee
+            $existingRecord = DestinationKnowledgeTraining::where('employee_id', $resolvedEmployeeId)
+                ->where('destination_name', $validated['destination_name'])
+                ->where('delivery_mode', $validated['delivery_mode'])
+                ->where('is_active', true)
+                ->first();
 
-                // Create new record for this employee
-                try {
-                    $recordData = [
-                        'employee_id' => $employeeId,
-                        'destination_name' => $validated['destination_name'],
+            if ($existingRecord) {
+                // Update existing record
+                $existingRecord->update([
+                    'details' => $validated['details'],
+                    'objectives' => $validated['objectives'] ?? $existingRecord->objectives,
+                    'duration' => $validated['duration'] ?? $existingRecord->duration,
+                    'expired_date' => $validated['expired_date'] ?? $existingRecord->expired_date,
+                    'remarks' => $validated['remarks'] ?? $existingRecord->remarks,
+                    'is_active' => true
+                ]);
+
+                $updatedRecords[] = $existingRecord;
+                Log::info('Updated existing record for employee: ' . $resolvedEmployeeId);
+                continue;
+            }
+
+            // Convert progress level to percentage
+            $progressPercentage = $this->convertLevelToPercentage($validated['progress_level'] ?? 0);
+
+            // Only process progress for Online Training delivery mode
+            if (isset($validated['delivery_mode']) && $validated['delivery_mode'] === 'Online Training') {
+                // Require progress_level for Online Training
+                if (!isset($validated['progress_level'])) {
+                    throw new \Exception('Progress level is required for Online Training');
+                }
+            } else {
+                // For non-Online Training, set default progress values
+                $progressPercentage = 0;
+            }
+
+            // Auto-set status based on progress if not provided
+            $status = $validated['status'] ?? 'not-started';
+
+            // Create new record for this employee
+            try {
+                $recordData = [
+                    'employee_id' => $resolvedEmployeeId,
+                    'destination_name' => $validated['destination_name'],
                         'details' => $validated['details'],
                         'objectives' => $validated['objectives'],
                         'duration' => $validated['duration'],
@@ -1452,7 +1488,41 @@ public function requestActivation(Request $request, $id)
             Log::info('Validation passed', ['destination_id' => $request->destination_id]);
 
             // Get the destination record with employee relationship
-            $destinationRecord = DestinationKnowledgeTraining::with('employee')->findOrFail($request->destination_id);
+        $destinationRecord = DestinationKnowledgeTraining::with('employee')->findOrFail($request->destination_id);
+
+        // DATA CONSISTENCY FIX: If the stored employee_id is an API ID and not a local ID,
+        // try to see if it can be resolved to a local ID now to fix visibility issues
+        if (!\App\Models\Employee::where('employee_id', $destinationRecord->employee_id)->exists()) {
+            Log::info("Stored employee_id {$destinationRecord->employee_id} not found in local table. Attempting to resolve via API...");
+            try {
+                $apiResponse = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+                if ($apiResponse->successful()) {
+                    $apiData = $apiResponse->json();
+                    $apiEmpRecords = $apiData['data'] ?? $apiData;
+                    if (is_array($apiEmpRecords)) {
+                        foreach ($apiEmpRecords as $apiEmp) {
+                            $apiEmpId = $apiEmp['employee_id'] ?? $apiEmp['id'] ?? null;
+                            if ((string)$apiEmpId === (string)$destinationRecord->employee_id) {
+                                $apiEmail = $apiEmp['email'] ?? null;
+                                if ($apiEmail) {
+                                    $localEmp = \App\Models\Employee::where('email', $apiEmail)->first();
+                                    if ($localEmp) {
+                                        Log::info("Resolved API ID {$destinationRecord->employee_id} to local ID {$localEmp->employee_id} during assignment");
+                                        $destinationRecord->employee_id = $localEmp->employee_id;
+                                        $destinationRecord->save();
+                                        // Re-fetch to update relationships
+                                        $destinationRecord = DestinationKnowledgeTraining::with('employee')->findOrFail($destinationRecord->id);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            } catch (\Exception $resEx) {
+                Log::warning('Failed to resolve employee ID during assignment: ' . $resEx->getMessage());
+            }
+        }
 
             Log::info('Found destination record', [
                 'id' => $destinationRecord->id,
@@ -1523,30 +1593,6 @@ public function requestActivation(Request $request, $id)
                 $this->syncExistingUpcomingTrainingExpiredDates();
             }
 
-            // Mark as approved for upcoming training and set status to pending response
-            $destinationRecord->admin_approved_for_upcoming = true;
-            $destinationRecord->status = 'pending-response';
-            $destinationRecord->is_active = false; // Employee needs to accept first
-            $destinationRecord->save();
-
-            Log::info('About to create/update UpcomingTraining record');
-
-            // Check for existing UpcomingTraining record to prevent duplicates
-            $existingUpcoming = null;
-            try {
-                $existingUpcoming = \App\Models\UpcomingTraining::where('employee_id', $destinationRecord->employee_id)
-                    ->where('training_title', $destinationRecord->destination_name)
-                    ->where('source', 'destination_assigned')
-                    ->first();
-                Log::info('Checked for existing upcoming training', ['found' => $existingUpcoming ? 'yes' : 'no']);
-            } catch (\Exception $queryException) {
-                Log::error('Error querying existing upcoming training: ' . $queryException->getMessage());
-                $existingUpcoming = null;
-            }
-
-            // Get assigned_by value safely with proper admin name
-            $assignedBy = 'Admin User';
-            $assignedByName = 'Admin User';
             try {
                 if (Auth::check() && Auth::user()) {
                     $user = Auth::user();
@@ -1576,12 +1622,69 @@ public function requestActivation(Request $request, $id)
                         $assignedByName = 'Admin User';
                     }
                     
-                    $assignedBy = $assignedByName;
+                    $assignedBy = Auth::id() ?? 1;
                 }
             } catch (\Exception $authException) {
                 Log::warning('Auth issue in assignToUpcomingTraining: ' . $authException->getMessage());
-                $assignedBy = 'Admin User';
+                $assignedBy = 1;
                 $assignedByName = 'Admin User';
+            }
+
+            // Mark as approved for upcoming training and set status to pending response
+            $destinationRecord->admin_approved_for_upcoming = true;
+            $destinationRecord->status = 'pending-response';
+            $destinationRecord->is_active = false; // Employee needs to accept first
+            
+            // SAVE ASSIGNED BY INFO TO THE RECORD ITSELF
+            // Ensure destination_knowledge_trainings has assigned_by/assigned_by_name/assigned_date columns
+            if (!Schema::hasColumn('destination_knowledge_trainings', 'assigned_by')
+                || !Schema::hasColumn('destination_knowledge_trainings', 'assigned_by_name')
+                || !Schema::hasColumn('destination_knowledge_trainings', 'assigned_date')) {
+                try {
+                    Schema::table('destination_knowledge_trainings', function (Blueprint $table) {
+                        if (!Schema::hasColumn('destination_knowledge_trainings', 'assigned_by')) {
+                            $table->unsignedBigInteger('assigned_by')->nullable()->after('is_active');
+                        }
+                        if (!Schema::hasColumn('destination_knowledge_trainings', 'assigned_by_name')) {
+                            $table->string('assigned_by_name')->nullable()->after('assigned_by');
+                        }
+                        if (!Schema::hasColumn('destination_knowledge_trainings', 'assigned_date')) {
+                            $table->timestamp('assigned_date')->nullable()->after('assigned_by_name');
+                        }
+                    });
+                    // Refresh the model instance to pick up new columns
+                    $destinationRecord = DestinationKnowledgeTraining::with('employee')->findOrFail($request->destination_id);
+                } catch (\Exception $schemaEx) {
+                    Log::warning('Failed to add assigned_by columns to destination_knowledge_trainings: ' . $schemaEx->getMessage());
+                }
+            }
+
+            // Set assigned info only if columns exist
+            if (Schema::hasColumn('destination_knowledge_trainings', 'assigned_by')) {
+                $destinationRecord->assigned_by = $assignedBy;
+            }
+            if (Schema::hasColumn('destination_knowledge_trainings', 'assigned_by_name')) {
+                $destinationRecord->assigned_by_name = $assignedByName;
+            }
+            if (Schema::hasColumn('destination_knowledge_trainings', 'assigned_date')) {
+                $destinationRecord->assigned_date = now();
+            }
+            
+            $destinationRecord->save();
+
+            Log::info('About to create/update UpcomingTraining record');
+
+            // Check for existing UpcomingTraining record to prevent duplicates
+            $existingUpcoming = null;
+            try {
+                $existingUpcoming = \App\Models\UpcomingTraining::where('employee_id', $destinationRecord->employee_id)
+                    ->where('training_title', $destinationRecord->destination_name)
+                    ->where('source', 'destination_assigned')
+                    ->first();
+                Log::info('Checked for existing upcoming training', ['found' => $existingUpcoming ? 'yes' : 'no']);
+            } catch (\Exception $queryException) {
+                Log::error('Error querying existing upcoming training: ' . $queryException->getMessage());
+                $existingUpcoming = null;
             }
 
             Log::info('Prepared data for upcoming training', [

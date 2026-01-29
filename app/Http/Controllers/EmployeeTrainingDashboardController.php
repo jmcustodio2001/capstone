@@ -142,11 +142,11 @@ class EmployeeTrainingDashboardController extends Controller
             }
 
             // Sync with latest exam progress for accurate display
-            $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($record->employee_id, $record->course_id);
-            if ($examProgress > 0 && $examProgress != $record->progress) {
-                // Update the dashboard record with exam progress
-                $record->progress = $examProgress;
-                $record->status = $examProgress >= 100 ? 'Completed' : ($examProgress >= 80 ? 'Completed' : 'In Progress');
+            $realProgress = $this->calculateRealProgress($record->employee_id, $record->course_id, $record->training_title, $record->progress);
+            if ($realProgress != $record->progress) {
+                // Update the dashboard record with accurate progress
+                $record->progress = $realProgress;
+                $record->status = $realProgress >= 80 ? 'Completed' : 'In Progress';
                 $record->save();
 
                 // Also sync with competency systems
@@ -316,8 +316,8 @@ class EmployeeTrainingDashboardController extends Controller
                 continue; // Skip if already exists
             }
 
-            // Get exam progress for this request
-            $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($request->employee_id, $request->course_id);
+            // Get accurate progress from all sources
+            $realProgress = $this->calculateRealProgress($request->employee_id, $request->course_id, $request->training_title, 0);
 
             // Create pseudo record from training request
             $pseudoRecord = new \stdClass();
@@ -325,14 +325,14 @@ class EmployeeTrainingDashboardController extends Controller
             $pseudoRecord->employee_id = $request->employee_id;
             $pseudoRecord->course_id = $request->course_id;
             $pseudoRecord->training_title = $request->training_title;
-            $pseudoRecord->progress = $examProgress > 0 ? $examProgress : 0;
-            $pseudoRecord->status = $examProgress >= 100 ? 'Completed' : ($examProgress >= 80 ? 'Completed' : 'In Progress');
+            $pseudoRecord->progress = $realProgress;
+            $pseudoRecord->status = $realProgress >= 80 ? 'Completed' : 'In Progress';
             $pseudoRecord->created_at = $request->created_at;
             $pseudoRecord->updated_at = $request->updated_at;
             $pseudoRecord->last_accessed = $request->updated_at ?? null;
             $pseudoRecord->expired_date = null;
             $pseudoRecord->assigned_by_name = 'Employee Request';
-            $pseudoRecord->source = 'approved_request';
+            $pseudoRecord->source = 'Training Request (Approved)';
 
             // Load relationships
             $pseudoRecord->employee = $request->employee;
@@ -407,8 +407,8 @@ class EmployeeTrainingDashboardController extends Controller
                 continue; // Skip if already exists
             }
 
-            // Get exam progress
-            $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($assignment->employee_id, $assignment->course_id);
+            // Get accurate progress
+            $realProgress = $this->calculateRealProgress($assignment->employee_id, $assignment->course_id, $courseTitle, $assignment->progress ?? 0);
 
             // Create pseudo record from competency assignment
             $pseudoRecord = new \stdClass();
@@ -416,8 +416,8 @@ class EmployeeTrainingDashboardController extends Controller
             $pseudoRecord->employee_id = $assignment->employee_id;
             $pseudoRecord->course_id = $assignment->course_id;
             $pseudoRecord->training_title = $assignment->course->course_title ?? 'Competency Training';
-            $pseudoRecord->progress = $examProgress > 0 ? $examProgress : ($assignment->progress ?? 0);
-            $pseudoRecord->status = $assignment->status ?? 'In Progress';
+            $pseudoRecord->progress = $realProgress;
+            $pseudoRecord->status = $realProgress >= 80 ? 'Completed' : ($assignment->status ?? 'In Progress');
             $pseudoRecord->created_at = $assignment->created_at;
             $pseudoRecord->updated_at = $assignment->updated_at;
             $pseudoRecord->last_accessed = $assignment->updated_at ?? null;
@@ -496,14 +496,17 @@ class EmployeeTrainingDashboardController extends Controller
                 $progress = $dashboardProgress->progress ?? 0;
             }
 
+            // Get accurate progress
+            $realProgress = $this->calculateRealProgress($gapTraining->employee_id, $gapTraining->destination_training_id, $gapTraining->training_title, $progress);
+
             // Create pseudo record from competency gap training
             $pseudoRecord = new \stdClass();
             $pseudoRecord->id = 'gap_' . $gapTraining->upcoming_id;
             $pseudoRecord->employee_id = $gapTraining->employee_id;
             $pseudoRecord->course_id = $gapTraining->destination_training_id;
             $pseudoRecord->training_title = $gapTraining->training_title;
-            $pseudoRecord->progress = $progress;
-            $pseudoRecord->status = $progress >= 100 ? 'Completed' : ($progress > 0 ? 'In Progress' : 'Not Started');
+            $pseudoRecord->progress = $realProgress;
+            $pseudoRecord->status = $realProgress >= 80 ? 'Completed' : ($realProgress > 0 ? 'In Progress' : 'Not Started');
             $pseudoRecord->created_at = $gapTraining->assigned_date ?? now();
             $pseudoRecord->updated_at = $gapTraining->updated_at ?? now();
             $pseudoRecord->last_accessed = $gapTraining->updated_at ?? null;
@@ -618,6 +621,62 @@ class EmployeeTrainingDashboardController extends Controller
         ]);
 
         return view('learning_management.employee_training_dashboard', compact('employees', 'courses', 'trainingRecords'));
+    }
+
+    /**
+     * Calculate real progress for a training record by checking multiple sources
+     * Consistent with _progress.blade.php logic
+     */
+    private function calculateRealProgress($employeeId, $courseId, $trainingTitle, $currentProgress = 0)
+    {
+        $progressValue = (float)$currentProgress;
+        $effectiveCourseId = $courseId;
+
+        // 1. Try to find course_id by title if missing
+        if (!$effectiveCourseId && $trainingTitle) {
+            $foundCourse = \App\Models\CourseManagement::where('course_title', $trainingTitle)
+                ->orWhere('course_title', 'LIKE', '%' . $trainingTitle . '%')
+                ->first();
+            if ($foundCourse) {
+                $effectiveCourseId = $foundCourse->course_id;
+            }
+        }
+
+        // 2. Check for exam progress (Priority 1)
+        if ($effectiveCourseId) {
+            $examProgress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $effectiveCourseId);
+            if ($examProgress > 0) {
+                $progressValue = max($progressValue, $examProgress);
+            }
+        }
+
+        // 3. Check for competency-based progress (Priority 2)
+        if ($progressValue < 100 && $trainingTitle) {
+            $competencyName = str_replace([' Training', ' Course', ' Program'], '', $trainingTitle);
+            $competencyProfile = \App\Models\EmployeeCompetencyProfile::where('employee_id', $employeeId)
+                ->whereHas('competency', function($query) use ($competencyName) {
+                    $query->where('competency_name', 'LIKE', '%' . $competencyName . '%');
+                })->first();
+
+            if ($competencyProfile && $competencyProfile->proficiency_level > 0) {
+                $compProgress = min(100, round(($competencyProfile->proficiency_level / 5) * 100));
+                $progressValue = max($progressValue, $compProgress);
+            }
+        }
+
+        // 4. Check destination knowledge training progress (Priority 3)
+        if ($progressValue < 100 && $trainingTitle) {
+            $destinationRecord = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
+                ->where('destination_name', 'LIKE', '%' . $trainingTitle . '%')
+                ->first();
+
+            if ($destinationRecord && $destinationRecord->progress > 0) {
+                $destProgress = min(100, round($destinationRecord->progress));
+                $progressValue = max($progressValue, (float)$destProgress);
+            }
+        }
+
+        return $progressValue;
     }
 
     /**

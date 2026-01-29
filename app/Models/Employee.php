@@ -26,6 +26,7 @@ class Employee extends Authenticatable
         'status',
         'password',
         'profile_picture',
+        'skills', // Employee skills for competency tracking
         'remember_token',
         'otp_code',
         'otp_expires_at',

@@ -1,0 +1,22 @@
+--- ID: 1 ---
+Count: 2
+[1] Customer Service Excellence
+    Category: Interpersonal
+    Desc: Provides high-quality client support, ensuring satisfaction through empathy, patience, and professionalism.
+[31] communication skill
+    Category: Technical Skills
+    Desc: Auto-created from employee skills
+--- ID: EMP001 ---
+Count: 4
+[3] Communication Skills
+    Category: Interpersonal
+    Desc: Clearly and effectively communicates information to clients, partners, and colleagues, both verbally and in writing.
+[6] Time Management
+    Category: Organizational
+    Desc: Prioritizes tasks effectively to meet booking deadlines and service delivery schedules.
+[29] Analytical Thinking
+    Category: Cognitive
+    Desc: Evaluates market trends and client data to improve travel offerings and strategies.
+[26] Networking Skills
+    Category: Interpersonal
+    Desc: Builds connections with partners, hotels, airlines, and tourism boards to expand opportunities.

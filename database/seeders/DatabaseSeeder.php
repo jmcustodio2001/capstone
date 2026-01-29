@@ -29,5 +29,8 @@ class DatabaseSeeder extends Seeder
         $this->call(CompetencyGapDisplaySeeder::class);
         $this->call(ActivityLogSeeder::class);
         $this->call(DashboardDataSeeder::class);
+        
+        // Sync employee skills from API to competency profiles
+        $this->call(EmployeeSkillsSeeder::class);
     }
 }

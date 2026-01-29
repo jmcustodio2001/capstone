@@ -124,19 +124,30 @@
                 $employee = Auth::guard('employee')->user();
                 $firstName = $employee->first_name ?? 'Unknown';
                 $lastName = $employee->last_name ?? 'Employee';
+                $fullName = trim($firstName . ' ' . $lastName);
                 
-                // Profile picture logic - same as other HR modules
-                $profilePicUrl = '';
-                if ($employee && $employee->profile_picture) {
-                  $profilePicUrl = asset('storage/' . $employee->profile_picture);
-                } else {
-                  // Fallback to UI Avatars with consistent color scheme
-                  $employeeId = $employee->employee_id ?? 'EMP';
-                  $initials = substr($firstName, 0, 1) . substr($lastName, 0, 1);
-                  $colors = ['FF6B6B', '4ECDC4', '45B7D1', '96CEB4', 'FFEAA7', 'DDA0DD', 'FFB347', '87CEEB'];
-                  $colorIndex = crc32($employeeId) % count($colors);
-                  $bgColor = $colors[$colorIndex];
-                  $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background={$bgColor}&color=ffffff&size=128&bold=true";
+                // Profile picture logic - robust approach
+                $profilePicUrl = null;
+                if ($employee && !empty($employee->profile_picture)) {
+                    $pic = $employee->profile_picture;
+                    if (strpos($pic, 'http') === 0) {
+                        $profilePicUrl = $pic;
+                    } elseif (strpos($pic, 'storage/') === 0) {
+                        $profilePicUrl = asset($pic);
+                    } else {
+                        $profilePicUrl = asset('storage/' . ltrim($pic, '/'));
+                    }
+                }
+
+                // Generate consistent color based on employee ID for fallback
+                $employeeId = $employee->employee_id ?? 'EMP';
+                $colors = ['FF9A56', 'FF6B9D', '4ECDC4', '45B7D1', 'FFA726', 'AB47BC', 'EF5350', '66BB6A', 'FFCA28', '26A69A'];
+                $colorIndex = abs(crc32($employeeId)) % count($colors);
+                $bgColor = $colors[$colorIndex];
+                
+                // Fallback to UI Avatars if needed
+                if (!$profilePicUrl) {
+                  $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) . "&background={$bgColor}&color=ffffff&size=128&bold=true&rounded=true";
                 }
               @endphp
               
@@ -144,7 +155,7 @@
                 <img src="{{ $profilePicUrl }}" 
                      class="rounded-circle" 
                      style="width: 60px; height: 60px; object-fit: cover;"
-                     onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode(substr($firstName, 0, 1) . substr($lastName, 0, 1)) }}&background=6c757d&color=ffffff&size=128&bold=true'">
+                     onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode($fullName) }}&background={{ $bgColor }}&color=ffffff&size=128&bold=true&rounded=true'">
               </div>
               <div>
                 <h4 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h4>

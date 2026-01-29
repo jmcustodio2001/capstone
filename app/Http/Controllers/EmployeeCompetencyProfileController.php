@@ -44,9 +44,9 @@ class EmployeeCompetencyProfileController extends Controller
                 foreach ($employees as $emp) {
                      // Use the employee_id directly from API - no conversion
                      $empId = $emp['employee_id'] ?? $emp['id'] ?? null;
-                     
+
                      $skills = $emp['skills'] ?? null;
-                     
+
                      // Auto-sync employee skills to competency profiles
                      if ($empId && $skills && $skills !== 'N/A') {
                          $this->syncEmployeeSkillsToCompetencies($empId, $skills);
@@ -93,22 +93,22 @@ class EmployeeCompetencyProfileController extends Controller
         $page = \Illuminate\Pagination\Paginator::resolveCurrentPage() ?: 1;
         $perPage = 9; // Show 9 employees per page
         $employeesCollection = collect($employees);
-        
+
         $paginatedEmployeesData = $employeesCollection->forPage($page, $perPage);
         $paginatedEmployeeIds = $paginatedEmployeesData->map(function($emp) {
-            return is_array($emp) 
+            return is_array($emp)
                 ? ($emp['employee_id'] ?? $emp['id'] ?? null)
                 : ($emp->employee_id ?? $emp->id ?? null);
         })->filter()->toArray();
 
         // Sync for these specific employees BEFORE fetching profiles for display
         foreach ($paginatedEmployeesData as $key => $emp) {
-            $empId = is_array($emp) 
+            $empId = is_array($emp)
                 ? ($emp['employee_id'] ?? $emp['id'] ?? null)
                 : ($emp->employee_id ?? $emp->id ?? null);
-            
+
             $email = is_array($emp) ? ($emp['email'] ?? null) : ($emp->email ?? null);
-            
+
             if ($empId) {
                 $this->syncWithTrainingProgress($empId, $email);
             }
@@ -117,7 +117,7 @@ class EmployeeCompetencyProfileController extends Controller
             $empEmail = strtolower($email ?? '');
             $localRef = $emailToLocalMap[$empEmail] ?? null;
             $profilePic = is_array($emp) ? ($emp['profile_picture'] ?? null) : ($emp->profile_picture ?? null);
-            
+
             $finalProfilePic = $profilePic;
 
             if ($localRef && $localRef->profile_picture) {
@@ -145,7 +145,7 @@ class EmployeeCompetencyProfileController extends Controller
         // Create a map for employee data to attach to profiles
         $employeeMap = [];
         foreach ($allEmployees as $employee) {
-            $empId = is_array($employee) 
+            $empId = is_array($employee)
                 ? ($employee['employee_id'] ?? $employee['id'] ?? null)
                 : ($employee->employee_id ?? $employee->id ?? null);
             if ($empId) $employeeMap[$empId] = $employee;
@@ -159,12 +159,12 @@ class EmployeeCompetencyProfileController extends Controller
                 $employeeData->employee_id = $profile->employee_id;
                 $employeeData->first_name = is_array($apiEmployee) ? ($apiEmployee['first_name'] ?? 'Unknown') : ($apiEmployee->first_name ?? 'Unknown');
                 $employeeData->last_name = is_array($apiEmployee) ? ($apiEmployee['last_name'] ?? 'Employee') : ($apiEmployee->last_name ?? 'Employee');
-                
+
                 // Improved photolink logic: Check local first then API
                 $empEmail = strtolower(is_array($apiEmployee) ? ($apiEmployee['email'] ?? '') : ($apiEmployee->email ?? ''));
                 $localRef = $emailToLocalMap[$empEmail] ?? null;
                 $profilePic = is_array($apiEmployee) ? ($apiEmployee['profile_picture'] ?? null) : ($apiEmployee->profile_picture ?? null);
-                
+
                 if ($localRef && $localRef->profile_picture) {
                     $employeeData->profile_picture = $localRef->profile_picture;
                 } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
@@ -543,17 +543,17 @@ class EmployeeCompetencyProfileController extends Controller
         try {
             $updatedCount = 0;
             $query = EmployeeCompetencyProfile::with(['employee', 'competency']);
-            
+
             if ($employeeId) {
                 $query->where('employee_id', $employeeId);
             }
-            
+
             $profiles = $query->get();
 
             foreach ($profiles as $profile) {
                 $competencyName = $profile->competency->competency_name;
                 $empId = (string) $profile->employee_id;
-                
+
                 // Handle different employee ID formats (e.g., "2" vs "EMP002")
                 $possibleEmpIds = [$empId];
                 if (is_numeric($empId)) {
@@ -592,7 +592,7 @@ class EmployeeCompetencyProfileController extends Controller
                 $searchTerms = array_unique(array_filter($searchTerms));
 
                 // 2. SEARCH SOURCES
-                
+
                 // Source A: Destination Knowledge Training (highest priority for location skills)
                 if (stripos($competencyName, 'Destination Knowledge') !== false) {
                     $locationName = str_replace(['Destination Knowledge - ', 'Destination Knowledge'], '', $competencyName);
@@ -633,12 +633,12 @@ class EmployeeCompetencyProfileController extends Controller
                                 $examProgress = max($examProgress, \App\Models\ExamAttempt::calculateCombinedProgress($pid, $course->course_id));
                             }
                         }
-                        
+
                         // Check Training Dashboard progress
                         $dashboardProgress = \App\Models\EmployeeTrainingDashboard::whereIn('employee_id', $possibleEmpIds)
                             ->where('course_id', $course->course_id)
                             ->max('progress') ?? 0;
-                            
+
                         $actualProgress = max($actualProgress, $examProgress, (float)$dashboardProgress);
                     }
                 }
@@ -683,7 +683,7 @@ class EmployeeCompetencyProfileController extends Controller
 
                 // Final progress cap and level conversion
                 $actualProgress = min(100, (float)$actualProgress);
-                
+
                 $computedLevel = 0;
                 if ($actualProgress >= 100) $computedLevel = 5;
                 elseif ($actualProgress >= 80) $computedLevel = 4;
@@ -973,14 +973,14 @@ class EmployeeCompetencyProfileController extends Controller
                 if ($response->successful()) {
                     $apiData = $response->json();
                     $employeesList = isset($apiData['data']) ? $apiData['data'] : $apiData;
-                    
+
                     if (is_array($employeesList)) {
                         foreach ($employeesList as $apiEmp) {
                             $apiId = $apiEmp['employee_id'] ?? $apiEmp['id'] ?? null;
                             // Match loosely to ensure we find the employee
-                            if ((string)$apiId === (string)$employeeId || 
+                            if ((string)$apiId === (string)$employeeId ||
                                 ($apiEmp['external_employee_id'] ?? '') === (string)$employeeId) {
-                                
+
                                 if (!empty($apiEmp['skills'])) {
                                     // Auto-import removed
                                 }
@@ -1119,7 +1119,7 @@ class EmployeeCompetencyProfileController extends Controller
         try {
             $empId = (string) $employeeId;
             $possibleEmpIds = [$empId];
-            
+
             // Handle different employee ID formats
             if (is_numeric($empId)) {
                 $possibleEmpIds[] = 'EMP' . str_pad($empId, 3, '0', STR_PAD_LEFT);
@@ -1152,7 +1152,7 @@ class EmployeeCompetencyProfileController extends Controller
                 if (empty($destinationName)) continue;
 
                 $competencyName = 'Destination Knowledge - ' . $destinationName;
-                
+
                 // Ensure Competency Exists
                 $competency = CompetencyLibrary::firstOrCreate(
                     ['competency_name' => $competencyName],
@@ -1171,7 +1171,7 @@ class EmployeeCompetencyProfileController extends Controller
                     // Calculate initial proficiency
                     $progress = $record->progress ?? 0;
                     $proficiencyLevel = 0;
-                    
+
                     if ($progress >= 90) $proficiencyLevel = 5;
                     elseif ($progress >= 70) $proficiencyLevel = 4;
                     elseif ($progress >= 50) $proficiencyLevel = 3;
@@ -1229,7 +1229,7 @@ class EmployeeCompetencyProfileController extends Controller
 
             foreach ($skillsList as $skillName) {
                 $skillName = trim($skillName);
-                
+
                 if (empty($skillName) || strlen($skillName) < 2) {
                     continue;
                 }
@@ -1297,11 +1297,11 @@ class EmployeeCompetencyProfileController extends Controller
 
         // Split by common delimiters
         $skillsList = [];
-        
+
         // Try newline separation first
         if (strpos($skills, "\n") !== false) {
             $skillsList = explode("\n", $skills);
-        } 
+        }
         // Try comma separation
         elseif (strpos($skills, ',') !== false) {
             $skillsList = explode(',', $skills);

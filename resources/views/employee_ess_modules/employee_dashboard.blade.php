@@ -962,31 +962,31 @@
           <div class="col-6">
             <div class="p-3 bg-light rounded">
               <small class="text-muted d-block mb-1">Department</small>
-              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->department ?? 'N/A' }}</h6>
+              <h6 class="fw-bold mb-0">{{ $apiEmployee['department']['name'] ?? (optional(Auth::guard('employee')->user()->department)->name ?? 'N/A') }}</h6>
             </div>
           </div>
           <div class="col-6">
             <div class="p-3 bg-light rounded">
               <small class="text-muted d-block mb-1">Position</small>
-              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->position ?? 'N/A' }}</h6>
+              <h6 class="fw-bold mb-0">{{ $apiEmployee['position'] ?? (Auth::guard('employee')->user()->position ?? 'N/A') }}</h6>
             </div>
           </div>
           <div class="col-6">
             <div class="p-3 bg-light rounded">
               <small class="text-muted d-block mb-1">Join Date</small>
-              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->joining_date ? Auth::guard('employee')->user()->joining_date->format('M d, Y') : 'N/A' }}</h6>
+              <h6 class="fw-bold mb-0">{{ isset($apiEmployee['hire_date']) ? \Carbon\Carbon::parse($apiEmployee['hire_date'])->format('M d, Y') : (Auth::guard('employee')->user()->hire_date ? \Carbon\Carbon::parse(Auth::guard('employee')->user()->hire_date)->format('M d, Y') : 'N/A') }}</h6>
             </div>
           </div>
           <div class="col-12">
             <div class="p-3 bg-light rounded">
               <small class="text-muted d-block mb-1">Email</small>
-              <p class="mb-0 text-break">{{ Auth::guard('employee')->user()->email ?? 'N/A' }}</p>
+              <p class="mb-0 text-break">{{ $apiEmployee['email'] ?? (Auth::guard('employee')->user()->email ?? 'N/A') }}</p>
             </div>
           </div>
           <div class="col-12">
             <div class="p-3 bg-light rounded">
               <small class="text-muted d-block mb-1">Contact</small>
-              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->phone ?? 'N/A' }}</h6>
+              <h6 class="fw-bold mb-0">{{ $apiEmployee['phone'] ?? (Auth::guard('employee')->user()->phone_number ?? 'N/A') }}</h6>
             </div>
           </div>
         </div>

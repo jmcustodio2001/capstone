@@ -456,7 +456,7 @@
                 <tbody>
           @endif
                   <tr>
-                    <td class="fw-semibold text">{{ $course->course_id }}</td>
+                    <td class="fw-semibold text">{{ $loop->iteration }}</td>
                     <td>
                       <span class="fw-semibold">{{ $course->course_title }}</span>
                     </td>

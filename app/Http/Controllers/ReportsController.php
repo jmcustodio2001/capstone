@@ -11,6 +11,8 @@ use App\Models\ExamAttempt;
 use App\Models\TrainingFeedback;
 use App\Models\Employee;
 use App\Models\OrganizationalPosition;
+use App\Models\CompetencyLibrary;
+use App\Models\EmployeeCompetencyProfile;
 use Illuminate\Support\Facades\Schema;
 
 class ReportsController extends Controller
@@ -51,32 +53,39 @@ class ReportsController extends Controller
         // Training ROI - not available by default; leave null
         $trainingRoi = null;
 
-        // Courses: for each course, compute participants and completion
-        $courses = CourseManagement::query()->get()->map(function($course) {
-            $participants = EmployeeTrainingDashboard::where('course_id', $course->course_id)->count();
-            $completed = EmployeeTrainingDashboard::where('course_id', $course->course_id)
-                ->where(function($q){ $q->whereRaw("LOWER(status) = 'completed'")->orWhere('progress', '>=', 100); })
+        // Competencies: for each competency, compute participants and completion (proficiency >= 3)
+        $competencyStats = CompetencyLibrary::query()->get()->map(function($competency) {
+            $participants = EmployeeCompetencyProfile::where('competency_id', $competency->id)->count();
+
+            // Assuming completed means proficiency level >= 3 (Competent)
+            $completed = EmployeeCompetencyProfile::where('competency_id', $competency->id)
+                ->where('proficiency_level', '>=', 3)
                 ->count();
 
-            // Avg score for the course from exam attempts (0-100 -> 0-10 scale)
-            $avgScore = ExamAttempt::where('course_id', $course->course_id)->avg('score');
-            $avgScore = $avgScore ? round($avgScore / 10, 1) : null;
+            // Avg score is the average proficiency level (1-5)
+            $avgScore = EmployeeCompetencyProfile::where('competency_id', $competency->id)->avg('proficiency_level');
+            $avgScore = $avgScore ? round($avgScore, 1) : 0;
 
+            // Completion Rate: % of participants who are competent (>= 3)
             $completionPercent = $participants > 0 ? round(($completed / $participants) * 100) : 0;
-            $statusClass = $completionPercent >= 90 ? 'bg-success' : ($completionPercent >= 75 ? 'bg-warning' : 'bg-danger');
-            $statusText = $completionPercent >= 90 ? 'Excellent' : ($completionPercent >= 75 ? 'On Track' : 'Needs Attention');
+
+            $statusClass = $completionPercent >= 80 ? 'bg-success' : ($completionPercent >= 50 ? 'bg-warning' : 'bg-danger');
+            $statusText = $completionPercent >= 80 ? 'Strong' : ($completionPercent >= 50 ? 'Developing' : 'Needs Focus');
 
             return [
-                'name' => $course->course_title ?? $course->training_title ?? 'Course',
-                'department' => $course->department ?? 'General',
+                'name' => $competency->competency_name,
+                'department' => $competency->category ?? 'General',
                 'participants' => $participants,
                 'completed' => $completed,
                 'completion_percent' => $completionPercent,
-                'avg_score' => $avgScore,
+                'avg_score' => $avgScore, // Scale 1-5
                 'status_class' => $statusClass,
                 'status_text' => $statusText,
             ];
         })->toArray();
+
+        // Keep courses for the count metric
+        $courses = CourseManagement::all();
 
         // Departments: try to detect department field and compute completion per department
         $departments = [];
@@ -133,7 +142,7 @@ class ReportsController extends Controller
         })->toArray();
 
         return view('reports', compact(
-            'courses', 'departments', 'employees',
+            'courses', 'competencyStats', 'departments', 'employees',
             'totalTrainingHours', 'completionRate', 'avgSkillScore', 'costPerTraining',
             'certifications', 'avgTrainingTime', 'trainingRoi'
         ));
@@ -146,19 +155,27 @@ class ReportsController extends Controller
     {
         $type = $request->query('type', 'csv');
 
-        // Reuse same course data logic
-        $courses = CourseManagement::query()->get()->map(function($course) {
-            $participants = EmployeeTrainingDashboard::where('course_id', $course->course_id)->count();
-            $completed = EmployeeTrainingDashboard::where('course_id', $course->course_id)
-                ->where(function($q){ $q->whereRaw("LOWER(status) = 'completed'")->orWhere('progress', '>=', 100); })
+        // Reuse same competency data logic
+        $courses = CompetencyLibrary::query()->get()->map(function($competency) {
+            $participants = EmployeeCompetencyProfile::where('competency_id', $competency->id)->count();
+
+            // Assuming completed means proficiency level >= 3 (Competent)
+            $completed = EmployeeCompetencyProfile::where('competency_id', $competency->id)
+                ->where('proficiency_level', '>=', 3)
                 ->count();
-            $avgScore = ExamAttempt::where('course_id', $course->course_id)->avg('score');
-            $avgScore = $avgScore ? round($avgScore / 10, 1) : null;
+
+            // Avg score is the average proficiency level (1-5)
+            $avgScore = EmployeeCompetencyProfile::where('competency_id', $competency->id)->avg('proficiency_level');
+            $avgScore = $avgScore ? round($avgScore, 1) : 0;
+
+            // Completion Rate: % of participants who are competent (>= 3)
             $completionPercent = $participants > 0 ? round(($completed / $participants) * 100) : 0;
-            $statusText = $completionPercent >= 90 ? 'Excellent' : ($completionPercent >= 75 ? 'On Track' : 'Needs Attention');
+
+            $statusText = $completionPercent >= 80 ? 'Strong' : ($completionPercent >= 50 ? 'Developing' : 'Needs Focus');
+
             return [
-                'name' => $course->course_title ?? $course->training_title ?? 'Course',
-                'department' => $course->department ?? 'General',
+                'name' => $competency->competency_name,
+                'department' => $competency->category ?? 'General',
                 'participants' => $participants,
                 'completed' => $completed,
                 'completion_percent' => $completionPercent,
@@ -172,8 +189,8 @@ class ReportsController extends Controller
         }
 
         // Build CSV content
-        $filename = 'training_reports_' . date('Ymd_His');
-        $columns = ['Course Name', 'Department', 'Participants', 'Completed', 'Completion %', 'Avg. Score', 'Status'];
+        $filename = 'competency_reports_' . date('Ymd_His');
+        $columns = ['Competency Name', 'Category', 'Participants', 'Competent/Completed', 'Competency Rate %', 'Avg. Proficiency', 'Status'];
 
         $callback = function() use ($courses, $columns) {
             $fh = fopen('php://output', 'w');

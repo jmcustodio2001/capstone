@@ -16,6 +16,7 @@ class CompetencyLibrarySeeder extends Seeder
         // Clear existing competencies safely (handle foreign key constraints)
         DB::statement('SET FOREIGN_KEY_CHECKS=0;');
         DB::table('competency_library')->truncate();
+        DB::table('course_management')->truncate();
         DB::statement('SET FOREIGN_KEY_CHECKS=1;');
 
         $competencies = [
@@ -214,7 +215,7 @@ class CompetencyLibrarySeeder extends Seeder
         }
 
         $this->command->info('Competency Library seeded successfully with ' . count($competencies) . ' competencies.');
-        
+
         // Auto-sync all competencies to course management
         $this->command->info('Auto-syncing competencies to course management...');
         $this->syncCompetenciesToCourseManagement();
@@ -229,35 +230,25 @@ class CompetencyLibrarySeeder extends Seeder
         try {
             // Get all competencies
             $competencies = DB::table('competency_library')->get();
-            
+
             $synced = 0;
-            $skipped = 0;
-            
+
             foreach ($competencies as $competency) {
-                // Check if course already exists
-                $existingCourse = DB::table('course_management')
-                    ->where('course_title', $competency->competency_name)
-                    ->first();
-                
-                if (!$existingCourse) {
-                    // Create new course from competency
-                    DB::table('course_management')->insert([
-                        'course_title' => $competency->competency_name,
-                        'description' => $competency->description ?? 'Auto-synced from Competency Library',
-                        'start_date' => now(),
-                        'status' => 'Active',
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                    
-                    $synced++;
-                } else {
-                    $skipped++;
-                }
+                // Create new course from competency
+                DB::table('course_management')->insert([
+                    'course_title' => $competency->competency_name,
+                    'description' => $competency->description ?? 'Auto-synced from Competency Library',
+                    'start_date' => now(),
+                    'status' => 'Active',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                $synced++;
             }
-            
-            $this->command->info("Synced {$synced} new courses, {$skipped} already existed");
-            
+
+            $this->command->info("Synced {$synced} new courses to course management.");
+
         } catch (\Exception $e) {
             $this->command->error('Error syncing competencies to courses: ' . $e->getMessage());
         }

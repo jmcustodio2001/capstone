@@ -301,7 +301,9 @@
 
               if (!$empId) continue;
 
-              $employeeProfiles = $groupedProfiles->get($empId, collect());
+              $employeeProfiles = $groupedProfiles->get($empId, collect())->filter(function($p) {
+                  return $p->competency !== null;
+              })->values();
 
               $firstName = is_array($employee) ? ($employee['first_name'] ?? 'Unknown') : ($employee->first_name ?? 'Unknown');
               $lastName = is_array($employee) ? ($employee['last_name'] ?? 'Employee') : ($employee->last_name ?? 'Employee');
@@ -385,7 +387,7 @@
                             <i class="bi bi-award me-1"></i>
                             Competency
                           </h6>
-                          <p class="fw-semibold mb-0 text-dark">{{ $profile->competency->competency_name }}</p>
+                          <p class="fw-semibold mb-0 text-dark">{{ $profile->competency?->competency_name ?? 'Unknown Competency' }}</p>
                         </div>
 
                         @php
@@ -465,7 +467,7 @@
                           <!-- View Button -->
                           <button class="btn btn-info btn-sm view-btn"
                                   data-employee-name="{{ $firstName }} {{ $lastName }}"
-                                  data-competency-name="{{ $profile->competency->competency_name }}"
+                                  data-competency-name="{{ $profile->competency?->competency_name ?? 'Unknown' }}"
                                   data-proficiency="{{ $profile->proficiency_level }}"
                                   data-assessment-date="{{ $profile->assessment_date }}"
                                   title="View Details">

@@ -67,8 +67,25 @@
         'On Leave' => 'bg-warning text-dark',
         default => 'bg-info'
       };
-      // Get the actual employee_id (primary key) from the model
-      $empId = $employee->getKey() ?? ($employee->employee_id ?? ($employee->id ?? 'N/A'));
+      // Get the actual employee_id
+      // If $employee is a User model (from Auth::user()), we need to check the linked Employee record
+      $targetEmployee = $employee;
+      if ($employee instanceof \App\Models\User && $employee->employee) {
+          $targetEmployee = $employee->employee;
+      }
+
+      // Prioritize 'id' (auto-increment) if available, then 'employee_id' (string PK)
+      // This matches the logic in employee_list.blade.php
+      $rawEmpId = $targetEmployee->id ?? ($targetEmployee->employee_id ?? ($targetEmployee->getKey() ?? 'N/A'));
+
+      // Format display ID (remove non-numeric characters to show just the number)
+      // This handles "EMP001" -> 1, "EMP-005" -> 5, etc.
+      $empId = $rawEmpId;
+      $strId = (string)$rawEmpId;
+      if (preg_match('/\d+/', $strId)) {
+          // Extract only digits and convert to integer to remove leading zeros
+          $empId = (int)preg_replace('/[^0-9]/', '', $strId);
+      }
     @endphp
     <span id="sidebar-status-badge" class="badge {{ $statusClass }} text-white mt-2" style="font-size: 0.85rem;">{{ $status }}</span>
     <div class="text-muted small mt-1">Employee ID: {{ $empId }}</div>

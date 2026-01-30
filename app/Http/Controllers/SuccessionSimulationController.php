@@ -20,15 +20,15 @@ class SuccessionSimulationController extends Controller
     {
         $apiEmployees = $this->getEmployeesFromAPI();
         $employeesList = $this->convertToEmployeesList($apiEmployees);
-        
+
         $simulations = $this->getSimulations($apiEmployees);
         $completedCertificates = $this->getCompletedCertificates();
         $certificateStatuses = $this->getCertificateStatuses($simulations);
         $positions = $this->getOrganizationalPositions();
-        
+
         // Get paginated top candidates
         $topUniqueCandidates = $this->getPaginatedUniqueCandidates($positions, $apiEmployees);
-        
+
         // We still need the raw topCandidates for scores and metrics calculation
         $allTopCandidates = $this->getTopCandidatesForPositions($positions, $apiEmployees);
         $readinessScores = $this->calculateReadinessScoresForPositions($allTopCandidates);
@@ -56,7 +56,7 @@ class SuccessionSimulationController extends Controller
     {
         $positions = $this->getOrganizationalPositions();
         $position = $positions->firstWhere('id', (int)$positionId);
-        
+
         if (!$position) {
             return response()->json(['error' => 'Position not found', 'candidates' => []], 404);
         }
@@ -64,7 +64,7 @@ class SuccessionSimulationController extends Controller
         $apiEmployees = $this->getEmployeesFromAPI();
         // Use existing logic to get candidates for this specific position
         $allTopCandidates = $this->getTopCandidatesForPositions(collect([$position]), $apiEmployees);
-        
+
         return response()->json([
             'success' => true,
             'position_name' => $position->position_title,
@@ -75,7 +75,7 @@ class SuccessionSimulationController extends Controller
     private function getSimulations($apiEmployees = null)
     {
         $simulations = SuccessionSimulation::with('employee')->orderByDesc('created_at')->paginate(10, ['*'], 'sim_page');
-        
+
         if ($apiEmployees) {
             $empMap = collect($apiEmployees)->keyBy(function($e) {
                 return is_object($e) ? $e->employee_id : ($e['employee_id'] ?? $e['id'] ?? null);
@@ -96,7 +96,7 @@ class SuccessionSimulationController extends Controller
     {
         $uniqueCandidates = collect();
         $topCandidates = $this->getTopCandidatesForPositions($positions, $apiEmployees);
-        
+
         foreach($topCandidates as $positionId => $candidates) {
             foreach($candidates as $candidate) {
                 if (!$uniqueCandidates->contains('employee_id', $candidate['employee_id'])) {
@@ -104,13 +104,13 @@ class SuccessionSimulationController extends Controller
                 }
             }
         }
-        
+
         $sortedCandidates = $uniqueCandidates->sortByDesc('readiness_score')->values();
-        
+
         // Paginate the collection manually
         $page = request()->get('cand_page', 1);
         $perPage = 6; // Show 6 candidates per page (2 rows of 3)
-        
+
         return new \Illuminate\Pagination\LengthAwarePaginator(
             $sortedCandidates->forPage($page, $perPage),
             $sortedCandidates->count(),
@@ -157,7 +157,7 @@ class SuccessionSimulationController extends Controller
         try {
             $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
-            
+
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }
@@ -166,7 +166,7 @@ class SuccessionSimulationController extends Controller
                 return collect($apiEmployees)->map(function($emp) use ($emailToLocalMap) {
                     $profilePic = $emp['profile_picture'] ?? null;
                     $empEmail = strtolower($emp['email'] ?? '');
-                    
+
                     // Prioritize local photo if it exists
                     $localRef = $emailToLocalMap[$empEmail] ?? null;
                     if ($localRef && $localRef->profile_picture) {
@@ -174,7 +174,7 @@ class SuccessionSimulationController extends Controller
                     } elseif ($profilePic && strpos($profilePic, 'http') !== 0) {
                         $profilePic = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
                     }
-                    
+
                     return (object) [
                         'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
                         'first_name' => $emp['first_name'] ?? 'Unknown',
@@ -194,22 +194,22 @@ class SuccessionSimulationController extends Controller
     private function getCompletedCertificates(): Collection
     {
         $certificates = collect();
-        
+
         // First, let's get some employees to create sample certificates
         $employees = Employee::take(5)->get();
-        
+
         // Try CompletedTraining first
         try {
             $completedTrainings = CompletedTraining::with(['course', 'employee'])
                 ->get(); // Remove the whereNotNull condition temporarily
-            
+
             Log::info('CompletedTraining records found: ' . $completedTrainings->count());
-            
+
             foreach ($completedTrainings as $cert) {
                 if ($cert->employee) {
                     $employeeName = $cert->employee->first_name . ' ' . $cert->employee->last_name;
                     $courseTitle = $cert->course ? $cert->course->course_title : ($cert->training_title ?? 'Training Course');
-                    
+
                     $certificates->push([
                         'employee_name' => $employeeName,
                         'course_title' => $courseTitle,
@@ -222,13 +222,13 @@ class SuccessionSimulationController extends Controller
         } catch (\Exception $e) {
             Log::error('Error fetching CompletedTraining: ' . $e->getMessage());
         }
-        
+
         // Also try EmployeeTraining as backup
         try {
             $employeeTrainings = \App\Models\EmployeeTraining::get(); // Remove status filter temporarily
-            
+
             Log::info('EmployeeTraining records found: ' . $employeeTrainings->count());
-            
+
             foreach ($employeeTrainings as $training) {
                 // Try to find employee from API or local
                 $employees = $this->getEmployeesFromAPI();
@@ -241,7 +241,7 @@ class SuccessionSimulationController extends Controller
                     $fname = is_object($employee) ? $employee->first_name : ($employee['first_name'] ?? 'Unknown');
                     $lname = is_object($employee) ? $employee->last_name : ($employee['last_name'] ?? 'Employee');
                     $employeeName = $fname . ' ' . $lname;
-                    
+
                     $certificates->push([
                         'employee_name' => $employeeName,
                         'course_title' => $training->training_title ?? 'Training Course',
@@ -254,37 +254,37 @@ class SuccessionSimulationController extends Controller
         } catch (\Exception $e) {
             Log::error('Error fetching EmployeeTraining: ' . $e->getMessage());
         }
-        
+
         // No sample data generation - only show real certificates
-        
+
         Log::info('Total certificates found: ' . $certificates->count());
-        
+
         return $certificates;
     }
 
     private function getCertificateStatuses($simulations): array
     {
         $certificateStatuses = [];
-        
+
         foreach ($simulations->items() as $sim) {
             $latestCert = CompletedTraining::with('course')
                 ->where('employee_id', $sim->employee_id)
                 ->orderByDesc('completion_date')
                 ->first();
-                
+
             if ($latestCert) {
                 // Generate a realistic expiry date (1 year from completion)
                 $expiryDate = null;
                 if ($latestCert->completion_date) {
                     $expiryDate = Carbon::parse($latestCert->completion_date)->addYear();
                 }
-                
+
                 // Create a certificate file path if one doesn't exist
                 $certificateUrl = $latestCert->certificate_path;
                 if (!$certificateUrl && $latestCert->completed_id) {
                     $certificateUrl = '/storage/certificates/cert_' . $latestCert->completed_id . '.pdf';
                 }
-                
+
                 $certificateStatuses[$sim->id] = [
                     'status' => $latestCert->status ?: 'Completed',
                     'date' => $latestCert->completion_date,
@@ -307,7 +307,7 @@ class SuccessionSimulationController extends Controller
                 ];
             }
         }
-        
+
         return $certificateStatuses;
     }
 
@@ -317,20 +317,20 @@ class SuccessionSimulationController extends Controller
             // Core
             (object)['id' => 1, 'position_title' => 'Travel Agent', 'department' => 'Core', 'level' => 4],
             (object)['id' => 2, 'position_title' => 'Travel Staff', 'department' => 'Core', 'level' => 4],
-            
+
             // Logistic
             (object)['id' => 3, 'position_title' => 'Fleet Manager', 'department' => 'Logistic', 'level' => 3],
             (object)['id' => 4, 'position_title' => 'Procurement Officer', 'department' => 'Logistic', 'level' => 4],
             (object)['id' => 5, 'position_title' => 'Driver', 'department' => 'Logistic', 'level' => 4],
             (object)['id' => 6, 'position_title' => 'Logistics Staff', 'department' => 'Logistic', 'level' => 4],
-            
+
             // Financial
             (object)['id' => 7, 'position_title' => 'Financial Staff', 'department' => 'Financial', 'level' => 4],
-            
+
             // Human Resource
             (object)['id' => 8, 'position_title' => 'Hr Manager', 'department' => 'Human Resource', 'level' => 3],
             (object)['id' => 9, 'position_title' => 'Hr Staff', 'department' => 'Human Resource', 'level' => 4],
-            
+
             // Administrative
             (object)['id' => 10, 'position_title' => 'Administrative Staff', 'department' => 'Administrative', 'level' => 4]
         ]);
@@ -344,14 +344,14 @@ class SuccessionSimulationController extends Controller
 
         $avgProficiency = $competencyProfiles->avg('proficiency_level') ?? 0;
         $leadershipCount = $competencyProfiles->filter(function($profile) {
-            return $profile->competency && 
+            return $profile->competency &&
                    str_contains(strtolower($profile->competency->competency_name ?? ''), 'leadership');
         })->count();
         $totalCompetencies = $competencyProfiles->count();
 
         // Weighted scoring: 40% proficiency, 30% leadership, 30% total competencies
-        return ($avgProficiency * 0.4) + 
-               (min($leadershipCount * 20, 100) * 0.3) + 
+        return ($avgProficiency * 0.4) +
+               (min($leadershipCount * 20, 100) * 0.3) +
                (min($totalCompetencies * 10, 100) * 0.3);
     }
 
@@ -359,24 +359,32 @@ class SuccessionSimulationController extends Controller
     {
         $topCandidates = [];
         if (!$employees) $employees = $this->getEmployeesFromAPI();
-        
+
         foreach ($positions as $position) {
             $candidates = collect($employees)
                 ->map(function($employee) {
                     $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
                     $fname = is_object($employee) ? $employee->first_name : ($employee['first_name'] ?? 'Unknown');
                     $lname = is_object($employee) ? $employee->last_name : ($employee['last_name'] ?? 'Employee');
-                    
+                    $positionTitle = is_object($employee) ? ($employee->position ?? 'N/A') : ($employee['position'] ?? 'N/A');
+                    $profilePic = is_object($employee) ? ($employee->profile_picture ?? null) : ($employee['profile_picture'] ?? null);
+
+                    if ($profilePic && strpos($profilePic, 'http') !== 0) {
+                        $profilePic = asset('storage/' . $profilePic);
+                    }
+
                     $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')
                         ->where('employee_id', $empId)
                         ->get();
-                        
+
                     $readinessScore = $this->calculateReadinessScore($competencyProfiles);
-                    
+
                     return [
                         'name' => $fname . ' ' . $lname,
                         'employee_id' => $empId,
-                        'readiness_score' => round($readinessScore, 1)
+                        'readiness_score' => round($readinessScore, 1),
+                        'current_position' => $positionTitle,
+                        'profile_picture' => $profilePic
                     ];
                 })
                 ->sortByDesc('readiness_score')
@@ -384,14 +392,14 @@ class SuccessionSimulationController extends Controller
 
             $topCandidates[$position->id] = $candidates;
         }
-        
+
         return $topCandidates;
     }
 
     private function calculateReadinessScoresForPositions(array $topCandidates): array
     {
         $readinessScores = [];
-        
+
         foreach ($topCandidates as $positionId => $candidates) {
             // Get the highest readiness score for this position (top candidate)
             if ($candidates->isNotEmpty()) {
@@ -401,14 +409,14 @@ class SuccessionSimulationController extends Controller
                 $readinessScores[$positionId] = 0;
             }
         }
-        
+
         return $readinessScores;
     }
 
     private function calculateDashboardMetrics($employees = null): array
     {
         if (!$employees) $employees = $this->getEmployeesFromAPI();
-        
+
         $totalCandidates = collect($employees)->count();
 
         $readyLeaders = collect($employees)->filter(function($employee) {
@@ -436,22 +444,22 @@ class SuccessionSimulationController extends Controller
     private function generateScenarioData(Collection $positions, array $topCandidates, array $metrics): array
     {
         $scenarioData = [];
-        
+
         // CEO Departure Scenario
         $ceoPosition = $positions->where('level', 1)->first();
         if ($ceoPosition) {
             $ceoCandidates = $topCandidates[1] ?? collect();
             $topCeoCandidate = $ceoCandidates->first();
-            
+
             $scenarioData[] = [
                 'id' => 'ceo_departure',
                 'title' => 'CEO Departure',
                 'description' => 'Sudden departure of Chief Executive Officer',
                 'impact_level' => 'High',
-                'ready_successor' => $topCeoCandidate ? 
-                    $topCeoCandidate['name'] . ' (' . round($topCeoCandidate['readiness_score']) . '% ready)' : 
+                'ready_successor' => $topCeoCandidate ?
+                    $topCeoCandidate['name'] . ' (' . round($topCeoCandidate['readiness_score']) . '% ready)' :
                     'No immediate successor',
-                'transition_time' => $topCeoCandidate && $topCeoCandidate['readiness_score'] >= 80 ? 
+                'transition_time' => $topCeoCandidate && $topCeoCandidate['readiness_score'] >= 80 ?
                     '2-3 months' : '6-12 months',
                 'affected_positions' => '3-5 executive roles'
             ];
@@ -518,7 +526,7 @@ class SuccessionSimulationController extends Controller
             'notes' => 'nullable|string',
             'simulation_result' => 'nullable|string', // For backward compatibility
         ]);
-        
+
         $sim = SuccessionSimulation::create([
             'employee_id' => $request->employee_id,
             'position_id' => $request->position_id,
@@ -539,7 +547,7 @@ class SuccessionSimulationController extends Controller
             'notes' => $request->notes,
             'simulation_result' => $request->simulation_result, // For backward compatibility
         ]);
-        
+
         // Log activity
         ActivityLog::create([
             'user_id' => Auth::id(),
@@ -547,7 +555,7 @@ class SuccessionSimulationController extends Controller
             'module' => 'Succession Simulation',
             'description' => 'Added simulation entry: ' . $sim->simulation_name . ' (ID: ' . $sim->id . ')',
         ]);
-        
+
         // Check if request expects JSON response (for AJAX calls)
         if ($request->expectsJson() || $request->header('Accept') === 'application/json') {
             return response()->json([
@@ -556,7 +564,7 @@ class SuccessionSimulationController extends Controller
                 'data' => $sim
             ]);
         }
-        
+
         return redirect()->route('succession_simulations.index')->with('success', 'Simulation entry added successfully.');
     }
 
@@ -629,7 +637,7 @@ class SuccessionSimulationController extends Controller
     {
         $sim = SuccessionSimulation::findOrFail($id);
         $sim->delete();
-        
+
         // Log activity
         ActivityLog::create([
             'user_id' => Auth::id(),
@@ -637,7 +645,7 @@ class SuccessionSimulationController extends Controller
             'module' => 'Succession Simulation',
             'description' => 'Deleted simulation entry (ID: ' . $id . ')',
         ]);
-        
+
         // Check if request expects JSON response (for AJAX calls)
         if ($request->expectsJson() || $request->header('Accept') === 'application/json') {
             return response()->json([
@@ -645,7 +653,7 @@ class SuccessionSimulationController extends Controller
                 'message' => 'Simulation entry deleted successfully.'
             ]);
         }
-        
+
         return redirect()->route('succession_simulations.index')->with('success', 'Simulation entry deleted successfully.');
     }
 
@@ -672,7 +680,7 @@ class SuccessionSimulationController extends Controller
         try {
             $exportType = $request->export_type;
             $timestamp = now()->format('Y-m-d_H-i-s');
-            
+
             switch ($exportType) {
                 case 'simulations':
                     return $this->exportSimulations($timestamp);
@@ -698,7 +706,7 @@ class SuccessionSimulationController extends Controller
     private function exportSimulations($timestamp)
     {
         $simulations = SuccessionSimulation::with('employee')->get();
-        
+
         $csvData = [];
         $csvData[] = [
             'ID',
@@ -720,8 +728,8 @@ class SuccessionSimulationController extends Controller
         ];
 
         foreach ($simulations as $sim) {
-            $employeeName = $sim->employee ? 
-                $sim->employee->first_name . ' ' . $sim->employee->last_name : 
+            $employeeName = $sim->employee ?
+                $sim->employee->first_name . ' ' . $sim->employee->last_name :
                 'Unknown Employee';
 
             $csvData[] = [
@@ -806,7 +814,7 @@ class SuccessionSimulationController extends Controller
         $dashboardMetrics = $this->calculateDashboardMetrics();
 
         $csvData = [];
-        
+
         // Dashboard Metrics Section
         $csvData[] = ['=== SUCCESSION PLANNING DASHBOARD METRICS ==='];
         $csvData[] = ['Metric', 'Value'];
@@ -822,7 +830,7 @@ class SuccessionSimulationController extends Controller
         foreach ($positions as $position) {
             $candidates = $topCandidates[$position->id] ?? collect();
             $topCandidate = $candidates->first();
-            
+
             $csvData[] = [
                 $position->position_title,
                 $position->department,
@@ -836,13 +844,13 @@ class SuccessionSimulationController extends Controller
         // Simulations Section
         $csvData[] = ['=== SIMULATION ENTRIES ==='];
         $csvData[] = [
-            'ID', 'Employee Name', 'Simulation Name', 'Type', 'Date', 
+            'ID', 'Employee Name', 'Simulation Name', 'Type', 'Date',
             'Score', 'Performance Rating', 'Status', 'Created Date'
         ];
-        
+
         foreach ($simulations as $sim) {
-            $employeeName = $sim->employee ? 
-                $sim->employee->first_name . ' ' . $sim->employee->last_name : 
+            $employeeName = $sim->employee ?
+                $sim->employee->first_name . ' ' . $sim->employee->last_name :
                 'Unknown Employee';
 
             $csvData[] = [
@@ -867,11 +875,11 @@ class SuccessionSimulationController extends Controller
     private function generateCsvResponse($data, $filename)
     {
         $output = fopen('php://temp', 'r+');
-        
+
         foreach ($data as $row) {
             fputcsv($output, $row);
         }
-        
+
         rewind($output);
         $csv = stream_get_contents($output);
         fclose($output);

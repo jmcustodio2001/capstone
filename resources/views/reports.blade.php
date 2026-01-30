@@ -307,20 +307,57 @@
       background: var(--report-primary);
     }
 
+    .quick-action-card {
+      background: white;
+      border: 1px solid var(--report-border);
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      height: 100%;
+    }
+
+    .quick-action-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+      border-color: var(--report-secondary);
+    }
+
+    .quick-action-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 12px;
+      background: rgba(41, 98, 255, 0.1);
+      color: var(--report-secondary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    .quick-action-card:hover .quick-action-icon {
+      background: var(--report-secondary);
+      color: white;
+      transform: scale(1.1);
+    }
+
     @media (max-width: 768px) {
       .chart-container {
         padding: 1.25rem;
       }
-      
+
       .metric-card {
         padding: 1.25rem;
       }
-      
+
       .report-tabs {
         flex-direction: column;
         width: 100%;
       }
-      
+
       .report-tabs .nav-link {
         margin: 0.25rem 0;
         text-align: center;
@@ -347,7 +384,7 @@
               <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels" class="logo-img" style="width: 60px;">
             </div>
             <div>
-              <h1 class="fw-bold mb-2" style="color: var(--report-primary);">Analytics Dashboard</h1>
+              <h1 class="fw-bold mb-2" style="color: var(--report-primary);">Reports</h1>
               <p class="text-muted mb-0 fs-6">
                 <i class="bi bi-graph-up me-2"></i>Real-time insights and performance metrics
               </p>
@@ -355,8 +392,8 @@
           </div>
           <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0" style="background: transparent; padding: 0;">
-              <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none text-muted">Dashboard</a></li>
-              <li class="breadcrumb-item active" aria-current="page" style="color: var(--report-secondary); font-weight: 600;">Analytics</li>
+              <li class="breadcrumb-item"><a href="{{ route('admin.dashboard') }}" class="text-decoration-none text-muted">Home</a></li>
+              <li class="breadcrumb-item active" aria-current="page" style="color: var(--report-secondary); font-weight: 600;">Reports</li>
             </ol>
           </nav>
         </div>
@@ -457,7 +494,6 @@
               <h5 class="section-title mb-0">Report Controls</h5>
               <div class="report-tabs">
                 <a class="nav-link active" href="#training" data-bs-toggle="tab">Training</a>
-                <a class="nav-link" href="#employee" data-bs-toggle="tab">Employees</a>
               </div>
             </div>
           </div>
@@ -493,54 +529,54 @@
             <div class="col-12">
               <div class="chart-container">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                  <h5 class="section-title mb-0">Training Performance Overview</h5>
+                  <h5 class="section-title mb-0">Competency Performance Overview</h5>
                   <small class="text-muted">Sorted by completion rate</small>
                 </div>
                 <div class="table-responsive">
                   <table class="table report-table table-hover">
                     <thead>
                       <tr>
-                        <th>Course Name</th>
-                        <th>Department</th>
+                        <th>Competency Name</th>
+                        <th>Category</th>
                         <th>Participants</th>
-                        <th>Completed</th>
-                        <th>Completion Rate</th>
-                        <th>Avg. Score</th>
+                        <th>Competent</th>
+                        <th>Competency Rate</th>
+                        <th>Avg. Proficiency</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
-                      @foreach($courses as $course)
+                      @foreach($competencyStats as $competency)
                       <tr class="animate-slide">
                         <td>
                           <div class="d-flex align-items-center gap-2">
-                            <i class="bi bi-journal-text text-primary"></i>
-                            <strong>{{ $course['name'] }}</strong>
+                            <i class="bi bi-award text-primary"></i>
+                            <strong>{{ $competency['name'] }}</strong>
                           </div>
                         </td>
                         <td>
                           <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 stat-badge">
-                            {{ $course['department'] }}
+                            {{ $competency['department'] }}
                           </span>
                         </td>
-                        <td class="fw-semibold">{{ $course['participants'] }}</td>
-                        <td class="fw-semibold">{{ $course['completed'] }}</td>
+                        <td class="fw-semibold">{{ $competency['participants'] }}</td>
+                        <td class="fw-semibold">{{ $competency['completed'] }}</td>
                         <td>
                           <div class="d-flex align-items-center gap-3">
                             <div class="progress progress-thin flex-grow-1" style="max-width: 150px;">
-                              <div class="progress-bar" role="progressbar" style="width: {{ $course['completion_percent'] }}%"></div>
+                              <div class="progress-bar" role="progressbar" style="width: {{ $competency['completion_percent'] }}%"></div>
                             </div>
-                            <span class="fw-bold">{{ $course['completion_percent'] }}%</span>
+                            <span class="fw-bold">{{ $competency['completion_percent'] }}%</span>
                           </div>
                         </td>
                         <td>
                           <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 stat-badge">
-                            {{ $course['avg_score'] }}
+                            {{ $competency['avg_score'] }} / 5
                           </span>
                         </td>
                         <td>
-                          <span class="badge {{ $course['status_class'] ?? 'bg-secondary' }} stat-badge">
-                            {{ $course['status_text'] }}
+                          <span class="badge {{ $competency['status_class'] ?? 'bg-secondary' }} stat-badge">
+                            {{ $competency['status_text'] }}
                           </span>
                         </td>
                       </tr>
@@ -663,46 +699,6 @@
             </div>
           </div>
         </div>
-
-        <div class="col-lg-8">
-          <div class="chart-container">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-              <h5 class="section-title mb-0">Quick Actions</h5>
-              <button class="action-btn">
-                <i class="bi bi-plus-circle me-2"></i> Generate Report
-              </button>
-            </div>
-            <div class="row g-3">
-              <div class="col-md-4">
-                <div class="border rounded p-3 text-center hover-shadow">
-                  <div class="metric-icon mx-auto mb-2">
-                    <i class="bi bi-download"></i>
-                  </div>
-                  <h6 class="fw-semibold mb-1">Export All Data</h6>
-                  <small class="text-muted">CSV, Excel, PDF</small>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="border rounded p-3 text-center hover-shadow">
-                  <div class="metric-icon mx-auto mb-2">
-                    <i class="bi bi-graph-up"></i>
-                  </div>
-                  <h6 class="fw-semibold mb-1">View Analytics</h6>
-                  <small class="text-muted">Detailed insights</small>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="border rounded p-3 text-center hover-shadow">
-                  <div class="metric-icon mx-auto mb-2">
-                    <i class="bi bi-bell"></i>
-                  </div>
-                  <h6 class="fw-semibold mb-1">Set Alerts</h6>
-                  <small class="text-muted">Notifications</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </main>
@@ -727,7 +723,7 @@
           this.style.boxShadow = '0 8px 25px rgba(0,0,0,0.1)';
           this.style.borderColor = 'var(--report-secondary)';
         });
-        
+
         card.addEventListener('mouseleave', function() {
           this.style.transform = 'translateY(0)';
           this.style.boxShadow = 'none';
@@ -742,7 +738,7 @@
           // Update active tab styles
           tabLinks.forEach(l => l.classList.remove('active'));
           this.classList.add('active');
-          
+
           // Animate content
           const target = this.getAttribute('href');
           const tabContent = document.querySelector(target + ' .animate-slide');
@@ -767,11 +763,11 @@
       if (exportExcelBtn) exportExcelBtn.addEventListener('click', function() {
         window.location.href = exportUrl('excel');
       });
-      
+
       if (exportCsvBtn) exportCsvBtn.addEventListener('click', function() {
         window.location.href = exportUrl('csv');
       });
-      
+
       if (exportPrintBtn) exportPrintBtn.addEventListener('click', function() {
         window.open(exportUrl('print'), '_blank');
       });
@@ -784,7 +780,7 @@
             const originalHTML = this.innerHTML;
             this.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Processing...';
             this.disabled = true;
-            
+
             setTimeout(() => {
               this.innerHTML = originalHTML;
               this.disabled = false;
@@ -800,7 +796,7 @@
           this.style.borderColor = 'var(--report-secondary)';
           this.style.boxShadow = '0 0 0 3px rgba(41, 98, 255, 0.1)';
         });
-        
+
         datePicker.addEventListener('blur', function() {
           this.style.borderColor = '';
           this.style.boxShadow = '';

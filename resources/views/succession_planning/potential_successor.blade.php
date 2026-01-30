@@ -1021,7 +1021,7 @@
 
     // Show Add Successor Form
     function showAddSuccessorForm(prefilledData = {}) {
-      const selectedEmployeeId = prefilledData.employeeId || '';
+      const selectedEmployeeId = prefilledData.employeeId ? String(prefilledData.employeeId).trim() : '';
       const selectedEmployeeName = prefilledData.employeeName || '';
       const selectedRole = prefilledData.targetRole || '';
       const selectedDate = prefilledData.identifiedDate || new Date().toISOString().split('T')[0];
@@ -1096,7 +1096,8 @@
       });
 
       const submitData = new FormData();
-      submitData.append('employee_id', formData.employee_id);
+      const cleanEmployeeId = formData.employee_id ? String(formData.employee_id).trim() : '';
+      submitData.append('employee_id', cleanEmployeeId);
       submitData.append('potential_role', formData.potential_role);
       submitData.append('identified_date', formData.identified_date);
       submitData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
@@ -1105,12 +1106,16 @@
         method: 'POST',
         body: submitData,
         headers: {
-          'X-Requested-With': 'XMLHttpRequest'
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
         }
       })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
+      .then(async response => {
+        const data = await response.json();
+        return { ok: response.ok, status: response.status, data: data };
+      })
+      .then(result => {
+        if (result.ok && result.data.success) {
           Swal.fire({
             title: 'Success!',
             text: 'Successor record has been added successfully.',
@@ -1122,9 +1127,17 @@
             window.location.reload();
           });
         } else {
+          let errorMessage = result.data.message || 'Failed to add successor record.';
+          
+          // Handle Validation Errors (422)
+          if (result.status === 422 && result.data.errors) {
+            const errors = Object.values(result.data.errors).flat().join('<br>');
+            errorMessage = `<strong>Validation Failed:</strong><br>${errors}`;
+          }
+
           Swal.fire({
             title: 'Error!',
-            text: data.message || 'Failed to add successor record.',
+            html: errorMessage,
             icon: 'error',
             confirmButtonText: 'Try Again'
           });
@@ -3206,6 +3219,18 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
 
 
     function selectCandidate(employeeId, employeeName, targetRole) {
+      // Validate employee ID
+      if (!employeeId || employeeId === 'N/A' || employeeId === 'undefined' || employeeId === 'null') {
+        Swal.fire({
+          title: 'Invalid Candidate',
+          text: 'This candidate cannot be selected because they have an invalid Employee ID.',
+          icon: 'error'
+        });
+        return;
+      }
+
+      employeeId = String(employeeId).trim();
+
       // Automatically open the Add Successor modal with pre-filled data
       const prefilledData = {
         employeeId: employeeId,

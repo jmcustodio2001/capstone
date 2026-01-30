@@ -156,8 +156,9 @@
             @method('PUT')
 
             <div class="profile-picture-container">
-                <img src="{{ $admin->profile_picture ? asset('storage/profile_pictures/' . $admin->profile_picture) : asset('assets/images/default-avatar.png') }}"
-                     alt="Profile Picture" class="profile-picture" id="profilePreview">
+                <img src="{{ $admin->profile_picture ? asset('storage/profile_pictures/' . $admin->profile_picture) : asset('images/default-avatar.png') }}"
+                     alt="Profile Picture" class="profile-picture" id="profilePreview"
+                     onerror="this.onerror=null; this.src='{{ asset('images/default-avatar.png') }}';">
                 <div class="profile-picture-overlay" onclick="document.getElementById('profilePictureInput').click()">
                     <i class="bi bi-camera-fill text-white" style="font-size: 1.5rem;"></i>
                 </div>

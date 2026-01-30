@@ -64,6 +64,11 @@ class Employee extends Authenticatable
     {
         return $this->hasOne(\App\Models\SuccessionReadinessRating::class, 'employee_id', 'employee_id');
     }
+
+    public function department()
+    {
+        return $this->belongsTo(\App\Models\Department::class, 'department_id');
+    }
 }
 
 

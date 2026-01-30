@@ -154,11 +154,52 @@ class EmployeeDashboardController extends Controller
         // Get rewards data
         $rewards = $this->getEmployeeRewards($employeeId);
 
+        // Fetch detailed employee data from API to sync with employee_list
+        $apiEmployee = null;
+        try {
+            $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            if ($response->successful()) {
+                $apiData = $response->json();
+                $employeesList = isset($apiData['data']) ? $apiData['data'] : $apiData;
+
+                if (is_array($employeesList)) {
+                    foreach ($employeesList as $emp) {
+                        $empId = $emp['employee_id'] ?? $emp['id'] ?? null;
+                        $empEmail = $emp['email'] ?? '';
+
+                        // Match by ID or Email (case-insensitive)
+                        if (($empId && $empId == $employeeId) ||
+                            ($empEmail && strtolower($empEmail) === strtolower($employee->email))) {
+
+                            $apiEmployee = $emp;
+                            // Normalize date field
+                            if (isset($apiEmployee['date_hired'])) {
+                                $apiEmployee['hire_date'] = date('Y-m-d', strtotime($apiEmployee['date_hired']));
+                            }
+
+                            // Debug API Employee Department Data
+                            error_log('API Employee found for ID ' . $employeeId . ' (Matched via ' . ($empId == $employeeId ? 'ID' : 'Email') . ')');
+                            error_log('API Department Data: ' . json_encode($apiEmployee['department'] ?? 'MISSING'));
+
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            error_log('Failed to fetch employee data from API: ' . $e->getMessage());
+        }
+
         // Debug: Log the upcoming trainings being passed to view
         error_log('Passing ' . $upcomingTrainingsList->count() . ' upcoming trainings to view for employee: ' . $employeeId);
 
+        // Debug: Local Employee Department Data
+        error_log('Local Employee Department ID: ' . $employee->department_id);
+        error_log('Local Employee Department Relation: ' . json_encode($employee->department));
+
         return view('employee_ess_modules.employee_dashboard', compact(
             'employee',
+            'apiEmployee',
             'trainings',
             'completedTrainings',
             'inProgressTrainings',
@@ -394,9 +435,9 @@ class EmployeeDashboardController extends Controller
             ->count();
         $attendanceRate = $workingDaysThisMonth > 0 ? round(($attendanceRecords / $workingDaysThisMonth) * 100) : 0;
 
-        // Get latest payslip amount (simulated for now)
-        $latestPayslip = 28500; // This would come from payroll system
-        $payslipMonth = 'July 2025';
+        // Get latest payslip amount from real payslip data
+        $latestPayslip = $this->getLatestPayslipAmount($employeeId);
+        $payslipMonth = $this->getLatestPayslipMonth($employeeId);
 
         // Get upcoming trainings
         $upcomingTrainings = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
@@ -665,18 +706,18 @@ class EmployeeDashboardController extends Controller
             if (Schema::hasTable('payslips')) {
                 $latestPayslip = DB::table('payslips')
                     ->where('employee_id', $employeeId)
-                    ->orderBy('pay_period_end', 'desc')
+                    ->orderBy('period_end', 'desc')
                     ->first();
 
                 if ($latestPayslip) {
-                    return $latestPayslip->net_pay ?? $latestPayslip->gross_pay ?? 28500;
+                    return $latestPayslip->net_pay ?? $latestPayslip->gross_pay ?? 0;
                 }
             }
 
-            // Fallback to default amount
-            return 28500;
+            // Fallback to 0 if no payslip found
+            return 0;
         } catch (\Exception $e) {
-            return 28500;
+            return 0;
         }
     }
 
@@ -690,18 +731,18 @@ class EmployeeDashboardController extends Controller
             if (Schema::hasTable('payslips')) {
                 $latestPayslip = DB::table('payslips')
                     ->where('employee_id', $employeeId)
-                    ->orderBy('pay_period_end', 'desc')
+                    ->orderBy('period_end', 'desc')
                     ->first();
 
-                if ($latestPayslip && $latestPayslip->pay_period_end) {
-                    return Carbon::parse($latestPayslip->pay_period_end)->format('F Y');
+                if ($latestPayslip && $latestPayslip->period_end) {
+                    return Carbon::parse($latestPayslip->period_end)->format('F Y');
                 }
             }
 
-            // Fallback to current month
-            return Carbon::now()->format('F Y');
+            // Fallback if no payslip found
+            return 'No Record';
         } catch (\Exception $e) {
-            return Carbon::now()->format('F Y');
+            return 'No Record';
         }
     }
 

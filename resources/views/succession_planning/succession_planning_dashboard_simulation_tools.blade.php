@@ -697,13 +697,23 @@
                     <div class="d-flex align-items-center mb-3">
                       <div class="avatar-circle me-3" style="width: 50px; height: 50px;">
                         @php
-                          // Get employee data for profile picture
-                          $employee = \App\Models\Employee::where('employee_id', $candidate['employee_id'])->first();
                           $profilePicUrl = null;
 
-                          if ($employee && $employee->profile_picture) {
-                              // Direct asset URL generation - Laravel handles the storage symlink
-                              $profilePicUrl = asset('storage/' . $employee->profile_picture);
+                          // First check if profile_picture was passed directly (from API or pre-fetched)
+                          if (isset($candidate['profile_picture']) && $candidate['profile_picture']) {
+                              $pic = $candidate['profile_picture'];
+                              if (strpos($pic, 'http') === 0) {
+                                  $profilePicUrl = $pic;
+                              } else {
+                                  $profilePicUrl = asset('storage/' . $pic);
+                              }
+                          }
+                          // Fallback to database lookup if not found
+                          else {
+                              $employee = \App\Models\Employee::where('employee_id', $candidate['employee_id'])->first();
+                              if ($employee && $employee->profile_picture) {
+                                  $profilePicUrl = asset('storage/' . $employee->profile_picture);
+                              }
                           }
 
                           // Generate fallback avatar if no profile picture
@@ -888,9 +898,13 @@
 
                           // Check if profile picture exists - simplified approach
                           $profilePicUrl = null;
-                          if ($item->employee->profile_picture) {
-                              // Direct asset URL generation - Laravel handles the storage symlink
-                              $profilePicUrl = asset('storage/' . $item->employee->profile_picture);
+                          if (!empty($item->employee->profile_picture)) {
+                              $pic = $item->employee->profile_picture;
+                              if (strpos($pic, 'http') === 0) {
+                                  $profilePicUrl = $pic;
+                              } else {
+                                  $profilePicUrl = asset('storage/' . $pic);
+                              }
                           }
 
                           // Generate consistent color based on employee name for fallback
@@ -4111,7 +4125,7 @@
 
         const responseData = await response.json();
         const candidatesList = Array.isArray(responseData) ? responseData : (responseData.candidates || []);
-        
+
         return candidatesList.map(candidate => ({
           name: candidate.name,
           readiness: Math.round(candidate.readiness_score || 0),

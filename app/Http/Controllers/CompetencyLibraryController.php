@@ -27,8 +27,8 @@ class CompetencyLibraryController extends Controller
             ->where('competency_name', 'NOT LIKE', '%ITALY%')
             ->where('competency_name', 'NOT LIKE', '%Destination Knowledge -%') // Only exclude auto-generated destination knowledge
             ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
-            ->orderBy('id', 'desc')
-            ->paginate(10);
+            ->orderBy('id', 'asc')
+            ->paginate(50);
 
         $employees = Employee::all();
         $gaps = CompetencyGap::with(['employee', 'competency'])->get();
@@ -98,10 +98,10 @@ class CompetencyLibraryController extends Controller
             }
 
             $competency = CompetencyLibrary::create($competencyData);
-            
+
             // Auto-sync to course management
             $this->syncCompetencyToCourseManagement($competency);
-            
+
             ActivityLog::createLog([
                 'module' => 'Competency Management',
                 'action' => 'create',
@@ -187,10 +187,10 @@ class CompetencyLibraryController extends Controller
             }
 
             $competency->update($competencyData);
-            
+
             // Auto-sync to course management
             $this->syncCompetencyToCourseManagement($competency);
-            
+
             ActivityLog::createLog([
                 'module' => 'Competency Management',
                 'action' => 'update',
@@ -586,7 +586,7 @@ class CompetencyLibraryController extends Controller
         try {
             // Check if course already exists for this competency
             $existingCourse = CourseManagement::where('course_title', $competency->competency_name)->first();
-            
+
             if (!$existingCourse) {
                 // Create new course from competency
                 $course = CourseManagement::create([
@@ -595,13 +595,13 @@ class CompetencyLibraryController extends Controller
                     'start_date' => now(),
                     'status' => 'Active'
                 ]);
-                
+
                 \Illuminate\Support\Facades\Log::info("Auto-synced competency '{$competency->competency_name}' to course management");
                 return $course;
             }
-            
+
             return $existingCourse;
-            
+
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Error syncing competency to course management: ' . $e->getMessage());
             return null;

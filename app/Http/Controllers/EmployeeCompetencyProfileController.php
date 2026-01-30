@@ -1227,6 +1227,9 @@ class EmployeeCompetencyProfileController extends Controller
             // Track which skills should have profiles
             $skillsToKeep = [];
 
+            // Pre-fetch all competencies to minimize DB queries and allow better matching
+            $allCompetencies = CompetencyLibrary::all();
+
             foreach ($skillsList as $skillName) {
                 $skillName = trim($skillName);
 
@@ -1234,17 +1237,53 @@ class EmployeeCompetencyProfileController extends Controller
                     continue;
                 }
 
-                $skillKeyName = strtolower($skillName);
-                $skillsToKeep[$skillKeyName] = $skillName;
+                // 1. Normalize the input skill
+                $normalizedInput = strtolower($skillName);
+                
+                // 2. Try to find a match in existing competencies
+                $matchedCompetency = null;
 
-                // Find or create competency in library
-                $competency = CompetencyLibrary::firstOrCreate(
-                    ['competency_name' => $skillName],
-                    [
+                // 2a. Direct exact match (case-insensitive)
+                $matchedCompetency = $allCompetencies->first(function ($comp) use ($normalizedInput) {
+                    return strtolower($comp->competency_name) === $normalizedInput;
+                });
+
+                // 2b. Check for "Skill" or "Skills" suffix variation
+                if (!$matchedCompetency) {
+                    $withoutSkills = preg_replace('/\s+skills?$/i', '', $normalizedInput);
+                    
+                    // If input was "Communication Skills", check for "Communication"
+                    if ($withoutSkills !== $normalizedInput) {
+                        $matchedCompetency = $allCompetencies->first(function ($comp) use ($withoutSkills) {
+                            return strtolower($comp->competency_name) === $withoutSkills;
+                        });
+                    } else {
+                        // If input was "Communication", check for "Communication Skills"
+                        $withSkills = $normalizedInput . ' skills';
+                         $matchedCompetency = $allCompetencies->first(function ($comp) use ($withSkills) {
+                            return strtolower($comp->competency_name) === $withSkills;
+                        });
+                    }
+                }
+                
+                // 3. Use matched or create new
+                if ($matchedCompetency) {
+                    $competency = $matchedCompetency;
+                } else {
+                    // Create new - prefer Title Case
+                    $cleanName = ucwords(strtolower($skillName));
+                    $competency = CompetencyLibrary::create([
+                        'competency_name' => $cleanName,
                         'description' => 'Auto-created from employee API skills',
                         'category' => 'Technical Skills'
-                    ]
-                );
+                    ]);
+                    // Add to local collection to match subsequent items in this loop
+                    $allCompetencies->push($competency);
+                }
+
+                // Track for cleanup (using the actual competency name we resolved to)
+                $skillKeyName = strtolower($competency->competency_name);
+                $skillsToKeep[$skillKeyName] = $competency->competency_name;
 
                 // Check if profile already exists
                 $existingProfile = EmployeeCompetencyProfile::where('employee_id', $employeeId)
@@ -1261,7 +1300,7 @@ class EmployeeCompetencyProfileController extends Controller
                         'created_from_api_skills' => true // Mark as auto-created from API
                     ]);
 
-                    \Log::info("Created competency profile for API employee {$employeeId}: {$skillName}");
+                    \Log::info("Created competency profile for API employee {$employeeId}: {$competency->competency_name}");
                 }
             }
 

@@ -162,6 +162,14 @@
     </li>
     <!-- Settings -->
 
+    <!-- Reports -->
+    <li class="nav-item">
+      <a href="{{ route('admin.reports') }}" class="nav-link text-dark d-flex align-items-center{{ request()->routeIs('admin.reports*') ? ' active fw-bold bg-light border-start border-primary' : '' }}">
+        <i class="bi bi-file-earmark-bar-graph me-2"></i>
+        <span>Reports Data</span>
+      </a>
+    </li>
+
     <li class="nav-item mt-3">
   <a href="{{ route('admin.settings') }}" class="nav-link text-primary w-100 text-start">
     <i class="bi bi-gear me-2"></i> Settings

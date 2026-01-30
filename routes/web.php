@@ -19,6 +19,7 @@ use App\Http\Controllers\SuccessionReadinessRatingController;
 use App\Http\Controllers\EmployeeCertificationController;
 use App\Http\Controllers\EmployeeAwardController;
 use App\Http\Controllers\TrainingProgressUpdateController;
+use App\Http\Controllers\ReportsController;
 
 Route::get('/', function () {
     return view('landingpage');
@@ -231,6 +232,8 @@ Route::post('/admin/notifications/mark-all-read', [AdminController::class, 'mark
 Route::get('/admin/employees', [AdminController::class, 'employeeList'])->name('admin.employees.index')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/employees', [AdminController::class, 'createEmployee'])->name('admin.employees.create')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/reports/generate/{type}', [AdminController::class, 'generateReport'])->name('admin.reports.generate')->middleware(['auth:admin', 'admin.auth']);
+Route::get('/admin/reports', [ReportsController::class, 'index'])->name('admin.reports')->middleware(['auth:admin', 'admin.auth']);
+Route::get('/admin/reports/export', [ReportsController::class, 'export'])->name('admin.reports.export')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/system/backup', [AdminController::class, 'createSystemBackup'])->name('admin.system.backup')->middleware(['auth:admin', 'admin.auth']);
 Route::post('/admin/system/clear-cache', [AdminController::class, 'clearSystemCache'])->name('admin.system.clear_cache')->middleware(['auth:admin', 'admin.auth']);
 Route::get('/admin/user-activity', [AdminController::class, 'getUserActivity'])->name('admin.user_activity')->middleware(['auth:admin', 'admin.auth']);

@@ -2829,51 +2829,46 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
     }
 
     function calculateSuitabilityScore(employee, targetRole, requirements) {
-      // Role-specific suitability calculation using competency matching
-      if (!employee.competencyProfiles || employee.competencyProfiles.length === 0) {
-        return 15; // Baseline score for employees without competency data
-      }
+      // Improved suitability calculation:
+      // Use the more accurate PHP-like algorithm as primary source (calculateAccurateSuitability)
+      // and blend a small portion of role-specific competency match to keep role context.
+      // This keeps suitability close to succession planning values and avoids inflated scores.
 
-      const roleWeights = requirements.weight || {};
-      const requiredCompetencies = requirements.required || [];
-      const preferredCompetencies = requirements.preferred || [];
+      // If no competency profiles present, defer to the accurate calculation (it handles baselines)
+      const accurate = calculateAccurateSuitability(employee, targetRole);
 
-      let totalScore = 0;
-      let totalWeight = 0;
+      // Compute a light role-specific score (only if competency profiles exist)
+      let roleSpecificScore = 0;
+      if (employee.competencyProfiles && employee.competencyProfiles.length > 0) {
+        const roleWeights = requirements.weight || {};
+        let totalScore = 0;
+        let totalWeight = 0;
 
-      // Calculate role-specific competency match scores
-      Object.keys(roleWeights).forEach(competencyType => {
-        const weight = roleWeights[competencyType];
-        const matchingProfiles = employee.competencyProfiles.filter(profile => {
-          const competencyName = (profile.competency?.competency_name || '').toLowerCase();
-          const category = (profile.competency?.category || '').toLowerCase();
-          const searchTerm = competencyType.replace('_', ' ').toLowerCase();
+        Object.keys(roleWeights).forEach(competencyType => {
+          const weight = roleWeights[competencyType];
+          const matchingProfiles = employee.competencyProfiles.filter(profile => {
+            const competencyName = (profile.competency?.competency_name || '').toLowerCase();
+            const category = (profile.competency?.category || '').toLowerCase();
+            const searchTerm = competencyType.replace('_', ' ').toLowerCase();
+            return competencyName.includes(searchTerm) || category.includes(searchTerm);
+          });
 
-          return competencyName.includes(searchTerm) || category.includes(searchTerm);
+          if (matchingProfiles.length > 0) {
+            const avgProficiency = matchingProfiles.reduce((sum, p) => sum + (p.proficiency_level || 0), 0) / matchingProfiles.length;
+            const competencyScore = (avgProficiency / 5) * 100;
+            totalScore += competencyScore * (weight / 100);
+          } else {
+            // Conservative default for missing competency: low contribution
+            totalScore += 10 * (weight / 100);
+          }
+          totalWeight += weight;
         });
 
-        if (matchingProfiles.length > 0) {
-          const avgProficiency = matchingProfiles.reduce((sum, p) => sum + p.proficiency_level, 0) / matchingProfiles.length;
-          const competencyScore = (avgProficiency / 5) * 100;
-          totalScore += competencyScore * (weight / 100);
-        } else {
-          // Penalty for missing required competencies
-          if (requiredCompetencies.some(req => req.toLowerCase().includes(competencyType.replace('_', ' ')))) {
-            totalScore += 10 * (weight / 100); // Low score for missing required competency
-          } else {
-            totalScore += 30 * (weight / 100); // Moderate score for missing preferred competency
-          }
-        }
-        totalWeight += weight;
-      });
+        roleSpecificScore = totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0;
+      }
 
-      // Normalize score based on total weights
-      const roleSpecificScore = totalWeight > 0 ? (totalScore / totalWeight) * 100 : 0;
-
-      // Combine with general readiness score (70% role-specific, 30% general readiness)
-      const generalReadiness = calculateGeneralReadiness(employee);
-      const finalScore = Math.round((roleSpecificScore * 0.7) + (generalReadiness * 0.3));
-
+      // Blend: favor accurate algorithm (80%) and include a small role-specific influence (20%)
+      const finalScore = Math.round((accurate * 0.8) + (roleSpecificScore * 0.2));
       return Math.min(100, Math.max(0, finalScore));
     }
 
@@ -3008,6 +3003,68 @@ ${data.milestones.map(milestone => `${milestone.milestone} - ${milestone.targetD
       }
 
       // Ensure minimum score for active employees
+      // Incorporate role-specific matching to better differentiate candidates
+      try {
+        const roleKey = (targetRole || '').toLowerCase();
+        let roleDef = roleRequirements[roleKey] || null;
+        if (!roleDef) {
+          // try case-insensitive key match
+          Object.keys(roleRequirements).forEach(k => {
+            if (k.toLowerCase() === roleKey) roleDef = roleRequirements[k];
+          });
+        }
+
+        if (roleDef) {
+          const required = roleDef.required || [];
+          const preferred = roleDef.preferred || [];
+
+          // Count required matches and compute proficiency for matched competencies
+          let requiredMatched = 0;
+          let requiredProfSum = 0;
+
+          required.forEach(req => {
+            const lowerReq = req.toLowerCase();
+            const matches = (employee.competencyProfiles || []).filter(p => {
+              const name = (p.competency?.competency_name || '').toLowerCase();
+              const cat = (p.competency?.category || '').toLowerCase();
+              return name.includes(lowerReq) || cat.includes(lowerReq);
+            });
+            if (matches.length > 0) {
+              requiredMatched += 1;
+              requiredProfSum += matches.reduce((s, m) => s + (m.proficiency_level || 0), 0) / matches.length;
+            }
+          });
+
+          const requiredScore = required.length > 0 ? (requiredMatched / required.length) * 100 : 100;
+          const avgRequiredProf = requiredMatched > 0 ? (requiredProfSum / requiredMatched) : 0;
+
+          // Preferred matches add small boost
+          let preferredMatched = 0;
+          (preferred || []).forEach(pref => {
+            const lowerPref = pref.toLowerCase();
+            const found = (employee.competencyProfiles || []).some(p => {
+              const name = (p.competency?.competency_name || '').toLowerCase();
+              const cat = (p.competency?.category || '').toLowerCase();
+              return name.includes(lowerPref) || cat.includes(lowerPref);
+            });
+            if (found) preferredMatched += 1;
+          });
+          const preferredScore = preferred.length > 0 ? (preferredMatched / preferred.length) * 100 : 50;
+
+          // Combine into role match score (weights: required 75%, preferred 25%)
+          // Apply a proficiency-based factor so matches with higher proficiency score higher
+          const baseRoleMatch = Math.round((requiredScore * 0.75) + (preferredScore * 0.25));
+          const profFactor = avgRequiredProf > 0 ? (0.6 + 0.4 * (avgRequiredProf / 5)) : 0.6;
+          const roleMatchScore = Math.round(baseRoleMatch * profFactor);
+
+          // Blend readiness with role match: readiness 60%, role match 40%
+          const blended = Math.round((readinessScore * 0.6) + (roleMatchScore * 0.4));
+          return Math.min(100, Math.max(0, blended));
+        }
+      } catch (e) {
+        // ignore and fall back
+      }
+
       return Math.max(readinessScore, 5);
     }
 

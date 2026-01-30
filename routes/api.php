@@ -9,6 +9,8 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
+Route::get('/leave-applications', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'index']);
+
 // API Routes for Leave Management Integration
 Route::prefix('v1/leave')->group(function () {
     // Submit leave request via API

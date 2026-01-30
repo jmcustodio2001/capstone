@@ -1657,12 +1657,28 @@
         method: 'GET',
         headers: {
           'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
           'X-CSRF-TOKEN': csrfToken
-        }
+        },
+        credentials: 'same-origin'
       })
-      .then(response => response.json())
+      .then(response => {
+        if (response.status === 401) {
+          contentDiv.innerHTML =
+            '<div class="text-center py-4">' +
+              '<i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>' +
+              '<h6 class="text-muted mt-2">Unable to Load Announcement</h6>' +
+              '<p class="text-muted small mb-0">Unauthenticated. Please log in and try again.</p>' +
+            '</div>';
+          return Promise.reject(new Error('Unauthenticated'));
+        }
+        if (!response.ok) {
+          return response.text().then(txt => { throw new Error(txt || 'Failed to load announcement'); });
+        }
+        return response.json();
+      })
       .then(data => {
-        if (data.success && data.announcement) {
+        if (data && data.success && data.announcement) {
           const announcement = data.announcement;
           const priority = announcement.priority || 'normal';
 
@@ -1727,11 +1743,15 @@
             '<div class="text-center py-4">' +
               '<i class="bi bi-exclamation-triangle text-warning" style="font-size: 3rem;"></i>' +
               '<h6 class="text-muted mt-2">Unable to Load Announcement</h6>' +
-              '<p class="text-muted small mb-0">' + (data.message || 'The announcement details could not be loaded at this time.') + '</p>' +
+              '<p class="text-muted small mb-0">' + (data && data.message ? data.message : 'The announcement details could not be loaded at this time.') + '</p>' +
             '</div>';
         }
       })
       .catch(error => {
+        if (error.message === 'Unauthenticated') {
+          // already handled above
+          return;
+        }
         console.error('Error fetching announcement:', error);
         contentDiv.innerHTML =
           '<div class="text-center py-4">' +
@@ -1780,7 +1800,7 @@
 
             // Filter only approved rewards
             const approvedRewards = rewards.filter(r => (r.status || 'approved').toLowerCase() === 'approved');
-            
+
             // Update badge count
             countBadge.textContent = approvedRewards.length + ' Earned';
 

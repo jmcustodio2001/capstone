@@ -17,6 +17,10 @@ class LeaveApplicationApiController extends Controller
     /**
      * Submit a new leave request via API
      */
+    public function index(){
+        return response()->json(LeaveApplication::all());
+    }
+
     public function submitLeaveRequest(Request $request)
     {
         try {
@@ -60,7 +64,7 @@ class LeaveApplicationApiController extends Controller
             // Check leave balance
             $leaveBalances = $this->calculateLeaveBalances($employee->employee_id);
             $requestedType = $request->leave_type;
-            
+
             if ($request->leave_days > $leaveBalances[$requestedType]['available']) {
                 return response()->json([
                     'success' => false,
@@ -101,7 +105,7 @@ class LeaveApplicationApiController extends Controller
             // Send to external HR3 system
             $externalService = new ExternalLeaveApiService();
             $hr3Result = $externalService->sendLeaveRequest($leaveApplication, $employee);
-            
+
             // Log HR3 integration result
             if ($hr3Result['success']) {
                 Log::info('Leave request successfully sent to HR3', [
@@ -139,7 +143,7 @@ class LeaveApplicationApiController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Leave application submitted successfully' . 
+                'message' => 'Leave application submitted successfully' .
                     ($hr3Result['success'] ? ' and sent to HR3 system' : ' (HR3 integration failed)'),
                 'data' => $responseData
             ], 201);
@@ -202,7 +206,7 @@ class LeaveApplicationApiController extends Controller
                     'leave_id' => $leaveApplication->leave_id,
                     'application_id' => $leaveApplication->id,
                     'employee_id' => $leaveApplication->employee_id,
-                    'employee_name' => $leaveApplication->employee ? 
+                    'employee_name' => $leaveApplication->employee ?
                         $leaveApplication->employee->first_name . ' ' . $leaveApplication->employee->last_name : 'N/A',
                     'leave_type' => $leaveApplication->leave_type,
                     'days_requested' => $leaveApplication->days_requested ?? $leaveApplication->leave_days,
@@ -212,7 +216,7 @@ class LeaveApplicationApiController extends Controller
                     'status' => $leaveApplication->status,
                     'submitted_at' => $leaveApplication->created_at->toISOString(),
                     'approved_by' => $leaveApplication->approved_by,
-                    'approved_date' => $leaveApplication->approved_date ? 
+                    'approved_date' => $leaveApplication->approved_date ?
                         Carbon::parse($leaveApplication->approved_date)->toISOString() : null,
                     'remarks' => $leaveApplication->remarks
                 ]
@@ -279,12 +283,12 @@ class LeaveApplicationApiController extends Controller
             // If approving, check if employee still has sufficient balance
             if ($request->status === 'Approved') {
                 $leaveBalances = $this->calculateLeaveBalances(
-                    $leaveApplication->employee_id, 
+                    $leaveApplication->employee_id,
                     $leaveApplication->id
                 );
                 $requestedType = $leaveApplication->leave_type;
                 $requestedDays = $leaveApplication->days_requested ?? $leaveApplication->leave_days;
-                
+
                 if ($requestedDays > $leaveBalances[$requestedType]['available']) {
                     return response()->json([
                         'success' => false,
@@ -309,7 +313,7 @@ class LeaveApplicationApiController extends Controller
             // Send status update to HR3 system
             $externalService = new ExternalLeaveApiService();
             $hr3Result = $externalService->sendStatusUpdate($leaveApplication, $oldStatus, $request->status);
-            
+
             // Log HR3 status update result
             if ($hr3Result['success']) {
                 Log::info('Status update successfully sent to HR3', [
@@ -339,7 +343,7 @@ class LeaveApplicationApiController extends Controller
             if ($request->status === 'Approved') {
                 $leaveBalances = $this->calculateLeaveBalances($leaveApplication->employee_id);
                 $newBalance = $leaveBalances[$leaveApplication->leave_type]['available'];
-                
+
                 // Trigger webhook notification if configured
                 $this->triggerWebhookNotification($leaveApplication, $request->status);
             }
@@ -360,7 +364,7 @@ class LeaveApplicationApiController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Leave application {$request->status} successfully" . 
+                'message' => "Leave application {$request->status} successfully" .
                     ($hr3Result['success'] ? ' and status sent to HR3 system' : ' (HR3 status update failed)'),
                 'data' => $responseData
             ]);
@@ -489,7 +493,7 @@ class LeaveApplicationApiController extends Controller
                     'status' => $leave->status,
                     'submitted_at' => $leave->created_at->toISOString(),
                     'approved_by' => $leave->approved_by,
-                    'approved_date' => $leave->approved_date ? 
+                    'approved_date' => $leave->approved_date ?
                         Carbon::parse($leave->approved_date)->toISOString() : null,
                     'remarks' => $leave->remarks
                 ];
@@ -529,7 +533,7 @@ class LeaveApplicationApiController extends Controller
         ];
 
         $balances = [];
-        
+
         // Get current year for annual reset functionality
         $currentYear = Carbon::now()->year;
 

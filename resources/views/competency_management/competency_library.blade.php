@@ -437,6 +437,10 @@
         <h4 class="fw-bold mb-0">Competency List</h4>
       </div>
       <div class="card-body p-0">
+        @php
+          // Track displayed competency names (normalized) to avoid duplicates in the table
+          $displayedCompetencyKeys = [];
+        @endphp
         @forelse($competencies as $index => $comp)
           @if($loop->first)
             <div class="table-responsive">
@@ -455,8 +459,53 @@
           @endif
 
           @php
-            // Detect if this competency is a 'skill' entry (case-insensitive, partial match)
-            $isSkill = Str::contains(Str::lower($comp->category ?? ''), 'skill');
+            // Hide competencies that are "skills" coming from the external API to avoid duplication.
+            // We check both category and competency name for the term 'skill', and attempt to detect
+            // whether the record came from an API using common fields (`source`, `origin`, `is_api`, `from_api`, `external`).
+            $category = data_get($comp, 'category', '');
+            $name = data_get($comp, 'competency_name', '');
+            $source = data_get($comp, 'source', data_get($comp, 'origin', ''));
+
+            $isSkillCategory = is_string($category) && Str::contains(Str::lower($category ?? ''), 'skill');
+            $isSkillName = is_string($name) && Str::contains(Str::lower($name ?? ''), 'skill');
+
+            $isFromApi = false;
+            if (is_string($source) && Str::contains(Str::lower($source), 'api')) {
+              $isFromApi = true;
+            }
+            if (data_get($comp, 'is_api') === true || data_get($comp, 'from_api') === true || data_get($comp, 'external') === true) {
+              $isFromApi = true;
+            }
+
+            // Also detect API-created entries via description patterns (example: "Auto-created from employee API skills")
+            $description = data_get($comp, 'description', '');
+            $descLower = is_string($description) ? Str::lower($description) : '';
+            if ($descLower) {
+              if (Str::contains($descLower, 'auto-created') || Str::contains($descLower, 'auto created') || Str::contains($descLower, 'employee api') || (Str::contains($descLower, 'employee') && Str::contains($descLower, 'api')) || Str::contains($descLower, 'api skills')) {
+                $isFromApi = true;
+              }
+            }
+
+            // Only treat as API-sourced skill when both conditions meet (is a skill AND is from API)
+            $isSkill = ($isSkillCategory || $isSkillName) && $isFromApi;
+
+            // Normalized uniqueness key (use id when available, otherwise normalized competency name)
+            $uniqueKey = null;
+            if (data_get($comp, 'id')) {
+              $uniqueKey = 'id:' . data_get($comp, 'id');
+            } else {
+              $uniqueKey = 'name:' . Str::lower(trim($name ?? ''));
+            }
+
+            // If we've already displayed this competency, skip to avoid duplicates
+            if ($uniqueKey && in_array($uniqueKey, $displayedCompetencyKeys)) {
+              continue;
+            }
+
+            // Mark as displayed
+            if ($uniqueKey) {
+              $displayedCompetencyKeys[] = $uniqueKey;
+            }
           @endphp
 
           @if(!$isSkill)
@@ -470,7 +519,7 @@
             @endphp
             <tr class="competency-row">
               <td class="text-center">
-                <span class="row-number">{{ $competencies->firstItem() + $loop->index }}</span>
+                <span class="row-number">{{ $loop->iteration }}</span>
               </td>
               <td>
                 <div class="competency-name">{{ $comp->competency_name }}</div>

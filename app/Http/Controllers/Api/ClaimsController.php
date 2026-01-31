@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 class ClaimsController extends Controller
 {
     public function c(){
-        return ClaimReimbursement::all();
+        return ClaimReimbursement::all(); // claims
     }
 
     public function updateStatus(Request $request, $id)

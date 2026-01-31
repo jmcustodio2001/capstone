@@ -25,7 +25,7 @@ class AssessmentController extends Controller
                 'success' => true,
                 'data' => $assessmentQuestions
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('Assessment API Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,

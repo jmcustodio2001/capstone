@@ -93,4 +93,7 @@ Route::get('/positions', [App\Http\Controllers\Api\PositionApiController::class,
 Route::get('/positions/{id}', [App\Http\Controllers\Api\PositionApiController::class, 'show'])
     ->name('api.positions.show');
 
-Route::get('/assessment', [App\Http\Controllers\Api\AssessmentController::class, 'index']);
+// API Routes for Assessment/Questions
+Route::get('/assessment', [App\Http\Controllers\Api\AssessmentController::class, 'index'])
+    ->name('api.assessment.index');
+

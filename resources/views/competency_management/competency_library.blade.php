@@ -579,6 +579,53 @@
         @endforelse
       </div>
     </div>
+    <!-- Questions List Section -->
+    <div class="card shadow-sm border-0 mt-4">
+      <div class="card-header d-flex justify-content-between align-items-center bg-white py-3">
+        <h4 class="fw-bold mb-0 text-primary">Interview Assesment List</h4>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th class="fw-bold" style="width: 5%;">ID</th>
+                <th class="fw-bold" style="width: 15%;">ROLE</th>
+                <th class="fw-bold" style="width: 10%;">TYPE</th>
+                <th class="fw-bold" style="width: 50%;">CONTENT</th>
+                <th class="fw-bold" style="width: 20%;">CREATED AT</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse($questions as $question)
+                <tr>
+                  <td class="fw-bold text-secondary ps-3">{{ $question->id }}</td>
+                  <td class="fw-bold text-dark">{{ $question->role }}</td>
+                  <td>
+                    <span class="badge bg-info text-white">{{ ucfirst($question->type) }}</span>
+                  </td>
+                  <td>
+                    <div class="text-dark">{{ $question->content }}</div>
+                  </td>
+                  <td class="text-muted small">
+                    {{ $question->created_at->format('M d, Y h:i A') }}
+                  </td>
+                </tr>
+              @empty
+                <tr>
+                  <td colspan="5" class="text-center py-4">
+                    <div class="text-muted">
+                      <i class="bi bi-question-circle display-4 d-block mb-2"></i>
+                      No questions found in the library.
+                    </div>
+                  </td>
+                </tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- Add Competency Modal -->

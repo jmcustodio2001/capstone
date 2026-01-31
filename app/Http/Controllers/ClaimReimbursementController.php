@@ -25,7 +25,7 @@ class ClaimReimbursementController extends Controller
         $this->ensureTableExists();
 
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         if (!$employee) {
             return redirect()->route('employee.dashboard')->with('error', 'Employee profile not found.');
         }
@@ -61,7 +61,7 @@ class ClaimReimbursementController extends Controller
                     $table->string('claim_id', 20)->unique();
                     $table->enum('claim_type', [
                         'Travel Expense',
-                        'Meal Allowance', 
+                        'Meal Allowance',
                         'Transportation',
                         'Accommodation',
                         'Medical Expense',
@@ -111,20 +111,20 @@ class ClaimReimbursementController extends Controller
         Log::info("Request headers: " . json_encode($request->headers->all()));
         Log::info("Is AJAX request: " . ($request->ajax() ? 'Yes' : 'No'));
         Log::info("Expects JSON: " . ($request->expectsJson() ? 'Yes' : 'No'));
-        
+
         // Ensure table exists before proceeding
         $this->ensureTableExists();
 
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         if (!$employee) {
             Log::error("Employee not found for auth ID: " . Auth::guard('employee')->id());
-            
+
             // Always return JSON for AJAX requests
             if ($request->ajax() || $request->expectsJson() || $request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => 'Employee profile not found.'], 404);
             }
-            
+
             return redirect()->back()->with('error', 'Employee profile not found.');
         }
 
@@ -138,7 +138,7 @@ class ClaimReimbursementController extends Controller
                 'claim_date' => 'required|date|before_or_equal:today',
                 'receipt_file' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120' // 5MB max
             ]);
-            
+
             Log::info("Validation passed");
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error("Validation failed: " . json_encode($e->errors()));
@@ -146,7 +146,7 @@ class ClaimReimbursementController extends Controller
             foreach ($e->errors() as $field => $messages) {
                 $errorMessages = array_merge($errorMessages, $messages);
             }
-            
+
             // Always return JSON for AJAX requests
             if ($request->ajax() || $request->expectsJson() || $request->wantsJson()) {
                 return response()->json([
@@ -156,7 +156,7 @@ class ClaimReimbursementController extends Controller
                     'status' => 'validation_error'
                 ], 422);
             }
-            
+
             return redirect()->back()->withErrors($e->errors())->withInput();
         }
 
@@ -221,21 +221,21 @@ class ClaimReimbursementController extends Controller
                     'timestamp' => now()->format('Y-m-d H:i:s')
                 ]
             ];
-            
+
             Log::info("Returning success response: " . json_encode($response));
-            
+
             // Always return JSON for AJAX requests
             if ($request->ajax() || $request->expectsJson() || $request->wantsJson()) {
                 return response()->json($response, 200);
             }
-            
+
             return redirect()->back()->with('success', $response['message']);
 
         } catch (\Exception $e) {
             Log::error('Error creating claim reimbursement: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
             Log::error('Request data at error: ' . json_encode($request->all()));
-            
+
             // Check if it's a database connection issue
             $errorMessage = 'Error submitting claim. Please try again.';
             if (strpos($e->getMessage(), 'Connection refused') !== false) {
@@ -245,9 +245,9 @@ class ClaimReimbursementController extends Controller
             } elseif (strpos($e->getMessage(), 'claim_id') !== false) {
                 $errorMessage = 'Error generating claim ID. Please try again.';
             }
-            
+
             $errorResponse = [
-                'success' => false, 
+                'success' => false,
                 'message' => $errorMessage,
                 'error' => app()->environment('local') ? $e->getMessage() : 'Internal server error',
                 'status' => 'error',
@@ -257,14 +257,14 @@ class ClaimReimbursementController extends Controller
                     'employee_id' => $employee->employee_id ?? 'unknown'
                 ] : null
             ];
-            
+
             Log::error("Returning error response: " . json_encode($errorResponse));
-            
+
             // Always return JSON for AJAX requests
             if ($request->ajax() || $request->expectsJson() || $request->wantsJson()) {
                 return response()->json($errorResponse, 500);
             }
-            
+
             return redirect()->back()->with('error', $errorResponse['message']);
         }
     }
@@ -275,7 +275,7 @@ class ClaimReimbursementController extends Controller
     public function show($id)
     {
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         $claim = ClaimReimbursement::where('id', $id)
             ->where('employee_id', $employee->employee_id)
             ->with(['employee', 'approver'])
@@ -316,7 +316,7 @@ class ClaimReimbursementController extends Controller
     public function update(Request $request, $id)
     {
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         $claim = ClaimReimbursement::where('id', $id)
             ->where('employee_id', $employee->employee_id)
             ->first();
@@ -382,16 +382,16 @@ class ClaimReimbursementController extends Controller
     {
         // Enhanced logging for debugging
         Log::info("Cancel claim request received for ID: {$id}");
-        
+
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         if (!$employee) {
             Log::error("Employee not found for auth ID: " . Auth::guard('employee')->id());
             return response()->json(['success' => false, 'message' => 'Employee profile not found.'], 404);
         }
-        
+
         Log::info("Employee found: {$employee->employee_id}");
-        
+
         $claim = ClaimReimbursement::where('id', $id)
             ->where('employee_id', $employee->employee_id)
             ->first();
@@ -410,7 +410,7 @@ class ClaimReimbursementController extends Controller
 
         try {
             Log::info("Attempting to cancel claim: {$claim->claim_id}");
-            
+
             $claim->update([
                 'status' => 'Rejected',
                 'rejected_reason' => 'Cancelled by employee',
@@ -435,24 +435,24 @@ class ClaimReimbursementController extends Controller
                 'claim_id' => $claim->claim_id,
                 'status' => 'success'
             ];
-            
+
             Log::info("Returning success response: " . json_encode($response));
-            
+
             return response()->json($response, 200);
 
         } catch (\Exception $e) {
             Log::error('Error cancelling claim reimbursement: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+
             $errorResponse = [
-                'success' => false, 
+                'success' => false,
                 'message' => 'Error cancelling claim. Please try again.',
                 'error' => $e->getMessage(),
                 'status' => 'error'
             ];
-            
+
             Log::error("Returning error response: " . json_encode($errorResponse));
-            
+
             return response()->json($errorResponse, 500);
         }
     }
@@ -463,7 +463,7 @@ class ClaimReimbursementController extends Controller
     public function downloadReceipt($id)
     {
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         $claim = ClaimReimbursement::where('id', $id)
             ->where('employee_id', $employee->employee_id)
             ->first();
@@ -473,7 +473,7 @@ class ClaimReimbursementController extends Controller
         }
 
         $filePath = storage_path('app/public/' . $claim->receipt_file);
-        
+
         if (!file_exists($filePath)) {
             return redirect()->back()->with('error', 'Receipt file not found on server.');
         }
@@ -487,7 +487,7 @@ class ClaimReimbursementController extends Controller
     public function getStatistics()
     {
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         if (!$employee) {
             return response()->json(['success' => false, 'message' => 'Employee not found.'], 404);
         }
@@ -527,10 +527,10 @@ class ClaimReimbursementController extends Controller
         Log::info("Auth user: " . (Auth::guard('employee')->user() ? Auth::guard('employee')->user()->employee_id : 'None'));
 
         $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
-        
+
         if (!$employee) {
             return response()->json([
-                'success' => false, 
+                'success' => false,
                 'message' => 'Employee not found',
                 'debug' => [
                     'auth_id' => Auth::guard('employee')->id(),
@@ -554,5 +554,30 @@ class ClaimReimbursementController extends Controller
                 'timestamp' => now()->format('Y-m-d H:i:s')
             ]
         ]);
+    }
+    public function fetchGivenRewards() {
+        try {
+            $response = Http::get('https://hr1.jetlougetravels-ph.com/api/give-rewards');
+
+            if(!$response->successful()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to fetch rewards data'
+                ], 500);
+            }
+
+            $data = $response->json();
+
+            return response()->json([
+                'success' => true,
+                'data' => $data
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching rewards: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }

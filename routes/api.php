@@ -4,12 +4,14 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/claims', [App\Http\Controllers\Api\ClaimsController::class, 'c']);
+Route::patch('/claims/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'updateStatus']);
 
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
 Route::get('/leave-applications', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'index']);
+Route::patch('/leave-applications/{id}', [App\Http\Controllers\Api\LeaveApplicationApiController::class, 'updateStatus']);
 
 // API Routes for Leave Management Integration
 Route::prefix('v1/leave')->group(function () {
@@ -83,3 +85,11 @@ Route::prefix('v1/claims')->group(function () {
     Route::get('/summary/{employeeId}', [App\Http\Controllers\Api\ClaimReimbursementApiController::class, 'getClaimSummary'])
         ->name('api.claims.summary');
 });
+
+// API Routes for Organizational Positions (Competency Library View)
+Route::get('/positions', [App\Http\Controllers\Api\PositionApiController::class, 'index'])
+    ->name('api.positions.index');
+Route::get('/positions/{id}', [App\Http\Controllers\Api\PositionApiController::class, 'show'])
+    ->name('api.positions.show');
+
+Route::get('/assessment', [App\Http\Controllers\Api\AssessmentController::class, 'index']);

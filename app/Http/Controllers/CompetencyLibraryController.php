@@ -12,6 +12,7 @@ use App\Models\DestinationKnowledgeTraining;
 use App\Models\TrainingNotification;
 use App\Models\CourseManagementNotification;
 use App\Models\CourseManagement;
+use App\Models\AssessmentQuestion;
 use Illuminate\Support\Facades\Auth;
 class CompetencyLibraryController extends Controller
 {
@@ -33,12 +34,14 @@ class CompetencyLibraryController extends Controller
         $employees = Employee::all();
         $gaps = CompetencyGap::with(['employee', 'competency'])->get();
         $positions = \App\Models\OrganizationalPosition::all();
+        $questions = AssessmentQuestion::all();
 
         return view('competency_management.competency_library', compact(
             'competencies',
             'employees',
             'gaps',
-            'positions'
+            'positions',
+            'questions'
         ));
     }
 

@@ -920,6 +920,7 @@ if (typeof window.trans === 'undefined') {
                 <tr>
                   <th>Employee</th>
                   <th>Date & Time</th>
+                  <th>Position</th>
                   <th>Location</th>
                   <th>Facilitator</th>
                   <th>Status</th>
@@ -975,6 +976,7 @@ if (typeof window.trans === 'undefined') {
                             <span class="text-muted">N/A</span>
                           @endif
                       </td>
+                      <td>{{ $orientation['position'] ?? 'N/A' }}</td>
                       <td>{{ $orientation['location'] ?? 'N/A' }}</td>
                       <td>{{ $orientation['facilitator'] ?? 'N/A' }}</td>
                       <td>

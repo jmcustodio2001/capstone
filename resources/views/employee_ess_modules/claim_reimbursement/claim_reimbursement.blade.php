@@ -36,6 +36,14 @@
       transform: translateY(-5px);
     }
 
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .spin-animation {
+      animation: spin 1s linear infinite;
+    }
+
     .card-header-custom {
       background-color: #fff;
       border-bottom: 1px solid #eaeaea;
@@ -134,6 +142,7 @@
     .claim-type-office-supplies { border-color: #ffbe0b; }
     .claim-type-training-materials { border-color: #720026; }
     .claim-type-communication-expense { border-color: #b5179e; }
+    .claim-type-benefits { border-color: #17b546; }
     .claim-type-other { border-color: #adb5bd; }
     .action-btn-group .btn {
       min-width: 100px;
@@ -527,7 +536,6 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
   </div>
-</main>
 
 <!-- Fallback New Claim Modal (kept for compatibility) -->
 <div class="modal fade" id="newClaimModal" tabindex="-1">
@@ -556,6 +564,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <option value="Office Supplies">Office Supplies</option>
                 <option value="Training Materials">Training Materials</option>
                 <option value="Communication Expense">Communication Expense</option>
+                <option value="Benefits">Benefits</option>
                 <option value="Other">Other</option>
               </select>
             </div>
@@ -594,6 +603,74 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 </div>
+
+<!-- Rewards & Recognition Cards Section -->
+<div class="simulation-card card mb-4">
+      <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0"><i class="bi bi-award me-2"></i>Rewards & Recognition</h5>
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-success" id="rewardsCountBadge">{{ isset($rewards) ? $rewards->where('status', 'approved')->count() : 0 }} Earned</span>
+          <button class="btn btn-sm btn-outline-primary" id="refreshRewardsBtn" onclick="fetchRewardsData()">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div id="rewardsContainer">
+          @if(isset($rewards) && $rewards->where('status', 'approved')->count() > 0)
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>Date Given</th>
+                    <th>Reward Name</th>
+                    <th>Type</th>
+                    <th>Benefits</th>
+                    <th>Given By</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @foreach($rewards as $reward)
+                    @if($reward->status == 'approved')
+                      <tr>
+                        <td>
+                          <span class="fw-semibold">{{ \Carbon\Carbon::parse($reward->given_date)->format('M d, Y') }}</span>
+                        </td>
+                        <td>
+                          @php
+                            $rName = $reward->reward->name ?? $reward->name ?? 'Award';
+                            $rDesc = $reward->reward->description ?? '';
+                          @endphp
+                          <div class="fw-bold text-primary">{{ $rName }}</div>
+                          @if($rDesc)
+                            <small class="text-muted d-block" style="max-width: 250px;">{{ Str::limit($rDesc, 60) }}</small>
+                          @endif
+                        </td>
+                        <td>
+                          <span class="badge bg-outline-secondary border text-dark">{{ $reward->reward->type ?? 'N/A' }}</span>
+                        </td>
+                        <td>{{ $reward->reward->benefits ?? $reward->benefits ?? 'Certificate' }}</td>
+                        <td>
+                          <span class="badge bg-light text-dark border">
+                            <i class="bi bi-person me-1"></i>{{ ucfirst($reward->given_by ?? 'System') }}
+                          </span>
+                        </td>
+                      </tr>
+                    @endif
+                  @endforeach
+                </tbody>
+              </table>
+            </div>
+          @else
+            <div class="text-center py-5">
+              <i class="bi bi-award" style="font-size: 3rem; color: #dee2e6;"></i>
+              <p class="text-muted mt-3 mb-0">No rewards earned yet. Keep up the great work!</p>
+            </div>
+          @endif
+        </div>
+  </div>
+</div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -709,6 +786,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Show New Claim Form
   async function showNewClaimForm() {
+    const claimOptions = CLAIM_TYPES.map(type => `<option value="${type}">${type}</option>`).join('');
+
     const { value: formValues } = await Swal.fire({
       title: 'Submit New Claim',
       html: `
@@ -718,15 +797,7 @@ document.addEventListener('DOMContentLoaded', function() {
               <label for="swal_claim_type" class="form-label">Claim Type <span class="text-danger">*</span></label>
               <select class="form-select" id="swal_claim_type" name="claim_type" required>
                 <option value="">Select claim type</option>
-                <option value="Travel Expense">Travel Expense</option>
-                <option value="Meal Allowance">Meal Allowance</option>
-                <option value="Transportation">Transportation</option>
-                <option value="Accommodation">Accommodation</option>
-                <option value="Medical Expense">Medical Expense</option>
-                <option value="Office Supplies">Office Supplies</option>
-                <option value="Training Materials">Training Materials</option>
-                <option value="Communication Expense">Communication Expense</option>
-                <option value="Other">Other</option>
+                ${claimOptions}
               </select>
             </div>
             <div class="col-md-6 mb-3">
@@ -767,7 +838,7 @@ document.addEventListener('DOMContentLoaded', function() {
       preConfirm: () => {
         const form = document.getElementById('swalNewClaimForm');
         const formData = new FormData(form);
-        
+
         // Validate required fields
         if (!formData.get('claim_type')) {
           Swal.showValidationMessage('Please select a claim type');
@@ -785,7 +856,7 @@ document.addEventListener('DOMContentLoaded', function() {
           Swal.showValidationMessage('Please provide a detailed description (minimum 10 characters)');
           return false;
         }
-        
+
         // Validate file size if file is selected
         const fileInput = document.getElementById('swal_receipt_file');
         if (fileInput && fileInput.files[0]) {
@@ -796,7 +867,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return false;
           }
         }
-        
+
         return formData;
       },
       didOpen: () => {
@@ -817,7 +888,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (newClaimFormElement) {
     newClaimFormElement.addEventListener('submit', async function(e) {
       e.preventDefault();
-      
+
       // Store form data for later submission
       pendingFormData = new FormData(this);
       pendingFormElement = this;
@@ -912,7 +983,7 @@ document.addEventListener('DOMContentLoaded', function() {
           confirmButtonColor: '#dc3545',
           confirmButtonText: 'Try Again'
         });
-        
+
         // Retry password verification
         await verifyEmployeePasswordForClaim();
       }
@@ -958,7 +1029,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       let result;
       const contentType = response.headers.get('content-type');
-      
+
       try {
         if (contentType && contentType.includes('application/json')) {
           result = await response.json();
@@ -992,12 +1063,12 @@ document.addEventListener('DOMContentLoaded', function() {
       } else {
         let errorMessage = 'Error updating claim. Please try again.';
         let showValidationErrors = false;
-        
+
         // Check for validation errors first
         if (result && result.errors) {
           console.error('Validation errors:', result.errors);
           showValidationErrors = true;
-          
+
           // Display specific validation errors with user-friendly messages
           let validationErrors = [];
           for (const [field, messages] of Object.entries(result.errors)) {
@@ -1009,7 +1080,7 @@ document.addEventListener('DOMContentLoaded', function() {
               'claim_date': 'Claim date',
               'description': 'Description'
             };
-            
+
             const fieldName = friendlyFieldNames[field] || field;
             const friendlyMessages = messages.map(msg => {
               // Convert technical messages to user-friendly ones
@@ -1024,10 +1095,10 @@ document.addEventListener('DOMContentLoaded', function() {
               }
               return msg;
             });
-            
+
             validationErrors = validationErrors.concat(friendlyMessages);
           }
-          
+
           if (validationErrors.length > 0) {
             await Swal.fire({
               title: 'Validation Errors',
@@ -1038,7 +1109,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
           }
         }
-        
+
         // Show general error message only if no validation errors were shown
         if (!showValidationErrors) {
           if (result && result.message) {
@@ -1050,7 +1121,7 @@ document.addEventListener('DOMContentLoaded', function() {
           } else if (response.status === 500) {
             errorMessage = 'Server error occurred. Please try again later.';
           }
-          
+
           await Swal.fire({
             title: 'Update Failed',
             text: errorMessage,
@@ -1112,7 +1183,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       let result;
       const contentType = response.headers.get('content-type');
-      
+
       try {
         // Check if response is JSON
         if (contentType && contentType.includes('application/json')) {
@@ -1122,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', function() {
           // Handle non-JSON responses (like redirects or HTML)
           const textResponse = await response.text();
           console.log('Submit raw response:', textResponse);
-          
+
           // Check if it's a session expiry redirect
           if (textResponse.includes('login') || textResponse.includes('session') || response.status === 302) {
             await Swal.fire({
@@ -1135,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', function() {
             setTimeout(() => location.reload(), 500);
             return;
           }
-          
+
           // If response is OK but not JSON, assume success
           if (response.ok) {
             result = { success: true, message: 'Claim submitted successfully!' };
@@ -1147,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Submit JSON parse error:', parseError);
         const textResponse = await response.text();
         console.log('Submit raw response:', textResponse);
-        
+
         // Check for session expiry in text response
         if (textResponse.includes('login') || textResponse.includes('session')) {
           await Swal.fire({
@@ -1160,7 +1231,7 @@ document.addEventListener('DOMContentLoaded', function() {
           setTimeout(() => location.reload(), 500);
           return;
         }
-        
+
         throw new Error('Server returned invalid response format');
       }
 
@@ -1182,7 +1253,7 @@ document.addEventListener('DOMContentLoaded', function() {
             newClaimModal.hide();
           }
         }
-        
+
         const newClaimFormElement = document.getElementById('newClaimForm');
         if (newClaimFormElement) {
           newClaimFormElement.reset();
@@ -1194,12 +1265,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // Handle server-side errors
         let errorMessage = 'Error submitting claim. Please try again.';
         let showValidationErrors = false;
-        
+
         // Check for validation errors first
         if (result && result.errors) {
           console.error('Validation errors:', result.errors);
           showValidationErrors = true;
-          
+
           // Display specific validation errors with user-friendly messages
           let validationErrors = [];
           for (const [field, messages] of Object.entries(result.errors)) {
@@ -1211,7 +1282,7 @@ document.addEventListener('DOMContentLoaded', function() {
               'claim_date': 'Claim date',
               'description': 'Description'
             };
-            
+
             const fieldName = friendlyFieldNames[field] || field;
             const friendlyMessages = messages.map(msg => {
               // Convert technical messages to user-friendly ones
@@ -1226,10 +1297,10 @@ document.addEventListener('DOMContentLoaded', function() {
               }
               return msg;
             });
-            
+
             validationErrors = validationErrors.concat(friendlyMessages);
           }
-          
+
           if (validationErrors.length > 0) {
             await Swal.fire({
               title: 'Validation Errors',
@@ -1240,7 +1311,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
           }
         }
-        
+
         // Show general error message only if no validation errors were shown
         if (!showValidationErrors) {
           if (result && result.message) {
@@ -1252,7 +1323,7 @@ document.addEventListener('DOMContentLoaded', function() {
           } else if (response.status === 500) {
             errorMessage = 'Server error occurred. Please try again later.';
           }
-          
+
           await Swal.fire({
             title: 'Submission Failed',
             text: errorMessage,
@@ -1264,7 +1335,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     } catch (error) {
       console.error('Claim submission error:', error);
-      
+
       // Show appropriate error message
       await Swal.fire({
         title: 'Submission Error',
@@ -1278,7 +1349,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const verificationPassword = document.getElementById('verification_password');
       const passwordError = document.getElementById('passwordError');
       const confirmVerification = document.getElementById('confirmVerification');
-      
+
       if (verificationPassword) {
         verificationPassword.value = '';
         verificationPassword.classList.remove('is-invalid');
@@ -1320,7 +1391,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (result.success) {
         const claim = result.claim;
-        
+
         await Swal.fire({
           title: 'Claim Details',
           html: `
@@ -1425,14 +1496,113 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  // Fetch Rewards Data
+  async function fetchRewardsData() {
+    const btn = document.getElementById('refreshRewardsBtn');
+    const icon = btn.querySelector('i');
+    const container = document.getElementById('rewardsContainer');
+    const badge = document.getElementById('rewardsCountBadge');
+
+    // Add spinning animation
+    icon.classList.add('spin-animation');
+    btn.disabled = true;
+
+    try {
+      const response = await fetch('/employee/fetch-rewards', {
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        const rewards = result.data;
+        const approvedRewards = rewards.filter(r => r.status === 'approved');
+        const approvedCount = approvedRewards.length;
+
+        // Update Badge
+        badge.textContent = `${approvedCount} Earned`;
+
+        // Update Container
+        if (approvedCount > 0) {
+          let html = `
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>Date Given</th>
+                    <th>Reward Name</th>
+                    <th>Type</th>
+                    <th>Benefits</th>
+                    <th>Given By</th>
+                  </tr>
+                </thead>
+                <tbody>
+          `;
+
+          approvedRewards.forEach(reward => {
+            const date = new Date(reward.given_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+            const name = reward.reward ? reward.reward.name : (reward.name || 'Award');
+            const description = reward.reward ? reward.reward.description : '';
+            const type = reward.reward ? reward.reward.type : 'N/A';
+            const benefits = reward.reward ? reward.reward.benefits : (reward.benefits || 'Certificate');
+            const givenBy = (reward.given_by || 'System').charAt(0).toUpperCase() + (reward.given_by || 'System').slice(1);
+
+            html += `
+              <tr>
+                <td><span class="fw-semibold">${date}</span></td>
+                <td>
+                  <div class="fw-bold text-primary">${name}</div>
+                  ${description ? `<small class="text-muted d-block" style="max-width: 250px;">${description.substring(0, 60)}${description.length > 60 ? '...' : ''}</small>` : ''}
+                </td>
+                <td><span class="badge bg-outline-secondary border text-dark">${type}</span></td>
+                <td>${benefits}</td>
+                <td><span class="badge bg-light text-dark border"><i class="bi bi-person me-1"></i>${givenBy}</span></td>
+              </tr>
+            `;
+          });
+
+          html += `
+                </tbody>
+              </table>
+            </div>
+          `;
+          container.innerHTML = html;
+        } else {
+          container.innerHTML = `
+            <div class="text-center py-5">
+              <i class="bi bi-award" style="font-size: 3rem; color: #dee2e6;"></i>
+              <p class="text-muted mt-3 mb-0">No rewards earned yet. Keep up the great work!</p>
+            </div>
+          `;
+        }
+
+        showToast('Rewards data refreshed successfully!', 'success');
+      } else {
+        showToast('Failed to load rewards data.', 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching rewards:', error);
+      showToast('Error refreshing rewards data.', 'error');
+    } finally {
+      // Remove spinning animation
+      setTimeout(() => {
+        icon.classList.remove('spin-animation');
+        btn.disabled = false;
+      }, 500);
+    }
+  }
+
   // File size validation function
   function validateFileSize(input, maxSizeMB) {
     const file = input.files[0];
     const errorDiv = input.parentNode.querySelector('.invalid-feedback');
-    
+
     if (file) {
       const fileSizeMB = file.size / (1024 * 1024);
-      
+
       if (fileSizeMB > maxSizeMB) {
         input.classList.add('is-invalid');
         if (errorDiv) {
@@ -1472,7 +1642,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (result.success) {
         const claim = result.claim;
-        
+
         const { value: formValues } = await Swal.fire({
           title: 'Edit Claim',
           html: `
@@ -1492,7 +1662,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <option value="Medical Expense" ${claim.claim_type === 'Medical Expense' ? 'selected' : ''}>Medical Expense</option>
                     <option value="Office Supplies" ${claim.claim_type === 'Office Supplies' ? 'selected' : ''}>Office Supplies</option>
                     <option value="Training Materials" ${claim.claim_type === 'Training Materials' ? 'selected' : ''}>Training Materials</option>
-                    <option value="Communication Expense" ${claim.claim_type === 'Communication Expense' ? 'selected' : ''}>Communication Expense</option>
+                    .claim-type-communication-expense { border-color: #b5179e; }
                     <option value="Other" ${claim.claim_type === 'Other' ? 'selected' : ''}>Other</option>
                   </select>
                 </div>
@@ -1541,7 +1711,7 @@ document.addEventListener('DOMContentLoaded', function() {
           preConfirm: () => {
             const form = document.getElementById('swalEditClaimForm');
             const formData = new FormData(form);
-            
+
             // Validate required fields
             if (!formData.get('claim_type')) {
               Swal.showValidationMessage('Please select a claim type');
@@ -1559,7 +1729,7 @@ document.addEventListener('DOMContentLoaded', function() {
               Swal.showValidationMessage('Please provide a detailed description (minimum 10 characters)');
               return false;
             }
-            
+
             // Validate file size if file is selected
             const fileInput = document.getElementById('swal_edit_receipt_file');
             if (fileInput && fileInput.files[0]) {
@@ -1570,7 +1740,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
               }
             }
-            
+
             return formData;
           }
         });
@@ -1606,7 +1776,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (document.getElementById('editClaimForm')) {
     document.getElementById('editClaimForm').addEventListener('submit', async function(e) {
       e.preventDefault();
-      
+
       // Redirect to enhanced SweetAlert version
       await Swal.fire({
         title: 'Enhanced Form Available',
@@ -1675,7 +1845,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Check if response is JSON
       const contentType = response.headers.get('content-type');
       let result;
-      
+
       try {
         if (contentType && contentType.includes('application/json')) {
           result = await response.json();
@@ -1792,7 +1962,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const monthFilterEl = document.getElementById('month-filter');
     const yearFilterEl = document.getElementById('year-filter');
     const statusFilterEl = document.getElementById('status-filter');
-    
+
     const monthFilter = monthFilterEl ? monthFilterEl.value : '';
     const yearFilter = yearFilterEl ? yearFilterEl.value : '';
     const statusFilter = statusFilterEl ? statusFilterEl.value : '';

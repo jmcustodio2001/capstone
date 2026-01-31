@@ -21,6 +21,31 @@ class LeaveApplicationApiController extends Controller
         return response()->json(LeaveApplication::all());
     }
 
+    public function updateStatus(Request $request, $id)
+    {
+        $request->validate([
+            'status' => 'required|in:Pending,Approved,Rejected'
+        ]);
+
+        $leave = LeaveApplication::find($id);
+
+        if (!$leave) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Leave application not found'
+            ], 404);
+        }
+
+        $leave->status = $request->status;
+        $leave->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Status updated successfully',
+            'data' => $leave
+        ]);
+    }
+
     public function submitLeaveRequest(Request $request)
     {
         try {

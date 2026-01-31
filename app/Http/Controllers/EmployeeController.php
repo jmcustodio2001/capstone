@@ -304,7 +304,7 @@ class EmployeeController extends Controller
 
                             // Use ID from API if available, otherwise generate new
                             $newId = $apiEmployee['employee_id'] ?? $this->generateNextEmployeeId();
-                            
+
                             // Ensure the ID is set in the employee data
                             $apiEmployee['employee_id'] = $newId;
 
@@ -634,6 +634,13 @@ class EmployeeController extends Controller
 
                 if ($externalOtp['code'] === $request->otp_code) {
                     // OTP Correct!
+
+                    // Promote pending external data to active session data if present
+                    if ($request->session()->has('pending_external_employee_data')) {
+                        $request->session()->put('external_employee_data', $request->session()->get('pending_external_employee_data'));
+                        $request->session()->forget('pending_external_employee_data');
+                    }
+
                     $request->session()->forget(['external_otp', 'otp_employee_id']);
                     $request->session()->put('employee_id', $employeeId); // For middleware
 

@@ -16,13 +16,25 @@ class EmployeeDashboardController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:employee')->except(['viewEmployeeDashboard']);
+        $this->middleware('employee.auth')->except(['viewEmployeeDashboard']);
         $this->middleware('auth:admin')->only(['viewEmployeeDashboard']);
     }
 
     public function index()
     {
         $employee = Auth::guard('employee')->user();
+
+        // Handle external session-based employee
+        if (!$employee && session()->has('external_employee_data')) {
+            $data = session('external_employee_data');
+            $employee = new \App\Models\Employee();
+            $employee->forceFill($data);
+        }
+
+        if (!$employee) {
+            return redirect()->route('employee.login');
+        }
+
         $employeeId = $employee->employee_id;
 
         // Debug: Log the employee ID being used
@@ -363,7 +375,22 @@ class EmployeeDashboardController extends Controller
      */
     public function getDashboardCounts()
     {
-        $employeeId = Auth::guard('employee')->user()->employee_id;
+        $employeeId = null;
+        $employee = Auth::guard('employee')->user();
+
+        if ($employee) {
+            $employeeId = $employee->employee_id;
+        } elseif (session()->has('external_employee_data')) {
+            $data = session('external_employee_data');
+            $employeeId = $data['employee_id'] ?? null;
+        }
+
+        if (!$employeeId) {
+            return response()->json([
+                'success' => false, 
+                'message' => 'Unauthenticated'
+            ], 401);
+        }
 
         // Get fresh upcoming trainings count
         $upcomingTrainings = $this->getAccurateUpcomingTrainingsCount($employeeId);

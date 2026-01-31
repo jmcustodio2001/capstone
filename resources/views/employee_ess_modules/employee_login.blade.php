@@ -220,8 +220,8 @@
             <div class="form-check">
               <input type="checkbox" class="form-check-input" id="privacyAgreement" name="privacy_agreement" value="1" required>
               <label class="form-check-label" for="privacyAgreement">
-                I agree to the 
-                <a href="#" onclick="showPrivacyPolicy()" class="text-decoration-none">Privacy Policy</a> and 
+                I agree to the
+                <a href="#" onclick="showPrivacyPolicy()" class="text-decoration-none">Privacy Policy</a> and
                 <a href="#" onclick="showTermsOfService()" class="text-decoration-none">Terms of Service</a>
               </label>
             </div>
@@ -237,7 +237,7 @@
               </div>
             @endif
           </div>
-          
+
           <!-- CAPTCHA error display -->
           <div class="alert alert-warning" id="captchaError" style="display: none;"></div>
 
@@ -246,7 +246,7 @@
 
           <!-- General login error display -->
           <div class="alert alert-danger" id="loginError" style="display: none;"></div>
-          
+
           <button type="submit" class="btn btn-login mb-3" id="loginButton">
             <i class="bi bi-box-arrow-in-right me-2"></i> Sign In
           </button>
@@ -334,7 +334,7 @@
             <li>Login timestamps for security monitoring</li>
             <li>Session data for maintaining secure access</li>
           </ul>
-          
+
           <h6>Data Protection</h6>
           <p>Your data is protected through:</p>
           <ul>
@@ -343,7 +343,7 @@
             <li>Two-factor authentication (OTP)</li>
             <li>Regular security audits</li>
           </ul>
-          
+
           <h6>Data Retention</h6>
           <p>We retain login data only as long as necessary for security and operational purposes. Inactive accounts are reviewed periodically.</p>
         </div>
@@ -371,7 +371,7 @@
             <li>Report any security incidents immediately</li>
             <li>Comply with company policies and procedures</li>
           </ul>
-          
+
           <h6>Security Responsibilities</h6>
           <p>Users are responsible for:</p>
           <ul>
@@ -380,7 +380,7 @@
             <li>Not sharing account access with others</li>
             <li>Using secure networks and devices</li>
           </ul>
-          
+
           <h6>System Monitoring</h6>
           <p>This system is monitored for security purposes. Unauthorized access attempts will be logged and investigated.</p>
         </div>
@@ -407,7 +407,7 @@
             <li><strong>Session Management:</strong> Automatic timeout for inactive sessions</li>
             <li><strong>Encryption:</strong> All data transmitted securely</li>
           </ul>
-          
+
           <h6>Best Practices</h6>
           <ul>
             <li>Always log out when finished</li>
@@ -415,7 +415,7 @@
             <li>Keep your browser updated</li>
             <li>Never share your login credentials</li>
           </ul>
-          
+
           <h6>Report Security Issues</h6>
           <p>If you notice any suspicious activity or security concerns, please contact IT support immediately.</p>
         </div>
@@ -581,7 +581,7 @@
               'X-Requested-With': 'XMLHttpRequest'
             }
           });
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.csrf_token || data.token) {
@@ -597,7 +597,7 @@
         } catch (error) {
           console.log('Token refresh failed, using existing token');
         }
-        
+
         // Always return existing token as fallback
         return getCSRFToken();
       }
@@ -674,25 +674,25 @@
 
       // Lockout timer functionality
       let lockoutTimer;
-      
+
       function showLockoutTimer(remainingSeconds, lockoutCount) {
         const minutes = Math.floor(remainingSeconds / 60);
         const seconds = remainingSeconds % 60;
-        
+
         // Clear any existing timer
         if (lockoutTimer) {
           clearInterval(lockoutTimer);
         }
-        
+
         // Show lockout message
         alert('Account temporarily locked due to too many failed attempts.\n\nPlease try again later.');
-        
+
         // Auto-unlock after lockout period
         setTimeout(() => {
           alert('You can now try logging in again.');
         }, remainingSeconds * 1000);
       }
-      
+
       // Lockout countdown function removed for security
 
       // Privacy Agreement validation function
@@ -713,7 +713,7 @@
           console.warn('reCAPTCHA not loaded');
           return true; // Skip validation if reCAPTCHA not available
         }
-        
+
         try {
           const captchaResponse = grecaptcha.getResponse();
           if (!captchaResponse) {
@@ -732,7 +732,7 @@
         const captchaErrorDiv = document.getElementById('captchaError');
         captchaErrorDiv.textContent = message;
         captchaErrorDiv.style.display = 'block';
-        
+
         // Hide after 5 seconds
         setTimeout(() => {
           captchaErrorDiv.style.display = 'none';
@@ -744,7 +744,7 @@
         const successDiv = document.getElementById('successMessage');
         successDiv.textContent = message;
         successDiv.style.display = 'block';
-        
+
         // Hide after 3 seconds
         setTimeout(() => {
           successDiv.style.display = 'none';
@@ -756,7 +756,7 @@
         const loginErrorDiv = document.getElementById('loginError');
         loginErrorDiv.textContent = message;
         loginErrorDiv.style.display = 'block';
-        
+
         // Hide after 5 seconds
         setTimeout(() => {
           loginErrorDiv.style.display = 'none';
@@ -768,18 +768,18 @@
         const errorElements = [
           'loginError', 'emailError', 'passwordError', 'captchaError', 'successMessage'
         ];
-        
+
         errorElements.forEach(elementId => {
           const element = document.getElementById(elementId);
           if (element) {
             element.style.display = 'none';
           }
         });
-        
+
         // Remove invalid classes with null checks
         const emailElement = document.getElementById('email');
         const passwordElement = document.getElementById('password');
-        
+
         if (emailElement) {
           emailElement.classList.remove('is-invalid');
         }
@@ -826,7 +826,7 @@
         try {
           // Use existing token first, no pre-refresh
           const csrfToken = getCSRFToken();
-          
+
           if (!csrfToken) {
             throw new Error('No CSRF token available');
           }
@@ -836,7 +836,7 @@
           if (!formData.has('_token')) {
             formData.append('_token', csrfToken);
           }
-          
+
           // Add CAPTCHA response with safety check
           let captchaResponse = '';
           if (typeof grecaptcha !== 'undefined') {
@@ -876,6 +876,10 @@
             } else if (data.step === 'login_complete') {
               // Direct login successful (if OTP is not required)
               window.location.href = data.redirect_url;
+            } else if (data.step === 'external_account_found') {
+              // External account found, redirect to dashboard
+              // Use provided redirect_url or default to dashboard
+              window.location.href = data.redirect_url || '/employee/dashboard';
             }
           } else {
             // Handle server-side error responses
@@ -884,18 +888,18 @@
             } else {
               // Reset CAPTCHA on error
               resetCaptcha();
-              
+
               // Show error message inline
               let errorText = data.message || 'An unknown error occurred.';
-              
+
               // Check if it's an email or password specific error
               if (errorText.toLowerCase().includes('email') || errorText.toLowerCase().includes('account') || errorText.toLowerCase().includes('no account found')) {
                 document.getElementById('email').classList.add('is-invalid');
                 document.getElementById('emailError').textContent = errorText;
                 document.getElementById('emailError').style.display = 'block';
-              } else if (errorText.toLowerCase().includes('password') || 
-                         errorText.toLowerCase().includes('credential') || 
-                         errorText.toLowerCase().includes('incorrect') || 
+              } else if (errorText.toLowerCase().includes('password') ||
+                         errorText.toLowerCase().includes('credential') ||
+                         errorText.toLowerCase().includes('incorrect') ||
                          errorText.toLowerCase().includes('wrong') ||
                          errorText.toLowerCase().includes('invalid') ||
                          errorText.toLowerCase().includes('failed') ||
@@ -913,7 +917,7 @@
           console.error('Login error:', error);
           // Reset CAPTCHA on connection error
           resetCaptcha();
-          
+
           showLoginError('Unable to connect to the server. Please check your internet connection and try again.');
         } finally {
           // Restore button state
@@ -942,7 +946,7 @@
         try {
           // Try with existing token first
           let csrfToken = getCSRFToken();
-          
+
           // Create form data
           const formData = new FormData();
           formData.append('otp_code', otpCode);
@@ -962,7 +966,7 @@
           if (!response.ok && response.status === 419) {
             console.log('CSRF token expired, refreshing...');
             csrfToken = await refreshCSRFTokenIfNeeded();
-            
+
             // Retry with new token
             const retryFormData = new FormData();
             retryFormData.append('otp_code', otpCode);
@@ -980,7 +984,7 @@
           }
 
           const data = await response.json();
-          
+
           if (data.success && data.step === 'login_complete') {
             // Clear timer on successful login
             if (otpTimer) {
@@ -1016,7 +1020,7 @@
 
         // Use existing token
         const csrfToken = getCSRFToken();
-        
+
         if (!csrfToken) {
           alert('Session Error\n\nPlease refresh the page and try again.');
           submitButton.disabled = false;
@@ -1107,7 +1111,7 @@
       function startSessionTimeout() {
         // Clear any existing timers
         if (sessionTimeoutTimer) clearTimeout(sessionTimeoutTimer);
-        
+
         // Silent logout after configured timeout duration (no warning)
         sessionTimeoutTimer = setTimeout(() => {
           handleSessionTimeout();
@@ -1125,11 +1129,11 @@
         const isHTTPS = location.protocol === 'https:';
         const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
         const isPrivateMode = detectPrivateMode();
-        
+
         if (!isHTTPS && !isLocalhost) {
           document.getElementById('browserWarning').style.display = 'block';
         }
-        
+
         // Warn about insecure contexts
         if (!window.isSecureContext && !isLocalhost) {
           const warningDiv = document.getElementById('browserWarning');
@@ -1154,22 +1158,22 @@
           score: 0,
           feedback: []
         };
-        
+
         if (password.length >= 8) strength.score++;
         else strength.feedback.push('Use at least 8 characters');
-        
+
         if (/[A-Z]/.test(password)) strength.score++;
         else strength.feedback.push('Include uppercase letters');
-        
+
         if (/[a-z]/.test(password)) strength.score++;
         else strength.feedback.push('Include lowercase letters');
-        
+
         if (/[0-9]/.test(password)) strength.score++;
         else strength.feedback.push('Include numbers');
-        
+
         if (/[^A-Za-z0-9]/.test(password)) strength.score++;
         else strength.feedback.push('Include special characters');
-        
+
         return strength;
       }
 
@@ -1177,7 +1181,7 @@
       window.addEventListener('load', () => {
         // Page loaded successfully
         console.log('Employee login page loaded');
-        
+
         // Load timeout settings from server
       async function loadTimeoutSettings() {
         try {
@@ -1188,14 +1192,14 @@
               'X-Requested-With': 'XMLHttpRequest'
             }
           });
-          
+
           if (response.ok) {
             const data = await response.json();
             if (data.success && data.session_timeout_enabled) {
               // Update session timeout variables (full duration, no warning)
               sessionTimeLeft = data.timeout_duration * 60; // Convert minutes to seconds
               console.log('Silent session timeout enabled:', data.timeout_duration, 'minutes');
-              
+
               // Start session timeout monitoring after successful login
               // This will be called after authentication
             } else {
@@ -1210,7 +1214,7 @@
       // Initialize security features
       checkBrowserSecurity();
       loadTimeoutSettings();
-      
+
       // Start session timeout monitoring (only after successful login)
       // This will be called after successful authentication
     });

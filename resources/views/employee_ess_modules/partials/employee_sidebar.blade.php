@@ -9,6 +9,10 @@
           $employee = Auth::guard('employee')->user();
       } elseif (Auth::check()) {
           $employee = Auth::user();
+      } elseif (session()->has('external_employee_data')) {
+          $data = session('external_employee_data');
+          $employee = new \App\Models\Employee();
+          $employee->forceFill($data);
       }
       // Auto-generate profile picture for any employee
       $profilePicUrl = null;
@@ -74,9 +78,8 @@
           $targetEmployee = $employee->employee;
       }
 
-      // Prioritize 'id' (auto-increment) if available, then 'employee_id' (string PK)
-      // This matches the logic in employee_list.blade.php
-      $rawEmpId = $targetEmployee->id ?? ($targetEmployee->employee_id ?? ($targetEmployee->getKey() ?? 'N/A'));
+      // Prioritize 'employee_id' (string PK) if available, then 'id' (auto-increment)
+      $rawEmpId = $targetEmployee->employee_id ?? ($targetEmployee->id ?? ($targetEmployee->getKey() ?? 'N/A'));
 
       // Format display ID (remove non-numeric characters to show just the number)
       // This handles "EMP001" -> 1, "EMP-005" -> 5, etc.
@@ -88,7 +91,7 @@
       }
     @endphp
     <span id="sidebar-status-badge" class="badge {{ $statusClass }} text-white mt-2" style="font-size: 0.85rem;">{{ $status }}</span>
-    <div class="text-muted small mt-1">Employee ID: {{ $empId }}</div>
+    <div class="text-muted small mt-1">Employee ID: {{ $rawEmpId }}</div>
   </div>
 
   <!-- Navigation Menu -->

@@ -192,7 +192,7 @@
                 }
               @endphp
               <h1>
-    {{ $greeting }}, {{ trim(Auth::guard('employee')->user()->first_name . ' ' . Auth::guard('employee')->user()->last_name) ?: 'Employee' }}!
+    {{ $greeting }}, {{ trim($employee->first_name . ' ' . $employee->last_name) ?: 'Employee' }}!
 </h1>
             </p>
           </div>

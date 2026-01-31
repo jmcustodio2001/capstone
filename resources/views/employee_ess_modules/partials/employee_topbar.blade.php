@@ -307,6 +307,14 @@ input:checked + .dark-mode-slider:before {
         <button class="btn btn-outline-light btn-sm d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
           @php
             $user = auth('employee')->user();
+            
+            // Fallback for session-based external users
+            if (!$user && session()->has('external_employee_data')) {
+                $data = session('external_employee_data');
+                $user = new \App\Models\Employee();
+                $user->forceFill($data);
+            }
+
             $profilePicture = asset('images/default-avatar.png');
             $firstName = $user->first_name ?? 'User';
             $lastName = $user->last_name ?? '';

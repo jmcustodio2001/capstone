@@ -246,6 +246,14 @@ class OTPService
     }
 
     /**
+     * Send OTP to external employee (session-based, no DB persistence)
+     */
+    public function sendOTPExternal(Employee $employee, string $otpCode): bool
+    {
+        return $this->sendOTPEmail($employee, $otpCode);
+    }
+
+    /**
      * Send OTP email using PHPMailer
      */
     private function sendOTPEmail(Employee $employee, string $otpCode): bool

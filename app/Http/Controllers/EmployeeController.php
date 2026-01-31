@@ -23,7 +23,7 @@ class EmployeeController extends Controller
         $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees'); // Project A's endpoint
 
         $apiData = $response->successful() ? $response->json() : [];
-        
+
         // Handle { success: true, data: [...] } structure
         if (isset($apiData['data']) && is_array($apiData['data'])) {
             $employees = $apiData['data'];
@@ -289,43 +289,83 @@ class EmployeeController extends Controller
             // Try to fetch from external API to provision account
             try {
                 $response = Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/accounts');
-                
+
                 if ($response->successful()) {
                     $apiData = $response->json();
                     $essAccounts = $apiData['data']['ess_accounts'] ?? $apiData['ess_accounts'] ?? [];
-                    
+
                     foreach ($essAccounts as $account) {
                         // Check if matches email and is ESS type
-                        if (isset($account['employee']['email']) && 
-                            $account['employee']['email'] === $email && 
+                        if (isset($account['employee']['email']) &&
+                            $account['employee']['email'] === $email &&
                             ($account['account_type'] ?? '') === 'ess') {
-                            
+
                             $apiEmployee = $account['employee'];
+
+                            // Use ID from API if available, otherwise generate new
+                            $newId = $apiEmployee['employee_id'] ?? $this->generateNextEmployeeId();
                             
-                            // Generate new ID
-                            $newId = $this->generateNextEmployeeId();
-                            
-                            // Create new employee record
-                            $employee = Employee::create([
-                                'employee_id' => $newId,
-                                'first_name' => $apiEmployee['first_name'] ?? 'Unknown',
-                                'last_name' => $apiEmployee['last_name'] ?? 'Unknown',
-                                'email' => $apiEmployee['email'],
-                                'password' => Hash::make($account['password'] ?? '12345678'),
-                                'phone_number' => $apiEmployee['phone'] ?? null,
-                                'address' => $apiEmployee['address'] ?? null,
-                                'hire_date' => isset($apiEmployee['date_hired']) ? date('Y-m-d', strtotime($apiEmployee['date_hired'])) : null,
-                                'department_id' => $apiEmployee['department_id'] ?? null,
-                                'position' => $apiEmployee['position'] ?? null,
-                                'status' => 'Active',
-                                'profile_picture' => null // API has profile_picture but usually needs download
+                            // Ensure the ID is set in the employee data
+                            $apiEmployee['employee_id'] = $newId;
+
+                            // Store external employee data in session (pending OTP verification)
+                            session([
+                                'pending_external_employee_data' => $apiEmployee,
+                                'external_account_type' => 'ess',
+                                'source_api' => 'http://hr4.jetlougetravels-ph.com/api/accounts'
                             ]);
-                            
-                            Log::info('Auto-provisioned employee from external API', [
-                                'email' => $email, 
-                                'new_id' => $newId
+
+                            Log::info('External employee found and pending data stored in session', [
+                                'email' => $email,
+                                'external_id' => $newId
                             ]);
-                            
+
+                            // Generate OTP for external user
+                            $otpService = new OTPService();
+                            $otpCode = $otpService->generateOTP();
+                            $expiresAt = Carbon::now()->addMinutes(2);
+
+                            // Store OTP in session
+                            session([
+                                'external_otp' => [
+                                    'code' => $otpCode,
+                                    'expires_at' => $expiresAt,
+                                    'attempts' => 0
+                                ],
+                                'otp_employee_id' => $newId
+                            ]);
+
+                            // Create temporary employee object for email
+                            $tempEmployee = new Employee();
+                            $tempEmployee->forceFill($apiEmployee);
+
+                            // Send OTP email
+                            $emailSent = $otpService->sendOTPExternal($tempEmployee, $otpCode);
+
+                            if ($emailSent) {
+                                $message = 'Verification code sent to your email.';
+                                if (env('OTP_BYPASS_EMAIL', false)) {
+                                    $message .= " [DEV: {$otpCode}]";
+                                }
+
+                                return response()->json([
+                                    'success' => true,
+                                    'message' => $message,
+                                    'step' => 'otp_required',
+                                    'expires_at' => $expiresAt,
+                                    'dev_otp' => env('OTP_BYPASS_EMAIL', false) ? $otpCode : null
+                                ]);
+                            } else {
+                                return response()->json([
+                                    'success' => false,
+                                    'message' => 'Failed to send OTP email.',
+                                    'step' => 'otp_error'
+                                ], 500);
+                            }
+
+                            // Previous logic (disabled):
+                            // $employee = Employee::create([...]);
+
                             break;
                         }
                     }
@@ -345,17 +385,17 @@ class EmployeeController extends Controller
             $passwordSynced = false;
             try {
                 $response = Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/accounts');
-                
+
                 if ($response->successful()) {
                     $apiData = $response->json();
                     $essAccounts = $apiData['data']['ess_accounts'] ?? $apiData['ess_accounts'] ?? [];
-                    
+
                     foreach ($essAccounts as $account) {
                         // Match email and account type
-                        if (isset($account['employee']['email']) && 
-                            $account['employee']['email'] === $email && 
+                        if (isset($account['employee']['email']) &&
+                            $account['employee']['email'] === $email &&
                             ($account['account_type'] ?? '') === 'ess') {
-                            
+
                             // Check if input password matches API password (plaintext check)
                             if (isset($account['password']) && $account['password'] === $request->password) {
                                 // Password matches API! Update local record.
@@ -567,6 +607,70 @@ class EmployeeController extends Controller
         }
 
         $employee = Employee::where('employee_id', $employeeId)->first();
+
+        // Handle external employee (session-based)
+        if (!$employee && ($request->session()->has('pending_external_employee_data') || $request->session()->has('external_employee_data'))) {
+            $externalData = $request->session()->get('pending_external_employee_data') ?? $request->session()->get('external_employee_data');
+
+            if (($externalData['employee_id'] ?? null) === $employeeId) {
+                // Verify external OTP
+                $externalOtp = $request->session()->get('external_otp');
+
+                if (!$externalOtp) {
+                     return response()->json([
+                        'success' => false,
+                        'message' => 'OTP session expired. Please request a new OTP.',
+                        'step' => 'session_expired'
+                    ], 422);
+                }
+
+                if (Carbon::now()->isAfter($externalOtp['expires_at'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'OTP has expired. Please request a new OTP.',
+                        'expired' => true
+                    ], 422);
+                }
+
+                if ($externalOtp['code'] === $request->otp_code) {
+                    // OTP Correct!
+                    $request->session()->forget(['external_otp', 'otp_employee_id']);
+                    $request->session()->put('employee_id', $employeeId); // For middleware
+
+                    Log::info('External employee login completed with OTP', [
+                        'employee_id' => $employeeId,
+                        'email' => $externalData['email']
+                    ]);
+
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Login successful! Redirecting to dashboard...',
+                        'step' => 'login_complete',
+                        'redirect_url' => route('employee.dashboard')
+                    ]);
+                } else {
+                    // Increment attempts
+                    $externalOtp['attempts']++;
+                    $request->session()->put('external_otp', $externalOtp);
+
+                    if ($externalOtp['attempts'] >= 5) {
+                        $request->session()->forget('external_otp');
+                         return response()->json([
+                            'success' => false,
+                            'message' => 'Too many failed attempts. Please request a new OTP.',
+                            'max_attempts' => true
+                        ], 422);
+                    }
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Incorrect OTP. " . (5 - $externalOtp['attempts']) . " attempts remaining.",
+                        'incorrect' => true
+                    ], 422);
+                }
+            }
+        }
+
         if (!$employee) {
             return response()->json([
                 'success' => false,
@@ -680,6 +784,56 @@ class EmployeeController extends Controller
         }
 
         $employee = Employee::where('employee_id', $employeeId)->first();
+
+        // Handle external employee (session-based)
+        if (!$employee && ($request->session()->has('pending_external_employee_data') || $request->session()->has('external_employee_data'))) {
+            $externalData = $request->session()->get('pending_external_employee_data') ?? $request->session()->get('external_employee_data');
+
+            if (($externalData['employee_id'] ?? null) === $employeeId) {
+                // Generate new OTP
+                $otpService = new OTPService();
+                $otpCode = $otpService->generateOTP();
+                $expiresAt = Carbon::now()->addMinutes(2);
+
+                // Update session
+                session([
+                    'external_otp' => [
+                        'code' => $otpCode,
+                        'expires_at' => $expiresAt,
+                        'attempts' => 0
+                    ]
+                ]);
+
+                // Create temporary employee object
+                $tempEmployee = new Employee();
+                $tempEmployee->forceFill($externalData);
+
+                // Send email
+                $result = $otpService->sendOTPExternal($tempEmployee, $otpCode);
+
+                $message = 'Verification code sent to your email.';
+                if (env('OTP_BYPASS_EMAIL', false)) {
+                     $message .= " [DEV: {$otpCode}]";
+                }
+
+                if ($result) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => $message,
+                        'step' => 'otp_resent',
+                        'expires_at' => $expiresAt,
+                        'dev_otp' => env('OTP_BYPASS_EMAIL', false) ? $otpCode : null
+                    ]);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Failed to send OTP email.',
+                        'step' => 'otp_error'
+                    ], 500);
+                }
+            }
+        }
+
         if (!$employee) {
             return response()->json([
                 'success' => false,
@@ -876,23 +1030,23 @@ class EmployeeController extends Controller
             // Debug: Log the data being updated
             Log::info('Employee settings update data:', $data);
             Log::info('Current employee status before update:', ['status' => $employee->status]);
-            
+
             // Check if status column exists in database
             $hasStatusColumn = Schema::hasColumn('employees', 'status');
             Log::info('Status column exists in database:', ['exists' => $hasStatusColumn]);
-            
+
             // Update employee record
             $updateResult = $employee->update($data);
-            
+
             // Alternative direct update if mass assignment fails
             if (isset($data['status'])) {
                 $employee->status = $data['status'];
                 $employee->save();
             }
-            
+
             // Refresh the model to get updated data
             $employee->refresh();
-            
+
             // Debug: Log the status after update
             Log::info('Employee status after update:', ['status' => $employee->status]);
             Log::info('Update result:', ['success' => $updateResult]);
@@ -1883,7 +2037,7 @@ class EmployeeController extends Controller
             } else {
                 // Create new employee
                 $validated['password'] = Hash::make($validated['password']);
-                
+
                 $employee = Employee::create($validated);
 
                 Log::info('Individual employee created successfully', [
@@ -1918,7 +2072,7 @@ class EmployeeController extends Controller
 
             if ($request->expectsJson()) {
                 return response()->json([
-                    'success' => false, 
+                    'success' => false,
                     'message' => 'Failed to save employee: ' . $e->getMessage()
                 ], 500);
             }
@@ -1949,7 +2103,7 @@ class EmployeeController extends Controller
             ]);
 
             $result = $response->json();
-            
+
             Log::info('CAPTCHA verification result', [
                 'success' => $result['success'] ?? false,
                 'error_codes' => $result['error-codes'] ?? [],

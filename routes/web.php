@@ -375,10 +375,10 @@ Route::get('/test-otp-system', function() {
     }
 })->name('test.otp.system');
 // Employee dashboard (protected route)
-Route::get('/employee/dashboard', [EmployeeDashboardController::class, 'index'])->name('employee.dashboard')->middleware('auth:employee');
+Route::get('/employee/dashboard', [EmployeeDashboardController::class, 'index'])->name('employee.dashboard')->middleware('employee.auth');
 
 // Employee dashboard additional routes
-Route::middleware('auth:employee')->group(function () {
+Route::middleware('employee.auth')->group(function () {
     Route::post('/employee/verify-password', [EmployeeDashboardController::class, 'verifyPassword'])->name('employee.verify-password');
     Route::get('/employee/announcements/{id}', [EmployeeDashboardController::class, 'getAnnouncementDetails'])->name('employee.announcements.details');
     Route::post('/employee/profile/update', [EmployeeDashboardController::class, 'updateProfile'])->name('employee.profile.update');

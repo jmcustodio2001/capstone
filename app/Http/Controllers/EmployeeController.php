@@ -83,6 +83,14 @@ class EmployeeController extends Controller
                 ], 401);
             }
 
+            // Skip password verification for external employees (no password set)
+            if (empty($employee->password)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Password verification skipped for external employee.'
+                ]);
+            }
+
             if (Hash::check($request->password, $employee->password)) {
                 return response()->json([
                     'success' => true,
@@ -302,8 +310,12 @@ class EmployeeController extends Controller
 
                             $apiEmployee = $account['employee'];
 
-                            // Use ID from API if available, otherwise generate new
-                            $newId = $apiEmployee['employee_id'] ?? $this->generateNextEmployeeId();
+                            // Use ID from API if available, checking multiple possible fields
+                            $newId = $apiEmployee['employee_id'] ??
+                                     $apiEmployee['id'] ??
+                                     $apiEmployee['external_employee_id'] ??
+                                     $account['employee_id'] ?? // Check root level too
+                                     $this->generateNextEmployeeId();
 
                             // Ensure the ID is set in the employee data
                             $apiEmployee['employee_id'] = $newId;
@@ -399,8 +411,8 @@ class EmployeeController extends Controller
                             // Check if input password matches API password (plaintext check)
                             if (isset($account['password']) && $account['password'] === $request->password) {
                                 // Password matches API! Update local record.
-                                $employee->password = Hash::make($request->password);
-                                $employee->save();
+                                // $employee->password = Hash::make($request->password);
+                                // $employee->save();
                                 $passwordSynced = true;
                                 Log::info('Password synced from external API for', ['email' => $email]);
                             }
@@ -1028,7 +1040,7 @@ class EmployeeController extends Controller
 
             // Handle profile picture upload
             if ($request->hasFile('profile_picture')) {
-                if ($employee->profile_picture) {
+                if ($employee->profile_picture && Storage::disk('public')->exists($employee->profile_picture)) {
                     Storage::disk('public')->delete($employee->profile_picture);
                 }
                 $data['profile_picture'] = $request->file('profile_picture')->store('profile_pictures', 'public');
@@ -1036,27 +1048,56 @@ class EmployeeController extends Controller
 
             // Debug: Log the data being updated
             Log::info('Employee settings update data:', $data);
-            Log::info('Current employee status before update:', ['status' => $employee->status]);
 
-            // Check if status column exists in database
-            $hasStatusColumn = Schema::hasColumn('employees', 'status');
-            Log::info('Status column exists in database:', ['exists' => $hasStatusColumn]);
+            // Check if external employee (session-based)
+            if (session()->has('external_employee_data')) {
+                Log::info('Updating external employee session data');
+                $externalData = session('external_employee_data');
 
-            // Update employee record
-            $updateResult = $employee->update($data);
+                // Merge new data into session data
+                // We only update fields that are present in $data
+                foreach ($data as $key => $value) {
+                    $externalData[$key] = $value;
+                }
 
-            // Alternative direct update if mass assignment fails
-            if (isset($data['status'])) {
-                $employee->status = $data['status'];
-                $employee->save();
+                // Update session
+                session(['external_employee_data' => $externalData]);
+
+                // Update the current instance so it reflects in the response
+                $employee->forceFill($data);
+
+                $updateResult = true;
+            } else {
+                Log::info('Updating database employee record');
+
+                // Check if status column exists in database
+                $hasStatusColumn = Schema::hasColumn('employees', 'status');
+                Log::info('Status column exists in database:', ['exists' => $hasStatusColumn]);
+
+                // Update employee record
+                $updateResult = $employee->update($data);
+
+                // Alternative direct update if mass assignment fails
+                if (isset($data['status'])) {
+                    $employee->status = $data['status'];
+                    $employee->save();
+                }
+
+                // Refresh the model to get updated data
+                $employee->refresh();
             }
-
-            // Refresh the model to get updated data
-            $employee->refresh();
 
             // Debug: Log the status after update
             Log::info('Employee status after update:', ['status' => $employee->status]);
             Log::info('Update result:', ['success' => $updateResult]);
+
+            if ($request->expectsJson()) {
+                 return response()->json([
+                     'success' => true,
+                     'message' => self::SETTINGS_UPDATED_SUCCESS,
+                     'employee' => $employee
+                 ]);
+            }
 
             return redirect()->back()->with('success', self::SETTINGS_UPDATED_SUCCESS);
 

@@ -5,6 +5,16 @@
         Training Requests
       </h4>
       @php
+        // Ensure employeeId is available
+        if (!isset($employeeId)) {
+            $currentEmployee = Auth::guard('employee')->user() ?? Auth::user();
+            if (!$currentEmployee && session()->has('external_employee_data')) {
+                $currentEmployee = new \App\Models\Employee();
+                $currentEmployee->forceFill(session('external_employee_data'));
+            }
+            $employeeId = $currentEmployee ? $currentEmployee->employee_id : null;
+        }
+
         // Initialize variables with proper counting
         $trainingRequests = isset($trainingRequests) ? collect($trainingRequests) : collect();
         $upcomingTrainings = isset($upcomingTrainings) ? collect($upcomingTrainings) : collect();
@@ -19,15 +29,15 @@
             if (isset($upcoming->source) && $upcoming->source === 'destination_assigned') {
                 continue; // Skip destination training centers completely
             }
-            
+
             // ADDITIONAL FILTER: Skip any training that looks like destination knowledge training
             $trainingTitle = $upcoming->training_title ?? '';
-            if (stripos($trainingTitle, 'destination') !== false || 
+            if (stripos($trainingTitle, 'destination') !== false ||
                 stripos($trainingTitle, 'accredited') !== false ||
                 stripos($trainingTitle, 'training center') !== false) {
                 continue; // Skip destination-related trainings
             }
-            
+
             // Check if request doesn't exist by both title and course_id
             $exists = $trainingRequests->contains(function ($request) use ($upcoming) {
                 return ($request->training_title === $upcoming->training_title) ||
@@ -35,7 +45,7 @@
             });
 
             // Also check if database record already exists to prevent duplicates
-            $dbExists = \App\Models\TrainingRequest::where('employee_id', Auth::user()->employee_id)
+            $dbExists = \App\Models\TrainingRequest::where('employee_id', $employeeId)
                 ->where('training_title', $upcoming->training_title ?? '')
                 ->exists();
 
@@ -44,7 +54,7 @@
             if (isset($upcoming->source) && in_array($upcoming->source, ['competency_gap', 'competency_assigned', 'admin_assigned'])) {
                 // Check if there's a competency gap that was recently unassigned for this training
                 $competencyGap = \App\Models\CompetencyGap::with('competency')
-                    ->where('employee_id', Auth::user()->employee_id)
+                    ->where('employee_id', $employeeId)
                     ->where('assigned_to_training', false) // Recently unassigned
                     ->whereHas('competency', function($query) use ($upcoming) {
                         $trainingTitle = $upcoming->training_title ?? '';
@@ -55,7 +65,7 @@
                     })
                     ->where('updated_at', '>', now()->subMinutes(5)) // Updated in last 5 minutes
                     ->exists();
-                
+
                 $wasRecentlyUnassigned = $competencyGap;
             }
 
@@ -64,7 +74,7 @@
                 try {
                     // Create the training request in database
                     $dbRequest = \App\Models\TrainingRequest::create([
-                        'employee_id' => Auth::user()->employee_id,
+                        'employee_id' => $employeeId,
                         'course_id' => $upcoming->course_id ?? null,
                         'training_title' => $upcoming->training_title ?? '',
                         'reason' => 'Automatically enrolled from upcoming trainings',
@@ -74,7 +84,7 @@
 
                     // Create corresponding progress record
                     \App\Models\TrainingProgress::create([
-                        'employee_id' => Auth::user()->employee_id,
+                        'employee_id' => $employeeId,
                         'course_id' => $upcoming->course_id ?? null,
                         'training_title' => $upcoming->training_title ?? '',
                         'progress' => 0,
@@ -86,7 +96,7 @@
 
                     // Create notification record
                     \App\Models\TrainingNotification::create([
-                        'employee_id' => Auth::user()->employee_id,
+                        'employee_id' => $employeeId,
                         'message' => "You have been automatically enrolled in '{$upcoming->training_title}' training.",
                         'sent_at' => now()
                     ]);
@@ -114,15 +124,15 @@
                         'is_auto' => true
                     ];
                 }
-                
+
                 $trainingRequests->push($newRequest);
                 $autoCreatedCount++;
             } elseif ($dbExists && !$exists) {
                 // If database record exists but not in collection, add it to display
-                $existingDbRequest = \App\Models\TrainingRequest::where('employee_id', Auth::user()->employee_id)
+                $existingDbRequest = \App\Models\TrainingRequest::where('employee_id', $employeeId)
                     ->where('training_title', $upcoming->training_title ?? '')
                     ->first();
-                
+
                 if ($existingDbRequest) {
                     $newRequest = (object)[
                         'request_id' => $existingDbRequest->request_id,
@@ -142,11 +152,11 @@
 
         // Calculate total after all processing
         $totalRequests = $existingCount + $autoCreatedCount;
-        
+
         // If we auto-created any records, trigger a data refresh
         $shouldRefreshData = $autoCreatedCount > 0;
       @endphp
-      
+
       @if($shouldRefreshData)
         <script>
           document.addEventListener("DOMContentLoaded", function() {
@@ -156,7 +166,7 @@
           });
         </script>
       @endif
-      
+
       @php
         // Update the total after all processing
         $totalRequests = $existingCount + $autoCreatedCount;
@@ -320,7 +330,7 @@
                       // ENHANCED: Auto-create dashboard record if missing for approved requests
                       if ($courseId && $r->status == 'Approved') {
                         // Check for existing dashboard record with multiple criteria
-                        $dashboardRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', Auth::user()->employee_id)
+                        $dashboardRecord = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)
                           ->where(function($query) use ($courseId, $r) {
                               $query->where('course_id', $courseId)
                                     ->orWhere('training_title', $r->training_title);
@@ -331,7 +341,7 @@
                           try {
                             // Ensure we have all required fields
                             $createData = [
-                              'employee_id' => Auth::user()->employee_id,
+                              'employee_id' => $employeeId,
                               'course_id' => $courseId,
                               'training_title' => $r->training_title,
                               'training_date' => now(),
@@ -349,7 +359,7 @@
                           } catch (\Exception $e) {
                             $debugInfo[] = "Failed to create dashboard record: " . $e->getMessage();
                             \Log::error('Failed to auto-create dashboard record', [
-                              'employee_id' => Auth::user()->employee_id,
+                              'employee_id' => $employeeId,
                               'course_id' => $courseId,
                               'training_title' => $r->training_title,
                               'error' => $e->getMessage()
@@ -451,7 +461,7 @@
         <div class="modal-header"><h5 class="modal-title">Request Training</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
+          <input type="hidden" name="employee_id" value="{{ $employeeId }}">
           <input type="hidden" name="status" value="Pending">
           <input type="hidden" name="requested_date" value="{{ now()->format('Y-m-d') }}">
           <!-- Ensure current_level is always sent -->
@@ -499,7 +509,7 @@
         <div class="modal-header"><h5 class="modal-title">Edit Training Request</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
+          <input type="hidden" name="employee_id" value="{{ $employeeId }}">
           <div class="mb-3"><label class="form-label">Training Title</label>
             <input type="text" name="training_title" class="form-control" required></div>
           <div class="mb-3"><label class="form-label">Reason</label>
@@ -556,7 +566,7 @@ function checkNewUpcomingTrainings() {
       if (data.upcomingTrainings && data.upcomingTrainings.length > 0) {
         // Filter out destination_assigned (accredited training centers)
         const filteredTrainings = data.upcomingTrainings.filter(training => training.source !== 'destination_assigned');
-        
+
         filteredTrainings.forEach(training => {
           const existingRequest = document.querySelector(`tr[data-course-id="${training.course_id}"]`);
           if (!existingRequest) {
@@ -630,7 +640,7 @@ function showRequestTrainingForm() {
   if (upcomingTrainings.length > 0) {
     // Filter out destination_assigned (accredited training centers) from dropdown
     const filteredTrainings = upcomingTrainings.filter(training => training.source !== 'destination_assigned');
-    
+
     if (filteredTrainings.length > 0) {
       courseOptions += '<optgroup label="Your Assigned Trainings">';
       filteredTrainings.forEach(training => {
@@ -655,7 +665,7 @@ function showRequestTrainingForm() {
     title: '<i class="fas fa-plus-circle text-primary"></i> Request Training',
     html: `
       <form id="requestTrainingForm">
-        <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
+        <input type="hidden" name="employee_id" value="{{ $employeeId }}">
         <input type="hidden" name="status" value="Pending">
         <input type="hidden" name="requested_date" value="{{ now()->format('Y-m-d') }}">
         <input type="hidden" name="current_level" id="currentLevelInput" value="0">
@@ -843,7 +853,7 @@ function showEditRequestForm(requestId, trainingTitle, reason, status, requested
     title: '<i class="fas fa-edit text-warning"></i> Edit Training Request',
     html: `
       <form id="editRequestForm">
-        <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
+        <input type="hidden" name="employee_id" value="{{ $employeeId }}">
 
         <div class="mb-3 text-start">
           <label class="form-label"><strong>Training Title:</strong></label>
@@ -1307,35 +1317,35 @@ document.addEventListener('DOMContentLoaded', function() {
       if (training.request_id) {
         return false;
       }
-      
+
       // Skip if training title is empty or generic
       const rawTitle = training.training_title || '';
       if (!rawTitle.trim() || ['training course', 'unknown course', 'unknown', 'course', 'n/a'].includes(rawTitle.toLowerCase().trim())) {
         return false;
       }
-      
+
       // Apply deduplication logic similar to PHP controller
       const normalizedTitle = rawTitle.toLowerCase()
         .replace(/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
-      
+
       // Create deduplication key
-      const deduplicationKey = training.course_id ? 
-        `course_${training.course_id}` : 
+      const deduplicationKey = training.course_id ?
+        `course_${training.course_id}` :
         `title_${normalizedTitle}`;
-      
+
       // Check if already seen
       if (seenTrainings.has(deduplicationKey)) {
         return false;
       }
-      
+
       // Skip if this is from a recently unassigned competency gap
       if (training.source && ['competency_gap', 'competency_assigned', 'admin_assigned'].includes(training.source)) {
         // This would require an AJAX call to check, but for now we'll rely on the PHP-side filtering
         // The PHP side already handles the $wasRecentlyUnassigned check
       }
-      
+
       // Add to seen set
       seenTrainings.add(deduplicationKey);
       return true;
@@ -1357,7 +1367,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Function to create or update training progress
   function createOrUpdateProgress(training) {
     const formData = new FormData();
-    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+    formData.append('employee_id', '{{ $employeeId }}');
     formData.append('training_title', training.training_title);
     formData.append('course_id', training.course_id || '');
     formData.append('status', 'In Progress');
@@ -1438,7 +1448,7 @@ async function autoCreateTrainingRequest(training) {
     // 2. Processing training silently
     // 3. Create the training request
     const formData = new FormData();
-    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+    formData.append('employee_id', '{{ $employeeId }}');
     formData.append('training_title', training.training_title);
     formData.append('course_id', training.course_id || '');
     formData.append('status', 'Approved'); // Auto-approve upcoming trainings
@@ -1583,7 +1593,7 @@ document.getElementById('editTrainingRequestModal')?.addEventListener('show.bs.m
   const b = e.relatedTarget;
   const f = document.getElementById('editTrainingRequestForm');
   if (!b || !f) return;
-  
+
   const id = b.getAttribute('data-id');
   f.action = "{{ url('employee/my-trainings') }}/" + id;
 
@@ -1620,44 +1630,44 @@ try {
 
 // Robust handler to always set current_level on course selection
 document.addEventListener('DOMContentLoaded', function() {
-  
+
   console.log('🔧 Setting up course selection handler...');
-  
+
   // Use a more robust element selection with retry
   function setupCourseHandler() {
     const courseSelect = document.getElementById('courseSelect');
     const trainingTitle = document.getElementById('trainingTitle');
-    
+
     console.log('Course select element:', courseSelect);
     console.log('Training title input:', trainingTitle);
 
     if (courseSelect && trainingTitle) {
       console.log('✅ Both elements found, adding event listener');
-      
+
       // Remove any existing event listeners to prevent duplicates
       const newCourseSelect = courseSelect.cloneNode(true);
       courseSelect.parentNode.replaceChild(newCourseSelect, courseSelect);
-      
+
       newCourseSelect.addEventListener('change', function() {
         try {
           console.log('📝 Course selection changed');
           const selectedOption = this.options[this.selectedIndex];
           const courseDescription = document.getElementById('courseDescription');
           const currentLevelInput = document.getElementById('currentLevelInput');
-          
+
           if (selectedOption && selectedOption.value) {
             let titleText = selectedOption.textContent.replace(' (Recommended)', '');
             trainingTitle.value = titleText;
-            
+
             if (courseDescription) {
               courseDescription.value = selectedOption.getAttribute('data-description') || '';
             }
-            
+
             if (currentLevelInput) {
               const currentLevel = selectedOption.getAttribute('data-current-level');
               currentLevelInput.value = currentLevel !== null ? currentLevel : 0;
             }
-            
+
             console.log('📋 Updated training title:', titleText);
           } else {
             trainingTitle.value = '';
@@ -1672,7 +1682,7 @@ document.addEventListener('DOMContentLoaded', function() {
           console.error('Error in course selection handler:', error);
         }
       });
-      
+
       console.log('✅ Event listener added successfully');
       return true;
     } else {
@@ -1680,7 +1690,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return false;
     }
   }
-  
+
   // Try to setup the handler, with retries if elements are not ready
   if (!setupCourseHandler()) {
     // Retry after a short delay
@@ -1741,7 +1751,7 @@ async function createOrUpdateProgress(training) {
       throw new Error('Invalid training data provided');
     }
 
-    formData.append('employee_id', '{{ Auth::user()->employee_id }}');
+    formData.append('employee_id', '{{ $employeeId }}');
     formData.append('training_title', training.training_title);
     formData.append('course_id', training.course_id || '');
     formData.append('status', 'Not Started');

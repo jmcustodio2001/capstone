@@ -176,11 +176,11 @@ document.addEventListener('DOMContentLoaded', function() {
             timerProgressBar: true
           });
         }
-        
+
         // Update sidebar status to match saved status
         const currentStatus = '{{ $employee->status ?? 'Active' }}';
         console.log('Page loaded with saved status:', currentStatus);
-        
+
         // Update sidebar badge to reflect saved status
         setTimeout(function() {
           const sidebarStatusBadge = document.getElementById('sidebar-status-badge');
@@ -504,10 +504,10 @@ document.addEventListener('DOMContentLoaded', function() {
   // Dynamic Online Status - checks actual connectivity
   function updateOnlineStatus() {
     const statusElement = document.getElementById('online-status');
-    
+
     if (navigator.onLine) {
       // Check if we can actually reach the server
-      fetch('/employee/ping', { 
+      fetch('/employee/ping', {
         method: 'GET',
         cache: 'no-cache',
         headers: {
@@ -545,7 +545,7 @@ document.addEventListener('DOMContentLoaded', function() {
   if (employmentStatusSelect) {
     console.log('Employment status select found:', employmentStatusSelect);
     console.log('Current value:', employmentStatusSelect.value);
-    
+
     employmentStatusSelect.addEventListener('change', function() {
       console.log('Status changed to:', this.value);
       updateSidebarStatus(this.value);
@@ -561,7 +561,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (sidebarStatusBadge) {
       // Update text
       sidebarStatusBadge.textContent = newStatus;
-      
+
       // Update badge color based on status
       sidebarStatusBadge.className = 'badge mt-2';
       switch(newStatus) {
@@ -584,11 +584,12 @@ document.addEventListener('DOMContentLoaded', function() {
   // Form submission handler to show success message
   const settingsForm = document.getElementById('settings-form');
   if (settingsForm) {
+    settingsForm.addEventListener('submit', function(e) {
       // CRITICAL: Prevent default submission immediately to stop page reload/freeze
       e.preventDefault();
-      
+
       const employmentStatus = employmentStatusSelect ? employmentStatusSelect.value : null;
-      
+
       // Ensure the status field has a value
       if (employmentStatusSelect && !employmentStatusSelect.value) {
         if (typeof Swal !== 'undefined') {
@@ -603,7 +604,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         return false;
       }
-      
+
       // Show loading message with Custom CSS Spinner
       if (typeof Swal !== 'undefined') {
         Swal.fire({
@@ -645,7 +646,7 @@ document.addEventListener('DOMContentLoaded', function() {
         body: formData,
         headers: {
           'X-Requested-With': 'XMLHttpRequest',
-          'Accept': 'application/json' 
+          'Accept': 'application/json'
         }
       })
       .then(response => {
@@ -661,12 +662,12 @@ document.addEventListener('DOMContentLoaded', function() {
                       timer: 2000,
                       showConfirmButton: false
                     }).then(() => {
-                      window.location.reload(); 
+                      window.location.reload();
                     });
                     return;
                  }
               } catch(e) {/* Not JSON */}
-              
+
               Swal.fire({
                 title: 'Success!',
                 text: 'Settings updated successfully.',
@@ -699,6 +700,7 @@ document.addEventListener('DOMContentLoaded', function() {
           confirmButtonText: 'Okay'
         });
       });
+    });
   }
 
 });

@@ -90,7 +90,7 @@ class ProfileUpdateOfEmployeeController extends Controller
     public function approve($id)
     {
         $update = ProfileUpdate::findOrFail($id);
-        
+
         if ($update->status !== 'pending') {
             return response()->json([
                 'success' => false,
@@ -105,10 +105,38 @@ class ProfileUpdateOfEmployeeController extends Controller
             'approved_by' => Auth::id()
         ]);
 
+        // Field mapping to ensure correct column names in employees table
+        $fieldMapping = [
+            'phone' => 'phone_number',
+            'phone_number' => 'phone_number',
+            'emergency_contact_name' => 'emergency_contact_name',
+            'emergency_contact_phone' => 'emergency_contact_phone',
+            'emergency_contact_relationship' => 'emergency_contact_relationship',
+            'profile_picture' => 'profile_picture',
+            'first_name' => 'first_name',
+            'last_name' => 'last_name',
+            'email' => 'email',
+            'address' => 'address',
+        ];
+
+        $actualFieldName = $fieldMapping[$update->field_name] ?? $update->field_name;
+
         // Apply the change to the employee record
         if ($update->employee) {
             $update->employee->update([
-                $update->field_name => $update->new_value
+                $actualFieldName => $update->new_value
+            ]);
+
+            // Log the update to employee record
+            \Log::info('Profile update applied to employee record', [
+                'employee_id' => $update->employee_id,
+                'field' => $actualFieldName,
+                'value' => $update->new_value
+            ]);
+        } else {
+            \Log::warning('Employee not found for profile update approval', [
+                'profile_update_id' => $update->id,
+                'employee_id' => $update->employee_id
             ]);
         }
 
@@ -117,7 +145,7 @@ class ProfileUpdateOfEmployeeController extends Controller
             'user_id' => Auth::id(),
             'action' => 'approve',
             'module' => 'Profile Update Of Employee',
-            'description' => 'Approved profile update request (ID: ' . $update->id . ') for employee ' . ($update->employee ? $update->employee->first_name . ' ' . $update->employee->last_name : 'Unknown'),
+            'description' => 'Approved profile update request (ID: ' . $update->id . ') for employee ' . ($update->employee ? $update->employee->first_name . ' ' . $update->employee->last_name : ($update->employee_name ?? 'Unknown')),
         ]);
 
         return response()->json([
@@ -129,7 +157,7 @@ class ProfileUpdateOfEmployeeController extends Controller
     public function reject($id)
     {
         $update = ProfileUpdate::findOrFail($id);
-        
+
         if ($update->status !== 'pending') {
             return response()->json([
                 'success' => false,
@@ -152,7 +180,7 @@ class ProfileUpdateOfEmployeeController extends Controller
             'user_id' => Auth::id(),
             'action' => 'reject',
             'module' => 'Profile Update Of Employee',
-            'description' => 'Rejected profile update request (ID: ' . $update->id . ') for employee ' . ($update->employee ? $update->employee->first_name . ' ' . $update->employee->last_name : 'Unknown') . '. Reason: ' . $rejectionReason,
+            'description' => 'Rejected profile update request (ID: ' . $update->id . ') for employee ' . ($update->employee ? $update->employee->first_name . ' ' . $update->employee->last_name : ($update->employee_name ?? 'Unknown')) . '. Reason: ' . $rejectionReason,
         ]);
 
         return response()->json([
@@ -184,7 +212,7 @@ class ProfileUpdateOfEmployeeController extends Controller
                         'phone' => 'phone_number',
                         'phone_number' => 'phone_number',
                         'emergency_contact_name' => 'emergency_contact_name',
-                        'emergency_contact_phone' => 'emergency_contact_phone', 
+                        'emergency_contact_phone' => 'emergency_contact_phone',
                         'emergency_contact_relationship' => 'emergency_contact_relationship',
                     ];
 

@@ -17,6 +17,14 @@ class EmployeeAuthentication
 
         // Check if logged in via session (External Employee)
         if ($request->session()->has('external_employee_data')) {
+            // Manually log in the user for this request using the session data
+            $data = session('external_employee_data');
+            $employee = new \App\Models\Employee();
+            $employee->forceFill($data);
+            
+            // Set the user on the guard for this request so Auth::guard('employee')->user() works in controllers
+            Auth::guard('employee')->setUser($employee);
+            
             return $next($request);
         }
 

@@ -25,7 +25,7 @@
         <tbody>
           @php
             // Show progress for both approved training requests AND competency gap trainings
-            $currentEmployeeId = Auth::user()->employee_id;
+            $currentEmployeeId = $employeeId;
 
             // Filter to include BOTH:
             // 1. Approved training requests from _requests.blade.php
@@ -68,15 +68,15 @@
                         // First compare progress percentage (descending)
                         $progressA = isset($a->progress_percentage) ? $a->progress_percentage : ($a->progress ?? 0);
                         $progressB = isset($b->progress_percentage) ? $b->progress_percentage : ($b->progress ?? 0);
-                        
+
                         // Check for explicit "Completed" or "Passed" status which implies 100%
                         if (isset($a->status) && in_array($a->status, ['Completed', 'Passed'])) $progressA = 100;
                         if (isset($b->status) && in_array($b->status, ['Completed', 'Passed'])) $progressB = 100;
-                        
+
                         if ($progressA != $progressB) {
                             return $progressB <=> $progressA; // Descending order of progress
                         }
-                        
+
                         // If progress is equal, compare timestamp (descending)
                         $updatedA = $a->last_updated ?? $a->updated_at ?? now();
                         $updatedB = $b->last_updated ?? $b->updated_at ?? now();
@@ -166,7 +166,7 @@
                   // Get progress value from available data sources with proper employee tracking
                   $progressValue = 0;
                   $progressSource = 'none';
-                  $employeeId = Auth::user()->employee_id;
+                  $employeeId = $currentEmployeeId;
 
                   // Priority 0: Check if status is explicitly completed/passed (highest priority)
                   if (isset($p->status) && in_array($p->status, ['Completed', 'Passed'])) {
@@ -198,7 +198,7 @@
                     if ($examAttempt) {
                       // Use actual exam score for progress, but set to 100% if passed (>=80%)
                       $actualScore = round($examAttempt->score);
-                      
+
                       // Only overwrite if we don't already have a 100% status from Priority 0
                       // OR if the exam is passed (which is also 100%)
                       if ($progressValue < 100 || $actualScore >= 80) {
@@ -318,8 +318,8 @@
                 @endphp
 
                 <div class="progress" style="height: 25px; border-radius: 15px; overflow: hidden; background-color: #f0f0f0; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
-                  <div class="progress-bar {{ $progressColor }} fw-bold" 
-                       role="progressbar" 
+                  <div class="progress-bar {{ $progressColor }} fw-bold"
+                       role="progressbar"
                        style="width: {{ $progressValue }}%; transition: width 0.8s ease;">
                     <div class="d-flex align-items-center justify-content-center w-100 h-100" style="gap: 6px; font-size: 0.9rem; text-shadow: 0 1px 1px rgba(0,0,0,0.2);">
                       <span>{{ $progressValue }}%</span>
@@ -464,7 +464,7 @@
                       <i class="bi bi-check-circle"></i> View in Completed
                     </button>
                     @php
-                      $certificate = \App\Models\TrainingRecordCertificateTracking::where('employee_id', Auth::user()->employee_id)
+                      $certificate = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)
                           ->where('course_id', $p->course_id ?? 0)
                           ->first();
                     @endphp
@@ -556,7 +556,7 @@
         <div class="modal-header"><h5 class="modal-title">Add Progress</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
+          <input type="hidden" name="employee_id" value="{{ $employeeId }}">
           <div class="mb-3"><label class="form-label">Training Title</label>
             <input type="text" name="training_title" class="form-control" required></div>
           <div class="mb-3"><label class="form-label">Progress (%)</label>

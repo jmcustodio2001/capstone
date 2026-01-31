@@ -677,6 +677,20 @@ document.addEventListener('DOMContentLoaded', function() {
   // CSRF Token Setup
   const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
+  // Claim Types Definition
+  const CLAIM_TYPES = [
+    'Travel Expense',
+    'Meal Allowance',
+    'Transportation',
+    'Accommodation',
+    'Medical Expense',
+    'Office Supplies',
+    'Training Materials',
+    'Communication Expense',
+    'Benefits',
+    'Other'
+  ];
+
   // Toast notification function
   function showToast(message, type = 'success') {
     const toastContainer = document.getElementById('toast-container') || createToastContainer();
@@ -823,17 +837,13 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="form-text">Upload receipt or supporting document (JPG, PNG, PDF - Max 5MB)</div>
             <div class="invalid-feedback" id="file-error"></div>
           </div>
-          <div class="alert alert-warning">
-            <i class="bi bi-shield-lock me-2"></i>
-            <strong>Security Notice:</strong> You will need to verify your password to submit this claim.
-          </div>
         </form>
       `,
       width: '800px',
       showCancelButton: true,
       confirmButtonColor: '#4361ee',
       cancelButtonColor: '#6c757d',
-      confirmButtonText: '<i class="bi bi-shield-lock me-1"></i>Verify Password & Submit',
+      confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Submit Claim',
       cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
       preConfirm: () => {
         const form = document.getElementById('swalNewClaimForm');
@@ -879,7 +889,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (formValues) {
       pendingFormData = formValues;
       pendingAction = 'create';
-      await verifyEmployeePasswordForClaim();
+      await submitClaim();
     }
   }
 
@@ -894,113 +904,12 @@ document.addEventListener('DOMContentLoaded', function() {
       pendingFormElement = this;
       pendingAction = 'create';
 
-      await verifyEmployeePasswordForClaim();
+      await submitClaim();
     });
   }
 
-  // Employee Password Verification for Claims
-  async function verifyEmployeePasswordForClaim() {
-    const { value: password } = await Swal.fire({
-      title: 'Password Verification Required',
-      html: `
-        <div class="alert alert-warning text-start">
-          <i class="bi bi-shield-lock me-2"></i>
-          <strong>Security Notice:</strong> Please enter your password to confirm this claim operation.
-        </div>
-        <div class="mb-3">
-          <label for="swal_password" class="form-label">Enter Your Password</label>
-          <input type="password" class="form-control" id="swal_password" placeholder="Enter your password" minlength="3">
-          <div class="form-text">Minimum 3 characters required</div>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonColor: '#4361ee',
-      cancelButtonColor: '#6c757d',
-      confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Verify & Continue',
-      cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
-      preConfirm: () => {
-        const password = document.getElementById('swal_password').value;
-        if (!password || password.length < 3) {
-          Swal.showValidationMessage('Password is required (minimum 3 characters)');
-          return false;
-        }
-        return password;
-      },
-      didOpen: () => {
-        document.getElementById('swal_password').focus();
-      }
-    });
-
-    if (password) {
-      await submitWithPasswordVerification(password);
-    }
-  }
-
-  // Submit with Password Verification
-  async function submitWithPasswordVerification(password) {
-    // Show loading
-    Swal.fire({
-      title: 'Verifying Password...',
-      text: 'Please wait while we verify your credentials.',
-      icon: 'info',
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      }
-    });
-
-    try {
-      // Verify password with server
-      const verifyResponse = await fetch('/employee/verify-password', {
-        method: 'POST',
-        headers: {
-          'X-CSRF-TOKEN': csrfToken,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ password: password })
-      });
-
-      const verifyResult = await verifyResponse.json();
-
-      if (verifyResponse.ok && (verifyResult.success || verifyResult.valid)) {
-        // Password verified, proceed with action
-        if (pendingAction === 'create') {
-          await submitClaimAfterVerification();
-        } else if (pendingAction === 'edit') {
-          await submitEditClaimAfterVerification();
-        } else if (pendingAction === 'cancel') {
-          await submitCancelClaimAfterVerification();
-        }
-      } else {
-        // Password verification failed
-        await Swal.fire({
-          title: 'Invalid Password',
-          text: verifyResult.message || 'The password you entered is incorrect. Please try again.',
-          icon: 'error',
-          confirmButtonColor: '#dc3545',
-          confirmButtonText: 'Try Again'
-        });
-
-        // Retry password verification
-        await verifyEmployeePasswordForClaim();
-      }
-    } catch (error) {
-      console.error('Password verification error:', error);
-      await Swal.fire({
-        title: 'Verification Error',
-        text: 'Network error during password verification. Please check your connection and try again.',
-        icon: 'error',
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'OK'
-      });
-    }
-  }
-
-  // Submit Edit Claim After Verification
-  async function submitEditClaimAfterVerification() {
+  // Submit Edit Claim
+  async function submitEditClaim() {
     // Show loading
     Swal.fire({
       title: 'Updating Claim...',
@@ -1143,8 +1052,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // Submit claim after password verification
-  async function submitClaimAfterVerification() {
+  // Submit Claim
+  async function submitClaim() {
     // Show loading alert
     Swal.fire({
       title: 'Submitting Claim...',
@@ -1655,15 +1564,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="col-md-6 mb-3">
                   <label for="swal_edit_claim_type" class="form-label">Claim Type <span class="text-danger">*</span></label>
                   <select class="form-select" id="swal_edit_claim_type" name="claim_type" required>
-                    <option value="Travel Expense" ${claim.claim_type === 'Travel Expense' ? 'selected' : ''}>Travel Expense</option>
-                    <option value="Meal Allowance" ${claim.claim_type === 'Meal Allowance' ? 'selected' : ''}>Meal Allowance</option>
-                    <option value="Transportation" ${claim.claim_type === 'Transportation' ? 'selected' : ''}>Transportation</option>
-                    <option value="Accommodation" ${claim.claim_type === 'Accommodation' ? 'selected' : ''}>Accommodation</option>
-                    <option value="Medical Expense" ${claim.claim_type === 'Medical Expense' ? 'selected' : ''}>Medical Expense</option>
-                    <option value="Office Supplies" ${claim.claim_type === 'Office Supplies' ? 'selected' : ''}>Office Supplies</option>
-                    <option value="Training Materials" ${claim.claim_type === 'Training Materials' ? 'selected' : ''}>Training Materials</option>
-                    .claim-type-communication-expense { border-color: #b5179e; }
-                    <option value="Other" ${claim.claim_type === 'Other' ? 'selected' : ''}>Other</option>
+                    <option value="">Select claim type</option>
+                    ${CLAIM_TYPES.map(type => `<option value="${type}" ${claim.claim_type === type ? 'selected' : ''}>${type}</option>`).join('')}
                   </select>
                 </div>
                 <div class="col-md-6 mb-3">
@@ -1696,17 +1598,13 @@ document.addEventListener('DOMContentLoaded', function() {
                   </div>
                 ` : ''}
               </div>
-              <div class="alert alert-warning">
-                <i class="bi bi-shield-lock me-2"></i>
-                <strong>Security Notice:</strong> You will need to verify your password to update this claim.
-              </div>
             </form>
           `,
           width: '800px',
           showCancelButton: true,
           confirmButtonColor: '#4361ee',
           cancelButtonColor: '#6c757d',
-          confirmButtonText: '<i class="bi bi-shield-lock me-1"></i>Verify Password & Update',
+          confirmButtonText: '<i class="bi bi-check-circle me-1"></i>Update Claim',
           cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Cancel',
           preConfirm: () => {
             const form = document.getElementById('swalEditClaimForm');
@@ -1749,7 +1647,7 @@ document.addEventListener('DOMContentLoaded', function() {
           pendingFormData = formValues;
           pendingClaimId = claimId;
           pendingAction = 'edit';
-          await verifyEmployeePasswordForClaim();
+          await submitEditClaim();
         }
       } else {
         await Swal.fire({
@@ -1780,7 +1678,7 @@ document.addEventListener('DOMContentLoaded', function() {
       // Redirect to enhanced SweetAlert version
       await Swal.fire({
         title: 'Enhanced Form Available',
-        text: 'Please use the enhanced edit functionality with password verification.',
+        text: 'Please use the enhanced edit functionality.',
         icon: 'info',
         confirmButtonColor: '#4361ee',
         confirmButtonText: 'OK'
@@ -1788,7 +1686,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Cancel Claim with Confirmation and Password Verification
+  // Cancel Claim with Confirmation
   async function cancelClaimWithConfirmation(claimId) {
     const result = await Swal.fire({
       title: 'Cancel Claim?',
@@ -1803,8 +1701,8 @@ document.addEventListener('DOMContentLoaded', function() {
       showCancelButton: true,
       confirmButtonColor: '#dc3545',
       cancelButtonColor: '#6c757d',
-      confirmButtonText: '<i class="bi bi-shield-lock me-1"></i>Verify Password & Cancel',
-      cancelButtonText: '<i class="bi bi-x-circle me-1"></i>Keep Claim',
+      confirmButtonText: '<i class="bi bi-x-circle me-1"></i>Yes, Cancel Claim',
+      cancelButtonText: '<i class="bi bi-arrow-return-left me-1"></i>Keep Claim',
       customClass: {
         popup: 'swal2-popup-custom'
       }
@@ -1813,12 +1711,12 @@ document.addEventListener('DOMContentLoaded', function() {
     if (result.isConfirmed) {
       pendingClaimId = claimId;
       pendingAction = 'cancel';
-      await verifyEmployeePasswordForClaim();
+      await submitCancelClaim();
     }
   }
 
-  // Submit Cancel Claim After Verification
-  async function submitCancelClaimAfterVerification() {
+  // Submit Cancel Claim
+  async function submitCancelClaim() {
     // Show loading
     Swal.fire({
       title: 'Cancelling Claim...',

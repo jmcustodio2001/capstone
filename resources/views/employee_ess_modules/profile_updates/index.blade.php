@@ -789,6 +789,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
   // Employee data (current values from server)
+  const hasPassword = {{ $hasPassword ? 'true' : 'false' }};
   const employeeData = {
     first_name: "@if($employee){{ addslashes($employee->first_name ?? '') }}@endif",
     last_name: "@if($employee){{ addslashes($employee->last_name ?? '') }}@endif",
@@ -1058,6 +1059,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Edit update function with password confirmation
   function editUpdateWithConfirmation(updateId) {
+    // If user has no password (external employee), skip verification
+    if (!hasPassword) {
+      showEditUpdateForm(updateId, '');
+      return;
+    }
+
     Swal.fire({
       title: 'Edit Profile Update Request',
       html: `
@@ -1187,6 +1194,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Delete update function with password confirmation
   function deleteUpdateWithConfirmation(updateId) {
+    // If user has no password (external employee), skip verification
+    if (!hasPassword) {
+      Swal.fire({
+        title: 'Delete Profile Update Request',
+        html: `
+          <div class="text-start">
+            <div class="alert alert-warning">
+              <i class="bi bi-exclamation-triangle me-2"></i>
+              <strong>Warning:</strong> This action cannot be undone. The profile update request will be permanently cancelled.
+            </div>
+            <p class="mb-3">Are you sure you want to delete this profile update request?</p>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Delete',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#dc3545',
+        cancelButtonColor: '#6c757d'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          Swal.fire({
+            title: 'Processing...',
+            text: 'Deleting profile update request...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => {
+              Swal.showLoading();
+            }
+          });
+          submitDeleteRequest(updateId, '');
+        }
+      });
+      return;
+    }
+
     Swal.fire({
       title: 'Delete Profile Update Request',
       html: `
@@ -1363,6 +1406,25 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('submitNewUpdate').addEventListener('click', function(e) {
     e.preventDefault();
     const form = document.getElementById('newUpdateForm');
+
+    // If user has no password (external employee), submit directly
+    if (!hasPassword) {
+      Swal.fire({
+        title: 'Are you sure?',
+        text: 'Do you want to submit this profile update request?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Yes, submit it!'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          form.submit();
+        }
+      });
+      return;
+    }
+
     Swal.fire({
       title: 'Are you sure?',
       text: 'Do you want to submit this profile update request?',

@@ -13,11 +13,50 @@ use Illuminate\Support\Facades\Log;
 
 class RequestFormController extends Controller
 {
+    /**
+     * Get the authenticated employee from Guard or Session
+     */
+    private function getAuthenticatedEmployee()
+    {
+        // 1. Try to get from Employee Guard
+        if (Auth::guard('employee')->check()) {
+            return Auth::guard('employee')->user();
+        }
+
+        // 2. Try to get from Default Guard
+        if (Auth::check()) {
+            return Auth::user();
+        }
+
+        // 3. Try to get from Session (for external employees)
+        $externalData = session('external_employee_data');
+        if ($externalData) {
+            // Create a temporary object or hydration
+            $employee = new Employee();
+            $employee->forceFill($externalData);
+            // Ensure employee_id is set
+            if (!isset($employee->employee_id) && isset($externalData['employee_id'])) {
+                $employee->employee_id = $externalData['employee_id'];
+            }
+            return $employee;
+        }
+
+        return null;
+    }
+
     public function index()
     {
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+
+        if (!$employee) {
+            // Redirect to login if no employee found
+            return redirect()->route('login');
+        }
+
+        $employeeId = $employee->employee_id;
         $requests = RequestForm::where('employee_id', $employeeId)->orderByDesc('requested_date')->get();
-        return view('employee_ess_modules.request_form.request_forms', compact('requests'));
+
+        return view('employee_ess_modules.request_form.request_forms', compact('requests', 'employee'));
     }
 
     public function store(Request $request)
@@ -35,7 +74,7 @@ class RequestFormController extends Controller
 
             // Always return JSON for AJAX requests
             if ($request->expectsJson() || $request->ajax() || $request->wantsJson()) {
-                
+
                 // Validate the request data including password
                 try {
                     $validated = $request->validate([
@@ -60,8 +99,10 @@ class RequestFormController extends Controller
 
                 Log::info('Request validation passed', ['validated_data' => $validated]);
 
-                // Check if user is authenticated
-                if (!Auth::guard('employee')->check()) {
+                // Get authenticated user (supports external employees)
+                $employee = $this->getAuthenticatedEmployee();
+
+                if (!$employee) {
                     Log::error('Unauthenticated user attempting to create request', [
                         'session_data' => session()->all(),
                         'guards' => [
@@ -73,16 +114,6 @@ class RequestFormController extends Controller
                     return response()->json([
                         'success' => false,
                         'message' => 'Your session has expired. Please refresh the page and log in again.'
-                    ], 401);
-                }
-
-                // Get authenticated user
-                $employee = Auth::guard('employee')->user();
-                if (!$employee) {
-                    Log::error('No authenticated employee found during create');
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Authentication required. Please refresh the page and log in again.'
                     ], 401);
                 }
 
@@ -167,7 +198,7 @@ class RequestFormController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error creating request form', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            
+
             if ($request->expectsJson() || $request->ajax() || $request->wantsJson()) {
                 return response()->json([
                     'success' => false,
@@ -208,22 +239,14 @@ class RequestFormController extends Controller
 
             Log::info('Update validation passed', ['validated_data' => $validated]);
 
-            // Check if user is authenticated
-            if (!Auth::guard('employee')->check()) {
+            // Get authenticated user (supports external employees)
+            $employee = $this->getAuthenticatedEmployee();
+
+            if (!$employee) {
                 Log::error('Unauthenticated user attempting to update request');
                 return response()->json([
                     'success' => false,
                     'message' => 'Your session has expired. Please refresh the page and log in again.'
-                ], 401);
-            }
-
-            // Get authenticated user
-            $employee = Auth::guard('employee')->user();
-            if (!$employee) {
-                Log::error('No authenticated employee found during update');
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Authentication required. Please refresh the page and log in again.'
                 ], 401);
             }
 
@@ -289,7 +312,7 @@ class RequestFormController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error updating request form', ['request_id' => $id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update request: ' . $e->getMessage()
@@ -304,7 +327,7 @@ class RequestFormController extends Controller
     {
         try {
             Log::info('RequestForm destroy method called', [
-                'request_id' => $id, 
+                'request_id' => $id,
                 'request_id_type' => gettype($id),
                 'request_data' => $request->all(),
                 'auth_check' => Auth::guard('employee')->check(),
@@ -330,22 +353,14 @@ class RequestFormController extends Controller
 
             Log::info('Delete validation passed');
 
-            // Check if user is authenticated
-            if (!Auth::guard('employee')->check()) {
+            // Get authenticated user (supports external employees)
+            $employee = $this->getAuthenticatedEmployee();
+
+            if (!$employee) {
                 Log::error('Unauthenticated user attempting to delete request');
                 return response()->json([
                     'success' => false,
                     'message' => 'Your session has expired. Please refresh the page and log in again.'
-                ], 401);
-            }
-
-            // Get authenticated user
-            $employee = Auth::guard('employee')->user();
-            if (!$employee) {
-                Log::error('No authenticated employee found during delete');
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Authentication required. Please refresh the page and log in again.'
                 ], 401);
             }
 
@@ -373,7 +388,7 @@ class RequestFormController extends Controller
 
             if (!$requestForm) {
                 Log::warning('Request not found or not owned by employee during delete', [
-                    'request_id' => $id, 
+                    'request_id' => $id,
                     'employee_id' => $employee->employee_id,
                     'request_exists_globally' => RequestForm::where('request_id', $id)->exists()
                 ]);
@@ -416,7 +431,7 @@ class RequestFormController extends Controller
                 }
             } catch (\Exception $deleteException) {
                 Log::error('Error deleting request from database', [
-                    'request_id' => $id, 
+                    'request_id' => $id,
                     'error' => $deleteException->getMessage(),
                     'trace' => $deleteException->getTraceAsString()
                 ]);
@@ -433,7 +448,7 @@ class RequestFormController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error deleting request form', ['request_id' => $id, 'error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete request: ' . $e->getMessage()
@@ -447,19 +462,27 @@ class RequestFormController extends Controller
     private function verifyEmployeePassword($password)
     {
         try {
-            $employee = Auth::guard('employee')->user();
+            // Get authenticated user (supports external employees)
+            $employee = $this->getAuthenticatedEmployee();
+
             if (!$employee) {
                 Log::error('No authenticated employee found');
                 return false;
             }
 
             Log::info('Verifying password for employee', ['employee_id' => $employee->employee_id]);
-            
+
+            // If employee has no password (external employee via session), skip verification
+            if (empty($employee->password)) {
+                Log::info('Skipping password verification for external employee (no stored password)');
+                return true;
+            }
+
             // Check password against employee's stored password
             $isValid = Hash::check($password, $employee->password);
-            
+
             Log::info('Password verification result', ['is_valid' => $isValid]);
-            
+
             return $isValid;
         } catch (\Exception $e) {
             Log::error('Error verifying employee password', ['error' => $e->getMessage()]);

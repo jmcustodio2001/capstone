@@ -121,7 +121,7 @@
             <!-- Employee Profile Section -->
             <div class="d-flex align-items-center mb-3">
               @php
-                $employee = Auth::guard('employee')->user();
+                // $employee is passed from the controller
                 $firstName = $employee->first_name ?? 'Unknown';
                 $lastName = $employee->last_name ?? 'Employee';
                 $fullName = trim($firstName . ' ' . $lastName);

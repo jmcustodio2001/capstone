@@ -430,7 +430,7 @@ Route::get('/test-otp/{email}', function($email) {
 })->name('test.otp.debug');
 
 // Employee competency training response route
-Route::post('/employee/competency-training/respond', [EmployeeController::class, 'respondToCompetencyTraining'])->name('employee.competency_training.respond')->middleware('auth:employee');
+Route::post('/employee/competency-training/respond', [EmployeeController::class, 'respondToCompetencyTraining'])->name('employee.competency_training.respond')->middleware('employee.auth');
 
 // Admin Routes - Competency Management
 Route::get('/admin/competency-library', [CompetencyLibraryController::class, 'index'])->name('admin.competency_library.index')->middleware(['auth:admin', 'admin.auth']);
@@ -925,20 +925,20 @@ Route::get('/api/succession-planning/position/{positionId}/training-status', [Ap
 Route::get('/api/succession-planning/position/{positionId}/candidates', [App\Http\Controllers\SuccessionPlanningController::class, 'getPositionCandidates'])->name('api.succession_planning.position_candidates')->middleware('auth:admin');
 
 // Employee Routes - Self Service
-Route::get('/employee/leave-applications', [App\Http\Controllers\LeaveApplicationController::class, 'index'])->name('employee.leave_applications.index')->middleware('auth:employee');
-Route::post('/employee/leave-applications', [App\Http\Controllers\LeaveApplicationController::class, 'store'])->name('employee.leave_applications.store')->middleware('auth:employee');
-Route::get('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'show'])->name('employee.leave_applications.show')->middleware('auth:employee');
-Route::put('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'update'])->name('employee.leave_applications.update')->middleware('auth:employee');
-Route::delete('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'cancel'])->name('employee.leave_applications.cancel')->middleware('auth:employee');
+Route::get('/employee/leave-applications', [App\Http\Controllers\LeaveApplicationController::class, 'index'])->name('employee.leave_applications.index')->middleware('employee.auth');
+Route::post('/employee/leave-applications', [App\Http\Controllers\LeaveApplicationController::class, 'store'])->name('employee.leave_applications.store')->middleware('employee.auth');
+Route::get('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'show'])->name('employee.leave_applications.show')->middleware('employee.auth');
+Route::put('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'update'])->name('employee.leave_applications.update')->middleware('employee.auth');
+Route::delete('/employee/leave-applications/{id}', [App\Http\Controllers\LeaveApplicationController::class, 'cancel'])->name('employee.leave_applications.cancel')->middleware('employee.auth');
 
 // Admin Routes for Leave Management
 Route::put('/admin/leave-applications/{id}/status', [App\Http\Controllers\LeaveApplicationController::class, 'adminUpdateStatus'])->name('admin.leave_applications.update_status')->middleware(['auth:admin', 'admin.auth']);
-Route::get('/employee/attendance-logs', [App\Http\Controllers\AttendanceTimeLogController::class, 'index'])->name('employee.attendance_logs.index')->middleware('auth:employee');
-Route::post('/employee/attendance/time-in', [App\Http\Controllers\AttendanceTimeLogController::class, 'timeIn'])->name('employee.attendance.time_in')->middleware('auth:employee');
-Route::post('/employee/attendance/time-out', [App\Http\Controllers\AttendanceTimeLogController::class, 'timeOut'])->name('employee.attendance.time_out')->middleware('auth:employee');
-Route::get('/employee/attendance/status', [App\Http\Controllers\AttendanceTimeLogController::class, 'getCurrentStatus'])->name('employee.attendance.status')->middleware('auth:employee');
-Route::get('/employee/attendance/{logId}/details', [App\Http\Controllers\AttendanceTimeLogController::class, 'getDetails'])->name('employee.attendance.details')->middleware('auth:employee');
-Route::post('/employee/attendance/correction-request', [App\Http\Controllers\AttendanceTimeLogController::class, 'submitCorrectionRequest'])->name('employee.attendance.correction_request')->middleware('auth:employee');
+Route::get('/employee/attendance-logs', [App\Http\Controllers\AttendanceTimeLogController::class, 'index'])->name('employee.attendance_logs.index')->middleware('employee.auth');
+Route::post('/employee/attendance/time-in', [App\Http\Controllers\AttendanceTimeLogController::class, 'timeIn'])->name('employee.attendance.time_in')->middleware('employee.auth');
+Route::post('/employee/attendance/time-out', [App\Http\Controllers\AttendanceTimeLogController::class, 'timeOut'])->name('employee.attendance.time_out')->middleware('employee.auth');
+Route::get('/employee/attendance/status', [App\Http\Controllers\AttendanceTimeLogController::class, 'getCurrentStatus'])->name('employee.attendance.status')->middleware('employee.auth');
+Route::get('/employee/attendance/{logId}/details', [App\Http\Controllers\AttendanceTimeLogController::class, 'getDetails'])->name('employee.attendance.details')->middleware('employee.auth');
+Route::post('/employee/attendance/correction-request', [App\Http\Controllers\AttendanceTimeLogController::class, 'submitCorrectionRequest'])->name('employee.attendance.correction_request')->middleware('employee.auth');
 
 // Payslip Resource Routes (Admin)
 Route::resource('payslips', App\Http\Controllers\PayslipController::class)->middleware('auth:admin');
@@ -946,10 +946,10 @@ Route::get('/payslips/download-all', [App\Http\Controllers\PayslipController::cl
 Route::get('/payslips/{id}/download', [App\Http\Controllers\PayslipController::class, 'download'])->name('payslips.download')->middleware('auth:admin');
 
 // Employee Payslip Routes
-Route::get('/employee/payslips', [App\Http\Controllers\PayslipController::class, 'index'])->name('employee.payslips.index')->middleware('auth:employee');
-Route::get('/employee/payslips/download-all', [App\Http\Controllers\PayslipController::class, 'downloadAll'])->name('employee.payslips.download_all')->middleware('auth:employee');
-Route::get('/employee/payslips/{id}/download', [App\Http\Controllers\PayslipController::class, 'download'])->name('employee.payslips.download')->middleware('auth:employee');
-Route::get('/employee/payslips/{id}/print', [App\Http\Controllers\PayslipController::class, 'print'])->name('employee.payslips.print')->middleware('auth:employee');
+Route::get('/employee/payslips', [App\Http\Controllers\PayslipController::class, 'index'])->name('employee.payslips.index')->middleware('employee.auth');
+Route::get('/employee/payslips/download-all', [App\Http\Controllers\PayslipController::class, 'downloadAll'])->name('employee.payslips.download_all')->middleware('employee.auth');
+Route::get('/employee/payslips/{id}/download', [App\Http\Controllers\PayslipController::class, 'download'])->name('employee.payslips.download')->middleware('employee.auth');
+Route::get('/employee/payslips/{id}/print', [App\Http\Controllers\PayslipController::class, 'print'])->name('employee.payslips.print')->middleware('employee.auth');
 
 // Payslip Table Creation Route (Admin only)
 Route::get('/admin/create-payslips-table', function() {
@@ -970,48 +970,48 @@ Route::get('/admin/create-payslips-table', function() {
     }
 })->middleware('auth:admin');
 
-Route::get('/employee/claim-reimbursements', [App\Http\Controllers\ClaimReimbursementController::class, 'index'])->name('employee.claim_reimbursements.index')->middleware('auth:employee');
-Route::post('/employee/claim-reimbursements', [App\Http\Controllers\ClaimReimbursementController::class, 'store'])->name('employee.claim_reimbursements.store')->middleware('auth:employee');
-Route::get('/employee/claim-reimbursements/{id}', [App\Http\Controllers\ClaimReimbursementController::class, 'show'])->name('employee.claim_reimbursements.show')->middleware('auth:employee');
-Route::put('/employee/claim-reimbursements/{id}', [App\Http\Controllers\ClaimReimbursementController::class, 'update'])->name('employee.claim_reimbursements.update')->middleware('auth:employee');
-Route::delete('/employee/claim-reimbursements/{id}/cancel', [App\Http\Controllers\ClaimReimbursementController::class, 'cancel'])->name('employee.claim_reimbursements.cancel')->middleware('auth:employee');
-Route::get('/employee/claim-reimbursements/{id}/download-receipt', [App\Http\Controllers\ClaimReimbursementController::class, 'downloadReceipt'])->name('employee.claim_reimbursements.download_receipt')->middleware('auth:employee');
-Route::post('/employee/claim-reimbursements/test', [App\Http\Controllers\ClaimReimbursementController::class, 'testSubmission'])->name('employee.claim_reimbursements.test')->middleware('auth:employee');
-Route::get('/employee/requests', [App\Http\Controllers\RequestFormController::class, 'index'])->name('employee.requests.index')->middleware('auth:employee');
-Route::post('/employee/requests', [App\Http\Controllers\RequestFormController::class, 'store'])->name('employee.requests.store')->middleware('auth:employee');
-Route::put('/employee/requests/{id}', [App\Http\Controllers\RequestFormController::class, 'update'])->name('employee.requests.update')->middleware('auth:employee');
-Route::delete('/employee/requests/{id}', [App\Http\Controllers\RequestFormController::class, 'destroy'])->name('employee.requests.destroy')->middleware('auth:employee');
+Route::get('/employee/claim-reimbursements', [App\Http\Controllers\ClaimReimbursementController::class, 'index'])->name('employee.claim_reimbursements.index')->middleware('employee.auth');
+Route::post('/employee/claim-reimbursements', [App\Http\Controllers\ClaimReimbursementController::class, 'store'])->name('employee.claim_reimbursements.store')->middleware('employee.auth');
+Route::get('/employee/claim-reimbursements/{id}', [App\Http\Controllers\ClaimReimbursementController::class, 'show'])->name('employee.claim_reimbursements.show')->middleware('employee.auth');
+Route::put('/employee/claim-reimbursements/{id}', [App\Http\Controllers\ClaimReimbursementController::class, 'update'])->name('employee.claim_reimbursements.update')->middleware('employee.auth');
+Route::delete('/employee/claim-reimbursements/{id}/cancel', [App\Http\Controllers\ClaimReimbursementController::class, 'cancel'])->name('employee.claim_reimbursements.cancel')->middleware('employee.auth');
+Route::get('/employee/claim-reimbursements/{id}/download-receipt', [App\Http\Controllers\ClaimReimbursementController::class, 'downloadReceipt'])->name('employee.claim_reimbursements.download_receipt')->middleware('employee.auth');
+Route::post('/employee/claim-reimbursements/test', [App\Http\Controllers\ClaimReimbursementController::class, 'testSubmission'])->name('employee.claim_reimbursements.test')->middleware('employee.auth');
+Route::get('/employee/requests', [App\Http\Controllers\RequestFormController::class, 'index'])->name('employee.requests.index')->middleware('employee.auth');
+Route::post('/employee/requests', [App\Http\Controllers\RequestFormController::class, 'store'])->name('employee.requests.store')->middleware('employee.auth');
+Route::put('/employee/requests/{id}', [App\Http\Controllers\RequestFormController::class, 'update'])->name('employee.requests.update')->middleware('employee.auth');
+Route::delete('/employee/requests/{id}', [App\Http\Controllers\RequestFormController::class, 'destroy'])->name('employee.requests.destroy')->middleware('employee.auth');
 // Employee profile update route
-Route::post('/employee/profile/update', [EmployeeController::class, 'updateProfile'])->name('employee.profile.update')->middleware('auth:employee');
+Route::post('/employee/profile/update', [EmployeeController::class, 'updateProfile'])->name('employee.profile.update')->middleware('employee.auth');
 
 // Employee Settings routes
-Route::get('/employee/settings', [EmployeeController::class, 'settings'])->name('employee.settings')->middleware('auth:employee');
-Route::put('/employee/settings', [EmployeeController::class, 'updateSettings'])->name('employee.updateSettings')->middleware('auth:employee');
-Route::post('/employee/settings', [EmployeeController::class, 'updateSettings'])->name('employee.updateSettings.post')->middleware('auth:employee');
-Route::post('/employee/settings-debug', [EmployeeController::class, 'updateSettingsDebug'])->name('employee.updateSettings.debug')->middleware('auth:employee');
-Route::post('/employee/verify-password', [EmployeeController::class, 'verifyPassword'])->name('employee.verify_password')->middleware('auth:employee');
+Route::get('/employee/settings', [EmployeeController::class, 'settings'])->name('employee.settings')->middleware('employee.auth');
+Route::put('/employee/settings', [EmployeeController::class, 'updateSettings'])->name('employee.updateSettings')->middleware('employee.auth');
+Route::post('/employee/settings', [EmployeeController::class, 'updateSettings'])->name('employee.updateSettings.post')->middleware('employee.auth');
+Route::post('/employee/settings-debug', [EmployeeController::class, 'updateSettingsDebug'])->name('employee.updateSettings.debug')->middleware('employee.auth');
+Route::post('/employee/verify-password', [EmployeeController::class, 'verifyPassword'])->name('employee.verify_password')->middleware('employee.auth');
 
 // Employee Settings Fix routes
-Route::post('/employee/settings/fix-save', [EmployeeController::class, 'fixEmployeeSettingsSave'])->name('employee.settings.fix')->middleware('auth:employee');
-Route::get('/employee/debug-auth', [EmployeeController::class, 'debugEmployeeAuth'])->name('employee.debug.auth')->middleware('auth:employee');
+Route::post('/employee/settings/fix-save', [EmployeeController::class, 'fixEmployeeSettingsSave'])->name('employee.settings.fix')->middleware('employee.auth');
+Route::get('/employee/debug-auth', [EmployeeController::class, 'debugEmployeeAuth'])->name('employee.debug.auth')->middleware('employee.auth');
 
 // Employee ping route for online status check
 Route::get('/employee/ping', function() {
     return response()->json(['status' => 'online', 'timestamp' => now()]);
-})->name('employee.ping')->middleware('auth:employee');
+})->name('employee.ping')->middleware('employee.auth');
 
 
 
-Route::get('/employee/my-trainings', [App\Http\Controllers\MyTrainingController::class, 'index'])->name('employee.my_trainings.index')->middleware('auth:employee');
+Route::get('/employee/my-trainings', [App\Http\Controllers\MyTrainingController::class, 'index'])->name('employee.my_trainings.index')->middleware('employee.auth');
 
 // Training export routes
-Route::get('/employee/trainings/export/pdf', [App\Http\Controllers\MyTrainingController::class, 'exportPdf'])->name('employee.trainings.export.pdf')->middleware('auth:employee');
-Route::get('/employee/trainings/export/excel', [App\Http\Controllers\MyTrainingController::class, 'exportExcel'])->name('employee.trainings.export.excel')->middleware('auth:employee');
+Route::get('/employee/trainings/export/pdf', [App\Http\Controllers\MyTrainingController::class, 'exportPdf'])->name('employee.trainings.export.pdf')->middleware('employee.auth');
+Route::get('/employee/trainings/export/excel', [App\Http\Controllers\MyTrainingController::class, 'exportExcel'])->name('employee.trainings.export.excel')->middleware('employee.auth');
 
 // Training CRUD routes
-Route::post('/employee/my-trainings', [App\Http\Controllers\MyTrainingController::class, 'store'])->name('employee.my_trainings.store')->middleware('auth:employee');
-Route::put('/employee/my-trainings/{id}', [App\Http\Controllers\MyTrainingController::class, 'update'])->name('employee.my_trainings.update')->middleware('auth:employee');
-Route::delete('/employee/my-trainings/{id}', [App\Http\Controllers\MyTrainingController::class, 'destroy'])->name('employee.my_trainings.destroy')->middleware('auth:employee');
+Route::post('/employee/my-trainings', [App\Http\Controllers\MyTrainingController::class, 'store'])->name('employee.my_trainings.store')->middleware('employee.auth');
+Route::put('/employee/my-trainings/{id}', [App\Http\Controllers\MyTrainingController::class, 'update'])->name('employee.my_trainings.update')->middleware('employee.auth');
+Route::delete('/employee/my-trainings/{id}', [App\Http\Controllers\MyTrainingController::class, 'destroy'])->name('employee.my_trainings.destroy')->middleware('employee.auth');
 
 // Debug route for duplicate trainings
 Route::get('/employee/debug-duplicate-trainings', [App\Http\Controllers\MyTrainingController::class, 'debugDuplicateTrainings'])->name('employee.debug_duplicate_trainings')->middleware('auth:admin');
@@ -1026,7 +1026,7 @@ Route::get('/admin/fix-competency-assigned-by-names', [App\Http\Controllers\MyTr
 Route::get('/employee/certificate/download/{id}', function($id) {
     // Sample certificate download - replace with actual file download
     return response()->json(['message' => 'Certificate download functionality not yet implemented']);
-})->name('employee.certificate.download')->middleware('auth:employee');
+})->name('employee.certificate.download')->middleware('employee.auth');
 
 // Certificate tracking routes
 Route::get('/certificates/view/{id}', [App\Http\Controllers\CertificateGenerationController::class, 'viewCertificate'])->name('certificates.view');
@@ -1124,19 +1124,19 @@ Route::get('/storage-file/{folder}/{path}', [App\Http\Controllers\StorageLinkCon
     ->name('storage.file');
 
 // Exam routes
-Route::get('/employee/exam/start/{courseId}', [ExamController::class, 'startExam'])->name('employee.exam.start')->middleware('auth:employee');
-Route::get('/employee/exam/take/{attemptId}', [ExamController::class, 'take'])->name('employee.exam.take')->middleware('auth:employee');
-Route::post('/employee/exam/submit/{attemptId}', [ExamController::class, 'submitAjax'])->name('employee.exam.submit')->middleware('auth:employee');
-Route::post('/employee/exam/submit-ajax/{attemptId}', [ExamController::class, 'submitAjax'])->name('employee.exam.submit_ajax')->middleware('auth:employee');
-Route::get('/employee/exam/result/{attemptId}', [ExamController::class, 'result'])->name('employee.exam.result')->middleware('auth:employee');
-Route::get('/employee/exam/simple-result/{attemptId}', [ExamController::class, 'simpleResult'])->name('employee.exam.simple_result')->middleware('auth:employee');
+Route::get('/employee/exam/start/{courseId}', [ExamController::class, 'startExam'])->name('employee.exam.start')->middleware('employee.auth');
+Route::get('/employee/exam/take/{attemptId}', [ExamController::class, 'take'])->name('employee.exam.take')->middleware('employee.auth');
+Route::post('/employee/exam/submit/{attemptId}', [ExamController::class, 'submitAjax'])->name('employee.exam.submit')->middleware('employee.auth');
+Route::post('/employee/exam/submit-ajax/{attemptId}', [ExamController::class, 'submitAjax'])->name('employee.exam.submit_ajax')->middleware('employee.auth');
+Route::get('/employee/exam/result/{attemptId}', [ExamController::class, 'result'])->name('employee.exam.result')->middleware('employee.auth');
+Route::get('/employee/exam/simple-result/{attemptId}', [ExamController::class, 'simpleResult'])->name('employee.exam.simple_result')->middleware('employee.auth');
 
 // Training feedback routes
-Route::get('/employee/training-feedback', [App\Http\Controllers\TrainingFeedbackController::class, 'index'])->name('employee.training_feedback.index')->middleware('auth:employee');
-Route::post('/employee/training-feedback', [App\Http\Controllers\TrainingFeedbackController::class, 'store'])->name('employee.training_feedback.store')->middleware('auth:employee');
-Route::get('/employee/training-feedback/{id}', [App\Http\Controllers\TrainingFeedbackController::class, 'show'])->name('employee.training_feedback.show')->middleware('auth:employee');
-Route::put('/employee/training-feedback/{id}', [App\Http\Controllers\TrainingFeedbackController::class, 'update'])->name('employee.training_feedback.update')->middleware('auth:employee');
-Route::delete('/employee/training-feedback/{id}', [App\Http\Controllers\TrainingFeedbackController::class, 'destroy'])->name('employee.training_feedback.destroy')->middleware('auth:employee');
+Route::get('/employee/training-feedback', [App\Http\Controllers\TrainingFeedbackController::class, 'index'])->name('employee.training_feedback.index')->middleware('employee.auth');
+Route::post('/employee/training-feedback', [App\Http\Controllers\TrainingFeedbackController::class, 'store'])->name('employee.training_feedback.store')->middleware('employee.auth');
+Route::get('/employee/training-feedback/{id}', [App\Http\Controllers\TrainingFeedbackController::class, 'show'])->name('employee.training_feedback.show')->middleware('employee.auth');
+Route::put('/employee/training-feedback/{id}', [App\Http\Controllers\TrainingFeedbackController::class, 'update'])->name('employee.training_feedback.update')->middleware('employee.auth');
+Route::delete('/employee/training-feedback/{id}', [App\Http\Controllers\TrainingFeedbackController::class, 'destroy'])->name('employee.training_feedback.destroy')->middleware('employee.auth');
 
 // Admin route to create training feedback table if missing
 Route::get('/admin/create-training-feedback-table', function() {
@@ -1180,37 +1180,37 @@ Route::get('/admin/create-training-feedback-table', function() {
         return response()->json(['success' => true, 'message' => 'Training feedback table already exists']);
     }
 })->name('admin.create_training_feedback_table')->middleware('auth:admin');
-Route::get('/employee/competency-profile', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'index'])->name('employee.competency_profile.index')->middleware('auth:employee');
+Route::get('/employee/competency-profile', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'index'])->name('employee.competency_profile.index')->middleware('employee.auth');
 
 // Competency Profile AJAX routes
-Route::get('/employee/competency-profile/progress-data', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'getProgressData'])->name('employee.competency_profile.progress_data')->middleware('auth:employee');
+Route::get('/employee/competency-profile/progress-data', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'getProgressData'])->name('employee.competency_profile.progress_data')->middleware('employee.auth');
 
-Route::get('/employee/competency-profile/{id}', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'show'])->name('employee.competency_profile.show')->middleware('auth:employee');
+Route::get('/employee/competency-profile/{id}', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'show'])->name('employee.competency_profile.show')->middleware('employee.auth');
 
-Route::post('/employee/competency-profile/request-feedback', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'requestFeedback'])->name('employee.competency_profile.request_feedback')->middleware('auth:employee');
+Route::post('/employee/competency-profile/request-feedback', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'requestFeedback'])->name('employee.competency_profile.request_feedback')->middleware('employee.auth');
 
-Route::post('/employee/competency-profile/{id}/update-progress', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'updateProgress'])->name('employee.competency_profile.update_progress')->middleware('auth:employee');
+Route::post('/employee/competency-profile/{id}/update-progress', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'updateProgress'])->name('employee.competency_profile.update_progress')->middleware('employee.auth');
 
-Route::post('/employee/competency-profile/{id}/start-training', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'startTraining'])->name('employee.competency_profile.start_training')->middleware('auth:employee');
+Route::post('/employee/competency-profile/{id}/start-training', [App\Http\Controllers\Employee\CompetencyProfileController::class, 'startTraining'])->name('employee.competency_profile.start_training')->middleware('employee.auth');
 
-Route::get('/employee/profile-updates', [App\Http\Controllers\ProfileUpdateController::class, 'index'])->name('employee.profile_updates.index')->middleware('auth:employee');
-Route::post('/employee/profile-updates', [App\Http\Controllers\ProfileUpdateController::class, 'store'])->name('employee.profile_updates.store')->middleware('auth:employee');
-Route::get('/employee/profile-updates/{profileUpdate}', [App\Http\Controllers\ProfileUpdateController::class, 'show'])->name('employee.profile_updates.show')->middleware('auth:employee');
-Route::get('/employee/profile-updates/{profileUpdate}/edit', [App\Http\Controllers\ProfileUpdateController::class, 'edit'])->name('employee.profile_updates.edit')->middleware('auth:employee');
-Route::put('/employee/profile-updates/{profileUpdate}', [App\Http\Controllers\ProfileUpdateController::class, 'update'])->name('employee.profile_updates.update')->middleware('auth:employee');
-Route::delete('/employee/profile-updates/{profileUpdate}', [App\Http\Controllers\ProfileUpdateController::class, 'destroy'])->name('employee.profile_updates.destroy')->middleware('auth:employee');
-Route::get('/employee/profile-updates/{profileUpdate}/details', [App\Http\Controllers\ProfileUpdateController::class, 'details'])->name('employee.profile_updates.details')->middleware('auth:employee');
+Route::get('/employee/profile-updates', [App\Http\Controllers\ProfileUpdateController::class, 'index'])->name('employee.profile_updates.index')->middleware('employee.auth');
+Route::post('/employee/profile-updates', [App\Http\Controllers\ProfileUpdateController::class, 'store'])->name('employee.profile_updates.store')->middleware('employee.auth');
+Route::get('/employee/profile-updates/{profileUpdate}', [App\Http\Controllers\ProfileUpdateController::class, 'show'])->name('employee.profile_updates.show')->middleware('employee.auth');
+Route::get('/employee/profile-updates/{profileUpdate}/edit', [App\Http\Controllers\ProfileUpdateController::class, 'edit'])->name('employee.profile_updates.edit')->middleware('employee.auth');
+Route::put('/employee/profile-updates/{profileUpdate}', [App\Http\Controllers\ProfileUpdateController::class, 'update'])->name('employee.profile_updates.update')->middleware('employee.auth');
+Route::delete('/employee/profile-updates/{profileUpdate}', [App\Http\Controllers\ProfileUpdateController::class, 'destroy'])->name('employee.profile_updates.destroy')->middleware('employee.auth');
+Route::get('/employee/profile-updates/{profileUpdate}/details', [App\Http\Controllers\ProfileUpdateController::class, 'details'])->name('employee.profile_updates.details')->middleware('employee.auth');
 
 
 // Employee destination training response routes
-Route::post('/employee/destination-training/accept', [App\Http\Controllers\MyTrainingController::class, 'acceptDestinationTraining'])->name('employee.destination_training.accept')->middleware('auth:employee');
-Route::post('/employee/destination-training/decline', [App\Http\Controllers\MyTrainingController::class, 'declineDestinationTraining'])->name('employee.destination_training.decline')->middleware('auth:employee');
-Route::get('/employee/destination-training/details/{id}', [App\Http\Controllers\MyTrainingController::class, 'getDestinationTrainingDetails'])->name('employee.destination_training.details')->middleware('auth:employee');
+Route::post('/employee/destination-training/accept', [App\Http\Controllers\MyTrainingController::class, 'acceptDestinationTraining'])->name('employee.destination_training.accept')->middleware('employee.auth');
+Route::post('/employee/destination-training/decline', [App\Http\Controllers\MyTrainingController::class, 'declineDestinationTraining'])->name('employee.destination_training.decline')->middleware('employee.auth');
+Route::get('/employee/destination-training/details/{id}', [App\Http\Controllers\MyTrainingController::class, 'getDestinationTrainingDetails'])->name('employee.destination_training.details')->middleware('employee.auth');
 
 // Training progress update routes
-Route::post('/employee/training/progress', [App\Http\Controllers\TrainingProgressUpdateController::class, 'store'])->name('employee.training.progress.store')->middleware('auth:employee');
-Route::post('/employee/training/update-progress-after-exam', [App\Http\Controllers\TrainingProgressUpdateController::class, 'updateProgressAfterExam'])->name('employee.training.update_progress_after_exam')->middleware('auth:employee');
-Route::post('/employee/training/refresh-progress', [App\Http\Controllers\TrainingProgressUpdateController::class, 'refreshProgress'])->name('employee.training.refresh_progress')->middleware('auth:employee');
+Route::post('/employee/training/progress', [App\Http\Controllers\TrainingProgressUpdateController::class, 'store'])->name('employee.training.progress.store')->middleware('employee.auth');
+Route::post('/employee/training/update-progress-after-exam', [App\Http\Controllers\TrainingProgressUpdateController::class, 'updateProgressAfterExam'])->name('employee.training.update_progress_after_exam')->middleware('employee.auth');
+Route::post('/employee/training/refresh-progress', [App\Http\Controllers\TrainingProgressUpdateController::class, 'refreshProgress'])->name('employee.training.refresh_progress')->middleware('employee.auth');
 
 // Debug route for testing exam progress
 Route::get('/employee/debug-exam-progress/{courseId}', function($courseId) {
@@ -1229,7 +1229,7 @@ Route::get('/employee/debug-exam-progress/{courseId}', function($courseId) {
         'calculated_progress' => $calculatedProgress,
         'debug' => 'Check exam progress calculation'
     ]);
-})->middleware('auth:employee');
+})->middleware('employee.auth');
 
 // Activity Logs Route
 Route::get('/admin/activity-logs', [App\Http\Controllers\ActivityLogController::class, 'index'])->name('activity_logs.index')->middleware('auth:admin');
@@ -1251,7 +1251,7 @@ Route::get('/employee/test-auth', function() {
             'login_url' => route('employee.login')
         ]);
     }
-})->middleware('auth:employee');
+})->middleware('employee.auth');
 
 // Debug route for testing settings access without middleware
 Route::get('/employee/debug-settings', function() {
@@ -1331,7 +1331,7 @@ Route::get('/debug/customer-service-training/{employeeId}', function($employeeId
 });
 
 // Employee Settings Routes
-Route::middleware(['auth:employee'])->group(function () {
+Route::middleware(['employee.auth'])->group(function () {
     Route::post('/employee/settings/save', [App\Http\Controllers\EmployeeSettingsController::class, 'saveSettings'])->name('employee.settings.save');
     Route::get('/employee/settings/get', [App\Http\Controllers\EmployeeSettingsController::class, 'getSettings'])->name('employee.settings.get');
 });

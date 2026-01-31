@@ -20,7 +20,7 @@ class CompetencyProfileController extends Controller
      */
     public function index()
     {
-        $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             return redirect()->route('employee.dashboard')->with('error', 'Employee profile not found.');
@@ -97,7 +97,7 @@ class CompetencyProfileController extends Controller
      */
     public function show($id)
     {
-        $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         $profile = EmployeeCompetencyProfile::with(['competency'])
             ->where('id', $id)
@@ -241,7 +241,7 @@ class CompetencyProfileController extends Controller
      */
     public function getProgressData(Request $request)
     {
-        $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             return response()->json(['error' => 'Employee not found'], 404);
@@ -291,7 +291,7 @@ class CompetencyProfileController extends Controller
      */
     public function updateProgress(Request $request, $id)
     {
-        $employee = Auth::user()->employee ?? Employee::where('email', Auth::user()->email)->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             return response()->json(['error' => 'Employee not found'], 404);
@@ -378,16 +378,10 @@ class CompetencyProfileController extends Controller
     public function startTraining($id)
     {
         try {
-            // Debug authentication
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json(['success' => false, 'message' => 'User not authenticated'], 401);
-            }
-
-            $employee = $user->employee ?? Employee::where('email', $user->email)->first();
+            $employee = $this->getAuthenticatedEmployee();
 
             if (!$employee) {
-                return response()->json(['success' => false, 'message' => 'Employee profile not found for user: ' . $user->email], 404);
+                return response()->json(['success' => false, 'message' => 'Employee profile not found'], 404);
             }
 
             $profile = EmployeeCompetencyProfile::with(['competency'])
@@ -657,5 +651,30 @@ class CompetencyProfileController extends Controller
         } else {
             return "Basic {$competencyName} fundamentals training";
         }
+    }
+
+    /**
+     * Get the authenticated employee, supporting both DB and session-based (external) employees.
+     *
+     * @return \App\Models\Employee|null
+     */
+    private function getAuthenticatedEmployee()
+    {
+        // Get employee from authenticated user
+        $employee = Auth::guard('employee')->user();
+
+        // Fallback to session data if not authenticated via guard but session exists
+        if (!$employee && session()->has('external_employee_data')) {
+            $data = session('external_employee_data');
+            $employee = new Employee();
+            $employee->forceFill($data);
+        }
+
+        // If still no employee object but we have an ID (rare case), try DB
+        if (!$employee && Auth::guard('employee')->id()) {
+            $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        }
+
+        return $employee;
     }
 }

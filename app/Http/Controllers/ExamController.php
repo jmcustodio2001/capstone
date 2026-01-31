@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ExamAttempt;
 use App\Models\ExamQuestion;
 use App\Models\CourseManagement;
+use App\Models\Employee;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -12,37 +13,81 @@ use Illuminate\Support\Facades\DB;
 
 class ExamController extends Controller
 {
+    /**
+     * Get the authenticated employee from Guard or Session
+     */
+    private function getAuthenticatedEmployee()
+    {
+        // 1. Try to get from Employee Guard
+        if (Auth::guard('employee')->check()) {
+            return Auth::guard('employee')->user();
+        }
+
+        // 2. Try to get from Default Guard
+        if (Auth::check()) {
+            return Auth::user();
+        }
+
+        // 3. Try to get from Session (for external employees)
+        $externalData = session('external_employee_data');
+        if ($externalData) {
+            // Create a temporary object or hydration
+            $employee = new Employee();
+            $employee->forceFill($externalData);
+            // Ensure employee_id is set
+            if (!isset($employee->employee_id) && isset($externalData['employee_id'])) {
+                $employee->employee_id = $externalData['employee_id'];
+            }
+            return $employee;
+        }
+
+        return null;
+    }
+
     public function take($attemptId)
     {
         $attempt = ExamAttempt::with('course')->findOrFail($attemptId);
-        
+
         // Verify this attempt belongs to the authenticated user
-        $user = Auth::user();
-        if (!$user || $attempt->employee_id !== $user->employee_id) {
+        $user = $this->getAuthenticatedEmployee();
+
+        Log::info('Exam Take Auth Check', [
+            'attempt_id' => $attemptId,
+            'attempt_employee_id' => $attempt->employee_id,
+            'user_exists' => $user ? 'yes' : 'no',
+            'user_employee_id' => $user ? $user->employee_id : 'null',
+            'session_data' => session('external_employee_data')
+        ]);
+
+        if (!$user || $attempt->employee_id != $user->employee_id) {
+            Log::warning('Unauthorized exam access attempt', [
+                'attempt_employee_id' => $attempt->employee_id,
+                'user_employee_id' => $user ? $user->employee_id : 'null'
+            ]);
             abort(403, 'Unauthorized access to exam attempt.');
         }
-        
+
         // Check if attempt is already completed
         if ($attempt->status === 'completed') {
             return redirect()->route('employee.exam.result', $attempt->id);
         }
-        
+
         $course = $attempt->course;
         $questions = ExamQuestion::getQuestionsForCourse($attempt->course_id, $attempt->type);
-        
+
         // Auto-generate questions if none exist for this course
         if ($questions->isEmpty()) {
             $this->autoGenerateQuestionsForCourse($attempt->course_id, $course->course_title);
             $questions = ExamQuestion::getQuestionsForCourse($attempt->course_id, $attempt->type);
         }
-        
+
         // Calculate remaining attempts
         $totalAttempts = ExamAttempt::where('employee_id', $attempt->employee_id)
             ->where('course_id', $attempt->course_id)
             ->where('type', $attempt->type)
             ->count();
         $remainingAttempts = 3 - $totalAttempts;
-        
+
         return view('employee_ess_modules.exam.take_exam', compact('attempt', 'course', 'questions', 'remainingAttempts'));
     }
 
@@ -94,7 +139,7 @@ class ExamController extends Controller
     private function autoGenerateQuestionsForCourse($courseId, $courseTitle)
     {
         $questions = $this->generateTopicSpecificQuestions($courseTitle);
-        
+
         foreach($questions as $q) {
             ExamQuestion::create([
                 'course_id' => $courseId,
@@ -107,7 +152,7 @@ class ExamController extends Controller
                 'is_active' => true
             ]);
         }
-        
+
         Log::info("Auto-generated exam questions for course", [
             'course_id' => $courseId,
             'course_title' => $courseTitle,
@@ -121,7 +166,7 @@ class ExamController extends Controller
     private function generateTopicSpecificQuestions($courseTitle)
     {
         $topic = strtolower($courseTitle);
-        
+
         // DESTINATION KNOWLEDGE - Any location/place
         if (preg_match('/\b(destination|location|place|city|terminal|station|baesa|quezon|cubao|baguio|boracay|cebu|davao|manila|palawan|geography|route|travel|area)\b/i', $courseTitle)) {
             return $this->generateDestinationQuestions($courseTitle);
@@ -160,19 +205,19 @@ class ExamController extends Controller
     {
         try {
             $attempt = ExamAttempt::findOrFail($attemptId);
-            $user = Auth::user();
+            $user = $this->getAuthenticatedEmployee();
             if (!$user) {
                 return response()->json(['success' => false, 'message' => 'Authentication required.'], 401);
             }
             $employeeId = $user->employee_id;
-            
+
             // Verify this attempt belongs to the authenticated user
-            if ($attempt->employee_id !== $employeeId) {
+            if ($attempt->employee_id != $employeeId) {
                 return response()->json(['success' => false, 'message' => 'Unauthorized access to exam attempt.'], 403);
             }
-            
+
             $answers = $request->input('answers', []);
-            
+
             Log::info("EXAM SUBMIT DEBUG", [
                 'attempt_id' => $attemptId,
                 'employee_id' => $employeeId,
@@ -180,11 +225,11 @@ class ExamController extends Controller
                 'answers_received' => $answers,
                 'answers_count' => count($answers)
             ]);
-            
+
             // Get questions for this attempt
             $questions = ExamQuestion::getQuestionsForCourse($attempt->course_id, $attempt->type);
             $totalQuestions = $questions->count();
-            
+
             // Check if questions exist
             if ($totalQuestions === 0) {
                 Log::warning("No questions found for exam submission", [
@@ -196,26 +241,26 @@ class ExamController extends Controller
                     'message' => 'No questions available for this exam.'
                 ], 400);
             }
-            
+
             $correctAnswers = 0;
-            
+
             // Enhanced answer validation - accurate and robust
             foreach ($questions as $question) {
                 $userAnswer = $answers[$question->id] ?? null;
                 $isCorrect = false;
-                
+
                 if ($userAnswer !== null && $userAnswer !== '') {
                     // Safely get the selected answer text from options
                     $selectedAnswerText = null;
                     if (is_array($question->options) && isset($question->options[$userAnswer])) {
                         $selectedAnswerText = $question->options[$userAnswer];
                     }
-                    
+
                     // Enhanced validation with multiple comparison methods
                     if ($selectedAnswerText) {
                         $selectedClean = trim(strtolower($selectedAnswerText));
                         $correctClean = trim(strtolower($question->correct_answer));
-                        
+
                         // Method 1: Exact match (case-insensitive)
                         if ($selectedClean === $correctClean) {
                             $isCorrect = true;
@@ -228,7 +273,7 @@ class ExamController extends Controller
                         elseif (strpos($selectedClean, $correctClean) !== false || strpos($correctClean, $selectedClean) !== false) {
                             $isCorrect = true;
                         }
-                        
+
                         Log::info($isCorrect ? "Answer CORRECT" : "Answer INCORRECT", [
                             'question_id' => $question->id,
                             'user_selected' => $userAnswer,
@@ -251,25 +296,25 @@ class ExamController extends Controller
                         'user_answer' => $userAnswer
                     ]);
                 }
-                
+
                 if ($isCorrect) {
                     $correctAnswers++;
                 }
             }
-            
+
             // Calculate score
             $score = $totalQuestions > 0 ? round(($correctAnswers / $totalQuestions) * 100, 2) : 0;
-            
+
             Log::info("Exam scoring complete", [
                 'total_questions' => $totalQuestions,
                 'correct_answers' => $correctAnswers,
                 'calculated_score' => $score
             ]);
-            
+
             // Update exam attempt with correct pass/fail status
             $isPassed = $score >= 80;
             $examStatus = $isPassed ? 'completed' : 'failed';
-            
+
             $attempt->update([
                 'answers' => $answers,
                 'score' => $score,
@@ -278,19 +323,19 @@ class ExamController extends Controller
                 'status' => $examStatus,
                 'completed_at' => now()
             ]);
-            
+
             // Update training progress based on accurate pass/fail logic
             // 80-100% = PASSED (100% progress), Below 80% = FAILED (progress = actual score)
             $progress = $isPassed ? 100 : $score;
             $status = $isPassed ? 'Completed' : 'Failed';
-            
+
             Log::info("Pass/Fail determination", [
                 'score' => $score,
                 'is_passed' => $isPassed,
                 'progress' => $progress,
                 'status' => $status
             ]);
-            
+
             // Safely update or create training progress records
             try {
                 // Force update - ensure we always update the record
@@ -303,7 +348,7 @@ class ExamController extends Controller
                         'updated_at' => now(),
                         'remarks' => 'Updated from exam completion - Score: ' . $score . '%'
                     ]);
-                
+
                 Log::info("Dashboard update attempt", [
                     'employee_id' => $employeeId,
                     'course_id' => $attempt->course_id,
@@ -311,7 +356,7 @@ class ExamController extends Controller
                     'status' => $status,
                     'rows_affected' => $updated
                 ]);
-                
+
                 // If no record was updated, create a new one
                 if ($updated === 0) {
                     // Check if record exists but wasn't updated due to constraints
@@ -319,7 +364,7 @@ class ExamController extends Controller
                         ->where('employee_id', $employeeId)
                         ->where('course_id', $attempt->course_id)
                         ->first();
-                    
+
                     if ($existingRecord) {
                         // Force update using raw SQL
                         DB::statement(
@@ -361,13 +406,13 @@ class ExamController extends Controller
                         'rows_updated' => $updated
                     ]);
                 }
-                
+
                 // Verify the update worked
                 $verifyRecord = DB::table('employee_training_dashboard')
                     ->where('employee_id', $employeeId)
                     ->where('course_id', $attempt->course_id)
                     ->first();
-                
+
                 if ($verifyRecord) {
                     Log::info("Dashboard record verification", [
                         'employee_id' => $employeeId,
@@ -384,15 +429,15 @@ class ExamController extends Controller
                         'course_id' => $attempt->course_id
                     ]);
                 }
-                    
+
                 // If exam is passed (100% progress), automatically move to Completed Trainings
                 if ($isPassed) {
                     $this->moveExamToCompletedTrainings($attempt, $progress);
-                    
+
                     // Update competency profile when exam is passed
                     $this->updateCompetencyProfileFromExam($attempt, $progress);
                 }
-                
+
                 // Match course title for title-based updates
                 $course = CourseManagement::find($attempt->course_id);
                 $courseTitle = $course ? $course->course_title : '';
@@ -437,19 +482,19 @@ class ExamController extends Controller
             } catch (\Exception $e) {
                 Log::warning("Failed to update extra training tables: " . $e->getMessage());
             }
-            
+
             // Update destination knowledge training records with enhanced matching
             try {
                 $course = CourseManagement::find($attempt->course_id);
                 if ($course) {
                     // Convert status to match destination training format
-                    $destinationStatus = $status === 'Completed' ? 'completed' : 
+                    $destinationStatus = $status === 'Completed' ? 'completed' :
                                        ($status === 'In Progress' ? 'in-progress' : 'not-started');
-                    
+
                     // Enhanced matching logic - try multiple patterns
                     $courseTitle = $course->course_title;
                     $updated = 0;
-                    
+
                     // Pattern 1: Exact match
                     $updated = DB::table('destination_knowledge_trainings')
                         ->where('employee_id', $employeeId)
@@ -460,7 +505,7 @@ class ExamController extends Controller
                             'date_completed' => $progress >= 100 ? now()->format('Y-m-d') : null,
                             'updated_at' => now()
                         ]);
-                    
+
                     // Pattern 2: If no exact match, try LIKE patterns
                     if ($updated === 0) {
                         $updated = DB::table('destination_knowledge_trainings')
@@ -477,7 +522,7 @@ class ExamController extends Controller
                                 'updated_at' => now()
                             ]);
                     }
-                    
+
                     // Pattern 3: If still no match, try word-based matching
                     if ($updated === 0) {
                         $words = explode(' ', $courseTitle);
@@ -496,7 +541,7 @@ class ExamController extends Controller
                             }
                         }
                     }
-                    
+
                     Log::info("Updated destination knowledge training", [
                         'employee_id' => $employeeId,
                         'course_title' => $courseTitle,
@@ -504,14 +549,14 @@ class ExamController extends Controller
                         'progress' => $progress,
                         'status' => $destinationStatus
                     ]);
-                    
+
                     // If still no records updated, log available records for debugging
                     if ($updated === 0) {
                         $availableRecords = DB::table('destination_knowledge_trainings')
                             ->where('employee_id', $employeeId)
                             ->pluck('destination_name')
                             ->toArray();
-                        
+
                         Log::warning("No destination training records updated", [
                             'employee_id' => $employeeId,
                             'course_title' => $courseTitle,
@@ -522,7 +567,7 @@ class ExamController extends Controller
             } catch (\Exception $e) {
                 Log::warning("Failed to update destination_knowledge_training: " . $e->getMessage());
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => 'Exam submitted successfully',
@@ -531,7 +576,7 @@ class ExamController extends Controller
                 'total_questions' => $totalQuestions,
                 'status' => 'completed'
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Exam submission error: ' . $e->getMessage());
             return response()->json([
@@ -547,29 +592,29 @@ class ExamController extends Controller
     public function result($attemptId)
     {
         $attempt = ExamAttempt::with(['course', 'employee'])->findOrFail($attemptId);
-        
+
         // Verify this attempt belongs to the authenticated user
-        $user = Auth::user();
-        if (!$user || $attempt->employee_id !== $user->employee_id) {
+        $user = $this->getAuthenticatedEmployee();
+        if (!$user || $attempt->employee_id != $user->employee_id) {
             abort(403, 'Unauthorized access to exam result.');
         }
-        
+
         // Calculate remaining attempts
         $totalAttempts = ExamAttempt::where('employee_id', $attempt->employee_id)
             ->where('course_id', $attempt->course_id)
             ->where('type', $attempt->type)
             ->count();
         $remainingAttempts = max(0, 3 - $totalAttempts);
-        
+
         // Calculate scores and progress
         $scores = [
             'exam_score' => $attempt->score,
             'quiz_score' => 0
         ];
-        
+
         // Apply same pass/fail logic: 80-100% = passed, 75% and below = failed
         $combinedProgress = $attempt->score >= 80 ? 100 : $attempt->score;
-        
+
         return view('employee_ess_modules.exam.simple_result', compact('attempt', 'scores', 'combinedProgress', 'remainingAttempts'));
     }
 
@@ -579,29 +624,29 @@ class ExamController extends Controller
     public function simpleResult($attemptId)
     {
         $attempt = ExamAttempt::with(['course', 'employee'])->findOrFail($attemptId);
-        
+
         // Verify this attempt belongs to the authenticated user
-        $user = Auth::user();
-        if (!$user || $attempt->employee_id !== $user->employee_id) {
+        $user = $this->getAuthenticatedEmployee();
+        if (!$user || $attempt->employee_id != $user->employee_id) {
             abort(403, 'Unauthorized access to exam result.');
         }
-        
+
         // Calculate remaining attempts
         $totalAttempts = ExamAttempt::where('employee_id', $attempt->employee_id)
             ->where('course_id', $attempt->course_id)
             ->where('type', $attempt->type)
             ->count();
         $remainingAttempts = max(0, 3 - $totalAttempts);
-        
+
         // Calculate scores and progress
         $scores = [
             'exam_score' => $attempt->score,
             'quiz_score' => 0
         ];
-        
+
         // Apply same pass/fail logic: 80-100% = passed, 75% and below = failed
         $combinedProgress = $attempt->score >= 80 ? 100 : $attempt->score;
-        
+
         return view('employee_ess_modules.exam.simple_result', compact('attempt', 'scores', 'combinedProgress', 'remainingAttempts'));
     }
 
@@ -610,37 +655,37 @@ class ExamController extends Controller
      */
     public function startExam($courseId)
     {
-        $user = Auth::user();
+        $user = $this->getAuthenticatedEmployee();
         if (!$user) {
             abort(401, 'Authentication required.');
         }
         $employeeId = $user->employee_id;
-        
+
         // Find the course
         $course = CourseManagement::findOrFail($courseId);
-        
+
         // Check if employee has already completed this exam
         $completedAttempt = ExamAttempt::where('employee_id', $employeeId)
             ->where('course_id', $courseId)
             ->where('status', 'completed')
             ->where('score', '>=', 80)
             ->first();
-            
+
         if ($completedAttempt) {
             return redirect()->to('/employee/exam/result/' . $completedAttempt->id)
                 ->with('info', 'You have already passed this exam.');
         }
-        
+
         // Check remaining attempts (max 3)
         $totalAttempts = ExamAttempt::where('employee_id', $employeeId)
             ->where('course_id', $courseId)
             ->count();
-            
+
         if ($totalAttempts >= 3) {
             return redirect()->route('employee.my_trainings.index')
                 ->with('error', 'You have reached the maximum number of exam attempts (3) for this course.');
         }
-        
+
         // Create new exam attempt
         $attempt = ExamAttempt::create([
             'employee_id' => $employeeId,
@@ -653,14 +698,14 @@ class ExamController extends Controller
             'correct_answers' => 0,
             'total_questions' => 0
         ]);
-        
+
         Log::info("New exam attempt created", [
             'attempt_id' => $attempt->id,
             'employee_id' => $employeeId,
             'course_id' => $courseId,
             'remaining_attempts' => 3 - $totalAttempts - 1
         ]);
-        
+
         return redirect()->to('/employee/exam/take/' . $attempt->id);
     }
 
@@ -687,7 +732,7 @@ class ExamController extends Controller
     {
         $location = preg_replace('/\b(destination|knowledge|training|course)\b/i', '', $courseTitle);
         $location = trim($location);
-        
+
         return [
             [
                 'question' => "What is the primary purpose of learning about $location?",
@@ -1103,7 +1148,7 @@ class ExamController extends Controller
     {
         $topicName = preg_replace('/\b(training|course|program|module|workshop|seminar)\b/i', '', $courseTitle);
         $topicName = trim($topicName);
-        
+
         return [
             [
                 'question' => "What is the main objective of $topicName training?",
@@ -1172,7 +1217,7 @@ private function updateCompetencyProfileFromExam($attempt, $progress)
 
         // Extract competency name from course title
         $courseTitle = str_replace([' Training', ' Course', ' Program'], '', $course->course_title);
-        
+
         // Find matching competency profile
         $competencyProfile = \App\Models\EmployeeCompetencyProfile::whereHas('competency', function($q) use ($courseTitle, $course) {
             $q->where('competency_name', 'LIKE', '%' . $courseTitle . '%')
@@ -1196,18 +1241,18 @@ private function updateCompetencyProfileFromExam($attempt, $progress)
             $proficiencyLevel = 5; // Passed exam = maximum proficiency
             if ($attempt->score < 90) $proficiencyLevel = 4;
             if ($attempt->score < 85) $proficiencyLevel = 3;
-            
+
             $competencyProfile->proficiency_level = $proficiencyLevel;
             $competencyProfile->assessment_date = now();
             $competencyProfile->save();
-            
+
             Log::info("Updated competency profile from exam", [
                 'employee_id' => $attempt->employee_id,
                 'course_title' => $course->course_title,
                 'exam_score' => $attempt->score,
                 'proficiency_level' => $proficiencyLevel
             ]);
-            
+
             // Also update competency gap if exists
             $competencyGap = \App\Models\CompetencyGap::whereHas('competency', function($q) use ($courseTitle, $course) {
                 $q->where('competency_name', 'LIKE', '%' . $courseTitle . '%')
@@ -1215,12 +1260,12 @@ private function updateCompetencyProfileFromExam($attempt, $progress)
             })
             ->where('employee_id', $attempt->employee_id)
             ->first();
-            
+
             if ($competencyGap) {
                 $competencyGap->current_level = $proficiencyLevel;
                 $competencyGap->gap = max(0, $competencyGap->required_level - $proficiencyLevel);
                 $competencyGap->save();
-                
+
                 Log::info("Updated competency gap from exam", [
                     'employee_id' => $attempt->employee_id,
                     'course_title' => $course->course_title,
@@ -1233,12 +1278,12 @@ private function updateCompetencyProfileFromExam($attempt, $progress)
             $competency = \App\Models\CompetencyLibrary::where('competency_name', 'LIKE', '%' . $courseTitle . '%')
                 ->orWhere('competency_name', 'LIKE', '%' . $course->course_title . '%')
                 ->first();
-            
+
             if ($competency) {
                 $proficiencyLevel = 5; // Passed exam = maximum proficiency
                 if ($attempt->score < 90) $proficiencyLevel = 4;
                 if ($attempt->score < 85) $proficiencyLevel = 3;
-                
+
                 \App\Models\EmployeeCompetencyProfile::create([
                     'employee_id' => $attempt->employee_id,
                     'competency_id' => $competency->competency_id,
@@ -1247,7 +1292,7 @@ private function updateCompetencyProfileFromExam($attempt, $progress)
                     'assessment_method' => 'Exam Result',
                     'notes' => "Auto-created from exam completion with {$attempt->score}% score"
                 ]);
-                
+
                 Log::info("Created new competency profile from exam", [
                     'employee_id' => $attempt->employee_id,
                     'competency_name' => $competency->competency_name,

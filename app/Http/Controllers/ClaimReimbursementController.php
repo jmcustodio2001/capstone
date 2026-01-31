@@ -24,7 +24,7 @@ class ClaimReimbursementController extends Controller
         // Ensure table exists before proceeding
         $this->ensureTableExists();
 
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             return redirect()->route('employee.dashboard')->with('error', 'Employee profile not found.');
@@ -68,6 +68,7 @@ class ClaimReimbursementController extends Controller
                         'Office Supplies',
                         'Training Materials',
                         'Communication Expense',
+                        'Benefits',
                         'Other'
                     ]);
                     $table->text('description');
@@ -115,7 +116,7 @@ class ClaimReimbursementController extends Controller
         // Ensure table exists before proceeding
         $this->ensureTableExists();
 
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             Log::error("Employee not found for auth ID: " . Auth::guard('employee')->id());
@@ -132,7 +133,7 @@ class ClaimReimbursementController extends Controller
 
         try {
             $request->validate([
-                'claim_type' => 'required|in:Travel Expense,Meal Allowance,Transportation,Accommodation,Medical Expense,Office Supplies,Training Materials,Communication Expense,Other',
+                'claim_type' => 'required|in:Travel Expense,Meal Allowance,Transportation,Accommodation,Medical Expense,Office Supplies,Training Materials,Communication Expense,Benefits,Other',
                 'description' => 'required|string|max:1000',
                 'amount' => 'required|numeric|min:0.01|max:999999.99',
                 'claim_date' => 'required|date|before_or_equal:today',
@@ -274,7 +275,11 @@ class ClaimReimbursementController extends Controller
      */
     public function show($id)
     {
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
+
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'Employee profile not found.'], 404);
+        }
 
         $claim = ClaimReimbursement::where('id', $id)
             ->where('employee_id', $employee->employee_id)
@@ -315,7 +320,11 @@ class ClaimReimbursementController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
+
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'Employee profile not found.'], 404);
+        }
 
         $claim = ClaimReimbursement::where('id', $id)
             ->where('employee_id', $employee->employee_id)
@@ -330,7 +339,7 @@ class ClaimReimbursementController extends Controller
         }
 
         $request->validate([
-            'claim_type' => 'required|in:Travel Expense,Meal Allowance,Transportation,Accommodation,Medical Expense,Office Supplies,Training Materials,Communication Expense,Other',
+            'claim_type' => 'required|in:Travel Expense,Meal Allowance,Transportation,Accommodation,Medical Expense,Office Supplies,Training Materials,Communication Expense,Benefits,Other',
             'description' => 'required|string|max:1000',
             'amount' => 'required|numeric|min:0.01|max:999999.99',
             'claim_date' => 'required|date|before_or_equal:today',
@@ -383,7 +392,7 @@ class ClaimReimbursementController extends Controller
         // Enhanced logging for debugging
         Log::info("Cancel claim request received for ID: {$id}");
 
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             Log::error("Employee not found for auth ID: " . Auth::guard('employee')->id());
@@ -462,7 +471,11 @@ class ClaimReimbursementController extends Controller
      */
     public function downloadReceipt($id)
     {
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
+
+        if (!$employee) {
+            return redirect()->back()->with('error', 'Employee profile not found.');
+        }
 
         $claim = ClaimReimbursement::where('id', $id)
             ->where('employee_id', $employee->employee_id)
@@ -486,7 +499,7 @@ class ClaimReimbursementController extends Controller
      */
     public function getStatistics()
     {
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             return response()->json(['success' => false, 'message' => 'Employee not found.'], 404);
@@ -526,7 +539,7 @@ class ClaimReimbursementController extends Controller
         Log::info("Auth check: " . (Auth::guard('employee')->check() ? 'Yes' : 'No'));
         Log::info("Auth user: " . (Auth::guard('employee')->user() ? Auth::guard('employee')->user()->employee_id : 'None'));
 
-        $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        $employee = $this->getAuthenticatedEmployee();
 
         if (!$employee) {
             return response()->json([
@@ -579,5 +592,30 @@ class ClaimReimbursementController extends Controller
                 'message' => 'Error fetching rewards: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Get the authenticated employee, supporting both DB and session-based (external) employees.
+     *
+     * @return \App\Models\Employee|null
+     */
+    private function getAuthenticatedEmployee()
+    {
+        // Get employee from authenticated user
+        $employee = Auth::guard('employee')->user();
+
+        // Fallback to session data if not authenticated via guard but session exists
+        if (!$employee && session()->has('external_employee_data')) {
+            $data = session('external_employee_data');
+            $employee = new Employee();
+            $employee->forceFill($data);
+        }
+
+        // If still no employee object but we have an ID (rare case), try DB
+        if (!$employee && Auth::guard('employee')->id()) {
+            $employee = Employee::where('employee_id', Auth::guard('employee')->id())->first();
+        }
+
+        return $employee;
     }
 }

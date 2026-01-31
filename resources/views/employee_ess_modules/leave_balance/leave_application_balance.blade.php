@@ -866,40 +866,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Calculate end date based on start date and number of days
   function calculateEndDate() {
-    console.log('calculateEndDate called');
     const startDateElement = document.getElementById('start_date');
     const leaveDaysElement = document.getElementById('leave_days');
     const endDateElement = document.getElementById('end_date');
 
-    console.log('Elements found:', {
-      startDateElement: !!startDateElement,
-      leaveDaysElement: !!leaveDaysElement,
-      endDateElement: !!endDateElement
-    });
-
     if (!startDateElement || !leaveDaysElement || !endDateElement) {
-      console.log('Missing required elements, exiting');
-      return; // Exit if any required elements are missing
+      return;
     }
 
     const startDate = startDateElement.value;
     const days = parseInt(leaveDaysElement.value) || 0;
 
-    console.log('Raw values:', {
-      startDate,
-      days,
-      startDateType: typeof startDate,
-      daysType: typeof days
-    });
-
     if (startDate && days > 0) {
       try {
         const start = new Date(startDate);
-        console.log('Start date parsed:', start);
 
         // Check if date is valid
         if (isNaN(start.getTime())) {
-          console.log('Invalid start date');
           return;
         }
 
@@ -907,28 +890,14 @@ document.addEventListener('DOMContentLoaded', function() {
         // Add days - 1 because start day counts as day 1
         end.setDate(start.getDate() + days - 1);
 
-        console.log('End date calculated (Date object):', end);
-
         // Format date as YYYY-MM-DD for input[type="date"]
         const endFormatted = end.toISOString().split('T')[0];
         endDateElement.value = endFormatted;
-
-        console.log('End date set to input:', endFormatted);
-
-        // Trigger change event to notify other listeners
-        endDateElement.dispatchEvent(new Event('change'));
 
       } catch (error) {
         console.error('Error calculating end date:', error);
       }
     } else {
-      console.log('Invalid conditions:', {
-        hasStartDate: !!startDate,
-        daysGreaterThanZero: days > 0,
-        startDate,
-        days
-      });
-
       // Clear end date if conditions not met
       endDateElement.value = '';
     }
@@ -1652,61 +1621,6 @@ document.addEventListener('DOMContentLoaded', function() {
   if (startDateElement) {
     startDateElement.setAttribute('min', formattedToday);
   }
-
-  // Add event listeners for date calculation as backup
-  const leaveDaysElement = document.getElementById('leave_days');
-  const endDateElement = document.getElementById('end_date');
-
-  if (startDateElement && leaveDaysElement) {
-    startDateElement.addEventListener('change', function() {
-      calculateEndDate();
-      if (window.simpleCalculateEndDate) window.simpleCalculateEndDate();
-    });
-    leaveDaysElement.addEventListener('input', function() {
-      calculateEndDate();
-      if (window.simpleCalculateEndDate) window.simpleCalculateEndDate();
-    });
-    leaveDaysElement.addEventListener('change', function() {
-      calculateEndDate();
-      if (window.simpleCalculateEndDate) window.simpleCalculateEndDate();
-    });
-  }
-
-  console.log('Date calculation event listeners added');
-
-  // Test the function immediately
-  console.log('Testing calculateEndDate function...');
-  setTimeout(() => {
-    calculateEndDate();
-  }, 1000);
-
-  // Create a simple backup function that definitely works
-  window.simpleCalculateEndDate = function() {
-    console.log('Simple calculate end date called');
-    const startInput = document.getElementById('start_date');
-    const daysInput = document.getElementById('leave_days');
-    const endInput = document.getElementById('end_date');
-
-    if (startInput && daysInput && endInput) {
-      const startValue = startInput.value;
-      const daysValue = parseInt(daysInput.value);
-
-      console.log('Simple function - Start:', startValue, 'Days:', daysValue);
-
-      if (startValue && daysValue > 0) {
-        const startDate = new Date(startValue);
-        startDate.setDate(startDate.getDate() + daysValue - 1);
-        const endDate = startDate.toISOString().split('T')[0];
-        endInput.value = endDate;
-        console.log('Simple function - End date set to:', endDate);
-      }
-    }
-  };
-
-  // Test the simple function too
-  setTimeout(() => {
-    window.simpleCalculateEndDate();
-  }, 1500);
 
 
 </script>

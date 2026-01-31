@@ -1375,11 +1375,20 @@ class CompetencyGapAnalysisController extends Controller
                     $table->timestamps();
                     
                     $table->index('employee_id');
-                    $table->foreign('employee_id')->references('employee_id')->on('employees');
+                    // Removed foreign key constraint to allow external employees
                 });
             } else {
-                // Check if employee_id column needs to be modified
+                // Check if employee_id column needs to be modified and drop foreign key
                 try {
+                    // First try to drop the foreign key if it exists to allow external employees
+                    try {
+                        Schema::table('upcoming_trainings', function (Blueprint $table) {
+                            $table->dropForeign(['employee_id']);
+                        });
+                    } catch (\Exception $e) {
+                        // Foreign key might not exist or has different name, ignore
+                    }
+
                     // Attempt to modify the column type if it exists as integer
                     Schema::table('upcoming_trainings', function (Blueprint $table) {
                         $table->string('employee_id', 20)->change();

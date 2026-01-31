@@ -537,7 +537,7 @@
             </div>
           @endif
 
-          <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
+          <input type="hidden" name="employee_id" value="{{ $employeeId }}">
           <div class="mb-3">
             <label class="form-label">Training Title</label>
             <input type="text" name="training_title" class="form-control" required>

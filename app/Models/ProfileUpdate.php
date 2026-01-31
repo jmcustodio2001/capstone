@@ -11,6 +11,9 @@ class ProfileUpdate extends Model
 
     protected $fillable = [
         'employee_id',
+        'employee_name',
+        'employee_email',
+        'employee_profile_picture',
         'field_name',
         'old_value',
         'new_value',

@@ -403,7 +403,11 @@ class MyTrainingController extends Controller
         // Fix assigned_by_name for any records that still have numeric values
         $this->fixAssignedByNamesOnLoad();
 
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+             return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+        $employeeId = $employee->employee_id;
 
         // Clear any cached data first to ensure fresh counts
         Cache::forget("employee_training_counts_{$employeeId}");
@@ -547,7 +551,7 @@ class MyTrainingController extends Controller
 
         // Fetch potential alternative employee IDs (e.g. from external API) to ensure visibility
         $possibleEmployeeIds = $this->getPossibleEmployeeIds($employeeId);
-        
+
         \Illuminate\Support\Facades\Log::info('Checking visibility for possible IDs', [
             'base' => $employeeId,
             'all' => $possibleEmployeeIds
@@ -678,7 +682,7 @@ class MyTrainingController extends Controller
             });
 
         // Calculate readiness rating for each employee to determine exam/quiz visibility
-        $employee = Auth::user();
+        $employee = $this->getAuthenticatedEmployee();
         $competencyProfiles = EmployeeCompetencyProfile::where('employee_id', $employeeId)->get();
 
         $readinessRating = 0;
@@ -768,13 +772,13 @@ class MyTrainingController extends Controller
         $seenCourseIds = [];
         $upcoming = $allTrainingsForUpcoming->filter(function($item) use (&$seenTitles, &$seenCourseIds) {
             $item = (object) $item;
-            
+
             // Normalize title for comparison
             $rawTitle = $item->training_title ?? $item->course_title ?? '';
             $normalizedTitle = strtolower(trim($rawTitle));
             $normalizedTitle = preg_replace('/\b(training|course|program|skills|knowledge|development|workshop|seminar)\b/i', '', $normalizedTitle);
             $normalizedTitle = preg_replace('/\s+/', ' ', trim($normalizedTitle));
-            
+
             // Check for duplicates by course_id first (most reliable)
             $courseId = $item->course_id ?? null;
             if ($courseId && in_array($courseId, $seenCourseIds)) {
@@ -1339,7 +1343,7 @@ class MyTrainingController extends Controller
 
                     // Use combined progress if available, otherwise fall back to dashboard progress
                     $actualProgress = $combinedProgress > 0 ? $combinedProgress : ($dashboardRecord->progress ?? 0);
-                    
+
                     if ($dashboardRecord) {
                         $lastUpdated = $dashboardRecord->updated_at->format('Y-m-d H:i');
                         $canStartExam = $actualProgress >= 75;
@@ -1638,7 +1642,7 @@ class MyTrainingController extends Controller
         return view('employee_ess_modules.my_trainings.index', compact(
             'upcoming', 'completed', 'progress', 'feedback', 'notifications',
             'trainingRequests', 'readinessRating', 'availableCourses', 'recommendedCourses',
-            'completedTrainings'
+            'completedTrainings', 'employee', 'employeeId'
         ))->with('upcomingTrainings', $upcomingForRequests); // Use collection without destination trainings for requests
     }
 
@@ -1647,7 +1651,11 @@ class MyTrainingController extends Controller
      */
     public function getTrainingCounts()
     {
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+             return response()->json(['error' => 'Unauthorized'], 401);
+        }
+        $employeeId = $employee->employee_id;
 
         // Clear caches to ensure fresh data
         Cache::forget("employee_training_counts_{$employeeId}");
@@ -1765,7 +1773,14 @@ class MyTrainingController extends Controller
         $this->ensureTrainingProgressTableExists();
         $this->ensureTrainingNotificationsTableExists();
 
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+            if ($request->ajax() || $request->expectsJson()) {
+                 return response()->json(['success' => false, 'message' => 'Session expired'], 401);
+            }
+            return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+        $employeeId = $employee->employee_id;
 
         // Log incoming request for debugging
         Log::info('MyTrainingController store method called', [
@@ -1934,7 +1949,14 @@ class MyTrainingController extends Controller
         // Ensure required tables exist before updating
         $this->ensureTrainingRequestsTableExists();
 
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+            if ($request->ajax() || $request->expectsJson()) {
+                 return response()->json(['success' => false, 'message' => 'Session expired'], 401);
+            }
+            return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+        $employeeId = $employee->employee_id;
 
         try {
             $request->validate([
@@ -1996,7 +2018,14 @@ class MyTrainingController extends Controller
         $this->ensureTrainingRequestsTableExists();
         $this->ensureTrainingProgressTableExists();
 
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+            if (request()->ajax() || request()->expectsJson()) {
+                 return response()->json(['success' => false, 'message' => 'Session expired'], 401);
+            }
+            return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+        $employeeId = $employee->employee_id;
         $isAjax = request()->ajax();
 
         // Get request data
@@ -2349,7 +2378,11 @@ class MyTrainingController extends Controller
     public function markAsReviewed(Request $request)
     {
         try {
-            $employeeId = Auth::user()->employee_id;
+            $employee = $this->getAuthenticatedEmployee();
+            if (!$employee) {
+                 return response()->json(['success' => false, 'error' => 'Unauthorized']);
+            }
+            $employeeId = $employee->employee_id;
             $courseId = $request->input('course_id');
             $trainingTitle = $request->input('training_title');
 
@@ -2389,7 +2422,11 @@ class MyTrainingController extends Controller
 
     public function exportPdf()
     {
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+             return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+        $employeeId = $employee->employee_id;
         $completed = CompletedTraining::where('employee_id', $employeeId)->get();
 
         // Simple PDF generation (you can enhance this with a proper PDF library)
@@ -2404,7 +2441,11 @@ class MyTrainingController extends Controller
 
     public function exportExcel()
     {
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+             return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+        $employeeId = $employee->employee_id;
         $completed = CompletedTraining::where('employee_id', $employeeId)->get();
 
         $csv = "Training Title,Completion Date,Status\n";
@@ -2419,7 +2460,11 @@ class MyTrainingController extends Controller
 
     public function downloadCertificate($id)
     {
-        $employeeId = Auth::user()->employee_id;
+        $employee = $this->getAuthenticatedEmployee();
+        if (!$employee) {
+             return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+        $employeeId = $employee->employee_id;
         $completed = CompletedTraining::where('completed_id', $id)->where('employee_id', $employeeId)->first();
 
         if ($completed && $completed->certificate_path) {
@@ -2442,7 +2487,11 @@ class MyTrainingController extends Controller
                 'training_id' => 'required|integer|exists:destination_knowledge_trainings,id'
             ]);
 
-            $employeeId = Auth::user()->employee_id;
+            $employee = $this->getAuthenticatedEmployee();
+            if (!$employee) {
+                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+            $employeeId = $employee->employee_id;
             $training = DestinationKnowledgeTraining::findOrFail($request->training_id);
 
             // Verify this training belongs to the authenticated employee (check all possible IDs)
@@ -2705,7 +2754,11 @@ class MyTrainingController extends Controller
                 'reason' => 'nullable|string|max:500'
             ]);
 
-            $employeeId = Auth::user()->employee_id;
+            $employee = $this->getAuthenticatedEmployee();
+            if (!$employee) {
+                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+            $employeeId = $employee->employee_id;
             $training = DestinationKnowledgeTraining::findOrFail($request->training_id);
 
             // Verify this training belongs to the authenticated employee (check all possible IDs)
@@ -2764,7 +2817,11 @@ class MyTrainingController extends Controller
     public function getDestinationTrainingDetails($trainingId)
     {
         try {
-            $employeeId = Auth::user()->employee_id;
+            $employee = $this->getAuthenticatedEmployee();
+            if (!$employee) {
+                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+            $employeeId = $employee->employee_id;
             $training = DestinationKnowledgeTraining::with('employee')->findOrFail($trainingId);
 
             // Verify this training belongs to the authenticated employee (check all possible IDs)
@@ -3540,7 +3597,11 @@ class MyTrainingController extends Controller
     public function refreshData()
     {
         try {
-            $employeeId = Auth::user()->employee_id;
+            $employee = $this->getAuthenticatedEmployee();
+            if (!$employee) {
+                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+            $employeeId = $employee->employee_id;
 
             // Get updated counts for each section - using the same logic as the main index method
 
@@ -3654,7 +3715,11 @@ class MyTrainingController extends Controller
     public function autoCreateRequests()
     {
         try {
-            $employeeId = Auth::user()->employee_id;
+            $employee = $this->getAuthenticatedEmployee();
+            if (!$employee) {
+                 return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+            $employeeId = $employee->employee_id;
             $createdCount = 0;
 
             // Get upcoming trainings (same logic as index method)
@@ -3749,8 +3814,9 @@ class MyTrainingController extends Controller
     private function getPossibleEmployeeIds($baseEmployeeId)
     {
         $possibleIds = [$baseEmployeeId];
-        $employeeEmail = Auth::user()->email;
-        
+        $employee = $this->getAuthenticatedEmployee();
+        $employeeEmail = $employee ? $employee->email : null;
+
         if ($employeeEmail) {
             try {
                 $apiResponse = \Illuminate\Support\Facades\Http::timeout(3)->get('http://hr4.jetlougetravels-ph.com/api/employees');
@@ -3772,7 +3838,30 @@ class MyTrainingController extends Controller
                 \Illuminate\Support\Facades\Log::warning('Failed to fetch alternative IDs in helper: ' . $e->getMessage());
             }
         }
-        
+
         return $possibleIds;
+    }
+
+    /**
+     * Get the authenticated employee from guard or session
+     */
+    private function getAuthenticatedEmployee()
+    {
+        // Get employee from authenticated user
+        $employee = Auth::guard('employee')->user();
+
+        // Fallback to default guard if employee guard returns null
+        if (!$employee) {
+            $employee = Auth::user();
+        }
+
+        // Fallback to session data if not authenticated via guard but session exists
+        if (!$employee && session()->has('external_employee_data')) {
+            $data = session('external_employee_data');
+            $employee = new Employee();
+            $employee->forceFill($data);
+        }
+
+        return $employee;
     }
 }

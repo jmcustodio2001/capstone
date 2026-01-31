@@ -22,8 +22,12 @@ class ProfileUpdateController extends Controller
             return redirect()->route('employee.login')->with('error', 'Please login to access this page.');
         }
 
+        // Self-healing: Fix missing data from approved updates
+        $this->syncApprovedUpdates($employee);
+
         // Debug: Convert employee to array to check structure
         $employeeArray = $employee->toArray();
+        $hasPassword = !empty($employee->password);
 
         // Get profile updates for the current employee
         $updates = ProfileUpdate::where('employee_id', $employee->employee_id)
@@ -31,7 +35,7 @@ class ProfileUpdateController extends Controller
             ->orderBy('updated_at', 'desc')
             ->paginate(15);
 
-        return view('employee_ess_modules.profile_updates.index', compact('updates', 'employee', 'employeeArray'));
+        return view('employee_ess_modules.profile_updates.index', compact('updates', 'employee', 'employeeArray', 'hasPassword'));
     }
 
     /**
@@ -102,6 +106,9 @@ class ProfileUpdateController extends Controller
 
         ProfileUpdate::create([
             'employee_id' => $employee->employee_id,
+            'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+            'employee_email' => $employee->email,
+            'employee_profile_picture' => $employee->profile_picture,
             'field_name' => $request->field_name,
             'old_value' => $oldValue,
             'new_value' => $newValue,
@@ -182,9 +189,13 @@ class ProfileUpdateController extends Controller
 
         $validationRules = [
             'field_name' => 'required|string|max:255',
-            'reason' => 'nullable|string|max:1000',
-            'password_verification' => 'required|string|min:6'
+            'reason' => 'nullable|string|max:1000'
         ];
+
+        // Add password validation only if employee has password
+        if (!empty($employee->password)) {
+            $validationRules['password_verification'] = 'required|string|min:6';
+        }
 
         // Add validation rules based on field type
         if ($request->field_name === 'profile_picture') {
@@ -195,8 +206,8 @@ class ProfileUpdateController extends Controller
 
         $request->validate($validationRules);
 
-        // Verify employee password
-        if (!Hash::check($request->password_verification, $employee->password)) {
+        // Verify employee password only if they have one
+        if (!empty($employee->password) && !Hash::check($request->password_verification, $employee->password)) {
             return redirect()->back()->withErrors(['password_verification' => 'Invalid password. Please enter your correct password.']);
         }
 
@@ -294,14 +305,16 @@ class ProfileUpdateController extends Controller
             abort(403, 'Cannot delete this profile update.');
         }
 
-        // Validate password verification
-        $request->validate([
-            'password_verification' => 'required|string|min:6'
-        ]);
+        // Validate password verification only if employee has password
+        if (!empty($employee->password)) {
+            $request->validate([
+                'password_verification' => 'required|string|min:6'
+            ]);
 
-        // Verify employee password
-        if (!Hash::check($request->password_verification, $employee->password)) {
-            return redirect()->back()->withErrors(['password_verification' => 'Invalid password. Please enter your correct password.']);
+            // Verify employee password
+            if (!Hash::check($request->password_verification, $employee->password)) {
+                return redirect()->back()->withErrors(['password_verification' => 'Invalid password. Please enter your correct password.']);
+            }
         }
 
         Log::info('Profile update request deleted', [
@@ -321,10 +334,6 @@ class ProfileUpdateController extends Controller
      */
     public function verifyPassword(Request $request)
     {
-        $request->validate([
-            'password' => 'required|string|min:6'
-        ]);
-
         $employee = Auth::guard('employee')->user();
 
         if (!$employee) {
@@ -333,6 +342,18 @@ class ProfileUpdateController extends Controller
                 'message' => 'Employee not authenticated'
             ], 401);
         }
+
+        // Skip verification for external employees (no password set)
+        if (empty($employee->password)) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Password verification skipped for external employee'
+            ]);
+        }
+
+        $request->validate([
+            'password' => 'required|string|min:6'
+        ]);
 
         // Check if the password matches the employee's password
         if (Hash::check($request->password, $employee->password)) {
@@ -345,6 +366,65 @@ class ProfileUpdateController extends Controller
                 'success' => false,
                 'message' => 'Incorrect password'
             ], 422);
+        }
+    }
+
+    /**
+     * Sync approved updates to employee record if data is missing.
+     * This fixes data inconsistency from previous bugs.
+     */
+    private function syncApprovedUpdates($employee)
+    {
+        $fieldMapping = [
+            'phone' => 'phone_number',
+            'phone_number' => 'phone_number',
+            'emergency_contact_name' => 'emergency_contact_name',
+            'emergency_contact_phone' => 'emergency_contact_phone',
+            'emergency_contact_relationship' => 'emergency_contact_relationship',
+            'profile_picture' => 'profile_picture',
+            'first_name' => 'first_name',
+            'last_name' => 'last_name',
+            'email' => 'email',
+            'address' => 'address',
+        ];
+
+        $wasUpdated = false;
+
+        foreach ($fieldMapping as $requestField => $dbField) {
+            // Check if current value is empty/null/N/A
+            $currentValue = $employee->{$dbField};
+            // Also check for 'No Phone' string if it was somehow saved as that, though unlikely
+            if (empty($currentValue) || $currentValue === 'N/A' || $currentValue === 'No Phone') {
+                // Find latest approved update for this field
+                $latestUpdate = ProfileUpdate::where('employee_id', $employee->employee_id)
+                    ->where('field_name', $requestField)
+                    ->where('status', 'approved')
+                    ->latest('approved_at')
+                    ->first();
+
+                if ($latestUpdate) {
+                    $employee->{$dbField} = $latestUpdate->new_value;
+                    $wasUpdated = true;
+                }
+            }
+        }
+
+        if ($wasUpdated) {
+            // Update DB if exists
+            if ($employee->exists) {
+                $employee->save();
+            }
+
+            // Update session if external
+            if (session()->has('external_employee_data')) {
+                $data = session('external_employee_data');
+                foreach ($fieldMapping as $requestField => $dbField) {
+                    if (isset($employee->{$dbField})) {
+                        $data[$dbField] = $employee->{$dbField};
+                    }
+                }
+                session(['external_employee_data' => $data]);
+            }
         }
     }
 }

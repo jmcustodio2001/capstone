@@ -81,7 +81,7 @@
               <td>
                 @php
                   // Enhanced certificate matching logic - same as auto-generation logic
-                  $employeeId = Auth::user()->employee_id;
+                  $employeeId = $employeeId;
                   $certificateRecord = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)
                     ->where(function($q) use ($c) {
                       // Match by course_id if available (most reliable)
@@ -91,11 +91,11 @@
                         // Enhanced title matching with multiple strategies
                         $q->whereHas('course', function($subQ) use ($c) {
                           $trainingTitle = trim($c->training_title);
-                          
+
                           // Normalize the training title for better matching
                           $normalizedTitle = trim(str_replace(['Training', 'Course', 'Program', 'Skills', 'Knowledge', 'Practices', 'Procedures'], '', $trainingTitle));
                           $normalizedTitle = trim(preg_replace('/\s+/', ' ', $normalizedTitle));
-                          
+
                           // Try multiple matching strategies
                           $subQ->where('course_title', $trainingTitle) // Exact match
                                ->orWhere('course_title', 'LIKE', '%' . $trainingTitle . '%') // Contains full title
@@ -177,7 +177,7 @@
         <div class="modal-header"><h5 class="modal-title">Add Completed Training</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-          <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
+          <input type="hidden" name="employee_id" value="{{ $employeeId }}">
           <div class="mb-3"><label class="form-label">Training Title</label>
             <input type="text" name="training_title" class="form-control" required></div>
           <div class="mb-3"><label class="form-label">Completion Date</label>
@@ -217,7 +217,7 @@
 <!-- Hidden certificate preview for PDF generation - unified template -->
 <div id="certificate-pdf-preview" style="display:none !important; background:#fff; width:10.5in; height:7.5in; margin:0 auto; border:8px solid #2d3a5a; border-radius:6px; position:relative; padding:25px; page-break-inside:avoid; box-sizing:border-box; flex-direction:column; justify-content:space-between; overflow:hidden;">
   <div style="position:absolute; top:15px; left:15px; right:15px; bottom:15px; border:2px solid #87ceeb; border-radius:3px; pointer-events:none;"></div>
-  
+
   <div style="text-align:center; margin-bottom:15px; position:relative; z-index:2;">
     <div style="position:relative; display:inline-block; margin-bottom:10px;">
       <div style="width:60px; height:60px; margin:0 auto; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #2d3a5a, #4a5568); border:3px solid #ffffff; box-shadow:0 4px 8px rgba(45, 58, 90, 0.3);">
@@ -228,19 +228,19 @@
     <div style="font-size:16px; color:#2d3a5a; letter-spacing:1px; margin-bottom:8px; font-weight:300;">OF ACHIEVEMENT</div>
     <div style="font-size:12px; color:#2d3a5a; font-style:italic; margin-bottom:15px;">Excellence in Travel & Tourism Training</div>
   </div>
-  
+
   <div style="text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; margin:15px 0; position:relative; z-index:2;">
     <div style="font-size:14px; color:#2d3a5a; margin-bottom:10px; line-height:1.2; font-weight:400;">This is to proudly certify that</div>
-    
+
     <div id="pdf-certificate-name" style="font-size:48px; font-family:cursive; font-weight:bold; color:#2d3a5a; margin:10px 0; letter-spacing:1px;"></div>
-    
+
     <div style="font-size:14px; color:#2d3a5a; margin-bottom:10px; line-height:1.2; font-weight:400;">has successfully completed the comprehensive training program and demonstrated exceptional proficiency in</div>
-    
+
     <div id="pdf-certificate-course" style="background:#2196f3; color:white; padding:8px 25px; border-radius:5px; font-size:28px; font-weight:bold; margin:12px auto; display:inline-block;"></div>
-    
+
     <div style="font-size:12px; color:#2d3a5a; margin:12px 0; font-weight:500;">Completed with distinction on <strong id="pdf-certificate-date"></strong></div>
   </div>
-  
+
   <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:10px; position:relative; z-index:2;">
     <div style="text-align:center; flex:1; position:relative;">
       <div style="width:100px; height:1px; background:#2d3a5a; margin:0 auto 5px;"></div>
@@ -253,7 +253,7 @@
       <div style="font-size:10px; color:#2d3a5a; font-style:italic;">HR Manager</div>
     </div>
   </div>
-  
+
   <div style="text-align:center; margin-top:15px; font-size:10px; color:#555;">
     Certificate ID: <span id="pdf-certificate-id"></span> &nbsp; | &nbsp; Issued: <span id="pdf-certificate-issued"></span>
   </div>
@@ -344,7 +344,7 @@ async function downloadCertificatePDF(certId) {
     }
 
     const certificate = await response.json();
-    
+
     // Use actual certificate data
     const certData = {
       name: certificate.employee_name || 'Unknown Employee',
@@ -353,24 +353,24 @@ async function downloadCertificatePDF(certId) {
       id: certificate.certificate_number || 'Unknown ID',
       issued: certificate.issued_date || 'Unknown Date'
     };
-    
+
     // Update the hidden preview with actual data
     document.getElementById('pdf-certificate-name').innerText = certData.name;
     document.getElementById('pdf-certificate-course').innerText = certData.course;
     document.getElementById('pdf-certificate-date').innerText = certData.date;
     document.getElementById('pdf-certificate-id').innerText = certData.id;
     document.getElementById('pdf-certificate-issued').innerText = certData.issued;
-    
+
     var certDiv = document.getElementById('certificate-pdf-preview');
     certDiv.style.display = 'flex';
     certDiv.style.setProperty('display', 'flex', 'important');
-    
+
     var opt = {
       margin: 0.2,
       filename: `certificate_${certData.name.replace(/\s+/g, '_')}_${certData.id}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { 
-        scale: 1.5, 
+      html2canvas: {
+        scale: 1.5,
         useCORS: true,
         width: 1056, // 10.5 inches * 96 DPI
         height: 720,  // 7.5 inches * 96 DPI
@@ -380,7 +380,7 @@ async function downloadCertificatePDF(certId) {
       jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' },
       pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
     };
-    
+
     // Generate PDF and force direct download (bypass IDM)
     html2pdf().set(opt).from(certDiv).toPdf().get('pdf').then(function(pdf) {
       // Create blob and force download
@@ -396,7 +396,7 @@ async function downloadCertificatePDF(certId) {
       window.URL.revokeObjectURL(url);
       certDiv.style.setProperty('display', 'none', 'important');
     });
-    
+
   } catch (error) {
     console.error('PDF download error:', error);
     alert('Unable to download certificate PDF. Please try again.');

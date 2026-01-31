@@ -3,6 +3,14 @@
 @section('title', 'Add New Training')
 
 @section('content')
+@php
+    $currentEmployee = Auth::guard('employee')->user() ?? Auth::user();
+    if (!$currentEmployee && session()->has('external_employee_data')) {
+        $currentEmployee = new \App\Models\Employee();
+        $currentEmployee->forceFill(session('external_employee_data'));
+    }
+    $employeeId = $currentEmployee ? $currentEmployee->employee_id : null;
+@endphp
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
@@ -23,14 +31,14 @@
 
                     <form action="{{ route('employee.trainings.store') }}" method="POST">
                         @csrf
-                        <input type="hidden" name="employee_id" value="{{ Auth::user()->employee_id }}">
-                        
+                        <input type="hidden" name="employee_id" value="{{ $employeeId }}">
+
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="training_title">Training Title <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control @error('training_title') is-invalid @enderror" 
-                                           id="training_title" name="training_title" 
+                                    <input type="text" class="form-control @error('training_title') is-invalid @enderror"
+                                           id="training_title" name="training_title"
                                            value="{{ old('training_title') }}" required>
                                     @error('training_title')
                                         <div class="invalid-feedback">{{ $message }}</div>
@@ -40,8 +48,8 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="training_date">Training Date <span class="text-danger">*</span></label>
-                                    <input type="date" class="form-control @error('training_date') is-invalid @enderror" 
-                                           id="training_date" name="training_date" 
+                                    <input type="date" class="form-control @error('training_date') is-invalid @enderror"
+                                           id="training_date" name="training_date"
                                            value="{{ old('training_date') }}" required>
                                     @error('training_date')
                                         <div class="invalid-feedback">{{ $message }}</div>
@@ -54,7 +62,7 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="status">Status <span class="text-danger">*</span></label>
-                                    <select class="form-control @error('status') is-invalid @enderror" 
+                                    <select class="form-control @error('status') is-invalid @enderror"
                                             id="status" name="status" required>
                                         <option value="">Select Status</option>
                                         <option value="Completed" {{ old('status') == 'Completed' ? 'selected' : '' }}>Completed</option>
@@ -69,7 +77,7 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="progress">Progress (%)</label>
-                                    <input type="number" class="form-control @error('progress') is-invalid @enderror" 
+                                    <input type="number" class="form-control @error('progress') is-invalid @enderror"
                                            id="progress" name="progress" min="0" max="100"
                                            value="{{ old('progress') }}" placeholder="0-100">
                                     @error('progress')
@@ -81,8 +89,8 @@
 
                         <div class="form-group">
                             <label for="feedback">Training Feedback</label>
-                            <textarea class="form-control @error('feedback') is-invalid @enderror" 
-                                      id="feedback" name="feedback" rows="3" 
+                            <textarea class="form-control @error('feedback') is-invalid @enderror"
+                                      id="feedback" name="feedback" rows="3"
                                       placeholder="Optional: Add your feedback about this training">{{ old('feedback') }}</textarea>
                             @error('feedback')
                                 <div class="invalid-feedback">{{ $message }}</div>
@@ -93,7 +101,7 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="notification_type">Notification Type</label>
-                                    <select class="form-control @error('notification_type') is-invalid @enderror" 
+                                    <select class="form-control @error('notification_type') is-invalid @enderror"
                                             id="notification_type" name="notification_type">
                                         <option value="">No Notification</option>
                                         <option value="Email" {{ old('notification_type') == 'Email' ? 'selected' : '' }}>Email</option>
@@ -108,9 +116,9 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="notification_message">Notification Message</label>
-                                    <input type="text" class="form-control @error('notification_message') is-invalid @enderror" 
-                                           id="notification_message" name="notification_message" 
-                                           value="{{ old('notification_message') }}" 
+                                    <input type="text" class="form-control @error('notification_message') is-invalid @enderror"
+                                           id="notification_message" name="notification_message"
+                                           value="{{ old('notification_message') }}"
                                            placeholder="Optional notification message">
                                     @error('notification_message')
                                         <div class="invalid-feedback">{{ $message }}</div>

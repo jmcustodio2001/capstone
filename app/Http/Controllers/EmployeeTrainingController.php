@@ -12,9 +12,35 @@ use App\Models\EmployeeTrainingDashboard;
 
 class EmployeeTrainingController extends Controller
 {
-    public function index(): \Illuminate\View\View
+    private function getAuthenticatedEmployee()
     {
-        $employeeId = Auth::user()->employee_id;
+        // Get employee from authenticated user
+        $employee = Auth::guard('employee')->user();
+
+        // Fallback to default guard if employee guard returns null
+        if (!$employee) {
+            $employee = Auth::user();
+        }
+
+        // Fallback to session data if not authenticated via guard but session exists
+        if (!$employee && session()->has('external_employee_data')) {
+            $data = session('external_employee_data');
+            $employee = new Employee();
+            $employee->forceFill($data);
+        }
+
+        return $employee;
+    }
+
+    public function index()
+    {
+        $employee = $this->getAuthenticatedEmployee();
+
+        if (!$employee) {
+             return redirect()->route('employee.login')->with('error', 'Session expired. Please login again.');
+        }
+
+        $employeeId = $employee->employee_id;
         $upcoming = EmployeeTraining::where('employee_id', $employeeId)->where('status', 'Upcoming')->get();
         $completed = EmployeeTraining::where('employee_id', $employeeId)->where('status', 'Completed')->get();
         $trainingRequests = EmployeeTraining::where('employee_id', $employeeId)->where('status', 'Requested')->get();
@@ -26,7 +52,9 @@ class EmployeeTrainingController extends Controller
 
     public function create()
     {
-        return view('employee_ess_modules.my_trainings.create');
+        $employee = $this->getAuthenticatedEmployee();
+        $employeeId = $employee ? $employee->employee_id : null;
+        return view('employee_ess_modules.my_trainings.create', compact('employeeId'));
     }
 
     public function store(Request $request): \Illuminate\Http\RedirectResponse

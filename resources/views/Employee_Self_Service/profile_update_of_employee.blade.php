@@ -41,17 +41,17 @@
       padding: 0.25rem 0.5rem;
       font-size: 0.875rem;
     }
-    
+
     /* Fix modal positioning to avoid topbar overlap */
     .modal {
       padding-top: 80px !important;
     }
-    
+
     .modal-dialog {
       margin-top: 20px;
       margin-bottom: 20px;
     }
-    
+
     /* Ensure modal content doesn't get too close to top */
     @media (min-height: 600px) {
       .modal {
@@ -115,36 +115,70 @@
               <tr>
                 <td>#{{ $update->id }}</td>
                 <td>
-                  @if($update->employee)
-                    @php
-                      $firstName = $update->employee->first_name ?? 'Unknown';
-                      $lastName = $update->employee->last_name ?? 'Employee';
-                      
-                      // Profile picture logic - same as other HR modules
-                      $profilePicUrl = '';
-                      if ($update->employee->profile_picture) {
-                        $profilePicUrl = asset('storage/' . $update->employee->profile_picture);
-                      } else {
-                        // Fallback to UI Avatars with consistent color scheme
-                        $employeeId = $update->employee->employee_id ?? 'EMP';
-                        $initials = substr($firstName, 0, 1) . substr($lastName, 0, 1);
-                        $colors = ['FF6B6B', '4ECDC4', '45B7D1', '96CEB4', 'FFEAA7', 'DDA0DD', 'FFB347', '87CEEB'];
-                        $colorIndex = crc32($employeeId) % count($colors);
-                        $bgColor = $colors[$colorIndex];
-                        $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background={$bgColor}&color=ffffff&size=128&bold=true";
-                      }
-                    @endphp
-                    
+                  @php
+                    $employee = $update->employee;
+                    $firstName = 'Unknown';
+                    $lastName = 'Employee';
+                    $employeeId = 'N/A';
+                    $profilePicUrl = '';
+
+                    if ($employee) {
+            $firstName = $employee->first_name ?? 'Unknown';
+            $lastName = $employee->last_name ?? 'Employee';
+            $employeeId = $employee->employee_id ?? 'EMP';
+            if ($employee->profile_picture) {
+              $profilePicUrl = asset('storage/' . $employee->profile_picture);
+            } elseif ($update->employee_profile_picture) {
+                // Fallback to stored picture in update record if local employee has none
+                if (filter_var($update->employee_profile_picture, FILTER_VALIDATE_URL)) {
+                    $profilePicUrl = $update->employee_profile_picture;
+                } else {
+                    $profilePicUrl = asset('storage/' . $update->employee_profile_picture);
+                }
+            }
+          } elseif ($update->employee_name) {
+            $fullName = $update->employee_name;
+            $names = explode(' ', $fullName, 2);
+            $firstName = $names[0] ?? 'Unknown';
+            $lastName = $names[1] ?? '';
+            $employeeId = $update->employee_id ?? 'N/A';
+
+            // Check for stored profile picture
+            if ($update->employee_profile_picture) {
+                // If it's a URL, use it directly
+                if (filter_var($update->employee_profile_picture, FILTER_VALIDATE_URL)) {
+                    $profilePicUrl = $update->employee_profile_picture;
+                } else {
+                    // Otherwise assume it's a local storage path
+                    $profilePicUrl = asset('storage/' . $update->employee_profile_picture);
+                }
+            }
+          } else {
+              // Last resort fallback using ID if available
+               $employeeId = $update->employee_id ?? 'N/A';
+          }
+
+                    // Profile picture fallback
+                    if (!$profilePicUrl) {
+                      $initials = substr($firstName, 0, 1) . substr($lastName, 0, 1);
+                      $colors = ['FF6B6B', '4ECDC4', '45B7D1', '96CEB4', 'FFEAA7', 'DDA0DD', 'FFB347', '87CEEB'];
+                      $colorIndex = crc32($employeeId) % count($colors);
+                      $bgColor = $colors[$colorIndex];
+                      $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background={$bgColor}&color=ffffff&size=128&bold=true";
+                    }
+                  @endphp
+
+                  @if($employee || $update->employee_name || $update->employee_id)
                     <div class="d-flex align-items-center">
                       <div class="avatar-sm me-2">
-                        <img src="{{ $profilePicUrl }}" 
-                             class="rounded-circle" 
+                        <img src="{{ $profilePicUrl }}"
+                             class="rounded-circle"
                              style="width: 40px; height: 40px; object-fit: cover;"
                              onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode(substr($firstName, 0, 1) . substr($lastName, 0, 1)) }}&background=6c757d&color=ffffff&size=128&bold=true'">
                       </div>
                       <div>
                         <span class="fw-semibold">{{ $firstName }} {{ $lastName }}</span>
-                        <br><small class="text-muted">{{ $update->employee->employee_id ?? 'N/A' }}</small>
+                        <br><small class="text-muted">{{ $employeeId }}</small>
                       </div>
                     </div>
                   @else
@@ -223,23 +257,63 @@
                     <h6 class="mb-0">Employee Information</h6>
                   </div>
                   <div class="card-body">
-                    @if($update->employee)
+                    @php
+                        $employee = $update->employee;
+                        $firstName = 'Unknown';
+                        $lastName = 'Employee';
+                        $employeeId = 'N/A';
+                        $email = 'N/A';
+                        $position = 'N/A';
+                        $profilePicUrl = '';
+
+                        if ($employee) {
+                            $firstName = $employee->first_name ?? 'Unknown';
+                            $lastName = $employee->last_name ?? 'Employee';
+                            $employeeId = $employee->employee_id ?? 'EMP';
+                            $email = $employee->email ?? 'N/A';
+                            $position = $employee->position ?? 'N/A';
+                            if ($employee->profile_picture) {
+                                $profilePicUrl = asset('storage/' . $employee->profile_picture);
+                            }
+                        } elseif ($update->employee_name) {
+                            $fullName = $update->employee_name;
+                            $names = explode(' ', $fullName, 2);
+                            $firstName = $names[0] ?? 'Unknown';
+                            $lastName = $names[1] ?? '';
+                            $employeeId = $update->employee_id ?? 'N/A';
+                            $email = $update->employee_email ?? 'N/A';
+                            $position = 'External Employee';
+
+                            // Check for stored profile picture
+                            if ($update->employee_profile_picture) {
+                                // If it's a URL, use it directly (likely from API)
+                                if (filter_var($update->employee_profile_picture, FILTER_VALIDATE_URL)) {
+                                    $profilePicUrl = $update->employee_profile_picture;
+                                } else {
+                                    // Otherwise assume it's a local storage path
+                                    $profilePicUrl = asset('storage/' . $update->employee_profile_picture);
+                                }
+                            }
+                        }
+
+                        if (!$profilePicUrl) {
+                            $initials = substr($firstName, 0, 1) . substr($lastName, 0, 1);
+                             $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($initials) . "&background=6c757d&color=ffffff&size=128&bold=true";
+                        }
+                    @endphp
+
+                    @if($employee || $update->employee_name)
                       <div class="d-flex align-items-center mb-3">
-                        @php
-                          $firstName = $update->employee->first_name ?? 'Unknown';
-                          $lastName = $update->employee->last_name ?? 'Employee';
-                          $profilePicUrl = $update->employee->profile_picture ? asset('storage/' . $update->employee->profile_picture) : "https://ui-avatars.com/api/?name=" . urlencode(substr($firstName, 0, 1) . substr($lastName, 0, 1)) . "&background=6c757d&color=ffffff&size=128&bold=true";
-                        @endphp
                         <img src="{{ $profilePicUrl }}" class="rounded-circle me-3" style="width: 60px; height: 60px; object-fit: cover;">
                         <div>
                           <h6 class="mb-1">{{ $firstName }} {{ $lastName }}</h6>
-                          <small class="text-muted">{{ $update->employee->employee_id ?? 'N/A' }}</small>
+                          <small class="text-muted">{{ $employeeId }}</small>
                         </div>
                       </div>
-                      <p><strong>Email:</strong> {{ $update->employee->email ?? 'N/A' }}</p>
-                      <p><strong>Position:</strong> {{ $update->employee->position ?? 'N/A' }}</p>
+                      <p><strong>Email:</strong> {{ $email }}</p>
+                      <p><strong>Position:</strong> {{ $position }}</p>
                     @else
-                      <p class="text-muted">Employee information not available</p>
+                      <p class="text-muted">Employee information not available (ID: {{ $update->employee_id }})</p>
                     @endif
                   </div>
                 </div>
@@ -251,7 +325,7 @@
                   </div>
                   <div class="card-body">
                     <p><strong>Field:</strong> {{ $update->formatted_field_name }}</p>
-                    <p><strong>Status:</strong> 
+                    <p><strong>Status:</strong>
                       <span class="badge {{ $update->status == 'approved' ? 'bg-success' : ($update->status == 'pending' ? 'bg-warning text-dark' : 'bg-danger') }}">
                         {{ ucfirst($update->status) }}
                       </span>
@@ -264,7 +338,7 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="card mb-3">
               <div class="card-header bg-light">
                 <h6 class="mb-0">Value Changes</h6>
@@ -294,7 +368,7 @@
                 </div>
               </div>
             </div>
-            
+
             @if($update->reason)
             <div class="card">
               <div class="card-header bg-light">
@@ -353,11 +427,11 @@
         },
         body: JSON.stringify({ password: password })
       });
-      
+
       if (!response.ok) {
         throw new Error('Network response was not ok');
       }
-      
+
       const data = await response.json();
       return data.success || data.valid;
     } catch (error) {
@@ -457,12 +531,12 @@
       cancelButtonColor: '#6c757d',
       preConfirm: async () => {
         const password = document.getElementById('admin-password-approve').value;
-        
+
         if (!password || password.length < 3) {
           Swal.showValidationMessage('Please enter a valid admin password (minimum 3 characters)');
           return false;
         }
-        
+
         // Show loading
         Swal.fire({
           title: 'Verifying Password...',
@@ -471,10 +545,10 @@
             Swal.showLoading();
           }
         });
-        
+
         // Verify password
         const isValidPassword = await verifyAdminPassword(password);
-        
+
         if (!isValidPassword) {
           Swal.fire({
             icon: 'error',
@@ -484,7 +558,7 @@
           });
           return false;
         }
-        
+
         return { password };
       }
     }).then((result) => {
@@ -581,17 +655,17 @@
       preConfirm: async () => {
         const reason = document.getElementById('rejection-reason').value.trim();
         const password = document.getElementById('admin-password-reject').value;
-        
+
         if (!reason) {
           Swal.showValidationMessage('Please provide a reason for rejecting this request');
           return false;
         }
-        
+
         if (!password || password.length < 3) {
           Swal.showValidationMessage('Please enter a valid admin password (minimum 3 characters)');
           return false;
         }
-        
+
         // Show loading
         Swal.fire({
           title: 'Verifying Password...',
@@ -600,10 +674,10 @@
             Swal.showLoading();
           }
         });
-        
+
         // Verify password
         const isValidPassword = await verifyAdminPassword(password);
-        
+
         if (!isValidPassword) {
           Swal.fire({
             icon: 'error',
@@ -613,7 +687,7 @@
           });
           return false;
         }
-        
+
         return { reason, password };
       }
     }).then((result) => {
@@ -715,12 +789,12 @@
       cancelButtonColor: '#6c757d',
       preConfirm: async () => {
         const password = document.getElementById('admin-password-fix').value;
-        
+
         if (!password || password.length < 3) {
           Swal.showValidationMessage('Please enter a valid admin password (minimum 3 characters)');
           return false;
         }
-        
+
         // Show loading
         Swal.fire({
           title: 'Verifying Password...',
@@ -729,10 +803,10 @@
             Swal.showLoading();
           }
         });
-        
+
         // Verify password
         const isValidPassword = await verifyAdminPassword(password);
-        
+
         if (!isValidPassword) {
           Swal.fire({
             icon: 'error',
@@ -742,7 +816,7 @@
           });
           return false;
         }
-        
+
         return { password };
       }
     }).then((result) => {

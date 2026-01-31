@@ -956,7 +956,7 @@
           <div class="col-6">
             <div class="p-3 bg-light rounded">
               <small class="text-muted d-block mb-1">Employee ID</small>
-              <h6 class="fw-bold mb-0">{{ Auth::guard('employee')->user()->employee_id ?? 'N/A' }}</h6>
+              <h6 class="fw-bold mb-0">{{ $apiEmployee['employee_id'] ?? $apiEmployee['id'] ?? $apiEmployee['external_employee_id'] ?? (Auth::guard('employee')->user()->employee_id ?? 'N/A') }}</h6>
             </div>
           </div>
           <div class="col-6">

@@ -151,7 +151,7 @@
         <div class="card-body py-3">
           @php
             // Count trainings that have progress (both approved requests AND competency gap trainings)
-            $currentEmployeeId = Auth::user()->employee_id;
+            $currentEmployeeId = $employeeId;
 
             // Filter to include ALL training progress sources with actual progress
             $trainingProgressItems = collect($progress)->filter(function ($item) use ($currentEmployeeId) {

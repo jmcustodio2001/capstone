@@ -365,11 +365,17 @@
                           $lastName = $successor->employee->last_name ?? 'Employee';
                           $fullName = $firstName . ' ' . $lastName;
 
-                          // Check if profile picture exists - simplified approach
+                          // Check if profile picture exists - robust approach
                           $profilePicUrl = null;
                           if ($successor->employee->profile_picture) {
-                              // Direct asset URL generation - Laravel handles the storage symlink
-                              $profilePicUrl = asset('storage/' . $successor->employee->profile_picture);
+                              $profilePic = $successor->employee->profile_picture;
+                              if (strpos($profilePic, 'http') === 0) {
+                                  $profilePicUrl = $profilePic;
+                              } elseif (strpos($profilePic, 'storage/') === 0) {
+                                  $profilePicUrl = asset($profilePic);
+                              } else {
+                                  $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                              }
                           }
 
                           // Generate consistent color based on employee name for fallback

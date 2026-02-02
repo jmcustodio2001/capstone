@@ -22,11 +22,11 @@ class SuccessionReadinessRatingController extends Controller
         $count = 0;
         foreach ($employees as $employee) {
             $empId = is_object($employee) ? $employee->employee_id : $employee['employee_id'];
-            
+
             // Pass employee data directly to avoid redundant lookups
             $score = $this->calculateEmployeeReadinessScore($empId, $employee);
             $assessmentDate = now()->format('Y-m-d');
-            
+
             $rating = \App\Models\SuccessionReadinessRating::updateOrCreate(
                 ['employee_id' => $empId],
                 [
@@ -41,7 +41,7 @@ class SuccessionReadinessRatingController extends Controller
             );
             $count++;
         }
-        
+
         // Log activity
         \App\Models\ActivityLog::create([
             'user_id' => \Illuminate\Support\Facades\Auth::id(),
@@ -49,7 +49,7 @@ class SuccessionReadinessRatingController extends Controller
             'module' => 'Succession Readiness Rating',
             'description' => 'Refreshed readiness scores for ' . $count . ' employees.',
         ]);
-        
+
         return redirect()->back()->with('success', 'Readiness scores recalculated for all employees.');
     }
 
@@ -60,15 +60,15 @@ class SuccessionReadinessRatingController extends Controller
     {
         // Get employee data for tenure calculation (API supported)
         $employee = $employeeData;
-        
+
         if (!$employee) {
             $employee = \App\Models\Employee::where('employee_id', $employeeId)->first();
         }
-        
+
         // 1. HIRE DATE COMPONENT (10%)
         $hireDateScore = 0;
         $yearsOfService = 0;
-        
+
         $hireDate = null;
         if ($employee) {
             if (is_object($employee)) {
@@ -84,7 +84,7 @@ class SuccessionReadinessRatingController extends Controller
             $yearsOfService = max(0, $hireCarbon->diffInYears(now()));
             $hireDateScore = min(10, $yearsOfService * 1);
         }
-        
+
         // 2. TRAINING RECORDS COMPONENT (3%)
         $trainingRecordsScore = 0;
         try {
@@ -97,42 +97,48 @@ class SuccessionReadinessRatingController extends Controller
         // 3. EMPLOYEE COMPETENCY PROFILES COMPONENT (Additive based on proficiency level)
         $competencyScore = 0;
         $competencyProfiles = \App\Models\EmployeeCompetencyProfile::where('employee_id', $employeeId)->get();
-            
+
         foreach ($competencyProfiles as $profile) {
             $proficiencyLevel = (int)$profile->proficiency_level;
-            $competencyScore += $proficiencyLevel * 2; 
+            $competencyScore += $proficiencyLevel * 2;
         }
 
         $totalScore = $hireDateScore + $trainingRecordsScore + $competencyScore;
         $minimumScore = $yearsOfService < 1 ? 5 : 15;
         $finalScore = max($minimumScore, min(100, $totalScore));
-        
+
         return $finalScore;
     }
 
     public function edit($id)
     {
-        $rating = SuccessionReadinessRating::findOrFail($id);
+        $rating = SuccessionReadinessRating::with('employee')->findOrFail($id);
         $employees = $this->getEmployeesFromAPI();
-        $ratings = SuccessionReadinessRating::latest()->paginate(10);
+        $ratings = SuccessionReadinessRating::with('employee')->latest()->paginate(10);
         $this->mapEmployeesToRatings($ratings, $employees);
         $editMode = true;
         return view('succession_planning.succession_readiness_rating', compact('rating', 'employees', 'ratings', 'editMode'));
     }
 
+    /**
+     * Display the specified resource.
+     */
     public function show($id)
     {
-        $rating = SuccessionReadinessRating::findOrFail($id);
+        $rating = SuccessionReadinessRating::with('employee')->findOrFail($id);
         $employees = $this->getEmployeesFromAPI();
-        $ratings = SuccessionReadinessRating::latest()->paginate(10);
+        $ratings = SuccessionReadinessRating::with('employee')->latest()->paginate(10);
         $this->mapEmployeesToRatings($ratings, $employees);
         $showMode = true;
         return view('succession_planning.succession_readiness_rating', compact('rating', 'employees', 'ratings', 'showMode'));
     }
 
+    /**
+     * Display a listing of the resource.
+     */
     public function index()
     {
-        $ratings = SuccessionReadinessRating::latest()->paginate(10);
+        $ratings = SuccessionReadinessRating::with('employee')->latest()->paginate(10);
         $employees = $this->getEmployeesFromAPI();
         $this->mapEmployeesToRatings($ratings, $employees);
         return view('succession_planning.succession_readiness_rating', compact('ratings', 'employees'));
@@ -143,7 +149,7 @@ class SuccessionReadinessRatingController extends Controller
         try {
             $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
-            
+
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }
@@ -175,16 +181,26 @@ class SuccessionReadinessRatingController extends Controller
         }
 
         foreach ($ratings as $rating) {
-            if (isset($employeeMap[$rating->employee_id])) {
-                $apiEmployee = $employeeMap[$rating->employee_id];
-                $employeeObj = new \stdClass();
-                $employeeObj->employee_id = $rating->employee_id;
-                $employeeObj->first_name = is_object($apiEmployee) ? $apiEmployee->first_name : ($apiEmployee['first_name'] ?? 'Unknown');
-                $employeeObj->last_name = is_object($apiEmployee) ? $apiEmployee->last_name : ($apiEmployee['last_name'] ?? 'Employee');
-                $employeeObj->profile_picture = is_object($apiEmployee) ? ($apiEmployee->profile_picture ?? null) : ($apiEmployee['profile_picture'] ?? null);
-                
-                $rating->setRelation('employee', $employeeObj);
-            }
+            $employeeObj = new \stdClass();
+            $employeeObj->employee_id = $rating->employee_id;
+
+            // Get API employee data if available
+            $apiEmployee = $employeeMap[$rating->employee_id] ?? null;
+
+            // Get local employee data (eager loaded)
+            $localEmployee = $rating->employee;
+
+            // Set basic details from API or Local
+            $employeeObj->first_name = is_object($apiEmployee) ? $apiEmployee->first_name : ($apiEmployee['first_name'] ?? ($localEmployee->first_name ?? 'Unknown'));
+            $employeeObj->last_name = is_object($apiEmployee) ? $apiEmployee->last_name : ($apiEmployee['last_name'] ?? ($localEmployee->last_name ?? 'Employee'));
+
+            // Handle Profile Picture Priority: API > Local > null
+            $apiPic = is_object($apiEmployee) ? ($apiEmployee->profile_picture ?? null) : ($apiEmployee['profile_picture'] ?? null);
+            $localPic = $localEmployee ? $localEmployee->profile_picture : null;
+
+            $employeeObj->profile_picture = $apiPic ?: $localPic;
+
+            $rating->setRelation('employee', $employeeObj);
         }
     }
 
@@ -196,21 +212,21 @@ class SuccessionReadinessRatingController extends Controller
                 'readiness_level' => 'required|string|in:Ready Now,Ready Soon,Needs Development',
                 'assessment_date' => 'required|date',
             ]);
-            
+
             $readinessScore = match($request->readiness_level) {
                 'Ready Now' => 90,
                 'Ready Soon' => 75,
                 'Needs Development' => 50,
                 default => 50
             };
-            
+
             $rating = SuccessionReadinessRating::create([
                 'employee_id' => $request->employee_id,
                 'readiness_score' => $readinessScore,
                 'readiness_level' => $request->readiness_level,
                 'assessment_date' => $request->assessment_date,
             ]);
-            
+
             ActivityLog::create([
                 'user_id' => Auth::id(),
                 'action' => 'create',
@@ -240,21 +256,21 @@ class SuccessionReadinessRatingController extends Controller
                 'readiness_level' => 'required|string|in:Ready Now,Ready Soon,Needs Development',
                 'assessment_date' => 'required|date',
             ]);
-            
+
             $readinessScore = match($request->readiness_level) {
                 'Ready Now' => 90,
                 'Ready Soon' => 75,
                 'Needs Development' => 50,
                 default => 50
             };
-            
+
             $rating->update([
                 'employee_id' => $request->employee_id,
                 'readiness_score' => $readinessScore,
                 'readiness_level' => $request->readiness_level,
                 'assessment_date' => $request->assessment_date,
             ]);
-            
+
             ActivityLog::create([
                 'user_id' => Auth::id(),
                 'action' => 'update',
@@ -302,29 +318,69 @@ class SuccessionReadinessRatingController extends Controller
 
             if (!$employee) {
                 $employee = Employee::where('employee_id', $employeeId)->first();
+            } else {
+                // If API employee found but has no hire date, check local DB
+                if (empty($employee->hire_date)) {
+                    $localEmp = Employee::where('employee_id', $employeeId)->first();
+                    if ($localEmp && $localEmp->hire_date) {
+                        $employee->hire_date = $localEmp->hire_date;
+                    }
+                }
             }
-            
+
             if (!$employee) {
                 return response()->json(['error' => 'Employee not found', 'has_data' => false], 200);
             }
-            
+
             $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')->where('employee_id', $employeeId)->get();
             $trainingRecords = \App\Models\EmployeeTrainingDashboard::where('employee_id', $employeeId)->get();
-            
+
+            // Fetch Certificate Data from TrainingRecordCertificateTracking
+            $certificateRecords = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)->get();
+            $certificatesEarned = $certificateRecords->filter(function($cert) {
+                return strtolower($cert->status) === 'completed';
+            })->count();
+            $totalCoursesAssigned = $certificateRecords->count();
+
+            // Calculate training progress
+            $trainingProgress = round($trainingRecords->avg('progress') ?? 0, 1);
+
+            // If no dashboard progress, fallback to certificate completion rate
+            if ($trainingProgress == 0 && $totalCoursesAssigned > 0) {
+                 $trainingProgress = round(($certificatesEarned / $totalCoursesAssigned) * 100, 1);
+            }
+
             $avgProficiency = $competencyProfiles->avg('proficiency_level') ?? 0;
             $totalCompetencies = $competencyProfiles->count();
-            
+
+            // Calculate Leadership Competencies Count
+            $leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building', 'communication'];
+            $leadershipCompetenciesCount = $competencyProfiles->filter(function($p) use ($leadershipKeywords) {
+                $name = strtolower($p->competency->competency_name ?? '');
+                $category = strtolower($p->competency->category ?? '');
+                foreach ($leadershipKeywords as $keyword) {
+                    if (str_contains($name, $keyword) || str_contains($category, $keyword)) {
+                        return true;
+                    }
+                }
+                return false;
+            })->count();
+
             $strongCompetencies = $competencyProfiles->filter(fn($p) => (int)$p->proficiency_level >= 4)->pluck('competency.competency_name')->take(4);
             $developmentCompetencies = $competencyProfiles->filter(fn($p) => (int)$p->proficiency_level <= 2)->pluck('competency.competency_name')->take(3);
 
             return response()->json([
                 'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                 'employee_id' => $employeeId,
+                'hire_date' => $employee->hire_date,
                 'years_of_service' => max(0, $employee->hire_date ? \Carbon\Carbon::parse($employee->hire_date)->diffInYears(now()) : 0),
                 'has_data' => true,
                 'avg_proficiency_level' => round($avgProficiency, 1),
                 'total_competencies_assessed' => $totalCompetencies,
-                'training_progress' => round($trainingRecords->avg('progress') ?? 0, 1),
+                'leadership_competencies_count' => $leadershipCompetenciesCount,
+                'training_progress' => $trainingProgress,
+                'certificates_earned' => $certificatesEarned,
+                'total_courses_assigned' => $totalCoursesAssigned,
                 'calculated_readiness_score' => $this->calculateEmployeeReadinessScore($employeeId, $employee),
                 'strong_competencies' => $strongCompetencies->toArray(),
                 'development_competencies' => $developmentCompetencies->toArray(),
@@ -343,7 +399,7 @@ class SuccessionReadinessRatingController extends Controller
                 $empId = is_object($employee) ? $employee->employee_id : $employee['employee_id'];
                 $rating = SuccessionReadinessRating::where('employee_id', $empId)->first();
                 $score = $rating ? $rating->readiness_score : $this->calculateEmployeeReadinessScore($empId, $employee);
-                
+
                 return [
                     'name' => is_object($employee) ? ($employee->first_name . ' ' . $employee->last_name) : 'Unknown',
                     'id' => $empId,
@@ -363,7 +419,7 @@ class SuccessionReadinessRatingController extends Controller
         try {
             $employees = $this->getEmployeesFromAPI();
             $scores = $employees->map(fn($e) => $this->calculateEmployeeReadinessScore($e->employee_id, $e));
-            
+
             return response()->json([
                 'success' => true,
                 'data' => [

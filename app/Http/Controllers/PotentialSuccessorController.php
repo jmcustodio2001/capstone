@@ -15,15 +15,15 @@ class PotentialSuccessorController extends Controller
     // Removed duplicate index() method. Only the eager loading version remains below.
     public function index()
     {
-        // Eager load successors
-        $successors = PotentialSuccessor::latest()->paginate(10);
-        
+        // Eager load successors and their local employee records
+        $successors = PotentialSuccessor::with('employee')->latest()->paginate(10);
+
         // Fetch employees from API with local fallback
         $employeeMap = [];
         try {
             $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
-            
+
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }
@@ -59,17 +59,22 @@ class PotentialSuccessorController extends Controller
         foreach ($successors as $successor) {
             if (isset($employeeMap[$successor->employee_id])) {
                 $apiEmployee = $employeeMap[$successor->employee_id];
-                
+
                 // Fetch local competency profiles for this employee
                 $profiles = EmployeeCompetencyProfile::with('competency')
                     ->where('employee_id', $successor->employee_id)
                     ->get();
-                
+
                 // Create a standard object that mimics the Employee model if needed
                 if (!is_object($apiEmployee)) {
                     $apiEmployee = (object) $apiEmployee;
                 }
-                
+
+                // If API profile picture is missing, try to use local one from the eager-loaded relationship
+                if (empty($apiEmployee->profile_picture) && $successor->employee && !empty($successor->employee->profile_picture)) {
+                    $apiEmployee->profile_picture = $successor->employee->profile_picture;
+                }
+
                 // Set the relation and profiles
                 $apiEmployee->competencyProfiles = $profiles;
                 $successor->setRelation('employee', $apiEmployee);
@@ -87,7 +92,7 @@ class PotentialSuccessorController extends Controller
                 'potential_role' => 'required|string|max:255',
                 'identified_date' => 'required|date',
             ]);
-            
+
             // Check if employee exists locally
             $employeeId = $request->input('employee_id');
             $employee = Employee::where('employee_id', $employeeId)->first();
@@ -97,7 +102,7 @@ class PotentialSuccessorController extends Controller
                 try {
                     $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
                     $apiEmployees = $response->successful() ? $response->json() : [];
-                    
+
                     if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                         $apiEmployees = $apiEmployees['data'];
                     }
@@ -142,7 +147,7 @@ class PotentialSuccessorController extends Controller
 
             // Create the potential successor record
             $successor = PotentialSuccessor::create($request->only(['employee_id', 'potential_role', 'identified_date']));
-            
+
             // Log activity
             ActivityLog::create([
                 'user_id' => Auth::id(),
@@ -150,7 +155,7 @@ class PotentialSuccessorController extends Controller
                 'module' => 'Potential Successor',
                 'description' => 'Added potential successor (ID: ' . $successor->id . ')',
             ]);
-            
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => true,
@@ -158,7 +163,7 @@ class PotentialSuccessorController extends Controller
                     'successor' => $successor
                 ]);
             }
-            
+
             return redirect()->route('potential_successors.index')->with('success', 'Potential successor added successfully.');
         } catch (\Exception $e) {
             if ($request->expectsJson()) {
@@ -167,7 +172,7 @@ class PotentialSuccessorController extends Controller
                     'message' => 'Failed to add potential successor: ' . $e->getMessage()
                 ], 500);
             }
-            
+
             return redirect()->back()->with('error', 'Failed to add potential successor: ' . $e->getMessage());
         }
     }
@@ -177,7 +182,7 @@ class PotentialSuccessorController extends Controller
         try {
             $successor = PotentialSuccessor::findOrFail($id);
             $successor->delete();
-            
+
             // Log activity
             ActivityLog::create([
                 'user_id' => Auth::id(),
@@ -185,14 +190,14 @@ class PotentialSuccessorController extends Controller
                 'module' => 'Potential Successor',
                 'description' => 'Deleted potential successor (ID: ' . $successor->id . ')',
             ]);
-            
+
             if (request()->expectsJson()) {
                 return response()->json([
                     'success' => true,
                     'message' => 'Potential successor deleted successfully.'
                 ]);
             }
-            
+
             return redirect()->route('potential_successors.index')->with('success', 'Potential successor deleted successfully.');
         } catch (\Exception $e) {
             if (request()->expectsJson()) {
@@ -201,7 +206,7 @@ class PotentialSuccessorController extends Controller
                     'message' => 'Failed to delete potential successor: ' . $e->getMessage()
                 ], 500);
             }
-            
+
             return redirect()->back()->with('error', 'Failed to delete potential successor.');
         }
     }
@@ -209,14 +214,14 @@ class PotentialSuccessorController extends Controller
     {
         try {
             $successor = PotentialSuccessor::with(['employee.competencyProfiles.competency'])->findOrFail($id);
-            
+
             if (request()->expectsJson()) {
                 return response()->json([
                     'success' => true,
                     'successor' => $successor
                 ]);
             }
-            
+
             $employees = Employee::all();
             $successors = PotentialSuccessor::with(['employee.competencyProfiles.competency'])->latest()->paginate(10);
             return view('succession_planning.potential_successor', compact('successors', 'employees', 'successor'))->with('showMode', true);
@@ -227,7 +232,7 @@ class PotentialSuccessorController extends Controller
                     'message' => 'Failed to load successor details: ' . $e->getMessage()
                 ], 500);
             }
-            
+
             return redirect()->back()->with('error', 'Successor not found.');
         }
     }
@@ -272,7 +277,7 @@ class PotentialSuccessorController extends Controller
         try {
             $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
-            
+
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }
@@ -334,7 +339,7 @@ class PotentialSuccessorController extends Controller
                 if ($readinessFilter === 'high' && $analysis['suitabilityScore'] >= 90) $match = true;
                 if ($readinessFilter === 'medium' && $analysis['suitabilityScore'] >= 70 && $analysis['suitabilityScore'] < 90) $match = true;
                 if ($readinessFilter === 'low' && $analysis['suitabilityScore'] < 70) $match = true;
-                
+
                 if (!$match) continue;
             }
 
@@ -465,7 +470,7 @@ class PotentialSuccessorController extends Controller
         // Count leadership competencies using comprehensive detection
         $leadershipCompetencies = $competencyProfiles->filter(function($profile) {
             if (!$profile->competency) return false;
-            
+
             $competencyName = strtolower($profile->competency->competency_name ?? '');
             $category = strtolower($profile->competency->category ?? '');
 
@@ -553,12 +558,12 @@ class PotentialSuccessorController extends Controller
 
         // Base proficiency contribution (40%)
         $proficiencyScore = ($avgProficiency / 5) * 100;
-        
+
         // Competency match contribution (60%)
         // We use a simplified model for the weighted contribution
         $matchScore = 0;
         $totalWeight = $lw + $cw + $tw + $mw + $sw + $ow + $nw + $aw + $fw + $orgw + $pw + $tkw;
-        
+
         if ($totalWeight > 0) {
             $matchScore += ($leadership > 0 ? 100 : 0) * ($lw / $totalWeight);
             $matchScore += ($communication > 0 ? 100 : 0) * ($cw / $totalWeight);
@@ -600,7 +605,7 @@ class PotentialSuccessorController extends Controller
         try {
             $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
-            
+
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }
@@ -712,7 +717,7 @@ class PotentialSuccessorController extends Controller
         try {
             $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
-            
+
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }

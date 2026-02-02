@@ -271,11 +271,17 @@
                     $lastName = $employee?->last_name ?? 'Employee';
                     $fullName = $firstName . ' ' . $lastName;
 
-                    // Check if profile picture exists - simplified approach with null safety
+                    // Check if profile picture exists - robust approach
                     $profilePicUrl = null;
-                    if ($employee?->profile_picture) {
-                        // Direct asset URL generation - Laravel handles the storage symlink
-                        $profilePicUrl = asset('storage/' . $employee->profile_picture);
+                    if ($employee && !empty($employee->profile_picture)) {
+                        $profilePic = $employee->profile_picture;
+                        if (strpos($profilePic, 'http') === 0) {
+                            $profilePicUrl = $profilePic;
+                        } elseif (strpos($profilePic, 'storage/') === 0) {
+                            $profilePicUrl = asset($profilePic);
+                        } else {
+                            $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                        }
                     }
 
                     // Generate consistent color based on employee name for fallback
@@ -1473,11 +1479,30 @@ document.addEventListener('DOMContentLoaded', function () {
           .then(html => {
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
-            const newTbody = doc.getElementById('gap-table-body');
-            if (newTbody) {
-              document.getElementById('gap-table-body').innerHTML = newTbody.innerHTML;
-              setupAutoAssignButtons(); // Re-attach handlers after refresh
+
+            // Update the main gap cards container
+            const newContainer = doc.getElementById('gap-cards-container');
+            const currentContainer = document.getElementById('gap-cards-container');
+
+            if (newContainer && currentContainer) {
+              currentContainer.innerHTML = newContainer.innerHTML;
+
+              // Re-initialize all functionality
+              setupAutoAssignButtons();
+              if (typeof initGapPagination === 'function') {
+                initGapPagination();
+              }
+
+              // Re-attach view/delete listeners if needed (delegation is better, but safe to re-run if they were direct)
+              // Note: Most listeners are delegated or global, so this might be enough.
+            } else {
+                // Fallback: Reload page if container not found
+                window.location.reload();
             }
+          })
+          .catch(err => {
+            console.error('Error refreshing table:', err);
+            window.location.reload();
           });
       }
 
@@ -2815,22 +2840,31 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // ========== COMPETENCY GAPS CARD PAGINATION ==========
-    const GAPS_PER_PAGE = 5;
+    const GAPS_PER_PAGE = 3; // Reduced to 3 to ensure pagination shows more often
 
     function initGapPagination() {
-      document.querySelectorAll('.gap-list').forEach(list => {
+      console.log('Initializing gap pagination...');
+      const gapLists = document.querySelectorAll('.gap-list');
+      console.log(`Found ${gapLists.length} gap lists`);
+
+      gapLists.forEach(list => {
         const empId = list.dataset.employeeId;
         const items = list.querySelectorAll('.competency-gap-item');
         const totalItems = items.length;
         const totalPages = Math.ceil(totalItems / GAPS_PER_PAGE);
         const paginationContainer = document.getElementById(`gap-pagination-${empId}`);
 
+        console.log(`Employee ${empId}: ${totalItems} items, ${totalPages} pages`);
+
         if (totalItems > GAPS_PER_PAGE) {
-            paginationContainer.style.display = 'flex';
-            paginationContainer.querySelector('.total-pages').textContent = totalPages;
-            showGapPage(empId, 1);
+            if (paginationContainer) {
+              paginationContainer.style.display = 'flex';
+              const totalPagesSpan = paginationContainer.querySelector('.total-pages');
+              if (totalPagesSpan) totalPagesSpan.textContent = totalPages;
+              showGapPage(empId, 1);
+            }
         } else {
-            paginationContainer.style.display = 'none';
+            if (paginationContainer) paginationContainer.style.display = 'none';
         }
       });
     }
@@ -2861,12 +2895,14 @@ document.addEventListener('DOMContentLoaded', function () {
       const items = document.querySelectorAll(`.gap-list[data-employee-id="${empId}"] .competency-gap-item`);
       const totalPages = Math.ceil(items.length / GAPS_PER_PAGE);
 
-      paginationContainer.querySelector('.current-page').textContent = page;
+      const currentPageSpan = paginationContainer.querySelector('.current-page');
+      if (currentPageSpan) currentPageSpan.textContent = page;
+
       const prevBtn = paginationContainer.querySelector('.prev-gap-page-btn');
       const nextBtn = paginationContainer.querySelector('.next-gap-page-btn');
 
-      prevBtn.disabled = page <= 1;
-      nextBtn.disabled = page >= totalPages;
+      if (prevBtn) prevBtn.disabled = page <= 1;
+      if (nextBtn) nextBtn.disabled = page >= totalPages;
     }
 
     document.addEventListener('click', function(e) {
@@ -2876,6 +2912,8 @@ document.addEventListener('DOMContentLoaded', function () {
       e.preventDefault();
       const empId = btn.dataset.employeeId;
       const list = document.querySelector(`.gap-list[data-employee-id="${empId}"]`);
+      if (!list) return;
+
       let currentPage = parseInt(list.dataset.currentPage) || 1;
 
       if (btn.classList.contains('prev-gap-page-btn')) {
@@ -2889,6 +2927,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Initialize gap pagination on load
     document.addEventListener('DOMContentLoaded', initGapPagination);
+
+    // Re-initialize on window load to ensure all resources are ready
+    window.addEventListener('load', initGapPagination);
   </script>
 </body>
 </html>

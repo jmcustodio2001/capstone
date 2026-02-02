@@ -210,7 +210,7 @@
                   <!-- Employee Profile Section -->
                   <div class="d-flex align-items-center w-100">
                     <div class="position-relative me-3">
-                      <img src="{{ isset($employee['profile_picture']) && $employee['profile_picture'] ? asset('storage/' . $employee['profile_picture']) : 'https://ui-avatars.com/api/?name=' . urlencode(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')) . '&background=ffffff&color=333333&size=64' }}"
+                      <img src="{{ isset($employee['profile_picture']) && $employee['profile_picture'] ? (strpos($employee['profile_picture'], 'http') === 0 ? $employee['profile_picture'] : asset('storage/' . $employee['profile_picture'])) : 'https://ui-avatars.com/api/?name=' . urlencode(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')) . '&background=ffffff&color=333333&size=64' }}"
                            class="rounded-circle border-3 border-white shadow-sm"
                            width="64" height="64" alt="Profile"
                            style="object-fit: cover;">
@@ -476,7 +476,7 @@
     // View Employee Details
     function viewEmployeeDetails(source) {
       let employee = source;
-      
+
       // If source is an HTML element (the button), extract data from it
       if (source && source.getAttribute) {
         try {
@@ -502,7 +502,7 @@
       const email = employee.email || 'N/A';
       const phone = employee.phone || 'N/A';
       const position = employee.position || 'N/A';
-      
+
       let departmentName = 'N/A';
       if (employee.department && employee.department.name) {
           departmentName = employee.department.name;
@@ -511,15 +511,31 @@
       }
 
       const address = employee.address || 'N/A';
-      const dateHired = employee.date_hired ? new Date(employee.date_hired).toLocaleDateString() : (employee.start_date ? new Date(employee.start_date).toLocaleDateString() : 'N/A');
+
+      // Handle various date field names for hire date
+      const rawHireDate = employee.hire_date || employee.date_hired || employee.start_date;
+      const dateHired = rawHireDate ? new Date(rawHireDate).toLocaleDateString() : 'N/A';
       const birthDate = employee.birth_date ? new Date(employee.birth_date).toLocaleDateString() : 'N/A';
-      
+
+      // Calculate Experience from Hire Date
+       let experience = employee.experience || 'N/A';
+       if (rawHireDate) {
+           const hireDateObj = new Date(rawHireDate);
+           const today = new Date();
+           let years = today.getFullYear() - hireDateObj.getFullYear();
+           const m = today.getMonth() - hireDateObj.getMonth();
+           if (m < 0 || (m === 0 && today.getDate() < hireDateObj.getDate())) {
+               years--;
+           }
+           experience = years + (years === 1 ? ' year' : ' years');
+       }
+
       // Additional fields
       const age = employee.age || 'N/A';
       const gender = employee.gender || 'N/A';
       const civilStatus = employee.civil_status || 'N/A';
       const skills = employee.skills || 'N/A';
-      const experience = employee.experience || 'N/A';
+      // experience is calculated above
       const education = employee.education || 'N/A';
 
 
@@ -576,7 +592,7 @@
                 <strong>Address:</strong><br>
                 <span class="text-muted">${address}</span>
               </div>
-              
+
               <div class="col-md-12">
                   <hr class="my-2">
                   <h6 class="fw-bold text-primary">Qualifications</h6>

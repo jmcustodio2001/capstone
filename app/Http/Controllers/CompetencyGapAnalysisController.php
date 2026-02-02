@@ -91,11 +91,19 @@ class CompetencyGapAnalysisController extends Controller
         foreach ($gaps as $gap) {
             if (isset($employeeMap[$gap->employee_id])) {
                 $apiEmp = $employeeMap[$gap->employee_id];
+                
+                // Get local picture from the existing relation BEFORE overwriting
+                $localPic = $gap->employee ? $gap->employee->profile_picture : null;
+                
                 $employeeData = new \stdClass();
                 $employeeData->employee_id = $gap->employee_id;
                 $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
                 $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
-                $employeeData->profile_picture = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                
+                $apiPic = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                // Prefer API pic, fallback to local pic
+                $employeeData->profile_picture = $apiPic ?: $localPic;
+                
                 $gap->setRelation('employee', $employeeData);
             }
         }
@@ -104,11 +112,19 @@ class CompetencyGapAnalysisController extends Controller
         foreach ($expiredGaps as $gap) {
             if (isset($employeeMap[$gap->employee_id])) {
                 $apiEmp = $employeeMap[$gap->employee_id];
+                
+                // Get local picture from the existing relation BEFORE overwriting
+                $localPic = $gap->employee ? $gap->employee->profile_picture : null;
+                
                 $employeeData = new \stdClass();
                 $employeeData->employee_id = $gap->employee_id;
                 $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
                 $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
-                $employeeData->profile_picture = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                
+                $apiPic = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
+                // Prefer API pic, fallback to local pic
+                $employeeData->profile_picture = $apiPic ?: $localPic;
+                
                 $gap->setRelation('employee', $employeeData);
             }
         }

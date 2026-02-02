@@ -265,9 +265,16 @@
                         $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                        "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
 
-                        // If profile picture exists in storage, try it first
-                        if ($rating->employee->profile_picture && file_exists(storage_path('app/public/' . $rating->employee->profile_picture))) {
-                            $profilePicUrl = asset('storage/' . $rating->employee->profile_picture);
+                        // Robust Profile Picture Logic
+                        if (!empty($rating->employee->profile_picture)) {
+                            $profilePic = $rating->employee->profile_picture;
+                            if (strpos($profilePic, 'http') === 0) {
+                                $profilePicUrl = $profilePic;
+                            } elseif (strpos($profilePic, 'storage/') === 0) {
+                                $profilePicUrl = asset($profilePic);
+                            } else {
+                                $profilePicUrl = asset('storage/' . ltrim($profilePic, '/'));
+                            }
                         }
                       @endphp
 
@@ -512,8 +519,23 @@
         });
     }
 
+    function calculateExperienceYears(hireDate) {
+      if (!hireDate) return 0;
+      const hireDateObj = new Date(hireDate);
+      const today = new Date();
+      let years = today.getFullYear() - hireDateObj.getFullYear();
+      const m = today.getMonth() - hireDateObj.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < hireDateObj.getDate())) {
+          years--;
+      }
+      return Math.max(0, years);
+    }
+
     function displaySimpleAnalysis(data, employeeName) {
       console.log('Display analysis called with data:', data);
+
+      // Calculate years of service from hire date (matching employee list logic)
+      const yearsOfService = calculateExperienceYears(data.hire_date) || parseFloat(data.years_of_service || 0);
 
       // Use backend-calculated score (new simplified calculation)
       let overallReadiness;
@@ -522,7 +544,6 @@
         console.log('Using backend-calculated readiness score:', overallReadiness);
       } else {
         // Fallback to simplified frontend calculation matching backend
-        const yearsOfService = data.years_of_service || 0;
         const certificates = data.certificates_earned || 0;
         const totalCompetencies = data.total_competencies_assessed || 0;
         const avgProficiency = data.avg_proficiency_level || 0;
@@ -578,7 +599,7 @@
       const leadership = data.leadership_competencies_count || 0;
       const trainingProgress = data.training_progress || 0;
       const certificates = data.certificates_earned || 0;
-      const yearsOfService = parseFloat(data.years_of_service || 0);
+      // yearsOfService is already calculated above
 
       // Generate strengths and development areas
       const strengths = [];
@@ -739,7 +760,7 @@
       const totalCompetencies = data.total_competencies_assessed || 0;
       const trainingProgress = data.training_progress || 0;
       const certificates = data.certificates_earned || 0;
-      const yearsOfService = parseFloat(data.years_of_service || 0).toFixed(1);
+      const yearsOfService = calculateExperienceYears(data.hire_date) || parseFloat(data.years_of_service || 0);
 
       let icon, colorClass, reasoning;
 

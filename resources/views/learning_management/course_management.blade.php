@@ -268,7 +268,7 @@
     </div>
     @endif
 
-    <!-- Training Requests Section -->
+    {{-- <!-- Training Requests Section -->
     <div class="card shadow-sm border-0 mt-4">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Employee Training</h4>
@@ -401,7 +401,7 @@
           </div>
         @endforelse
       </div>
-    </div>
+    </div> --}}
 
     <!-- Table Section -->
     <div class="card shadow-sm border-0 mt-4">

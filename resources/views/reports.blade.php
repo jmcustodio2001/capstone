@@ -499,12 +499,6 @@
           </div>
           <div class="col-md-6">
             <div class="d-flex justify-content-md-end align-items-center gap-3">
-              <div class="input-group" style="max-width: 300px;">
-                <span class="input-group-text bg-white border-end-0">
-                  <i class="bi bi-calendar"></i>
-                </span>
-                <input type="text" class="form-control date-range-picker border-start-0" placeholder="Select date range">
-              </div>
               <div class="export-toolbar">
                 <button class="action-btn" id="export-excel" style="background: linear-gradient(135deg, #00c853, #00b248);">
                   <i class="bi bi-file-earmark-excel"></i> Excel

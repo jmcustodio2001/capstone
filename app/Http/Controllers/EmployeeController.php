@@ -20,6 +20,15 @@ class EmployeeController extends Controller
     // List all employees with all columns
     public function index()
     {
+        // Fetch all local employees to map emails to local profile pictures
+        $localEmployees = Employee::all();
+        $emailToLocalMap = [];
+        foreach ($localEmployees as $localEmp) {
+            if ($localEmp->email) {
+                $emailToLocalMap[strtolower($localEmp->email)] = $localEmp;
+            }
+        }
+
         $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees'); // Project A's endpoint
 
         $apiData = $response->successful() ? $response->json() : [];
@@ -35,8 +44,20 @@ class EmployeeController extends Controller
         // Ensure $employees is an array before looping
         if (is_array($employees)) {
             foreach ($employees as &$employee) {
-                if (is_array($employee) && isset($employee['date_hired'])) {
-                    $employee['hire_date'] = date('Y-m-d', strtotime($employee['date_hired']));
+                if (is_array($employee)) {
+                    // Date normalization
+                    if (isset($employee['date_hired'])) {
+                        $employee['hire_date'] = date('Y-m-d', strtotime($employee['date_hired']));
+                    }
+
+                    // Merge local profile picture if available
+                    $email = strtolower($employee['email'] ?? '');
+                    if ($email && isset($emailToLocalMap[$email])) {
+                        $localEmp = $emailToLocalMap[$email];
+                        if ($localEmp->profile_picture) {
+                            $employee['profile_picture'] = $localEmp->profile_picture;
+                        }
+                    }
                 }
             }
         } else {

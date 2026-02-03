@@ -34,7 +34,7 @@ class CompetencyLibraryController extends Controller
         $employees = Employee::all();
         $gaps = CompetencyGap::with(['employee', 'competency'])->get();
         $positions = \App\Models\OrganizationalPosition::all();
-        $questions = AssessmentQuestion::all();
+        $questions = AssessmentQuestion::paginate(10, ['*'], 'questions_page');
 
         return view('competency_management.competency_library', compact(
             'competencies',

@@ -565,7 +565,7 @@
               </table>
             </div>
             <div class="card-footer bg-white border-0 py-3 d-flex justify-content-end">
-              {{ $competencies->links('pagination::bootstrap-5') }}
+              {{ $competencies->appends(request()->query())->links('pagination::bootstrap-5') }}
             </div>
           @endif
         @empty
@@ -624,6 +624,9 @@
             </tbody>
           </table>
         </div>
+      </div>
+      <div class="card-footer bg-white border-0 py-3 d-flex justify-content-end">
+        {{ $questions->appends(request()->query())->links('pagination::bootstrap-5') }}
       </div>
     </div>
   </main>

@@ -821,6 +821,7 @@ Route::post('/admin/employee-request-forms/fix-status-case', [App\Http\Controlle
 // Add alias route for backward compatibility
 Route::put('/admin/requests/{id}', [App\Http\Controllers\EmployeeRequestFormController::class, 'update'])->name('admin.requests.update')->middleware('auth:admin');
 Route::get('/admin/employee-list', [EmployeeController::class, 'index'])->name('employee.list')->middleware('auth:admin');
+Route::get('/admin/proxy-image', [EmployeeController::class, 'proxyImage'])->name('employee.proxy.image')->middleware('auth:admin');
 Route::post('/admin/employees', [EmployeeController::class, 'store'])->name('employees.store')->middleware('auth:admin');
 Route::post('/admin/employees/save-individual', [EmployeeController::class, 'saveIndividualEmployee'])->name('employees.save_individual')->middleware('auth:admin');
 Route::get('/employees/{id}', [EmployeeController::class, 'show'])->name('employees.show')->middleware('auth:admin');
@@ -993,6 +994,7 @@ Route::post('/employee/verify-password', [EmployeeController::class, 'verifyPass
 
 // Employee Settings Fix routes
 Route::post('/employee/settings/fix-save', [EmployeeController::class, 'fixEmployeeSettingsSave'])->name('employee.settings.fix')->middleware('employee.auth');
+Route::get('/employee/profile-picture-proxy', [EmployeeController::class, 'proxyProfilePicture'])->name('employee.profile_picture.proxy')->middleware('employee.auth');
 Route::get('/employee/debug-auth', [EmployeeController::class, 'debugEmployeeAuth'])->name('employee.debug.auth')->middleware('employee.auth');
 
 // Employee ping route for online status check

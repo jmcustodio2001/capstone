@@ -344,7 +344,22 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
           <div class="d-flex align-items-center flex-wrap">
             @if($employee->profile_picture)
-              <img src="{{ asset('storage/'.$employee->profile_picture) }}" alt="Profile Picture" class="profile-img-preview me-4" id="current-profile-picture">
+              @php
+                  $profilePictureUrl = $employee->profile_picture;
+                  if (strpos($profilePictureUrl, 'http') !== 0) {
+                      // Check if local file exists
+                      if (file_exists(public_path('storage/' . $profilePictureUrl))) {
+                          $profilePictureUrl = asset('storage/' . $profilePictureUrl);
+                      } else {
+                          // If not local, assume it's external and use proxy to fetch from remote
+                          // The proxy handles fallbacks to avatar if remote also fails
+                          $profilePictureUrl = route('employee.profile_picture.proxy');
+                      }
+                  }
+              @endphp
+              <img src="{{ $profilePictureUrl }}"
+                   onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode($employee->first_name . ' ' . $employee->last_name) }}&background=random';"
+                   alt="Profile Picture" class="profile-img-preview me-4" id="current-profile-picture">
             @else
               <div class="profile-img-preview me-4 d-flex align-items-center justify-content-center bg-light" id="no-profile-picture">
                 <i class="bi bi-person-circle" style="font-size: 4rem; color: #6c757d;"></i>

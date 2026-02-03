@@ -52,10 +52,19 @@ class EmployeeController extends Controller
 
                     // Merge local profile picture if available
                     $email = strtolower($employee['email'] ?? '');
+                    $isLocal = false;
                     if ($email && isset($emailToLocalMap[$email])) {
                         $localEmp = $emailToLocalMap[$email];
                         if ($localEmp->profile_picture) {
                             $employee['profile_picture'] = $localEmp->profile_picture;
+                            $isLocal = true;
+                        }
+                    }
+
+                    // Normalize API profile picture if not local
+                    if (!$isLocal && isset($employee['profile_picture']) && $employee['profile_picture']) {
+                        if (strpos($employee['profile_picture'], 'http') !== 0) {
+                            $employee['profile_picture'] = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($employee['profile_picture'], '/');
                         }
                     }
                 }
@@ -939,6 +948,11 @@ class EmployeeController extends Controller
             return redirect()->route('employee.login')->with('error', 'Please log in to access settings.');
         }
 
+        // Check if there is updated session data for external employee
+        if (session()->has('external_employee_data')) {
+            $employee->forceFill(session('external_employee_data'));
+        }
+
         return view('employee_ess_modules.setting_employee', compact('employee'));
     }
 
@@ -1071,23 +1085,72 @@ class EmployeeController extends Controller
             Log::info('Employee settings update data:', $data);
 
             // Check if external employee (session-based)
-            if (session()->has('external_employee_data')) {
-                Log::info('Updating external employee session data');
-                $externalData = session('external_employee_data');
+            if (session()->has('external_employee_data') || session('external_account_type') === 'ess') {
+                Log::info('Updating external employee data via API');
 
-                // Merge new data into session data
-                // We only update fields that are present in $data
-                foreach ($data as $key => $value) {
-                    $externalData[$key] = $value;
+                // Prepare payload for API
+                $apiPayload = $data;
+                unset($apiPayload['profile_picture']); // Handle profile picture separately or keep local
+
+                // Use raw password for API if it was set
+                if ($request->filled('password')) {
+                    $apiPayload['password'] = $request->input('password');
                 }
 
-                // Update session
-                session(['external_employee_data' => $externalData]);
+                // Get correct ESS Account ID by fetching accounts list
+                $externalId = null;
+                $email = $employee->email;
 
-                // Update the current instance so it reflects in the response
-                $employee->forceFill($data);
+                try {
+                    $accountsResponse = Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/accounts');
+                    if ($accountsResponse->successful()) {
+                        $apiData = $accountsResponse->json();
+                        $essAccounts = $apiData['data']['ess_accounts'] ?? $apiData['ess_accounts'] ?? [];
 
-                $updateResult = true;
+                        foreach ($essAccounts as $account) {
+                            if (isset($account['employee']['email']) && $account['employee']['email'] === $email) {
+                                $externalId = $account['id']; // This is the ESS Account ID
+                                Log::info("Found ESS Account ID: $externalId for email: $email");
+                                break;
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::error("Failed to fetch accounts to find ID: " . $e->getMessage());
+                }
+
+                // Fallback to existing logic if fetch fails (though it likely won't work for PATCH)
+                if (!$externalId) {
+                    $externalData = session('external_employee_data', []);
+                    $externalId = $externalData['id'] ?? $externalData['employee_id'] ?? $employee->employee_id;
+                    Log::warning("Could not find ESS Account ID from API, falling back to: $externalId");
+                }
+
+                $apiUrl = 'https://hr4.jetlougetravels-ph.com/api/accounts/ess/' . $externalId;
+
+                Log::info('Patching to API:', ['url' => $apiUrl]);
+
+                $response = Http::patch($apiUrl, $apiPayload);
+
+                if ($response->successful()) {
+                    Log::info('API Update Successful', $response->json());
+
+                    // Update session data if exists
+                    if (session()->has('external_employee_data')) {
+                        $externalData = session('external_employee_data');
+                        foreach ($data as $key => $value) {
+                            $externalData[$key] = $value;
+                        }
+                        session(['external_employee_data' => $externalData]);
+                    }
+
+                    // Update the current instance so it reflects in the response
+                    $employee->forceFill($data);
+                    $updateResult = true;
+                } else {
+                    Log::error('API Update Failed', ['status' => $response->status(), 'body' => $response->body()]);
+                    throw new \Exception('Failed to update settings on external server.');
+                }
             } else {
                 Log::info('Updating database employee record');
 
@@ -1144,6 +1207,49 @@ class EmployeeController extends Controller
             'csrf_token' => csrf_token(),
             'guard_name' => 'employee'
         ]);
+    }
+
+    /**
+     * Proxy Profile Picture for External Employees
+     * Serves as a bridge to fetch images from the main server to avoid CORS/Hotlink issues
+     */
+    public function proxyProfilePicture()
+    {
+        $employee = Auth::guard('employee')->user();
+
+        if (!$employee || !$employee->profile_picture) {
+            return abort(404);
+        }
+
+        $profilePictureUrl = $employee->profile_picture;
+
+        // If it's already a full URL (which shouldn't happen for proxy use case usually, but safety check)
+        if (strpos($profilePictureUrl, 'http') === 0) {
+            $url = $profilePictureUrl;
+        } else {
+            // Construct remote URL
+            $url = 'https://hr4.jetlougetravels-ph.com/storage/' . $profilePictureUrl;
+        }
+
+        try {
+            // Fetch the image
+            $response = Http::timeout(10)->get($url);
+
+            if ($response->successful()) {
+                $contentType = $response->header('Content-Type');
+                return response($response->body())
+                    ->header('Content-Type', $contentType)
+                    ->header('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+            }
+
+            // Fallback if failed
+            Log::warning("Failed to proxy profile picture: $url, Status: " . $response->status());
+            return redirect('https://ui-avatars.com/api/?name=' . urlencode($employee->first_name . ' ' . $employee->last_name) . '&background=random');
+
+        } catch (\Exception $e) {
+            Log::error("Proxy profile picture error: " . $e->getMessage());
+            return redirect('https://ui-avatars.com/api/?name=' . urlencode($employee->first_name . ' ' . $employee->last_name) . '&background=random');
+        }
     }
 
     /**
@@ -2186,5 +2292,38 @@ class EmployeeController extends Controller
         }
     }
 
+    /**
+     * Generic Proxy for Employee Images (List View)
+     */
+    public function proxyImage(Request $request)
+    {
+        $url = $request->query('url');
+        
+        if (!$url) {
+            return abort(404);
+        }
 
+        // Security check: Only allow specific domains
+        if (strpos($url, 'https://hr4.jetlougetravels-ph.com/') !== 0 && 
+            strpos($url, 'http://hr4.jetlougetravels-ph.com/') !== 0) {
+            return abort(403, 'Unauthorized domain');
+        }
+
+        try {
+            // Fetch the image
+            $response = Http::timeout(10)->get($url);
+
+            if ($response->successful()) {
+                $contentType = $response->header('Content-Type');
+                return response($response->body())
+                    ->header('Content-Type', $contentType)
+                    ->header('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+            }
+
+            return abort(404);
+        } catch (\Exception $e) {
+            Log::error("Proxy image error: " . $e->getMessage());
+            return abort(404);
+        }
+    }
 }

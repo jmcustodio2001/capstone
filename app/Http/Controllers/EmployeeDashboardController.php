@@ -387,7 +387,7 @@ class EmployeeDashboardController extends Controller
 
         if (!$employeeId) {
             return response()->json([
-                'success' => false, 
+                'success' => false,
                 'message' => 'Unauthenticated'
             ], 401);
         }

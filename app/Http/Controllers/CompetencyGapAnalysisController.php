@@ -55,10 +55,10 @@ class CompetencyGapAnalysisController extends Controller
             if (is_array($apiEmployees)) {
                 foreach ($apiEmployees as $emp) {
                     // Match the ID mapping logic from EmployeeCompetencyProfileController
-                    $empId = is_array($emp) 
+                    $empId = is_array($emp)
                         ? ($emp['external_employee_id'] ?? $emp['employee_id'] ?? $emp['id'] ?? null)
                         : ($emp->external_employee_id ?? $emp->employee_id ?? $emp->id ?? null);
-                    
+
                     if ($empId) {
                         $employeeMap[$empId] = $emp;
                     }
@@ -91,19 +91,19 @@ class CompetencyGapAnalysisController extends Controller
         foreach ($gaps as $gap) {
             if (isset($employeeMap[$gap->employee_id])) {
                 $apiEmp = $employeeMap[$gap->employee_id];
-                
+
                 // Get local picture from the existing relation BEFORE overwriting
                 $localPic = $gap->employee ? $gap->employee->profile_picture : null;
-                
+
                 $employeeData = new \stdClass();
                 $employeeData->employee_id = $gap->employee_id;
                 $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
                 $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
-                
+
                 $apiPic = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
                 // Prefer API pic, fallback to local pic
                 $employeeData->profile_picture = $apiPic ?: $localPic;
-                
+
                 $gap->setRelation('employee', $employeeData);
             }
         }
@@ -112,19 +112,19 @@ class CompetencyGapAnalysisController extends Controller
         foreach ($expiredGaps as $gap) {
             if (isset($employeeMap[$gap->employee_id])) {
                 $apiEmp = $employeeMap[$gap->employee_id];
-                
+
                 // Get local picture from the existing relation BEFORE overwriting
                 $localPic = $gap->employee ? $gap->employee->profile_picture : null;
-                
+
                 $employeeData = new \stdClass();
                 $employeeData->employee_id = $gap->employee_id;
                 $employeeData->first_name = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Unknown') : ($apiEmp->first_name ?? 'Unknown');
                 $employeeData->last_name = is_array($apiEmp) ? ($apiEmp['last_name'] ?? 'Employee') : ($apiEmp->last_name ?? 'Employee');
-                
+
                 $apiPic = is_array($apiEmp) ? ($apiEmp['profile_picture'] ?? null) : ($apiEmp->profile_picture ?? null);
                 // Prefer API pic, fallback to local pic
                 $employeeData->profile_picture = $apiPic ?: $localPic;
-                
+
                 $gap->setRelation('employee', $employeeData);
             }
         }
@@ -132,7 +132,7 @@ class CompetencyGapAnalysisController extends Controller
         // Prepare employees list for the "Add Gap" dropdown
         $localEmployees = Employee::all();
         $employees = [];
-        
+
         foreach ($employeeMap as $id => $data) {
             $employees[] = [
                 'id' => $id,
@@ -290,7 +290,7 @@ class CompetencyGapAnalysisController extends Controller
     {
         try {
             $gap = CompetencyGap::findOrFail($id);
-            
+
             // Check if gap is already assigned to training
             if ($gap->assigned_to_training) {
                 if ($request->ajax() || $request->wantsJson()) {
@@ -349,7 +349,7 @@ class CompetencyGapAnalysisController extends Controller
     {
         try {
             $gap = CompetencyGap::findOrFail($id);
-            
+
             // Check if gap is already assigned to training
             if ($gap->assigned_to_training) {
                 if ($request->ajax() || $request->wantsJson()) {
@@ -583,7 +583,7 @@ class CompetencyGapAnalysisController extends Controller
                     $table->unsignedBigInteger('destination_training_id')->nullable();
                     $table->boolean('needs_response')->default(false);
                     $table->timestamps();
-                    
+
                     $table->index('employee_id');
                     $table->index('destination_training_id');
                 });
@@ -1305,7 +1305,7 @@ class CompetencyGapAnalysisController extends Controller
             $request->validate([
                 'gap_id' => 'required|integer|exists:competency_gaps,id',
                 // Relaxed validation: rely on the gap record to identify the employee
-                'employee_id' => 'nullable', 
+                'employee_id' => 'nullable',
                 'competency' => 'required|string',
                 'expired_date' => 'nullable|string'
             ]);
@@ -1326,7 +1326,7 @@ class CompetencyGapAnalysisController extends Controller
                 // 1. Direct match on employee_id (trimming whitespace)
                 $employeeId = trim($competencyGap->employee_id);
                 $employee = Employee::where('employee_id', $employeeId)->first();
-                
+
                 // 2. If numeric, try padded versions (common issue with imported data)
                 if (!$employee && is_numeric($employeeId)) {
                     $paddings = [3, 4, 5, 6]; // Try common zero-padding lengths
@@ -1349,11 +1349,11 @@ class CompetencyGapAnalysisController extends Controller
                     if (count($nameParts) >= 2) {
                         $firstName = $nameParts[0];
                         $lastName = end($nameParts); // Last part as last name
-                        
+
                         $employee = Employee::where('first_name', 'LIKE', "%{$firstName}%")
                                           ->where('last_name', 'LIKE', "%{$lastName}%")
                                           ->first();
-                        
+
                         if ($employee) {
                             Log::info("AssignTraining: Found employee by name '{$request->employee_name}' (ID: {$employee->employee_id}) after ID lookup failed.");
                         }
@@ -1370,10 +1370,10 @@ class CompetencyGapAnalysisController extends Controller
                      // We continue execution instead of returning 404
                 }
             }
-            
+
             // The employees table uses string employee_id, but upcoming_trainings expects integer
             // We need to modify the upcoming_trainings table to use string employee_id to match
-            
+
             // Ensure upcoming_trainings table exists with correct structure
             if (!Schema::hasTable('upcoming_trainings')) {
                 Schema::create('upcoming_trainings', function (Blueprint $table) {
@@ -1389,7 +1389,7 @@ class CompetencyGapAnalysisController extends Controller
                     $table->unsignedBigInteger('destination_training_id')->nullable();
                     $table->boolean('needs_response')->default(true);
                     $table->timestamps();
-                    
+
                     $table->index('employee_id');
                     // Removed foreign key constraint to allow external employees
                 });
@@ -1414,7 +1414,7 @@ class CompetencyGapAnalysisController extends Controller
                     Log::info('Could not modify employee_id column in upcoming_trainings: ' . $e->getMessage());
                 }
             }
-            
+
             // $employeeDatabaseId is already set above
 
 
@@ -1438,15 +1438,15 @@ class CompetencyGapAnalysisController extends Controller
 
             // Use the competency gap's exact expiration date
             $expirationDate = $competencyGap->expired_date;
-            
+
             // If expired_date is provided in request, validate it matches the competency gap
             if ($request->expired_date) {
                 $requestDate = \Carbon\Carbon::parse($request->expired_date);
                 $gapDate = \Carbon\Carbon::parse($competencyGap->expired_date);
-                
+
                 // Use the competency gap date to ensure consistency
                 $expirationDate = $gapDate;
-                
+
                 Log::info("Expiration date comparison - Request: {$requestDate}, Gap: {$gapDate}, Using: {$expirationDate}");
             }
 
@@ -1520,19 +1520,19 @@ class CompetencyGapAnalysisController extends Controller
                 ->where('training_title', 'Communication Skills')
                 ->where('source', 'competency_gap')
                 ->update(['end_date' => '2025-09-30 19:15:00']);
-            
+
             Log::info("Direct fix: Updated {$updated} Communication Skills records to Sep 30, 2025");
-            
+
             // Also run the general fix method
             $updatedCount = \App\Models\UpcomingTraining::fixExpirationDates();
-            
+
             return response()->json([
                 'success' => true,
                 'message' => "Successfully fixed {$updatedCount} expiration dates. Direct fix updated {$updated} Communication Skills records.",
                 'updated_count' => $updatedCount,
                 'direct_fix' => $updated
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error('Error fixing expiration dates: ' . $e->getMessage());
             return response()->json([
@@ -1549,7 +1549,7 @@ class CompetencyGapAnalysisController extends Controller
     {
         try {
             $gap = CompetencyGap::findOrFail($id);
-            
+
             // Mark as not assigned to training
             $gap->assigned_to_training = false;
             $gap->save();
@@ -1614,7 +1614,7 @@ class CompetencyGapAnalysisController extends Controller
                         ->where(function($query) use ($competencyName) {
                             // Clean competency name for better matching
                             $cleanCompetencyName = str_replace([' Training', ' Course', ' Program', ' Skills'], '', $competencyName);
-                            
+
                             $query->where('training_title', 'LIKE', '%' . $competencyName . '%')
                                   ->orWhere('training_title', 'LIKE', '%' . $cleanCompetencyName . '%')
                                   ->orWhere('training_title', $competencyName)
@@ -1644,7 +1644,7 @@ class CompetencyGapAnalysisController extends Controller
                 try {
                     // More aggressive matching for training progress
                     $cleanCompetencyName = str_replace([' Training', ' Course', ' Program', ' Skills'], '', $competencyName);
-                    
+
                     $trainingProgress = \App\Models\TrainingProgress::where('employee_id', $employeeId)
                         ->where(function($query) use ($competencyName, $cleanCompetencyName) {
                             $query->where('training_title', 'LIKE', '%' . $competencyName . '%')
@@ -1742,8 +1742,8 @@ class CompetencyGapAnalysisController extends Controller
             try {
                 if (Schema::hasTable('employees')) {
                     DB::statement("
-                        ALTER TABLE competency_gaps 
-                        ADD CONSTRAINT competency_gaps_employee_id_foreign 
+                        ALTER TABLE competency_gaps
+                        ADD CONSTRAINT competency_gaps_employee_id_foreign
                         FOREIGN KEY (employee_id) REFERENCES employees (employee_id) ON DELETE CASCADE
                     ");
                 }
@@ -1754,8 +1754,8 @@ class CompetencyGapAnalysisController extends Controller
             try {
                 if (Schema::hasTable('competency_library')) {
                     DB::statement("
-                        ALTER TABLE competency_gaps 
-                        ADD CONSTRAINT competency_gaps_competency_id_foreign 
+                        ALTER TABLE competency_gaps
+                        ADD CONSTRAINT competency_gaps_competency_id_foreign
                         FOREIGN KEY (competency_id) REFERENCES competency_library (id) ON DELETE CASCADE
                     ");
                 }
@@ -1801,10 +1801,10 @@ class CompetencyGapAnalysisController extends Controller
 
                 if (is_array($apiEmployees)) {
                     foreach ($apiEmployees as $emp) {
-                        $empId = is_array($emp) 
+                        $empId = is_array($emp)
                             ? ($emp['external_employee_id'] ?? $emp['employee_id'] ?? $emp['id'] ?? null)
                             : ($emp->external_employee_id ?? $emp->employee_id ?? $emp->id ?? null);
-                        
+
                         if ($empId) {
                             $employeeMap[$empId] = $emp;
                         }
@@ -1837,7 +1837,7 @@ class CompetencyGapAnalysisController extends Controller
                     if (!$competency) continue;
 
                     // Exclude restricted categories
-                    if (stripos($competency->competency_name, 'BESTLINK') !== false || 
+                    if (stripos($competency->competency_name, 'BESTLINK') !== false ||
                         stripos($competency->competency_name, 'ITALY') !== false) {
                         continue;
                     }
@@ -1845,7 +1845,7 @@ class CompetencyGapAnalysisController extends Controller
                     // 4. Resolve name accurately
                     $firstName = 'Employee';
                     $lastName = $employeeId;
-                    
+
                     if (isset($employeeMap[$employeeId])) {
                         $apiEmp = $employeeMap[$employeeId];
                         $firstName = is_array($apiEmp) ? ($apiEmp['first_name'] ?? 'Employee') : ($apiEmp->first_name ?? 'Employee');
@@ -1928,10 +1928,10 @@ class CompetencyGapAnalysisController extends Controller
             Cache::forget("upcoming_trainings_{$employeeId}");
             Cache::forget("training_requests_{$employeeId}");
             Cache::forget("training_progress_{$employeeId}");
-            
+
             // Force refresh of any cached dashboard data
             Cache::forget("employee_dashboard_{$employeeId}");
-            
+
             Log::info("Cleared training caches for employee: {$employeeId}");
         } catch (\Exception $e) {
             Log::warning("Error clearing training caches: " . $e->getMessage());

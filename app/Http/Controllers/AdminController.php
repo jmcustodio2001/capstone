@@ -97,18 +97,18 @@ class AdminController extends Controller
 
                     foreach ($systemAccounts as $account) {
                         // Check email and account type
-                        if (isset($account['employee']['email']) && 
-                            $account['employee']['email'] === $request->email && 
+                        if (isset($account['employee']['email']) &&
+                            $account['employee']['email'] === $request->email &&
                             ($account['account_type'] ?? '') === 'system') {
-                            
+
                             $apiEmployee = $account['employee'];
                             $apiPassword = $account['password'] ?? '';
-                            
+
                             // Check if password matches (API has plaintext password)
                             if ($apiPassword === $request->password) {
                                 // Find or create user
                                 $user = User::where('email', $request->email)->first();
-                                
+
                                 if (!$user) {
                                     // Auto-provision admin
                                     $user = User::create([
@@ -125,7 +125,7 @@ class AdminController extends Controller
                                     $user->save();
                                     Log::info('Synced admin password from external API', ['email' => $user->email]);
                                 }
-                                
+
                                 // Login the user
                                 Auth::guard('admin')->login($user);
                                 $loginAttempt = true;
@@ -1141,8 +1141,78 @@ class AdminController extends Controller
     public function employeeList(Request $request)
     {
         try {
-            // Get employees data
-            $employees = \App\Models\Employee::orderBy('created_at', 'desc')->get();
+            // Fetch all local employees to map emails to local profile pictures
+            $localEmployees = \App\Models\Employee::all();
+            $emailToLocalMap = [];
+            foreach ($localEmployees as $localEmp) {
+                if ($localEmp->email) {
+                    $emailToLocalMap[strtolower($localEmp->email)] = $localEmp;
+                }
+            }
+
+            // Fetch employees from API
+            $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiData = $response->successful() ? $response->json() : [];
+
+            // Fetch accounts from API (source of truth for profile pictures)
+            $accountsResponse = Http::get('http://hr4.jetlougetravels-ph.com/api/accounts');
+            $accountsData = $accountsResponse->successful() ? $accountsResponse->json() : [];
+            $accountPictures = [];
+
+            $essAccounts = $accountsData['data']['ess_accounts'] ?? $accountsData['ess_accounts'] ?? [];
+            foreach ($essAccounts as $account) {
+                if (isset($account['employee']['email']) && isset($account['profile_picture'])) {
+                    $accountPictures[strtolower($account['employee']['email'])] = $account['profile_picture'];
+                }
+            }
+
+            // Handle { success: true, data: [...] } structure
+            if (isset($apiData['data']) && is_array($apiData['data'])) {
+                $employees = $apiData['data'];
+            } else {
+                $employees = $apiData;
+            }
+
+            // If API fails or returns empty, fallback to local DB
+            if (empty($employees)) {
+                $employees = $localEmployees->toArray();
+            }
+
+            // Normalize data
+            if (is_array($employees)) {
+                foreach ($employees as &$employee) {
+                    if (is_array($employee)) {
+                        // Date normalization
+                        if (isset($employee['date_hired'])) {
+                            $employee['hire_date'] = date('Y-m-d', strtotime($employee['date_hired']));
+                        }
+
+                        // Merge local profile picture if available
+                        $email = strtolower($employee['email'] ?? '');
+                        $isLocal = false;
+                        if ($email && isset($emailToLocalMap[$email])) {
+                            $localEmp = $emailToLocalMap[$email];
+                            // If local has profile picture, use it
+                            if ($localEmp->profile_picture) {
+                                $employee['profile_picture'] = $localEmp->profile_picture;
+                                $isLocal = true;
+                            }
+                        }
+
+                        // If not local, check API accounts for profile picture
+                        if (!$isLocal && isset($accountPictures[$email])) {
+                            $employee['profile_picture'] = $accountPictures[$email];
+                        }
+
+                        // Normalize API profile picture if not local
+                        if (!$isLocal && isset($employee['profile_picture']) && $employee['profile_picture']) {
+                            if (strpos($employee['profile_picture'], 'http') !== 0) {
+                                $employee['profile_picture'] = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($employee['profile_picture'], '/');
+                            }
+                        }
+                    }
+                }
+            }
 
             // Generate next employee ID
             $nextEmployeeId = $this->generateNextEmployeeId();

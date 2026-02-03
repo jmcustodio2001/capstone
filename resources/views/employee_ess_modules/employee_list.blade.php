@@ -213,9 +213,8 @@
                       <img src="{{ isset($employee['profile_picture']) && $employee['profile_picture'] ? (strpos($employee['profile_picture'], 'http') === 0 ? $employee['profile_picture'] : asset('storage/' . $employee['profile_picture'])) : 'https://ui-avatars.com/api/?name=' . urlencode(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')) . '&background=ffffff&color=333333&size=64' }}"
                            class="rounded-circle border-3 border-white shadow-sm"
                            width="64" height="64" alt="Profile"
-                           style="object-fit: cover;">
-
-
+                           style="object-fit: cover;"
+                           onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? '')) }}&background=ffffff&color=333333&size=64';">
                     </div>
 
                     <div class="flex-grow-1">
@@ -259,6 +258,9 @@
                         <i class="bi bi-building me-1"></i>
                         {{ $employee['department']['name'] ?? 'Not Assigned' }}
                       </span>
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">
+                        <i class="bi bi-shield-lock me-1"></i>{{ $employee['role'] ?? 'Employee' }}
+                      </span>
                     </div>
                   </div>
 
@@ -288,6 +290,12 @@
                             data-employee="{{ json_encode($employee) }}"
                             title="View Details" data-bs-toggle="tooltip">
                       <i class="bi bi-eye me-1"></i>View
+                    </button>
+                    <button class="btn btn-outline-warning btn-sm flex-fill"
+                            onclick="initiateEditEmployee(this)"
+                            data-employee="{{ json_encode($employee) }}"
+                            title="Edit Details" data-bs-toggle="tooltip">
+                      <i class="bi bi-pencil me-1"></i>Edit
                     </button>
                   </div>
                 </div>
@@ -472,7 +480,33 @@
       });
     @endif
 
-    // View Employee Details
+    // Initiate Edit Employee
+    function initiateEditEmployee(source) {
+      let employee = source;
+      if (source && source.getAttribute) {
+        try {
+           const jsonData = source.getAttribute('data-employee');
+           employee = JSON.parse(jsonData);
+        } catch(e) {
+           console.error("Failed to parse employee data", e);
+           return;
+        }
+      }
+
+      const id = employee.employee_id || employee.id;
+      const firstName = employee.first_name || '';
+      const lastName = employee.last_name || '';
+      const email = employee.email || '';
+      const phone = employee.phone || '';
+      const position = employee.position || '';
+      const department = employee.department_id || '';
+      const address = employee.address || '';
+      const status = employee.status || 'Active';
+      const role = employee.role || 'Employee';
+
+      editEmployeeWithConfirmation(id, firstName, lastName, email, phone, position, department, address, status, role);
+    }
+
     // View Employee Details
     function viewEmployeeDetails(source) {
       let employee = source;
@@ -552,6 +586,10 @@
                 <strong>Position:</strong><br>
                 <span class="text-muted">${position}</span>
               </div>
+              <div class="col-md-4">
+                <strong>Role:</strong><br>
+                <span class="text-muted">${employee.role || 'Employee'}</span>
+              </div>
                <div class="col-md-4">
                 <strong>Department:</strong><br>
                 <span class="text-muted">${departmentName}</span>
@@ -620,7 +658,7 @@
     }
 
     // Edit Employee with Password Confirmation
-    function editEmployeeWithConfirmation(id, firstName, lastName, email, phone, position, department, address, status) {
+    function editEmployeeWithConfirmation(id, firstName, lastName, email, phone, position, department, address, status, role) {
       Swal.fire({
         title: '🔐 Admin Password Required',
         html: `
@@ -687,7 +725,7 @@
 
               if (response.ok && result && result.success) {
                 // Password verified, show edit employee form
-                showEditEmployeeForm(id, firstName, lastName, email, phone, position, department, address, status, password);
+                showEditEmployeeForm(id, firstName, lastName, email, phone, position, department, address, status, role, password);
               } else {
                 Swal.fire({
                   title: '❌ Invalid Password',
@@ -863,7 +901,7 @@
 
 
     // Show Edit Employee Form after password verification
-    function showEditEmployeeForm(id, firstName, lastName, email, phone, position, department, address, status, adminPassword) {
+    function showEditEmployeeForm(id, firstName, lastName, email, phone, position, department, address, status, role, adminPassword) {
       Swal.fire({
         title: '✏️ Edit Employee',
         html: `
@@ -888,6 +926,15 @@
               <div class="col-md-6">
                 <label class="form-label fw-bold">Position</label>
                 <input type="text" name="position" class="form-control" value="${position || ''}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold">Role</label>
+          <select name="role" class="form-select">
+            <option value="ess" ${role === 'ess' ? 'selected' : ''}>ESS</option>
+            <option value="user" ${role === 'user' ? 'selected' : ''}>User</option>
+            <option value="admin" ${role === 'admin' ? 'selected' : ''}>Admin</option>
+            <option value="superadmin" ${role === 'superadmin' ? 'selected' : ''}>Super Admin</option>
+          </select>
               </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold">Department</label>
@@ -945,7 +992,7 @@
           }
 
           // Add optional fields
-          ['phone', 'position', 'department_id', 'address'].forEach(field => {
+          ['phone', 'position', 'role', 'department_id', 'address'].forEach(field => {
             const value = formData.get(field);
             if (value && value.trim()) {
               data[field] = value.trim();

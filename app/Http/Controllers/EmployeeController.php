@@ -180,6 +180,7 @@ class EmployeeController extends Controller
                 'hire_date' => 'nullable|date',
                 'department_id' => 'nullable|integer',
                 'position' => 'nullable|string|max:255',
+                'role' => 'nullable|string|max:255',
                 'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
             ], [
                 'password.regex' => 'Password must contain at least one uppercase letter, one number, and one special character.'
@@ -237,6 +238,7 @@ class EmployeeController extends Controller
             'address' => 'nullable|string|max:255',
             'department_id' => 'nullable|integer',
             'position' => 'nullable|string|max:255',
+            'role' => 'nullable|string|max:255',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
         ]);
 
@@ -461,6 +463,12 @@ class EmployeeController extends Controller
 
         // Password is correct, clear any failed attempts and lockout data
         $request->session()->forget([$lockoutKey, $attemptsKey, $lockoutCountKey]);
+
+        // Enforce role-based access: ESS and User roles only
+        // Admin/Superadmin must use the Admin Login page
+        if (!in_array(strtolower($employee->role ?? ''), ['ess', 'user'])) {
+            return $this->handleFailedLoginAttempt($request, $email, 'Access denied. Administrators must use the Admin Login page.');
+        }
 
         // Password is correct, now send OTP
         try {
@@ -1130,46 +1138,71 @@ class EmployeeController extends Controller
 
                 Log::info('Patching to API:', ['url' => $apiUrl]);
 
-                $response = Http::patch($apiUrl, $apiPayload);
+                try {
+                    $response = Http::patch($apiUrl, $apiPayload);
 
-                if ($response->successful()) {
-                    Log::info('API Update Successful', $response->json());
+                    if ($response->successful()) {
+                        Log::info('API Update Successful', $response->json());
 
-                    // Update session data if exists
-                    if (session()->has('external_employee_data')) {
-                        $externalData = session('external_employee_data');
-                        foreach ($data as $key => $value) {
-                            $externalData[$key] = $value;
+                        // Update session data if exists
+                        if (session()->has('external_employee_data')) {
+                            $externalData = session('external_employee_data');
+                            foreach ($data as $key => $value) {
+                                $externalData[$key] = $value;
+                            }
+                            session(['external_employee_data' => $externalData]);
                         }
-                        session(['external_employee_data' => $externalData]);
+
+                        // Update the current instance so it reflects in the response
+                        $employee->forceFill($data);
+                    } else {
+                        Log::error('API Update Failed', ['status' => $response->status(), 'body' => $response->body()]);
+                        // Continue to local save even if API fails
                     }
-
-                    // Update the current instance so it reflects in the response
-                    $employee->forceFill($data);
-                    $updateResult = true;
-                } else {
-                    Log::error('API Update Failed', ['status' => $response->status(), 'body' => $response->body()]);
-                    throw new \Exception('Failed to update settings on external server.');
+                } catch (\Exception $e) {
+                     Log::error('API Patch Exception: ' . $e->getMessage());
                 }
-            } else {
-                Log::info('Updating database employee record');
-
-                // Check if status column exists in database
-                $hasStatusColumn = Schema::hasColumn('employees', 'status');
-                Log::info('Status column exists in database:', ['exists' => $hasStatusColumn]);
-
-                // Update employee record
-                $updateResult = $employee->update($data);
-
-                // Alternative direct update if mass assignment fails
-                if (isset($data['status'])) {
-                    $employee->status = $data['status'];
-                    $employee->save();
-                }
-
-                // Refresh the model to get updated data
-                $employee->refresh();
             }
+
+            // ALWAYS update/create local database employee record to persist profile picture and settings
+            Log::info('Updating/Creating local database employee record for persistence');
+
+            $localEmployee = Employee::where('email', $employee->email)->first();
+            if (!$localEmployee) {
+                $localEmployee = new Employee();
+                $localEmployee->email = $employee->email;
+
+                // Fill basic info from session employee if creating new
+                $sessionAttrs = $employee->getAttributes();
+                unset($sessionAttrs['id']); // Exclude internal DB id
+
+                $localEmployee->forceFill($sessionAttrs);
+
+                // Ensure employee_id is set
+                if (!$localEmployee->employee_id) {
+                     $localEmployee->employee_id = $employee->employee_id ?? $this->generateNextEmployeeId();
+                }
+            }
+
+            // Update with new data
+            $localEmployee->fill($data);
+
+            // Handle password explicitly if present (it's already hashed in $data)
+            if (isset($data['password'])) {
+                 $localEmployee->password = $data['password'];
+            }
+
+            // Handle status column if it exists (for mass assignment protection or separate handling)
+            if (isset($data['status'])) {
+                 $localEmployee->status = $data['status'];
+            }
+
+            $localEmployee->save();
+            $localEmployee->refresh();
+
+            // Update $employee reference to the persisted local model
+            $employee = $localEmployee;
+            $updateResult = true;
 
             // Debug: Log the status after update
             Log::info('Employee status after update:', ['status' => $employee->status]);
@@ -2161,6 +2194,7 @@ class EmployeeController extends Controller
                 'hire_date' => 'nullable|date',
                 'department_id' => 'nullable|integer',
                 'position' => 'nullable|string|max:255',
+                'role' => 'nullable|string|max:255',
                 'password' => 'required|string|min:8'
             ]);
 
@@ -2177,7 +2211,8 @@ class EmployeeController extends Controller
                     'phone_number' => $validated['phone_number'],
                     'address' => $validated['address'],
                     'department_id' => $validated['department_id'],
-                    'position' => $validated['position']
+                    'position' => $validated['position'],
+                    'role' => $validated['role'] ?? 'Employee'
                 ];
 
                 // Only update hire_date if provided and not already set
@@ -2298,13 +2333,13 @@ class EmployeeController extends Controller
     public function proxyImage(Request $request)
     {
         $url = $request->query('url');
-        
+
         if (!$url) {
             return abort(404);
         }
 
         // Security check: Only allow specific domains
-        if (strpos($url, 'https://hr4.jetlougetravels-ph.com/') !== 0 && 
+        if (strpos($url, 'https://hr4.jetlougetravels-ph.com/') !== 0 &&
             strpos($url, 'http://hr4.jetlougetravels-ph.com/') !== 0) {
             return abort(403, 'Unauthorized domain');
         }

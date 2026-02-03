@@ -582,7 +582,7 @@
     <!-- Questions List Section -->
     <div class="card shadow-sm border-0 mt-4">
       <div class="card-header d-flex justify-content-between align-items-center bg-white py-3">
-        <h4 class="fw-bold mb-0 text-primary">Interview Assesment List</h4>
+        <h4 class="fw-bold mb-0 text-primary">Interview Assessment List</h4>
       </div>
       <div class="card-body">
         <div class="table-responsive">

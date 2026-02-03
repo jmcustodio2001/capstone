@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
         
         $this->call([
             ExamQuestionsSeeder::class,
+            AssessmentQuestionSeeder::class,
             CompetencyLibrarySeeder::class,
             DestinationMasterSeeder::class,
         ]);

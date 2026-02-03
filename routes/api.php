@@ -97,3 +97,5 @@ Route::get('/positions/{id}', [App\Http\Controllers\Api\PositionApiController::c
 Route::get('/assessment', [App\Http\Controllers\Api\AssessmentController::class, 'index'])
     ->name('api.assessment.index');
 
+Route::get('/potential', [App\Http\Controllers\Api\PotentialController::class, 'index'])
+    ->name('api.potential.index');

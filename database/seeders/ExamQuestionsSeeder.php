@@ -16,7 +16,7 @@ class ExamQuestionsSeeder extends Seeder
     {
         // Find Communication Skills course
         $communicationCourse = CourseManagement::where('course_title', 'LIKE', '%Communication Skills%')->first();
-        
+
         if (!$communicationCourse) {
             // Create Communication Skills course if it doesn't exist
             $communicationCourse = CourseManagement::create([
@@ -230,7 +230,7 @@ class ExamQuestionsSeeder extends Seeder
                     break;
                 }
             }
-            
+
             if (!$questionExists) {
                 $questionsToAdd[] = $question;
             }
@@ -251,7 +251,7 @@ class ExamQuestionsSeeder extends Seeder
         }
 
         $this->command->info('Added ' . count($questionsToAdd) . ' new unique Communication Skills exam questions.');
-        
+
         if (count($questionsToAdd) < count($newQuestions)) {
             $duplicates = count($newQuestions) - count($questionsToAdd);
             $this->command->info('Skipped ' . $duplicates . ' duplicate questions.');

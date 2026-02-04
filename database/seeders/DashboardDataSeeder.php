@@ -104,12 +104,13 @@ class DashboardDataSeeder extends Seeder
 
                 TrainingRecordCertificateTracking::firstOrCreate([
                     'employee_id' => $employee->employee_id,
-                    'course_id' => $course->id,
+                    'course_id' => $course->course_id,
                 ], [
                     'training_date' => Carbon::now()->subDays(rand(1, 30)),
                     'status' => ['Active', 'Completed', 'Ongoing'][rand(0, 2)],
                     'certificate_number' => rand(0, 1) ? 'CERT-' . rand(1000, 9999) : null,
                     'certificate_expiry' => rand(0, 1) ? Carbon::now()->addYears(rand(1, 3)) : null,
+                    'issue_date' => Carbon::now(),
                 ]);
             }
         }
@@ -152,10 +153,10 @@ class DashboardDataSeeder extends Seeder
             for ($i = 0; $i < 30; $i++) {
                 $employee = $employees->random();
                 $course = $courses->random();
-                
+
                 \App\Models\EmployeeTrainingDashboard::firstOrCreate([
                     'employee_id' => $employee->employee_id,
-                    'course_id' => $course->id,
+                    'course_id' => $course->course_id,
                 ], [
                     'training_title' => $course->course_title,
                     'training_date' => Carbon::now()->subDays(rand(1, 60)),

@@ -14,7 +14,7 @@ return new class extends Migration
     {
         // 1. Drop the problematic view first
         DB::statement('DROP VIEW IF EXISTS destination_knowledge_training');
-        
+
         // 2. Drop unnecessary and error tables
         $tablesToDrop = [
             'employee_trainings',
@@ -30,14 +30,14 @@ return new class extends Migration
             'succession_simulations',
             'training_notifications',
             'training_progress',
-            'training_record_certificate_tracking',
+            // 'training_record_certificate_tracking', // Kept as it is required
             'training_reviews'
         ];
-        
+
         foreach ($tablesToDrop as $table) {
             Schema::dropIfExists($table);
         }
-        
+
         // 3. Check and fix foreign key constraints
         // Drop foreign keys that reference non-existent tables
         try {
@@ -50,10 +50,10 @@ return new class extends Migration
         } catch (Exception $e) {
             // Foreign key might not exist, continue
         }
-        
+
         // 4. Clean up orphaned records in remaining tables
         // This will be done via raw SQL to handle potential issues
-        
+
         // 5. Drop the old view - no longer needed, using table directly
         DB::statement('DROP VIEW IF EXISTS destination_knowledge_training');
     }
@@ -65,7 +65,7 @@ return new class extends Migration
     {
         // Drop the view
         DB::statement('DROP VIEW IF EXISTS destination_knowledge_training');
-        
+
         // Note: We won't recreate the dropped tables as they were unnecessary
         // If needed, they can be recreated from their original migrations
     }

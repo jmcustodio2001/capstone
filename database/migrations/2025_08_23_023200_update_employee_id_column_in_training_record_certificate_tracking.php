@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::table('training_record_certificate_tracking', function (Blueprint $table) {
             // Change employee_id from unsignedBigInteger to string to match Employee model
-            $table->string('employee_id', 50)->change();
+            $table->string('employee_id', 20)->change();
         });
     }
 

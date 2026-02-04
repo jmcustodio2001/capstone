@@ -26,7 +26,8 @@ class DestinationKnowledgeTrainingController extends BaseController
 
     private const VALIDATION_RULES_CREATE = [
         'employee_ids' => 'required|string', // Comma-separated employee IDs
-        'position' => 'required|string',
+        'department' => 'required|string',
+        'position' => 'nullable|string',
         'date_completed' => 'nullable|date',
         'expired_date' => 'nullable|date',
         'progress_level' => 'nullable|integer|min:0|max:5',
@@ -267,11 +268,11 @@ class DestinationKnowledgeTrainingController extends BaseController
 
         // Auto-activate all accredited training centers as courses
         $autoActivationResult = $this->autoActivateAccreditedTrainingCenters();
-        
+
         // Log the result for admin visibility and add session message
         if ($autoActivationResult['activated'] > 0) {
             Log::info("Auto-activation summary: {$autoActivationResult['activated']} courses activated, {$autoActivationResult['skipped']} already active, {$autoActivationResult['total']} total destinations");
-            
+
             // Add success message for admin
             session()->flash('success', "Auto-Activation Complete: {$autoActivationResult['activated']} accredited training centers have been automatically activated as courses. {$autoActivationResult['skipped']} were already active. Total destinations: {$autoActivationResult['total']}");
         } elseif (isset($autoActivationResult['error'])) {
@@ -298,9 +299,10 @@ foreach ($destinations as $destination) {
 
         // Get all employees for destination knowledge training (Fetch from API with local fallback)
         // Create an employee map for quick lookup, starting with local employees
-        $localEmployees = Employee::all();
+        $localEmployees = Employee::with('department')->get();
         $emailToLocalMap = [];
         foreach ($localEmployees as $employee) {
+            $employee->department_name_view = $employee->department->name ?? 'N/A';
             $employeeMap[$employee->employee_id] = $employee;
             if ($employee->email) {
                 $emailToLocalMap[strtolower($employee->email)] = $employee;
@@ -310,7 +312,7 @@ foreach ($destinations as $destination) {
         try {
             $response = \Illuminate\Support\Facades\Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/employees');
             $apiEmployees = $response->successful() ? $response->json() : [];
-            
+
             if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                 $apiEmployees = $apiEmployees['data'];
             }
@@ -328,9 +330,9 @@ foreach ($destinations as $destination) {
                         if ($localRef) {
                             continue;
                         }
-                        
+
                         $profilePic = $emp['profile_picture'] ?? null;
-                        
+
                         // Prioritize local photo if it exists
                         if ($localRef && $localRef->profile_picture) {
                             $profilePic = $localRef->profile_picture;
@@ -338,14 +340,18 @@ foreach ($destinations as $destination) {
                             // If it's an API photo, link it to the HR server (use HTTPS for better compatibility)
                             $profilePic = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
                         }
-                        
+
                         if (!isset($employeeMap[$empId])) {
+                            $rawDepartment = $emp['department'] ?? $emp['department_name'] ?? 'N/A';
+                            $deptName = is_array($rawDepartment) ? ($rawDepartment['name'] ?? $rawDepartment['department_name'] ?? 'N/A') : $rawDepartment;
+
                             $employeeMap[$empId] = (object) [
                                 'employee_id' => $empId,
                                 'first_name' => $emp['first_name'] ?? 'Unknown',
                                 'last_name' => $emp['last_name'] ?? 'Employee',
                                 'email' => $emp['email'] ?? null,
                                 'position' => $emp['role'] ?? $emp['position'] ?? 'N/A',
+                                'department_name_view' => $deptName,
                                 'profile_picture' => $profilePic
                             ];
                         }
@@ -361,14 +367,14 @@ foreach ($destinations as $destination) {
         foreach ($destinations as $destination) {
             if (!$destination->employee && isset($employeeMap[$destination->employee_id])) {
                 $apiEmployee = $employeeMap[$destination->employee_id];
-                
+
                 // Create a standard object that mimics the Employee model
                 $employeeData = new \stdClass();
                 $employeeData->employee_id = $destination->employee_id;
                 $employeeData->first_name = is_object($apiEmployee) ? $apiEmployee->first_name : ($apiEmployee['first_name'] ?? 'Unknown');
                 $employeeData->last_name = is_object($apiEmployee) ? $apiEmployee->last_name : ($apiEmployee['last_name'] ?? 'Employee');
                 $employeeData->profile_picture = is_object($apiEmployee) ? $apiEmployee->profile_picture : ($apiEmployee['profile_picture'] ?? null);
-                
+
                 // Set the relation
                 $destination->setRelation('employee', $employeeData);
             }
@@ -406,17 +412,17 @@ foreach ($destinations as $destination) {
         try {
             // Disable SSL verification for development/testing environments
             $response = \Illuminate\Support\Facades\Http::withoutVerifying()->get('https://hr1.jetlougetravels-ph.com/api/orientation-schedule');
-            
+
             if ($response->successful()) {
                 $data = $response->json();
-                
+
                 // Handle both direct array and wrapped 'data' structure
                 if (isset($data['data']) && is_array($data['data'])) {
                     $orientationTrainings = $data['data'];
                 } elseif (is_array($data)) {
                     $orientationTrainings = $data;
                 }
-                
+
                 // Log for debugging
                 \Illuminate\Support\Facades\Log::info('Orientation API Response count: ' . count($orientationTrainings));
             } else {
@@ -436,7 +442,7 @@ foreach ($destinations as $destination) {
     {
         try {
             $result = $this->autoActivateAccreditedTrainingCenters();
-            
+
             if ($result['activated'] > 0 || $result['skipped'] > 0) {
                 return response()->json([
                     'success' => true,
@@ -470,13 +476,13 @@ foreach ($destinations as $destination) {
             ]);
 
             $position = strtoupper($request->input('position'));
-            
+
             // Try to fetch employees from API first
             $employees = [];
             try {
                 $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
                 $apiEmployees = $response->successful() ? $response->json() : [];
-                
+
                 // Handle if response is wrapped in a data key
                 if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
                     $apiEmployees = $apiEmployees['data'];
@@ -487,18 +493,18 @@ foreach ($destinations as $destination) {
                         // Check multiple possible fields for position/role AND department with type safety
                         $rawPosition = $emp['role'] ?? $emp['position'] ?? $emp['job_title'] ?? '';
                         $empPosition = is_string($rawPosition) ? strtoupper($rawPosition) : '';
-                        
+
                         $rawDepartment = $emp['department'] ?? $emp['department_name'] ?? '';
                         if (is_array($rawDepartment)) {
                              // Handle case where department is an object/array (e.g. ['id'=>1, 'name'=>'Core'])
-                             $empDepartment = strtoupper($rawDepartment['name'] ?? $rawDepartment['department_name'] ?? ''); 
+                             $empDepartment = strtoupper($rawDepartment['name'] ?? $rawDepartment['department_name'] ?? '');
                         } else {
                              $empDepartment = is_string($rawDepartment) ? strtoupper($rawDepartment) : '';
                         }
-                        
+
                         // Handle "ACCOUNTANT" and "Travel Agent" (AGENT) etc.
                         $match = ($empPosition === $position || $empDepartment === $position);
-                        
+
                         // Special cases for mapping if needed
                         if (!$match) {
                             if ($position === 'AGENT' && (strpos($empPosition, 'AGENT') !== false || strpos($empPosition, 'TRAVEL AGENT') !== false)) $match = true;
@@ -525,7 +531,7 @@ foreach ($destinations as $destination) {
                     ->orWhere('department_id', $position)
                     ->select('employee_id', 'first_name', 'last_name', 'position')
                     ->get();
-                
+
                 foreach ($localEmployees as $emp) {
                     $employees[] = [
                         'employee_id' => $emp->employee_id,
@@ -535,7 +541,7 @@ foreach ($destinations as $destination) {
                     ];
                 }
             }
-            
+
             // If still empty and it's a "known" position, try to return some local data without position filter if total count is small
             if (empty($employees)) {
                 $allLocal = \App\Models\Employee::select('employee_id', 'first_name', 'last_name', 'position')->limit(10)->get();
@@ -578,7 +584,7 @@ foreach ($destinations as $destination) {
 
             // Parse employee IDs from comma-separated string
             $employeeIds = array_filter(explode(',', $validated['employee_ids']));
-            
+
             if (empty($employeeIds)) {
                 throw new \Exception('No employees selected. Please select at least one employee.');
             }
@@ -733,7 +739,7 @@ foreach ($destinations as $destination) {
             ActivityLog::createLog([
                 'action' => 'bulk_create',
                 'module' => self::MODULE_NAME,
-                'description' => "Bulk destination training assignment: {$totalCreated} created, {$totalUpdated} updated, {$totalSkipped} skipped for position: {$validated['position']}",
+                'description' => "Bulk destination training assignment: {$totalCreated} created, {$totalUpdated} updated, {$totalSkipped} skipped for department: " . ($validated['department'] ?? 'N/A'),
             ]);
 
             // Prepare response message
@@ -750,7 +756,7 @@ foreach ($destinations as $destination) {
                         'created' => $totalCreated,
                         'updated' => $totalUpdated,
                         'skipped' => $totalSkipped,
-                        'position' => $validated['position']
+                        'department' => $validated['department'] ?? 'N/A'
                     ],
                     'created_records' => $createdRecords,
                     'updated_records' => $updatedRecords,
@@ -1548,7 +1554,7 @@ public function requestActivation(Request $request, $id)
                 // Refresh the model instance
                 $destinationRecord = DestinationKnowledgeTraining::with('employee')->findOrFail($request->destination_id);
             }
-            
+
             // Check if assigned_by_name column exists in upcoming_trainings, if not add it
             if (!Schema::hasColumn('upcoming_trainings', 'assigned_by_name')) {
                 Schema::table('upcoming_trainings', function (Blueprint $table) {
@@ -1596,7 +1602,7 @@ public function requestActivation(Request $request, $id)
             try {
                 if (Auth::check() && Auth::user()) {
                     $user = Auth::user();
-                    
+
                     // Get name from user table
                     if (isset($user->name) && !empty($user->name)) {
                         $assignedByName = $user->name;
@@ -1615,13 +1621,13 @@ public function requestActivation(Request $request, $id)
                             Log::warning('Employee lookup failed: ' . $empException->getMessage());
                         }
                     }
-                    
+
                     // Clean up the name
                     $assignedByName = trim($assignedByName);
                     if (empty($assignedByName)) {
                         $assignedByName = 'Admin User';
                     }
-                    
+
                     $assignedBy = Auth::id() ?? 1;
                 }
             } catch (\Exception $authException) {
@@ -1634,7 +1640,7 @@ public function requestActivation(Request $request, $id)
             $destinationRecord->admin_approved_for_upcoming = true;
             $destinationRecord->status = 'pending-response';
             $destinationRecord->is_active = false; // Employee needs to accept first
-            
+
             // SAVE ASSIGNED BY INFO TO THE RECORD ITSELF
             // Ensure destination_knowledge_trainings has assigned_by/assigned_by_name/assigned_date columns
             if (!Schema::hasColumn('destination_knowledge_trainings', 'assigned_by')
@@ -1669,7 +1675,7 @@ public function requestActivation(Request $request, $id)
             if (Schema::hasColumn('destination_knowledge_trainings', 'assigned_date')) {
                 $destinationRecord->assigned_date = now();
             }
-            
+
             $destinationRecord->save();
 
             Log::info('About to create/update UpcomingTraining record');
@@ -2141,8 +2147,8 @@ public function requestActivation(Request $request, $id)
         // DISABLED: Per user request, destination knowledge training should NOT auto-create competency gaps.
         // This prevents pollution of the competency gap analysis view.
         return;
-        
-        /* 
+
+        /*
         try {
             // Check if competency gap already exists
             $existingGap = CompetencyGap::where('employee_id', $destinationRecord->employee_id)
@@ -2275,17 +2281,17 @@ public function requestActivation(Request $request, $id)
 
             // Create CSV content
             $csv = "ID,Employee Name,Employee ID,Destination,Details,Delivery Mode,Date Created,Expired Date,Status,Progress,Remarks\n";
-            
+
             foreach ($destinations as $record) {
                 $employeeName = $record->employee ? ($record->employee->first_name . ' ' . $record->employee->last_name) : 'Unknown Employee';
                 $employeeId = $record->employee ? $record->employee->employee_id : 'N/A';
                 $expiredDate = $record->expired_date ? $record->expired_date->format('Y-m-d') : 'Not Set';
                 $createdDate = $record->created_at ? $record->created_at->format('Y-m-d') : 'N/A';
-                
-                $csv .= '"' . $record->id . '","' . $employeeName . '","' . $employeeId . '","' . 
-                        $record->destination_name . '","' . str_replace('"', '""', $record->details) . '","' . 
-                        $record->delivery_mode . '","' . $createdDate . '","' . $expiredDate . '","' . 
-                        $record->status . '","' . ($record->progress ?? 0) . '%","' . 
+
+                $csv .= '"' . $record->id . '","' . $employeeName . '","' . $employeeId . '","' .
+                        $record->destination_name . '","' . str_replace('"', '""', $record->details) . '","' .
+                        $record->delivery_mode . '","' . $createdDate . '","' . $expiredDate . '","' .
+                        $record->status . '","' . ($record->progress ?? 0) . '%","' .
                         str_replace('"', '""', $record->remarks ?? '') . '"' . "\n";
             }
 
@@ -2314,7 +2320,7 @@ public function requestActivation(Request $request, $id)
         try {
             // Get all destination knowledge training records with employee relationships
             $destinations = DestinationKnowledgeTraining::with(['employee'])->orderBy('created_at', 'desc')->get();
-            
+
             // Get all master destinations (possible training destinations)
             $masterDestinations = DestinationMaster::where('is_active', true)->orderBy('id')->get();
 

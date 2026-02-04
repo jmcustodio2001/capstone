@@ -1036,17 +1036,17 @@ if (typeof window.trans === 'undefined') {
                   </div>
                 @endif
                 <div class="mb-3">
-                  <label class="form-label" for="position">Position*</label>
-                  <select class="form-select" name="position" id="position" required onchange="loadEmployeesByPosition()">
-                    <option value="">Select Position</option>
+                  <label class="form-label" for="department">Department*</label>
+                  <select class="form-select" name="department" id="department" required onchange="loadEmployeesByDepartment()">
+                    <option value="">Select Department</option>
                     @php
-                        // Get unique positions from employees collection
-                        $uniquePositions = collect($employees)->pluck('position')->map(function($item) {
+                        // Get unique departments from employees collection
+                        $uniqueDepartments = collect($employees)->pluck('department_name_view')->map(function($item) {
                             return strtoupper(trim($item));
-                        })->filter()->unique()->sort()->values();
+                        })->filter(function($value) { return !empty($value) && $value !== 'N/A'; })->unique()->sort()->values();
                     @endphp
-                    @foreach($uniquePositions as $pos)
-                        <option value="{{ $pos }}">{{ $pos }}</option>
+                    @foreach($uniqueDepartments as $dept)
+                        <option value="{{ $dept }}">{{ $dept }}</option>
                     @endforeach
                   </select>
                 </div>
@@ -1070,12 +1070,12 @@ if (typeof window.trans === 'undefined') {
                     </div>
                     <div id="employeeSelectionList">
                       @foreach($employees as $employee)
-                        <div class="form-check employee-checkbox-item" data-position="{{ strtoupper($employee->position ?? '') }}" data-name="{{ strtolower($employee->first_name . ' ' . $employee->last_name) }}">
+                        <div class="form-check employee-checkbox-item" data-position="{{ strtoupper($employee->position ?? '') }}" data-department="{{ strtoupper($employee->department_name_view ?? '') }}" data-name="{{ strtolower($employee->first_name . ' ' . $employee->last_name) }}">
                           <input class="form-check-input employee-box-check" type="checkbox" value="{{ $employee->employee_id }}" id="emp_check_{{ $employee->employee_id }}" onchange="updateSelectedEmployeeIds()">
                           <label class="form-check-label d-flex align-items-center" for="emp_check_{{ $employee->employee_id }}">
                             <div class="ms-2">
                               <span class="fw-semibold d-block" style="font-size: 0.9rem;">{{ $employee->first_name }} {{ $employee->last_name }}</span>
-                              <small class="text-muted" style="font-size: 0.75rem;">ID: {{ $loop->iteration }} | {{ $employee->position ?? 'No Position' }}</small>
+                              <small class="text-muted" style="font-size: 0.75rem;">ID: {{ $loop->iteration }} | {{ $employee->position ?? 'No Position' }} | {{ $employee->department_name_view ?? 'N/A' }}</small>
                             </div>
                           </label>
                         </div>
@@ -1086,7 +1086,7 @@ if (typeof window.trans === 'undefined') {
                       </div>
                     </div>
                   </div>
-                  <small class="text-muted">Filtered based on the Position selected above.</small>
+                  <small class="text-muted">Filtered based on the Department selected above.</small>
                 </div>
                 <input type="hidden" name="employee_ids" id="employee_ids" value="">
                 <div class="mb-3">
@@ -2102,28 +2102,28 @@ if (typeof window.trans === 'undefined') {
   }, 500); // Small delay to ensure Bootstrap is fully loaded
 
   // Updated Function to load and filter employees in the box
-  window.loadEmployeesByPosition = function() {
+  window.loadEmployeesByDepartment = function() {
     window.filterEmployeeBox();
   }
 
-  // New: Function to filter the employee selection box by position AND search text
+  // New: Function to filter the employee selection box by department AND search text
   window.filterEmployeeBox = function() {
-    const positionSelect = document.getElementById('position');
+    const departmentSelect = document.getElementById('department');
     const searchBox = document.getElementById('employeeSearchBox');
-    const selectedPosition = positionSelect ? positionSelect.value.toUpperCase().trim() : '';
+    const selectedDepartment = departmentSelect ? departmentSelect.value.toUpperCase().trim() : '';
     const searchText = searchBox ? searchBox.value.toLowerCase().trim() : '';
 
     const items = document.querySelectorAll('.employee-checkbox-item');
     let foundCount = 0;
 
     items.forEach(item => {
-      const itemPos = (item.getAttribute('data-position') || '').trim();
+      const itemDept = (item.getAttribute('data-department') || '').trim();
       const itemName = (item.getAttribute('data-name') || '').trim();
 
-      const posMatch = !selectedPosition || itemPos === selectedPosition;
+      const deptMatch = !selectedDepartment || itemDept === selectedDepartment;
       const nameMatch = !searchText || itemName.includes(searchText);
 
-      if (posMatch && nameMatch) {
+      if (deptMatch && nameMatch) {
         item.style.display = '';
         foundCount++;
       } else {

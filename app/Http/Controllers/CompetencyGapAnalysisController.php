@@ -1836,9 +1836,10 @@ class CompetencyGapAnalysisController extends Controller
                     $competency = CompetencyLibrary::find($competencyId);
                     if (!$competency) continue;
 
-                    // Exclude restricted categories
+                    // Exclude restricted categories and Destination Knowledge
                     if (stripos($competency->competency_name, 'BESTLINK') !== false ||
-                        stripos($competency->competency_name, 'ITALY') !== false) {
+                        stripos($competency->competency_name, 'ITALY') !== false ||
+                        $competency->category === 'Destination Knowledge') {
                         continue;
                     }
 

@@ -146,5 +146,25 @@ class DashboardDataSeeder extends Seeder
                 }
             }
         }
+
+        // Create sample Employee Training Dashboard records (Recent Trainings)
+        if ($employees->count() > 0 && $courses->count() > 0) {
+            for ($i = 0; $i < 30; $i++) {
+                $employee = $employees->random();
+                $course = $courses->random();
+                
+                \App\Models\EmployeeTrainingDashboard::firstOrCreate([
+                    'employee_id' => $employee->employee_id,
+                    'course_id' => $course->id,
+                ], [
+                    'training_title' => $course->course_title,
+                    'training_date' => Carbon::now()->subDays(rand(1, 60)),
+                    'status' => ['Completed', 'Ongoing', 'In Progress', 'Scheduled'][rand(0, 3)],
+                    'progress' => rand(0, 100),
+                    'remarks' => 'Auto-generated via seeder',
+                    'assigned_by' => User::first()->id ?? null,
+                ]);
+            }
+        }
     }
 }

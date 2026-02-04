@@ -460,7 +460,10 @@
                       $trainingBasedScore = ($progressScore * 0.5) + ($completionScore * 0.3) + ($assignmentScore * 0.1) + ($serviceScore * 0.1);
 
                       if ($hasRealCompetencyData) {
-                        $proficiencyScore = min(50, ($avgProficiency / 5) * 50);
+                        // Penalty for low skill count (less than 20 skills reduces score)
+                        $skillCountPenalty = min(1, $profile->count() / 20);
+
+                        $proficiencyScore = min(50, ($avgProficiency / 5) * 50 * $skillCountPenalty);
                         $leadershipScore = 0;
                         if ($leadershipCompetencies->count() > 0) {
                           $leadershipProficiencySum = 0;
@@ -472,7 +475,7 @@
                             $leadershipProficiencySum += $profLevel;
                           }
                           $avgLeadershipProficiency = $leadershipProficiencySum / $leadershipCompetencies->count();
-                          $leadershipScore = min(25, ($avgLeadershipProficiency / 5) * 25);
+                          $leadershipScore = min(25, ($avgLeadershipProficiency / 5) * 25 * $skillCountPenalty);
                         }
                         $competencyBreadthScore = min(15, ($profile->count() / 20) * 15);
                         $competencyScore = ($proficiencyScore * 0.5) + ($leadershipScore * 0.3) + ($competencyBreadthScore * 0.1) + ($serviceScore * 0.1);
@@ -481,7 +484,10 @@
                         $readinessScore = round($trainingBasedScore);
                       }
                     } elseif ($hasRealCompetencyData) {
-                      $proficiencyScore = min(60, ($avgProficiency / 5) * 60);
+                      // Penalty for low skill count (less than 20 skills reduces score)
+                      $skillCountPenalty = min(1, $profile->count() / 20);
+
+                      $proficiencyScore = min(60, ($avgProficiency / 5) * 60 * $skillCountPenalty);
                       $leadershipScore = 0;
                       if ($leadershipCompetencies->count() > 0) {
                         $leadershipProficiencySum = 0;
@@ -493,7 +499,7 @@
                           $leadershipProficiencySum += $profLevel;
                         }
                         $avgLeadershipProficiency = $leadershipProficiencySum / $leadershipCompetencies->count();
-                        $leadershipScore = min(30, ($avgLeadershipProficiency / 5) * 30);
+                        $leadershipScore = min(30, ($avgLeadershipProficiency / 5) * 30 * $skillCountPenalty);
                       }
                       $competencyBreadthScore = min(20, ($profile->count() / 15) * 20);
                       $readinessScore = round(($proficiencyScore * 0.5) + ($leadershipScore * 0.3) + ($competencyBreadthScore * 0.1) + ($serviceScore * 0.1));
@@ -689,8 +695,11 @@
 
                 // If real competency data exists, blend with balanced approach
                 if ($hasRealCompetencyData) {
+                  // Penalty for low skill count (less than 20 skills reduces score)
+                  $skillCountPenalty = min(1, $profile->count() / 20);
+
                   // Balanced competency scoring
-                  $proficiencyScore = min(50, ($avgProficiency / 5) * 50); // Max 50% from proficiency
+                  $proficiencyScore = min(50, ($avgProficiency / 5) * 50 * $skillCountPenalty); // Max 50% from proficiency
 
                   // Balanced leadership scoring
                   if ($leadershipCompetencies->count() > 0) {
@@ -707,7 +716,7 @@
                       $leadershipProficiencySum += $profLevel;
                     }
                     $avgLeadershipProficiency = $leadershipProficiencySum / $leadershipCompetencies->count();
-                    $leadershipScore = min(25, ($avgLeadershipProficiency / 5) * 25); // Max 25% from leadership
+                    $leadershipScore = min(25, ($avgLeadershipProficiency / 5) * 25 * $skillCountPenalty); // Max 25% from leadership
                   } else {
                     $leadershipScore = 0;
                   }
@@ -728,8 +737,11 @@
               }
               // Balanced competency-only calculation
               elseif ($hasRealCompetencyData) {
+                // Penalty for low skill count (less than 20 skills reduces score)
+                $skillCountPenalty = min(1, $profile->count() / 20);
+
                 // Balanced scoring for competency-only assessment
-                $proficiencyScore = min(60, ($avgProficiency / 5) * 60); // Max 60% from proficiency
+                $proficiencyScore = min(60, ($avgProficiency / 5) * 60 * $skillCountPenalty); // Max 60% from proficiency
 
                 if ($leadershipCompetencies->count() > 0) {
                   $leadershipProficiencySum = 0;
@@ -745,7 +757,7 @@
                     $leadershipProficiencySum += $profLevel;
                   }
                   $avgLeadershipProficiency = $leadershipProficiencySum / $leadershipCompetencies->count();
-                  $leadershipScore = min(30, ($avgLeadershipProficiency / 5) * 30); // Max 30% from leadership
+                  $leadershipScore = min(30, ($avgLeadershipProficiency / 5) * 30 * $skillCountPenalty); // Max 30% from leadership
                 } else {
                   $leadershipScore = 0;
                 }
@@ -1134,7 +1146,7 @@
           });
         } else {
           let errorMessage = result.data.message || 'Failed to add successor record.';
-          
+
           // Handle Validation Errors (422)
           if (result.status === 422 && result.data.errors) {
             const errors = Object.values(result.data.errors).flat().join('<br>');

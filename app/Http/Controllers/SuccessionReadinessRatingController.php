@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\SuccessionReadinessRating;
 use App\Models\Employee;
+use App\Models\SuccessionSimulation;
 use Illuminate\Http\Request;
 use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Auth;
@@ -54,7 +55,8 @@ class SuccessionReadinessRatingController extends Controller
     }
 
     /**
-     * Calculate readiness score based on: Hire Date (10%), Training Records (3%), and Competency Profiles (additive)
+     * Calculate readiness score based on: Proficiency (40%), Leadership (30%), Breadth (30%) + Simulation (30%) if available.
+     * Includes bonuses for Hire Date and Training Records.
      */
     public function calculateEmployeeReadinessScore($employeeId, $employeeData = null)
     {
@@ -65,7 +67,7 @@ class SuccessionReadinessRatingController extends Controller
             $employee = \App\Models\Employee::where('employee_id', $employeeId)->first();
         }
 
-        // 1. HIRE DATE COMPONENT (10%)
+        // 1. HIRE DATE BONUS (Max 10%)
         $hireDateScore = 0;
         $yearsOfService = 0;
 
@@ -79,35 +81,94 @@ class SuccessionReadinessRatingController extends Controller
         }
 
         if ($hireDate) {
-            $hireCarbon = \Carbon\Carbon::parse($hireDate);
-            // Use whole years: < 1 year = 0, 1+ years = integer count
-            $yearsOfService = max(0, $hireCarbon->diffInYears(now()));
-            $hireDateScore = min(10, $yearsOfService * 1);
+            try {
+                $hireCarbon = \Carbon\Carbon::parse($hireDate);
+                // Use whole years: < 1 year = 0, 1+ years = integer count
+                $yearsOfService = max(0, $hireCarbon->diffInYears(now()));
+                $hireDateScore = min(10, $yearsOfService * 1);
+            } catch (\Exception $e) {
+                $yearsOfService = 0;
+                $hireDateScore = 0;
+            }
         }
 
-        // 2. TRAINING RECORDS COMPONENT (3%)
+        // 2. TRAINING RECORDS BONUS (Max 5%)
         $trainingRecordsScore = 0;
         try {
             $certificates = \App\Models\TrainingRecordCertificateTracking::where('employee_id', $employeeId)->count();
-            $trainingRecordsScore = min(3, $certificates * 0.5);
+            $trainingRecordsScore = min(5, $certificates * 1);
         } catch (\Exception $e) {
             $trainingRecordsScore = 0;
         }
 
-        // 3. EMPLOYEE COMPETENCY PROFILES COMPONENT (Additive based on proficiency level)
-        $competencyScore = 0;
-        $competencyProfiles = \App\Models\EmployeeCompetencyProfile::where('employee_id', $employeeId)->get();
+        // 3. CORE READINESS SCORE (Weighted)
 
-        foreach ($competencyProfiles as $profile) {
-            $proficiencyLevel = (int)$profile->proficiency_level;
-            $competencyScore += $proficiencyLevel * 2;
+        // Fetch Simulation Data
+        $simulationScore = 0;
+        $hasSimulation = false;
+        $simulations = \App\Models\SuccessionSimulation::where('employee_id', $employeeId)
+            ->whereNotNull('score')
+            ->get();
+
+        if ($simulations->isNotEmpty()) {
+            $hasSimulation = true;
+            $totalPercentage = 0;
+            foreach($simulations as $sim) {
+                $max = $sim->max_score > 0 ? $sim->max_score : 100;
+                $totalPercentage += ($sim->score / $max) * 100;
+            }
+            $simulationScore = $totalPercentage / $simulations->count();
         }
 
-        $totalScore = $hireDateScore + $trainingRecordsScore + $competencyScore;
+        // Fetch Competency Data
+        $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with('competency')->where('employee_id', $employeeId)->get();
+
+        if ($competencyProfiles->isEmpty() && !$hasSimulation) {
+            return $yearsOfService < 1 ? 5 : 15; // Minimum score if no data
+        }
+
+        $avgProficiency = $competencyProfiles->avg('proficiency_level') ?? 0;
+        $totalCompetencies = $competencyProfiles->count();
+
+        // Calculate Leadership Count
+        $leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building', 'communication'];
+        $leadershipCount = $competencyProfiles->filter(function($p) use ($leadershipKeywords) {
+            if (!$p->competency) return false;
+            $name = strtolower($p->competency->competency_name ?? '');
+            $category = strtolower($p->competency->category ?? '');
+            foreach ($leadershipKeywords as $keyword) {
+                if (str_contains($name, $keyword) || str_contains($category, $keyword)) {
+                    return true;
+                }
+            }
+            return false;
+        })->count();
+
+        // Calculate Component Scores (0-100 scale)
+        $proficiencyScore = ($avgProficiency / 5) * 100;
+        $leadershipScore = min($leadershipCount * 20, 100); // 5 leadership skills = 100%
+        $breadthScore = min($totalCompetencies * 10, 100);  // 10 competencies = 100%
+
+        // Weighted Calculation
+        if ($hasSimulation) {
+            // 30% Proficiency, 20% Leadership, 20% Breadth, 30% Simulation
+            $baseScore = ($proficiencyScore * 0.3) +
+                         ($leadershipScore * 0.2) +
+                         ($breadthScore * 0.2) +
+                         ($simulationScore * 0.3);
+        } else {
+            // 40% Proficiency, 30% Leadership, 30% Breadth
+            $baseScore = ($proficiencyScore * 0.4) +
+                         ($leadershipScore * 0.3) +
+                         ($breadthScore * 0.3);
+        }
+
+        $totalScore = $baseScore + $hireDateScore + $trainingRecordsScore;
+
         $minimumScore = $yearsOfService < 1 ? 5 : 15;
         $finalScore = max($minimumScore, min(100, $totalScore));
 
-        return $finalScore;
+        return round($finalScore);
     }
 
     public function edit($id)
@@ -356,6 +417,9 @@ class SuccessionReadinessRatingController extends Controller
             // Calculate Leadership Competencies Count
             $leadershipKeywords = ['leadership', 'management', 'strategic', 'decision making', 'team building', 'communication'];
             $leadershipCompetenciesCount = $competencyProfiles->filter(function($p) use ($leadershipKeywords) {
+                // Handle potential orphaned records where competency is null
+                if (!$p->competency) return false;
+
                 $name = strtolower($p->competency->competency_name ?? '');
                 $category = strtolower($p->competency->category ?? '');
                 foreach ($leadershipKeywords as $keyword) {
@@ -366,8 +430,13 @@ class SuccessionReadinessRatingController extends Controller
                 return false;
             })->count();
 
-            $strongCompetencies = $competencyProfiles->filter(fn($p) => (int)$p->proficiency_level >= 4)->pluck('competency.competency_name')->take(4);
-            $developmentCompetencies = $competencyProfiles->filter(fn($p) => (int)$p->proficiency_level <= 2)->pluck('competency.competency_name')->take(3);
+            // Filter out orphaned records for strong/development lists
+            $validProfiles = $competencyProfiles->filter(function($p) {
+                return $p->competency !== null;
+            });
+
+            $strongCompetencies = $validProfiles->filter(fn($p) => (int)$p->proficiency_level >= 4)->pluck('competency.competency_name')->take(4);
+            $developmentCompetencies = $validProfiles->filter(fn($p) => (int)$p->proficiency_level <= 2)->pluck('competency.competency_name')->take(3);
 
             return response()->json([
                 'employee_name' => $employee->first_name . ' ' . $employee->last_name,
@@ -384,9 +453,13 @@ class SuccessionReadinessRatingController extends Controller
                 'calculated_readiness_score' => $this->calculateEmployeeReadinessScore($employeeId, $employee),
                 'strong_competencies' => $strongCompetencies->toArray(),
                 'development_competencies' => $developmentCompetencies->toArray(),
-                'all_competencies' => $competencyProfiles->map(fn($p) => ['name' => $p->competency->competency_name, 'level' => $p->proficiency_level])
+                'all_competencies' => $competencyProfiles->map(fn($p) => [
+                    'name' => $p->competency ? ($p->competency->competency_name ?? 'Unknown Competency') : 'Unknown Competency',
+                    'level' => $p->proficiency_level
+                ])
             ]);
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Error in getCompetencyData: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }

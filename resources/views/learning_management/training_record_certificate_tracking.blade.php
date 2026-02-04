@@ -217,7 +217,11 @@
                   // Profile Pic
                   $profilePicUrl = null;
                   if ($employee && $employee->profile_picture) {
-                      $profilePicUrl = asset('storage/' . $employee->profile_picture);
+                      if (filter_var($employee->profile_picture, FILTER_VALIDATE_URL) || str_starts_with($employee->profile_picture, 'http')) {
+                          $profilePicUrl = $employee->profile_picture;
+                      } else {
+                          $profilePicUrl = asset('storage/' . $employee->profile_picture);
+                      }
                   }
                   
                   $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];

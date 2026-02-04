@@ -547,19 +547,27 @@
         const certificates = data.certificates_earned || 0;
         const totalCompetencies = data.total_competencies_assessed || 0;
         const avgProficiency = data.avg_proficiency_level || 0;
+        const leadershipCount = data.leadership_competencies_count || 0;
 
-        // 1. HIRE DATE COMPONENT (10%)
-        const hireDateScore = Math.min(10, yearsOfService * 1); // 1% per year, max 10%
+        // Implement Weighted Average Logic to prevent inflated scores
 
-        // 2. TRAINING RECORDS COMPONENT (3%)
-        const trainingRecordsScore = Math.min(3, certificates * 0.5); // 0.5% per certificate, max 3%
+        // 1. Proficiency Score (40%)
+        const proficiencyScore = (avgProficiency / 5) * 100;
 
-        // 3. COMPETENCY PROFILES COMPONENT (Additive)
-        // Each competency adds 2% per proficiency level (Level 1=2%, Level 2=4%, etc.)
-        const competencyScore = totalCompetencies * avgProficiency * 2;
+        // 2. Leadership Score (30%) - 5 leadership skills = 100%
+        const leadershipScore = Math.min(100, leadershipCount * 20);
 
-        // CALCULATE FINAL SCORE
-        const totalScore = hireDateScore + trainingRecordsScore + competencyScore;
+        // 3. Breadth Score (30%) - 10 competencies = 100%
+        const breadthScore = Math.min(100, totalCompetencies * 10);
+
+        // Calculate Base Score
+        let calculatedScore = (proficiencyScore * 0.4) + (leadershipScore * 0.3) + (breadthScore * 0.3);
+
+        // Add small bonuses for Tenure and Training (capped)
+        const tenureBonus = Math.min(5, yearsOfService * 0.5); // Max 5 points
+        const trainingBonus = Math.min(5, certificates * 1);   // Max 5 points
+
+        const totalScore = calculatedScore + tenureBonus + trainingBonus;
 
         // Set minimum score
         const minimumScore = yearsOfService < 1 ? 5 : 15;
@@ -567,10 +575,12 @@
         // Final score
         overallReadiness = Math.max(minimumScore, Math.min(100, Math.round(totalScore)));
 
-        console.log('Simplified calculation:', {
-          hireDateScore,
-          trainingRecordsScore,
-          competencyScore,
+        console.log('Simplified calculation (Weighted):', {
+          proficiencyScore,
+          leadershipScore,
+          breadthScore,
+          tenureBonus,
+          trainingBonus,
           totalScore,
           overallReadiness
         });

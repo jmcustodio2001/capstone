@@ -336,9 +336,29 @@ class SuccessionSimulationController extends Controller
         ]);
     }
 
-    private function calculateReadinessScore($competencyProfiles): float
+    private function calculateReadinessScore($competencyProfiles, $employeeId = null): float
     {
-        if ($competencyProfiles->isEmpty()) {
+        $simulationScore = 0;
+        $hasSimulation = false;
+
+        if ($employeeId) {
+            $simulations = SuccessionSimulation::where('employee_id', $employeeId)
+                ->whereNotNull('score')
+                ->get();
+
+            if ($simulations->isNotEmpty()) {
+                $hasSimulation = true;
+                // Calculate average score percentage
+                $totalPercentage = 0;
+                foreach($simulations as $sim) {
+                    $max = $sim->max_score > 0 ? $sim->max_score : 100;
+                    $totalPercentage += ($sim->score / $max) * 100;
+                }
+                $simulationScore = $totalPercentage / $simulations->count();
+            }
+        }
+
+        if ($competencyProfiles->isEmpty() && !$hasSimulation) {
             return 0;
         }
 
@@ -349,10 +369,24 @@ class SuccessionSimulationController extends Controller
         })->count();
         $totalCompetencies = $competencyProfiles->count();
 
-        // Weighted scoring: 40% proficiency, 30% leadership, 30% total competencies
-        return ($avgProficiency * 0.4) +
-               (min($leadershipCount * 20, 100) * 0.3) +
-               (min($totalCompetencies * 10, 100) * 0.3);
+        // Base scores normalized to 0-100
+        $proficiencyScore = ($avgProficiency / 5) * 100;
+        $leadershipScore = min($leadershipCount * 20, 100);
+        $breadthScore = min($totalCompetencies * 10, 100);
+
+        if ($hasSimulation) {
+            // Weighted scoring with simulation:
+            // 30% proficiency, 20% leadership, 20% breadth, 30% simulation
+            return ($proficiencyScore * 0.3) +
+                   ($leadershipScore * 0.2) +
+                   ($breadthScore * 0.2) +
+                   ($simulationScore * 0.3);
+        } else {
+            // Weighted scoring: 40% proficiency, 30% leadership, 30% total competencies
+            return ($proficiencyScore * 0.4) +
+                   ($leadershipScore * 0.3) +
+                   ($breadthScore * 0.3);
+        }
     }
 
     private function getTopCandidatesForPositions(Collection $positions, $employees = null): array
@@ -377,7 +411,7 @@ class SuccessionSimulationController extends Controller
                         ->where('employee_id', $empId)
                         ->get();
 
-                    $readinessScore = $this->calculateReadinessScore($competencyProfiles);
+                    $readinessScore = $this->calculateReadinessScore($competencyProfiles, $empId);
 
                     return [
                         'name' => $fname . ' ' . $lname,
@@ -422,14 +456,14 @@ class SuccessionSimulationController extends Controller
         $readyLeaders = collect($employees)->filter(function($employee) {
             $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
             $competencyProfiles = \App\Models\EmployeeCompetencyProfile::where('employee_id', $empId)->get();
-            $readinessScore = $this->calculateReadinessScore($competencyProfiles);
+            $readinessScore = $this->calculateReadinessScore($competencyProfiles, $empId);
             return $readinessScore >= 80;
         })->count();
 
         $inDevelopment = collect($employees)->filter(function($employee) {
             $empId = is_object($employee) ? $employee->employee_id : ($employee['employee_id'] ?? $employee['id'] ?? null);
             $competencyProfiles = \App\Models\EmployeeCompetencyProfile::where('employee_id', $empId)->get();
-            $readinessScore = $this->calculateReadinessScore($competencyProfiles);
+            $readinessScore = $this->calculateReadinessScore($competencyProfiles, $empId);
             return $readinessScore >= 40 && $readinessScore < 80;
         })->count();
 

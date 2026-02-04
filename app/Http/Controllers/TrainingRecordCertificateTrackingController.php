@@ -18,44 +18,57 @@ class TrainingRecordCertificateTrackingController extends Controller
         try {
             // Check if table exists first
             $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
-            
+
             if (count($tableExists) == 0) {
                 // Table doesn't exist, create it
                 Log::warning('training_record_certificate_tracking table does not exist, creating it...');
                 $this->ensureTableStructure();
             }
-            
+
             // FIXED: Show ALL certificate tracking records instead of filtering by completed trainings
             // This ensures that all auto-generated certificates appear in the table
             $certificates = TrainingRecordCertificateTracking::with(['employee', 'course'])
                 ->orderBy('created_at', 'desc')
                 ->paginate(5);
-            
+
+            // Fetch employees from API for fallback (Fix for Unknown Employee)
+            $apiEmployees = $this->getEmployeesFromAPI();
+
+            // Attach API employees to certificates where local employee is missing
+            foreach ($certificates as $certificate) {
+                if (!$certificate->employee && $certificate->employee_id) {
+                    $apiEmp = $apiEmployees->firstWhere('employee_id', $certificate->employee_id);
+                    if ($apiEmp) {
+                         $certificate->setRelation('employee', $apiEmp);
+                    }
+                }
+            }
+
             // Get all completed trainings from various sources for debugging purposes
             $completedTrainingEmployees = $this->getCompletedTrainingEmployees();
-            
+
             // Safely get employees and courses with error handling
             $employees = collect();
             $courses = collect();
-            
+
             try {
                 $employees = \App\Models\Employee::all();
             } catch (\Exception $e) {
                 Log::error('Error fetching employees: ' . $e->getMessage());
             }
-            
+
             try {
                 $courses = \App\Models\CourseManagement::all();
             } catch (\Exception $e) {
                 Log::error('Error fetching courses: ' . $e->getMessage());
             }
-            
+
             // Debug logging with safe counts
             Log::info('Certificate tracking - Completed training employees: ' . $completedTrainingEmployees->count());
             Log::info('Certificate tracking - All certificates displayed: ' . $certificates->count());
             Log::info('Certificate tracking - Employees available: ' . $employees->count());
             Log::info('Certificate tracking - Courses available: ' . $courses->count());
-            
+
             // Debug: Log details of completed trainings for each employee
             foreach ($completedTrainingEmployees as $employeeId => $completedTrainings) {
                 Log::info("Employee {$employeeId} completed trainings:", $completedTrainings->map(function($training) {
@@ -66,10 +79,10 @@ class TrainingRecordCertificateTrackingController extends Controller
                     ];
                 })->toArray());
             }
-            
+
             // Debug: Log all certificate records being displayed
             Log::info('All certificate records: ' . $certificates->pluck('id')->implode(', '));
-            
+
             // Check for orphaned records (certificates without valid employee/course relationships)
             $orphanedCount = 0;
             foreach ($certificates as $certificate) {
@@ -84,25 +97,25 @@ class TrainingRecordCertificateTrackingController extends Controller
                     ]);
                 }
             }
-            
+
             if ($orphanedCount > 0) {
                 Log::warning("Found {$orphanedCount} certificate records with missing employee or course relationships");
             }
-            
+
             return view('learning_management.training_record_certificate_tracking', compact('certificates', 'employees', 'courses'));
-            
+
         } catch (\Exception $e) {
             Log::error('Error in TrainingRecordCertificateTracking index: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
             ]);
-            
+
             // If there's an error, try to ensure table structure and return empty data
             $this->ensureTableStructure();
-            
+
             $certificates = collect();
             $employees = collect();
             $courses = collect();
-            
+
             return view('learning_management.training_record_certificate_tracking', compact('certificates', 'employees', 'courses'))
                 ->with('error', 'Database error detected. Table structure has been verified. Please refresh the page. Error: ' . $e->getMessage());
         }
@@ -115,7 +128,7 @@ class TrainingRecordCertificateTrackingController extends Controller
     {
         try {
             $certificate = TrainingRecordCertificateTracking::with(['employee', 'course'])->findOrFail($id);
-            
+
             // Safe employee data extraction
             $employee = $certificate->employee;
             $employeeName = 'Unknown Employee';
@@ -127,7 +140,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                     $employeeName = 'Employee ID: ' . $certificate->employee_id;
                 }
             }
-            
+
             // Safe course data extraction
             $course = $certificate->course;
             $courseTitle = 'Unknown Course';
@@ -136,7 +149,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             } elseif ($certificate->course_id) {
                 $courseTitle = 'Course ID: ' . $certificate->course_id;
             }
-            
+
             // Format dates for display
             $formattedDate = 'Unknown Date';
             $issuedDate = 'Unknown Date';
@@ -149,7 +162,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                     Log::warning('Failed to parse training date', ['training_date' => $certificate->training_date]);
                 }
             }
-            
+
             // Format the data for JSON response with safe null handling
             $data = [
                 'id' => $certificate->id,
@@ -169,15 +182,15 @@ class TrainingRecordCertificateTrackingController extends Controller
                 'has_employee_record' => $employee ? true : false,
                 'has_course_record' => $course ? true : false
             ];
-            
+
             Log::info('Certificate data retrieved successfully', [
                 'certificate_id' => $id,
                 'employee_found' => $employee ? 'yes' : 'no',
                 'course_found' => $course ? 'yes' : 'no'
             ]);
-            
+
             return response()->json($data);
-            
+
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             Log::error('Certificate not found: ' . $id);
             return response()->json(['error' => 'Certificate record not found. It may have been deleted.'], 404);
@@ -307,13 +320,13 @@ class TrainingRecordCertificateTrackingController extends Controller
             if (!$this->ensureTableStructure()) {
                 return redirect()->back()->with('error', 'Failed to verify table structure.');
             }
-            
+
             $employees = \App\Models\Employee::all();
             $totalCreated = 0;
             $totalEmployees = $employees->count();
-            
+
             Log::info("Starting comprehensive certificate sync for {$totalEmployees} employees");
-            
+
             foreach ($employees as $employee) {
                 try {
                     $createdForEmployee = $this->syncEmployeeCompletedTrainings($employee->employee_id);
@@ -324,7 +337,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             }
 
             return redirect()->back()->with('success', "Generation Complete! Certificate records have been synchronized for all employees. Created {$totalCreated} new records.");
-            
+
         } catch (\Exception $e) {
             Log::error('Auto-generate certificates error: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Error generating certificates: ' . $e->getMessage());
@@ -367,7 +380,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                   ->where('date_completed', '!=', '1970-01-01')
                   ->get();
         } catch (\Exception $e) {}
-              
+
         // Get competency course assignments
         $competencyCompleted = \App\Models\CompetencyCourseAssignment::with(['course'])
             ->where('employee_id', $employeeId)
@@ -376,7 +389,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             })->get();
 
         // 2. PROCESS EACH SOURCE
-        
+
         // Manual
         foreach ($manualCompleted as $training) {
              if($this->processSingleTraining($employeeId, $training->training_title, $training->completion_date, $training->certificate_path, 'Manual')) {
@@ -407,7 +420,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                  $createdCount++;
              }
         }
-        
+
         // Competency
         foreach ($competencyCompleted as $comp) {
             $title = $comp->course ? $comp->course->course_title : 'Competency Training';
@@ -415,12 +428,12 @@ class TrainingRecordCertificateTrackingController extends Controller
                 $createdCount++;
             }
         }
-        
+
         // Upcoming Training (Completed)
         $upcoming = \App\Models\UpcomingTraining::where('employee_id', $employeeId)
             ->where('status', 'Completed')
             ->get();
-            
+
         foreach ($upcoming as $train) {
             $date = $train->end_date ?? $train->updated_at;
             if($this->processSingleTraining($employeeId, $train->training_title, $date, null, 'Upcoming Training')) {
@@ -437,18 +450,18 @@ class TrainingRecordCertificateTrackingController extends Controller
     private function processSingleTraining($employeeId, $title, $date, $existingCertPath = null, $source = 'Unknown')
     {
         if (empty($title)) return false;
-        
+
         $title = trim($title);
         $date = $date instanceof \Carbon\Carbon ? $date : (\Carbon\Carbon::tryParse($date) ?? now());
-        
+
         // 1. Find or Create Course
         $course = \App\Models\CourseManagement::where('course_title', $title)->first();
-        
+
         // Fuzzy match for Customer Service
         if (!$course && stripos($title, 'Customer Service') !== false) {
              $course = \App\Models\CourseManagement::where('course_title', 'LIKE', '%Customer Service%')->first();
         }
-        
+
         if (!$course) {
             // Create course if missing
             try {
@@ -465,9 +478,9 @@ class TrainingRecordCertificateTrackingController extends Controller
                $course = \App\Models\CourseManagement::firstOrCreate(['course_title' => 'Uncategorized Training'], ['status'=>'Active']);
             }
         }
-        
+
         if (!$course) return false;
-        
+
         // 2. Check if certificate exists (by Course ID or Title Match)
         $exists = TrainingRecordCertificateTracking::where('employee_id', $employeeId)
             ->where(function($q) use ($course, $title) {
@@ -476,14 +489,14 @@ class TrainingRecordCertificateTrackingController extends Controller
                       $sq->where('course_title', 'LIKE', $title);
                   });
             })->exists();
-            
+
         if ($exists) return false;
-        
+
         // 3. Create Certificate Record
         try {
             // Generate standard certificate number
             $certNum = 'CERT-' . strtoupper(substr($employeeId, 0, 3)) . '-' . $date->format('Ymd') . '-' . rand(1000, 9999);
-            
+
             // Format existing path if present
             $certUrl = null;
             if ($existingCertPath) {
@@ -493,7 +506,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                 }
                 $certUrl = preg_replace('#/+#', '/', $certUrl);
             }
-            
+
             TrainingRecordCertificateTracking::create([
                 'employee_id' => $employeeId,
                 'course_id' => $course->course_id,
@@ -505,13 +518,13 @@ class TrainingRecordCertificateTrackingController extends Controller
                 'remarks' => "Auto-synced from {$source} Records",
                 'certificate_url' => $certUrl
             ]);
-            
+
             // Sync competency
             $this->syncWithCompetencyProfile($employeeId, $title, $date);
-            
+
             Log::info("Synced certificate for {$employeeId}: {$title}");
             return true;
-            
+
         } catch (\Exception $e) {
             Log::error("Failed to create certificate for {$employeeId} - {$title}: " . $e->getMessage());
             return false;
@@ -532,35 +545,35 @@ class TrainingRecordCertificateTrackingController extends Controller
     {
         try {
             Log::info("Starting duplicate certificate cleanup...");
-            
+
             // Find duplicate certificates (same employee_id and course_id)
             $duplicates = TrainingRecordCertificateTracking::select('employee_id', 'course_id', DB::raw('COUNT(*) as count'))
                 ->groupBy('employee_id', 'course_id')
                 ->having('count', '>', 1)
                 ->get();
-            
+
             $deletedCount = 0;
-            
+
             foreach ($duplicates as $duplicate) {
                 // Get all certificates for this employee-course combination
                 $certificates = TrainingRecordCertificateTracking::where('employee_id', $duplicate->employee_id)
                     ->where('course_id', $duplicate->course_id)
                     ->orderBy('created_at', 'desc')
                     ->get();
-                
+
                 // Keep the latest one, delete the rest
                 $latestCertificate = $certificates->first();
                 $certificatesToDelete = $certificates->skip(1);
-                
+
                 foreach ($certificatesToDelete as $certToDelete) {
                     Log::info("Deleting duplicate certificate: ID {$certToDelete->id} for employee {$certToDelete->employee_id}, course {$certToDelete->course_id}");
                     $certToDelete->delete();
                     $deletedCount++;
                 }
             }
-            
+
             Log::info("Duplicate cleanup completed. Deleted {$deletedCount} duplicate certificate records.");
-            
+
             // Log activity for cleanup
             if ($deletedCount > 0) {
                 ActivityLog::create([
@@ -570,7 +583,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                     'description' => "Cleaned up {$deletedCount} duplicate certificate records during auto-generation process.",
                 ]);
             }
-            
+
         } catch (\Exception $e) {
             Log::error("Error during duplicate certificate cleanup: " . $e->getMessage());
         }
@@ -598,10 +611,10 @@ class TrainingRecordCertificateTrackingController extends Controller
     {
         try {
             $this->cleanupDuplicateCertificates();
-            
+
             return redirect()->route('training_record_certificate_tracking.index')
                 ->with('success', 'Duplicate certificate cleanup completed successfully.');
-                
+
         } catch (\Exception $e) {
             return redirect()->route('training_record_certificate_tracking.index')
                 ->with('error', 'Error during cleanup: ' . $e->getMessage());
@@ -805,7 +818,7 @@ class TrainingRecordCertificateTrackingController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error creating training_record_certificate_tracking table: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error creating table: ' . $e->getMessage(),
@@ -823,7 +836,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             // Execute the table creation directly using raw SQL
             $createTableSQL = "
                 DROP TABLE IF EXISTS `training_record_certificate_tracking`;
-                
+
                 CREATE TABLE `training_record_certificate_tracking` (
                     `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
                     `employee_id` varchar(50) NOT NULL,
@@ -844,7 +857,7 @@ class TrainingRecordCertificateTrackingController extends Controller
 
             // Execute each statement separately
             DB::statement("DROP TABLE IF EXISTS `training_record_certificate_tracking`");
-            
+
             DB::statement("
                 CREATE TABLE `training_record_certificate_tracking` (
                     `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -866,7 +879,7 @@ class TrainingRecordCertificateTrackingController extends Controller
 
             // Verify table was created
             $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
-            
+
             if (count($tableExists) > 0) {
                 // Log activity
                 ActivityLog::create([
@@ -887,7 +900,7 @@ class TrainingRecordCertificateTrackingController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error force creating training_record_certificate_tracking table: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error force creating table: ' . $e->getMessage(),
@@ -904,7 +917,7 @@ class TrainingRecordCertificateTrackingController extends Controller
         try {
             // Execute the table creation directly
             DB::statement("DROP TABLE IF EXISTS `training_record_certificate_tracking`");
-            
+
             DB::statement("
                 CREATE TABLE `training_record_certificate_tracking` (
                     `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -926,7 +939,7 @@ class TrainingRecordCertificateTrackingController extends Controller
 
             // Verify table exists
             $result = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
-            
+
             if (count($result) > 0) {
                 Log::info('training_record_certificate_tracking table created successfully');
                 return true;
@@ -934,7 +947,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                 Log::error('Failed to create training_record_certificate_tracking table');
                 return false;
             }
-            
+
         } catch (\Exception $e) {
             Log::error('Error creating training_record_certificate_tracking table: ' . $e->getMessage());
             return false;
@@ -949,7 +962,7 @@ class TrainingRecordCertificateTrackingController extends Controller
         try {
             // Check if table exists
             $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
-            
+
             if (count($tableExists) == 0) {
                 // Table doesn't exist, create it
                 $this->executeTableCreation();
@@ -959,14 +972,14 @@ class TrainingRecordCertificateTrackingController extends Controller
             // Check if all required columns exist
             if (!TrainingRecordCertificateTracking::hasAllRequiredColumns()) {
                 Log::info('Missing columns detected, attempting to fix table structure');
-                
+
                 // Get missing columns for logging
                 $missingColumns = TrainingRecordCertificateTracking::getMissingColumns();
                 Log::info('Missing columns: ' . implode(', ', $missingColumns));
-                
+
                 // Use the model's comprehensive fix method
                 $result = TrainingRecordCertificateTracking::fixMissingColumns();
-                
+
                 if ($result['success']) {
                     Log::info('Successfully fixed table structure: ' . $result['message']);
                     return true;
@@ -980,12 +993,12 @@ class TrainingRecordCertificateTrackingController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error ensuring table structure: ' . $e->getMessage());
-            
+
             // If all else fails, try to use the model's fix method
             try {
                 Log::info('Attempting to fix table structure using model method...');
                 $result = TrainingRecordCertificateTracking::fixMissingColumns();
-                
+
                 if ($result['success']) {
                     Log::info('Successfully fixed table structure using model method');
                     return true;
@@ -1009,7 +1022,7 @@ class TrainingRecordCertificateTrackingController extends Controller
         try {
             // Check if table exists
             $tableExists = DB::select("SHOW TABLES LIKE 'training_record_certificate_tracking'");
-            
+
             if (count($tableExists) == 0) {
                 // Table doesn't exist, create it completely
                 return $this->executeTableCreation();
@@ -1017,16 +1030,16 @@ class TrainingRecordCertificateTrackingController extends Controller
 
             // Check if training_date column exists
             $columns = DB::select("SHOW COLUMNS FROM training_record_certificate_tracking LIKE 'training_date'");
-            
+
             if (count($columns) == 0) {
                 // Column doesn't exist, add it
                 DB::statement("ALTER TABLE `training_record_certificate_tracking` ADD COLUMN `training_date` date NOT NULL AFTER `course_id`");
-                
+
                 // Update existing records with a default date if they don't have one
                 DB::statement("UPDATE `training_record_certificate_tracking` SET `training_date` = COALESCE(`created_at`, NOW()) WHERE `training_date` IS NULL OR `training_date` = '0000-00-00'");
-                
+
                 Log::info('Added missing training_date column to training_record_certificate_tracking table');
-                
+
                 // Log activity
                 ActivityLog::create([
                     'user_id' => Auth::id() ?: 1,
@@ -1050,7 +1063,7 @@ class TrainingRecordCertificateTrackingController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error fixing training_date column: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fixing training_date column: ' . $e->getMessage(),
@@ -1068,7 +1081,7 @@ class TrainingRecordCertificateTrackingController extends Controller
         try {
             // Drop and recreate table with complete structure
             DB::statement("DROP TABLE IF EXISTS `training_record_certificate_tracking`");
-            
+
             DB::statement("
                 CREATE TABLE `training_record_certificate_tracking` (
                     `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -1091,7 +1104,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             // Verify table was created with correct structure
             $columns = DB::select("DESCRIBE training_record_certificate_tracking");
             $hasTrainingDate = false;
-            
+
             foreach ($columns as $column) {
                 if ($column->Field === 'training_date') {
                     $hasTrainingDate = true;
@@ -1122,7 +1135,7 @@ class TrainingRecordCertificateTrackingController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error fixing table structure: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Error fixing table structure: ' . $e->getMessage(),
@@ -1139,16 +1152,16 @@ class TrainingRecordCertificateTrackingController extends Controller
     {
         try {
             $result = TrainingRecordCertificateTracking::fixMissingTrainingDateColumn();
-            
+
             // Log the result for debugging
             Log::info('Quick fix training_date column result: ', $result);
-            
+
             if ($result['success']) {
                 return response()->json($result);
             } else {
                 return response()->json($result, 500);
             }
-            
+
         } catch (\Exception $e) {
             Log::error('Error in quickFixTrainingDateColumn: ' . $e->getMessage());
             return response()->json([
@@ -1167,13 +1180,13 @@ class TrainingRecordCertificateTrackingController extends Controller
     {
         try {
             $result = TrainingRecordCertificateTracking::fixMissingTrainingDateColumn();
-            
+
             if ($result['success']) {
                 return redirect()->back()->with('success', $result['message']);
             } else {
                 return redirect()->back()->with('error', $result['message']);
             }
-            
+
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Error executing fix: ' . $e->getMessage());
         }
@@ -1196,9 +1209,9 @@ class TrainingRecordCertificateTrackingController extends Controller
             }
 
             $result = TrainingRecordCertificateTracking::fixMissingTrainingDateColumn();
-            
+
             return response()->json($result);
-            
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -1243,7 +1256,7 @@ class TrainingRecordCertificateTrackingController extends Controller
                               ->orWhere('progress', '>=', 100);
                     })
                     ->get();
-                
+
                 foreach ($systemCompleted as $completed) {
                     $employeeCompletedTrainings->push((object)[
                         'training_title' => $completed->course->course_title ?? 'Unknown Course',
@@ -1344,7 +1357,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             }
 
             Log::info('Certificate tracking - Found employees with completed trainings: ' . $completedEmployees->count());
-            
+
             return $completedEmployees;
 
         } catch (\Exception $e) {
@@ -1354,19 +1367,60 @@ class TrainingRecordCertificateTrackingController extends Controller
     }
 
     /**
+     * Get employees from API with error handling
+     */
+    private function getEmployeesFromAPI()
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                return collect($apiEmployees)->map(function($emp) {
+                    // Normalize profile picture URL
+                    $profilePic = $emp['profile_picture'] ?? null;
+                    if ($profilePic && !Str::startsWith($profilePic, 'http')) {
+                         $profilePic = 'http://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                    }
+
+                    // Create a pseudo-model object that behaves like Employee model
+                    $empObj = new \App\Models\Employee();
+                    $empObj->forceFill([
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'profile_picture' => $profilePic,
+                        // Add other fields if necessary
+                    ]);
+
+                    // We need to make sure the attributes are accessible as properties
+                    return $empObj;
+                });
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to fetch employees from API in TrainingRecordCertificateTracking: ' . $e->getMessage());
+        }
+        return collect();
+    }
+
+    /**
      * Fix certificate_expiry field and all missing columns in the table
      */
     public function fixCertificateExpiryField()
     {
         try {
             Log::info('Attempting to fix training_record_certificate_tracking table structure');
-            
+
             // Use the model's comprehensive fix method
             $result = TrainingRecordCertificateTracking::fixMissingColumns();
-            
+
             if ($result['success']) {
                 Log::info('Successfully fixed table structure', $result);
-                
+
                 return response()->json([
                     'success' => true,
                     'message' => $result['message'],
@@ -1374,16 +1428,16 @@ class TrainingRecordCertificateTrackingController extends Controller
                 ]);
             } else {
                 Log::error('Failed to fix table structure', $result);
-                
+
                 return response()->json([
                     'success' => false,
                     'message' => $result['message']
                 ], 500);
             }
-            
+
         } catch (\Exception $e) {
             Log::error('Error fixing table structure: ' . $e->getMessage());
-            
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fix table structure: ' . $e->getMessage()

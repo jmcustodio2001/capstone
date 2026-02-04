@@ -44,18 +44,19 @@ class TrainingRecordCertificateTrackingController extends Controller
                 }
             }
 
-            // Get all completed trainings from various sources for debugging purposes
-            $completedTrainingEmployees = $this->getCompletedTrainingEmployees();
-
-            // Safely get employees and courses with error handling
+            // Auto-sync certificates for all employees to ensure the table is up-to-date
             $employees = collect();
-            $courses = collect();
-
             try {
                 $employees = \App\Models\Employee::all();
+                foreach ($employees as $employee) {
+                    $this->syncEmployeeCompletedTrainings($employee->employee_id);
+                }
             } catch (\Exception $e) {
-                Log::error('Error fetching employees: ' . $e->getMessage());
+                Log::error('Error syncing/fetching employees: ' . $e->getMessage());
             }
+
+            // Safely get courses with error handling
+            $courses = collect();
 
             try {
                 $courses = \App\Models\CourseManagement::all();
@@ -64,21 +65,9 @@ class TrainingRecordCertificateTrackingController extends Controller
             }
 
             // Debug logging with safe counts
-            Log::info('Certificate tracking - Completed training employees: ' . $completedTrainingEmployees->count());
             Log::info('Certificate tracking - All certificates displayed: ' . $certificates->count());
             Log::info('Certificate tracking - Employees available: ' . $employees->count());
             Log::info('Certificate tracking - Courses available: ' . $courses->count());
-
-            // Debug: Log details of completed trainings for each employee
-            foreach ($completedTrainingEmployees as $employeeId => $completedTrainings) {
-                Log::info("Employee {$employeeId} completed trainings:", $completedTrainings->map(function($training) {
-                    return [
-                        'title' => $training->training_title,
-                        'course_id' => $training->course_id,
-                        'source' => $training->source
-                    ];
-                })->toArray());
-            }
 
             // Debug: Log all certificate records being displayed
             Log::info('All certificate records: ' . $certificates->pluck('id')->implode(', '));
@@ -438,6 +427,55 @@ class TrainingRecordCertificateTrackingController extends Controller
             $date = $train->end_date ?? $train->updated_at;
             if($this->processSingleTraining($employeeId, $train->training_title, $date, null, 'Upcoming Training')) {
                 $createdCount++;
+            }
+        }
+
+        // Training Requests (Completed/Passed)
+        $completedRequests = \App\Models\TrainingRequest::where('employee_id', $employeeId)
+            ->whereIn('status', ['Completed', 'Passed'])
+            ->get();
+
+        foreach ($completedRequests as $request) {
+            $date = $request->updated_at;
+            if($this->processSingleTraining($employeeId, $request->training_title, $date, null, 'Training Request')) {
+                $createdCount++;
+            }
+        }
+
+        // Training Requests (Approved but with 100% Exam Progress - Self-Healing)
+        $approvedRequests = \App\Models\TrainingRequest::where('employee_id', $employeeId)
+            ->where('status', 'Approved')
+            ->get();
+
+        foreach ($approvedRequests as $request) {
+            // Calculate progress if course_id exists
+            if ($request->course_id) {
+                $progress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $request->course_id);
+                if ($progress >= 100) {
+                     // Auto-complete the request if it's 100% done
+                     $request->update(['status' => 'Completed']);
+
+                     if($this->processSingleTraining($employeeId, $request->training_title, now(), null, 'Training Request (Exam Passed)')) {
+                        $createdCount++;
+                     }
+                }
+            } else {
+                // Try to find course by title to check progress
+                $course = \App\Models\CourseManagement::where('course_title', $request->training_title)
+                        ->orWhere('course_title', 'LIKE', '%' . $request->training_title . '%')
+                        ->first();
+
+                if ($course) {
+                    $progress = \App\Models\ExamAttempt::calculateCombinedProgress($employeeId, $course->course_id);
+                    if ($progress >= 100) {
+                        // Auto-complete
+                        $request->update(['status' => 'Completed', 'course_id' => $course->course_id]);
+
+                        if($this->processSingleTraining($employeeId, $request->training_title, now(), null, 'Training Request (Exam Passed)')) {
+                            $createdCount++;
+                        }
+                    }
+                }
             }
         }
 

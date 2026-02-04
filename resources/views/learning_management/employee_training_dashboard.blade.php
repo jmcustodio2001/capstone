@@ -9,7 +9,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
-  
+
   <!-- Load optional CSS files with error handling -->
   <style>
     /* Responsive styles fallback */
@@ -26,11 +26,11 @@
     .dashboard-card {
       transition: transform 0.3s ease;
     }
-    
+
     .dashboard-card:hover {
       transform: translateY(-2px);
     }
-    
+
     /* Training Card Styles */
     .training-card {
       border: none;
@@ -41,19 +41,19 @@
       overflow: hidden;
       position: relative;
     }
-    
+
     .training-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
     }
-    
-    
+
+
     .card-header-custom {
       background: rgba(13, 110, 253, 0.05);
       border-bottom: 1px solid rgba(13, 110, 253, 0.1);
       padding: 1rem 1.25rem;
     }
-    
+
     .employee-avatar {
       width: 50px;
       height: 50px;
@@ -62,14 +62,14 @@
       border: 3px solid #fff;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     }
-    
+
     .progress-container {
       background: #f8f9fa;
       border-radius: 10px;
       padding: 0.75rem;
       margin: 0.5rem 0;
     }
-    
+
     .progress-bar-custom {
       height: 8px;
       border-radius: 4px;
@@ -102,7 +102,7 @@
     .progress .progress-bar[aria-valuenow="0"] {
       background: #6c757d !important;
     }
-    
+
     .status-badge-custom {
       padding: 0.5rem 1rem;
       border-radius: 20px;
@@ -111,7 +111,7 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    
+
     .course-badge {
       background: linear-gradient(135deg, #007bff, #0056b3);
       color: white;
@@ -120,14 +120,14 @@
       font-size: 0.75rem;
       font-weight: 600;
     }
-    
+
     .action-buttons {
       display: flex;
       gap: 0.5rem;
       justify-content: center;
       margin-top: 1rem;
     }
-    
+
     .btn-action {
       width: 40px;
       height: 40px;
@@ -139,24 +139,24 @@
       transition: all 0.3s ease;
       font-size: 1.1rem;
     }
-    
+
     .btn-action:hover {
       transform: scale(1.1);
     }
-    
+
     .info-row {
       display: flex;
       align-items: center;
       margin: 0.5rem 0;
       padding: 0.25rem 0;
     }
-    
+
     .info-icon {
       width: 20px;
       margin-right: 0.5rem;
       color: #6c757d;
     }
-    
+
     .readiness-score {
       background: linear-gradient(135deg, #28a745, #20c997);
       color: white;
@@ -166,7 +166,7 @@
       text-align: center;
       min-width: 60px;
     }
-    
+
     .expired-indicator {
       position: absolute;
       top: 15px;
@@ -179,50 +179,50 @@
       font-weight: bold;
       animation: pulse 2s infinite;
     }
-    
+
     @keyframes pulse {
       0% { opacity: 1; }
       50% { opacity: 0.7; }
       100% { opacity: 1; }
     }
-    
+
     .card-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
       gap: 1.5rem;
       margin-top: 1rem;
     }
-    
+
     @media (max-width: 767px) {
       .page-header h2 {
         font-size: 1.5rem;
       }
-      
+
       .dashboard-logo img {
         width: 40px;
         height: 40px;
       }
-      
+
       .card-grid {
         grid-template-columns: 1fr;
         gap: 1rem;
       }
-      
+
       .training-card {
         margin: 0 0.5rem;
       }
-      
+
       .action-buttons {
         flex-wrap: wrap;
       }
     }
-    
+
     @media (max-width: 480px) {
       .card-grid {
         grid-template-columns: 1fr;
         margin: 0 -0.5rem;
       }
-      
+
       .employee-avatar {
         width: 40px;
         height: 40px;
@@ -322,7 +322,7 @@
         // Group records by employee
         $groupedRecords = $trainingRecords->groupBy('employee_id');
       @endphp
-      
+
       @forelse($groupedRecords as $employeeId => $employeeRecords)
         @php
           // Get employee info from first record
@@ -368,7 +368,7 @@
           $completedTrainings = 0;
           $inProgressTrainings = 0;
           $expiredTrainings = 0;
-          
+
           foreach ($employeeRecords as $record) {
               // Calculate progress for each record using consistent logic with _progress.blade.php
               $employeeId = $record->employee_id;
@@ -401,7 +401,7 @@
                       ->whereHas('competency', function($q) use ($competencyName) {
                           $q->where('competency_name', 'LIKE', '%' . $competencyName . '%');
                       })->where('employee_id', $employeeId)->first();
-                  
+
                   if ($competencyProfile && $competencyProfile->proficiency_level > 0) {
                       $compProgress = round(($competencyProfile->proficiency_level / 5) * 100);
                       $displayProgress = max($displayProgress, (float)$compProgress);
@@ -420,13 +420,13 @@
               }
 
               $displayProgress = max(0, min(100, (int)$displayProgress));
-              
+
               // Store the calculated progress in the record for JavaScript access
               // Also update progress and status directly to ensure they are captured in @json
               $record->calculated_progress = $displayProgress;
               $record->progress = $displayProgress;
               $record->status = $displayProgress >= 80 ? 'Completed' : 'In Progress';
-              
+
               // Check if expired
               $finalExpiredDate = $record->expired_date ?? ($record->course->expired_date ?? null);
               $isExpired = false;
@@ -445,7 +445,7 @@
                   $inProgressTrainings++;
               }
           }
-          
+
           $averageProgress = $employeeRecords->count() > 0 ? round($totalProgress / $employeeRecords->count()) : 0;
           $notStartedTrainings = $employeeRecords->count() - $completedTrainings - $inProgressTrainings - $expiredTrainings;
         @endphp
@@ -518,15 +518,15 @@
                 }
               @endphp
               <div class="progress mb-2" style="height: 12px; background-color: #e9ecef; border-radius: 6px;">
-                <div class="progress-bar" 
-                     role="progressbar" 
-                     style="width: {{ $averageProgress }}%; background: {{ $progressColor }} !important; border-radius: 6px;" 
-                     aria-valuenow="{{ $averageProgress }}" 
-                     aria-valuemin="0" 
+                <div class="progress-bar"
+                     role="progressbar"
+                     style="width: {{ $averageProgress }}%; background: {{ $progressColor }} !important; border-radius: 6px;"
+                     aria-valuenow="{{ $averageProgress }}"
+                     aria-valuemin="0"
                      aria-valuemax="100">
                 </div>
               </div>
-              
+
               <div class="mt-2">
                 @if($expiredTrainings > 0)
                   <span class="badge bg-danger bg-opacity-10 text-danger fs-6 px-3 py-2">Has Expired Trainings</span>
@@ -592,7 +592,7 @@
     } catch (error) {
       console.warn('Tooltip initialization failed:', error);
     }
-    
+
     // Safe dropdown initialization
     try {
       const dropdownElements = document.querySelectorAll('[data-bs-toggle="dropdown"]');
@@ -630,7 +630,7 @@
         const employeeFilterEl = document.getElementById('filterEmployee');
         const courseFilterEl = document.getElementById('filterCourse');
         const statusFilterEl = document.getElementById('filterStatus');
-        
+
         const employeeFilter = employeeFilterEl ? employeeFilterEl.value : '';
         const courseFilter = courseFilterEl ? courseFilterEl.value : '';
         const statusFilter = statusFilterEl ? statusFilterEl.value : '';
@@ -651,12 +651,12 @@
   async function verifyAdminPassword(password) {
     try {
       const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-      
+
       if (!csrfToken) {
         console.error('CSRF token not found');
         return false;
       }
-      
+
       const response = await fetch('/admin/verify-password', {
         method: 'POST',
         headers: {
@@ -666,10 +666,10 @@
         },
         body: JSON.stringify({ password: password })
       });
-      
+
       const data = await response.json();
       console.log('Password verification response:', data); // Debug log
-      
+
       // AdminController returns 'success' field, not 'valid'
       if (response.ok && data.success === true) {
         return true;
@@ -734,7 +734,7 @@
         <div class="text-start mb-3">
           <div class="alert alert-warning">
             <i class="bi bi-exclamation-triangle"></i>
-            <strong>Security Notice:</strong> You are about to edit a training record. 
+            <strong>Security Notice:</strong> You are about to edit a training record.
             Please enter your admin password to verify your identity.
           </div>
           <label for="admin-password" class="form-label">Admin Password:</label>
@@ -886,7 +886,7 @@
     });
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    
+
     if (!csrfToken) {
       Swal.fire({
         title: 'Error!',
@@ -1017,7 +1017,7 @@
     });
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    
+
     if (!csrfToken) {
       Swal.fire({
         title: 'Error!',
@@ -1134,7 +1134,7 @@
     });
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
-    
+
     if (!csrfToken) {
       Swal.fire({
         title: 'Error!',
@@ -1149,7 +1149,7 @@
     console.log('Making GET request to create missing entries with password verification');
     console.log('Request URL:', `/admin/create-missing-training-entries?password=${encodeURIComponent(password)}&_t=${Date.now()}`);
     console.log('Request method: GET');
-    
+
     fetch(`/admin/create-missing-training-entries?password=${encodeURIComponent(password)}&_t=${Date.now()}`, {
       method: 'GET',
       headers: {
@@ -1331,7 +1331,7 @@
       preConfirm: () => {
         const password = document.getElementById('export-password').value;
         const format = document.getElementById('export-format').value;
-        
+
         if (!password) {
           Swal.showValidationMessage('Please enter your admin password');
           return false;
@@ -1490,7 +1490,7 @@
       cancelButtonColor: '#6c757d',
       preConfirm: () => {
         const password = document.getElementById('cleanup-password').value;
-        
+
         if (!password) {
           Swal.showValidationMessage('Please enter your admin password');
           return false;
@@ -1582,7 +1582,7 @@
     // Get employee records from the PHP data
     const groupedRecords = @json($trainingRecords->groupBy('employee_id'));
     const records = groupedRecords[employeeId] || [];
-    
+
     if (records.length === 0) {
       Swal.fire({
         icon: 'info',
@@ -1602,14 +1602,14 @@
     let trainingsHtml = '';
     records.forEach((record, index) => {
       // Get training title with priority system
-      const trainingTitle = record.training_title || 
-                           (record.course && record.course.course_title) || 
-                           record.course_title || 
+      const trainingTitle = record.training_title ||
+                           (record.course && record.course.course_title) ||
+                           record.course_title ||
                            'Unknown Training';
-      
+
       // Use the calculated progress from the record (this should include exam scores)
       let progress = 0;
-      
+
       // Try to get the calculated progress from different sources
       if (record.calculated_progress !== undefined) {
         progress = record.calculated_progress;
@@ -1624,7 +1624,7 @@
         progress = record.progress || 0;
         console.log(`Using fallback progress for ${trainingTitle}: ${progress}%`);
       }
-      
+
       progress = Math.max(0, Math.min(100, parseInt(progress) || 0));
       const progressColor = progress >= 100 ? 'success' : progress > 0 ? 'primary' : 'secondary';
       const statusText = record.status || (progress >= 100 ? 'Completed' : progress > 0 ? 'In Progress' : 'Not Started');
@@ -1692,7 +1692,7 @@
 
   <!-- Bootstrap JS -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  
+
   <!-- Initialize global objects to prevent undefined errors -->
   <script>
     // Prevent translation service errors
@@ -1702,19 +1702,19 @@
         get: function(key) { return key; }
       };
     }
-    
+
     // Add any other global objects that might be missing
     if (typeof window.app === 'undefined') {
       window.app = {};
     }
-    
+
     // Prevent sidebar toggle errors
     if (typeof window.toggleSidebar === 'undefined') {
       window.toggleSidebar = function() {
         console.log('Sidebar toggle called (fallback)');
       };
     }
-    
+
     // Prevent any Array.find errors for older browsers
     if (!Array.prototype.find) {
       Array.prototype.find = function(predicate) {
@@ -1726,7 +1726,7 @@
         return undefined;
       };
     }
-    
+
     console.log('Global objects and polyfills initialized to prevent undefined errors');
   </script>
 </body>

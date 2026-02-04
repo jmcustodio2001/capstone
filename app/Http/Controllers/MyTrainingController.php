@@ -903,6 +903,9 @@ class MyTrainingController extends Controller
             ]);
         }
 
+        // Fetch API courses for fallback
+        $apiCourses = $this->getCoursesFromAPI();
+
         // Get manually added completed trainings
         $manualCompleted = CompletedTraining::where('employee_id', $employeeId)->get();
 
@@ -914,10 +917,18 @@ class MyTrainingController extends Controller
                       ->orWhere('progress', '>=', 100);
             })
             ->get()
-            ->map(function($training) {
+            ->map(function($training) use ($apiCourses) {
+                $title = $training->course->course_title ?? null;
+                if (!$title && $training->course_id) {
+                    $apiCourse = $apiCourses->firstWhere('course_id', $training->course_id) ?? $apiCourses->firstWhere('id', $training->course_id);
+                    if ($apiCourse) {
+                        $title = $apiCourse['course_title'] ?? $apiCourse['title'] ?? null;
+                    }
+                }
+
                 return (object)[
                     'completed_id' => 'system_' . $training->id,
-                    'training_title' => $training->course->course_title ?? 'Unknown Course',
+                    'training_title' => $title ?? 'Unknown Course',
                     'completion_date' => $training->progress >= 100 ? $training->updated_at->format('Y-m-d') : $training->training_date,
                     'remarks' => 'Completed via system - Progress: ' . ($training->progress ?? 0) . '%',
                     'status' => 'Verified',
@@ -938,10 +949,18 @@ class MyTrainingController extends Controller
                       ->where('progress', '>=', 100);
             })
             ->get()
-            ->map(function($assignment) {
+            ->map(function($assignment) use ($apiCourses) {
+                $title = $assignment->course->course_title ?? null;
+                if (!$title && $assignment->course_id) {
+                    $apiCourse = $apiCourses->firstWhere('course_id', $assignment->course_id) ?? $apiCourses->firstWhere('id', $assignment->course_id);
+                    if ($apiCourse) {
+                        $title = $apiCourse['course_title'] ?? $apiCourse['title'] ?? null;
+                    }
+                }
+
                 return (object)[
                     'completed_id' => 'comp_completed_' . $assignment->id,
-                    'training_title' => $assignment->course->course_title ?? 'Unknown Course',
+                    'training_title' => $title ?? 'Unknown Course',
                     'completion_date' => $assignment->progress >= 100 ? $assignment->updated_at : $assignment->assigned_date,
                     'remarks' => 'Completed competency-based training - Progress: ' . ($assignment->progress ?? 0) . '%',
                     'status' => 'Verified',
@@ -3863,5 +3882,22 @@ class MyTrainingController extends Controller
         }
 
         return $employee;
+    }
+
+    /**
+     * Get all courses from the API
+     */
+    private function getCoursesFromAPI()
+    {
+        try {
+            $apiResponse = \Illuminate\Support\Facades\Http::timeout(3)->get('http://hr4.jetlougetravels-ph.com/api/courses');
+            if ($apiResponse->successful()) {
+                $data = $apiResponse->json();
+                return collect($data['data'] ?? $data);
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('Failed to fetch courses from API: ' . $e->getMessage());
+        }
+        return collect([]);
     }
 }

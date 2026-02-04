@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="{{ asset('assets/css/admin_dashboard-style.css') }}">
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  
+
   <!-- Custom Certificate Card Styles -->
   <style>
     .certificate-card {
@@ -21,82 +21,82 @@
       overflow: hidden;
       box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
-    
+
     .certificate-card:hover {
       transform: translateY(-5px);
       box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
       border-color: #007bff;
     }
-    
+
     .info-section {
       transition: all 0.2s ease;
     }
-    
+
     .info-section:hover {
       transform: translateY(-2px);
     }
-    
+
     .info-section .bg-light {
       transition: all 0.2s ease;
       border: 1px solid transparent;
     }
-    
+
     .info-section:hover .bg-light {
       border-color: #dee2e6;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     }
-    
+
     .certificate-card .card-body {
       display: flex;
       flex-direction: column;
       height: 100%;
     }
-    
+
     .certificate-card .row.g-4 {
       flex: 1;
     }
-    
+
     .certificate-card .row.mt-4 {
       margin-top: auto !important;
     }
-    
+
     @media (max-width: 1200px) {
       .col-xl-4 {
         flex: 0 0 50%;
         max-width: 50%;
       }
     }
-    
+
     @media (max-width: 768px) {
       .col-lg-6 {
         flex: 0 0 100%;
         max-width: 100%;
       }
-      
+
       .certificate-card .card-header .d-flex {
         flex-direction: column;
         text-align: center;
       }
-      
+
       .certificate-card .card-header .text-end {
         text-align: center !important;
         margin-top: 1rem;
       }
-      
+
       .certificate-card .row .col-md-6 {
         margin-bottom: 1rem;
       }
-      
+
       .certificate-card .d-flex.justify-content-end {
         justify-content: center !important;
       }
     }
-    
+
     .badge {
       font-size: 0.75rem;
       padding: 0.5rem 0.75rem;
     }
-    
+
     .btn-outline-primary:hover,
     .btn-outline-success:hover,
     .btn-outline-warning:hover,
@@ -213,7 +213,7 @@
                   $lastName = $employee->last_name ?? 'Employee';
                   $fullName = $firstName . ' ' . $lastName;
                   $initials = strtoupper(substr($firstName, 0, 1)) . strtoupper(substr($lastName, 0, 1));
-                  
+
                   // Profile Pic
                   $profilePicUrl = null;
                   if ($employee && $employee->profile_picture) {
@@ -223,11 +223,11 @@
                           $profilePicUrl = asset('storage/' . $employee->profile_picture);
                       }
                   }
-                  
+
                   $colors = ['007bff', '28a745', 'dc3545', 'ffc107', '6f42c1', 'fd7e14'];
                   $colorIndex = abs(crc32($certificate->employee_id ?? '0')) % count($colors);
                   $bgColor = $colors[$colorIndex];
-                  
+
                   if (!$profilePicUrl) {
                       $profilePicUrl = "https://ui-avatars.com/api/?name=" . urlencode($fullName) .
                                      "&size=100&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
@@ -254,7 +254,7 @@
                           }
                       } catch (\Exception $e) { $expiryDate = null; }
                   }
-                  
+
                   if (!$expiryDate && $certificate->certificate_expiry) {
                       try { $expiryDate = \Carbon\Carbon::parse($certificate->certificate_expiry); } catch (\Exception $e) {}
                   }
@@ -266,7 +266,7 @@
                   if ($expiryDate) {
                       $now = \Carbon\Carbon::now();
                       $daysUntilExpiry = $now->diffInDays($expiryDate, false);
-                      
+
                       if ($daysUntilExpiry < 0) {
                           $expiryStatus = 'expired';
                           $expiryText = $expiryDate->format('M d, Y');
@@ -293,7 +293,7 @@
                       </div>
                     </div>
                   </td>
-                  
+
                   <!-- Course Column -->
                   <td>
                     <div class="fw-semibold text-primary">
@@ -306,7 +306,7 @@
                       @endif
                     </div>
                   </td>
-                  
+
                   <!-- Date Completed -->
                   <td>
                     @if($certificate->training_date)
@@ -380,7 +380,7 @@
             </tbody>
           </table>
         </div>
-        
+
         <!-- Pagination Links -->
         <div class="d-flex justify-content-center mt-4">
             {{ $certificates->links('pagination::bootstrap-5') }}
@@ -398,7 +398,7 @@
   <!-- Hidden certificate preview for PDF generation - matches _completed.blade.php design -->
   <div id="certificate-pdf-preview" style="display:none !important; background:#fff; width:10.5in; height:7.5in; margin:0 auto; border:8px solid #2d3a5a; border-radius:6px; position:relative; padding:25px; page-break-inside:avoid; box-sizing:border-box; flex-direction:column; justify-content:space-between; overflow:hidden;">
     <div style="position:absolute; top:15px; left:15px; right:15px; bottom:15px; border:2px solid #87ceeb; border-radius:3px; pointer-events:none;"></div>
-    
+
     <div style="text-align:center; margin-bottom:15px; position:relative; z-index:2;">
       <div style="position:relative; display:inline-block; margin-bottom:10px;">
         <div style="width:60px; height:60px; margin:0 auto; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg, #2d3a5a, #4a5568); border:3px solid #ffffff; box-shadow:0 4px 8px rgba(45, 58, 90, 0.3);">
@@ -409,19 +409,19 @@
       <div style="font-size:16px; color:#2d3a5a; letter-spacing:1px; margin-bottom:8px; font-weight:300;">OF ACHIEVEMENT</div>
       <div style="font-size:12px; color:#2d3a5a; font-style:italic; margin-bottom:15px;">Excellence in Travel & Tourism Training</div>
     </div>
-    
+
     <div style="text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; margin:15px 0; position:relative; z-index:2;">
       <div style="font-size:14px; color:#2d3a5a; margin-bottom:10px; line-height:1.2; font-weight:400;">This is to proudly certify that</div>
-      
+
       <div id="pdf-certificate-name" style="font-size:48px; font-family:cursive; font-weight:bold; color:#2d3a5a; margin:10px 0; letter-spacing:1px;"></div>
-      
+
       <div style="font-size:14px; color:#2d3a5a; margin-bottom:10px; line-height:1.2; font-weight:400;">has successfully completed the comprehensive training program and demonstrated exceptional proficiency in</div>
-      
+
       <div id="pdf-certificate-course" style="background:#2196f3; color:white; padding:8px 25px; border-radius:5px; font-size:28px; font-weight:bold; margin:12px auto; display:inline-block;"></div>
-      
+
       <div style="font-size:12px; color:#2d3a5a; margin:12px 0; font-weight:500;">Completed with distinction on <strong id="pdf-certificate-date"></strong></div>
     </div>
-    
+
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:10px; position:relative; z-index:2;">
       <div style="text-align:center; flex:1; position:relative;">
         <div style="width:100px; height:1px; background:#2d3a5a; margin:0 auto 5px;"></div>
@@ -434,7 +434,7 @@
         <div style="font-size:10px; color:#2d3a5a; font-style:italic;">HR Manager</div>
       </div>
     </div>
-    
+
     <div style="text-align:center; margin-top:15px; font-size:10px; color:#555;">
       Certificate ID: <span id="pdf-certificate-id"></span> &nbsp; | &nbsp; Issued: <span id="pdf-certificate-issued"></span>
     </div>
@@ -453,11 +453,11 @@
         position: relative;
         box-sizing: border-box;
       `;
-      
+
       div.innerHTML = `
         <!-- Inner light blue border -->
         <div style="position: absolute; top: 8px; left: 8px; right: 8px; bottom: 8px; border: 2px solid #87ceeb; background: white;"></div>
-        
+
         <!-- Logo Section -->
         <div style="position: absolute; top: 40px; left: 0; right: 0; text-align: center; z-index: 2;">
           <div style="width: 80px; height: 80px; background: #4285f4; margin: 0 auto; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: inline-flex; align-items: center; justify-content: center;">
@@ -466,27 +466,27 @@
             </div>
           </div>
         </div>
-        
+
         <!-- Title Section -->
         <div style="position: absolute; top: 140px; left: 0; right: 0; text-align: center; z-index: 2;">
           <h1 style="font-size: 48px; font-weight: bold; color: #2d3a5a; margin: 0 0 8px 0; letter-spacing: 3px; font-family: 'Times New Roman', serif;">CERTIFICATE</h1>
           <p style="font-size: 16px; color: #2d3a5a; margin: 0 0 5px 0; letter-spacing: 2px; font-weight: 400;">OF ACHIEVEMENT</p>
           <p style="font-size: 12px; color: #2d3a5a; font-style: italic; margin: 0;">Excellence in Travel & Tourism Training</p>
         </div>
-        
+
         <!-- Content Section -->
         <div style="position: absolute; top: 250px; left: 40px; right: 40px; text-align: center; z-index: 2;">
           <p style="font-size: 16px; color: #2d3a5a; margin: 0 0 20px 0;">This is to proudly certify that</p>
-          
+
           <h2 style="font-size: 42px; color: #2d3a5a; margin: 20px 0; font-family: 'Brush Script MT', cursive, serif; font-weight: bold; letter-spacing: 1px;">${certData.name}</h2>
-          
+
           <p style="font-size: 16px; color: #2d3a5a; margin: 0 0 20px 0; line-height: 1.4;">has successfully completed the comprehensive training program and demonstrated exceptional proficiency in</p>
-          
+
           <div style="background: #2196f3; color: white; padding: 12px 30px; border-radius: 8px; font-size: 24px; font-weight: bold; margin: 20px auto; display: inline-block; max-width: 500px;">${certData.course}</div>
-          
+
           <p style="font-size: 14px; color: #2d3a5a; margin: 20px 0 0 0;">Completed with distinction on <strong>${certData.date}</strong></p>
         </div>
-        
+
         <!-- Signature Section -->
         <div style="position: absolute; bottom: 80px; left: 60px; right: 60px; z-index: 2;">
           <table style="width: 100%; border-collapse: collapse;">
@@ -504,13 +504,13 @@
             </tr>
           </table>
         </div>
-        
+
         <!-- Footer -->
         <div style="position: absolute; bottom: 25px; left: 40px; right: 40px; text-align: center; font-size: 10px; color: #666; border-top: 1px solid #ddd; padding-top: 8px; z-index: 2;">
           Certificate ID: ${certData.id} &nbsp; | &nbsp; Issued: ${certData.issued}
         </div>
       `;
-      
+
       return div;
     }
 
@@ -529,7 +529,7 @@
         }
 
         const certificate = await response.json();
-        
+
         // Use actual certificate data
         const certData = {
           name: certificate.employee_name || 'Unknown Employee',
@@ -538,24 +538,24 @@
           id: certificate.certificate_number || 'Unknown ID',
           issued: certificate.issued_date || 'Unknown Date'
         };
-        
+
         // Update the hidden preview with actual data
         document.getElementById('pdf-certificate-name').innerText = certData.name;
         document.getElementById('pdf-certificate-course').innerText = certData.course;
         document.getElementById('pdf-certificate-date').innerText = certData.date;
         document.getElementById('pdf-certificate-id').innerText = certData.id;
         document.getElementById('pdf-certificate-issued').innerText = certData.issued;
-        
+
         var certDiv = document.getElementById('certificate-pdf-preview');
         certDiv.style.display = 'flex';
         certDiv.style.setProperty('display', 'flex', 'important');
-        
+
         var opt = {
           margin: 0.2,
           filename: `certificate_${certData.name.replace(/\s+/g, '_')}_${certData.id}.pdf`,
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { 
-            scale: 1.5, 
+          html2canvas: {
+            scale: 1.5,
             useCORS: true,
             width: 1056, // 10.5 inches * 96 DPI
             height: 720,  // 7.5 inches * 96 DPI
@@ -565,7 +565,7 @@
           jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape' },
           pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
         };
-        
+
         // Generate PDF and force direct download (bypass IDM)
         html2pdf().set(opt).from(certDiv).toPdf().get('pdf').then(function(pdf) {
           // Create blob and force download
@@ -581,7 +581,7 @@
           window.URL.revokeObjectURL(url);
           certDiv.style.setProperty('display', 'none', 'important');
         });
-        
+
       } catch (error) {
         console.error('PDF download error:', error);
         alert('Unable to download certificate PDF. Please try again.');
@@ -598,12 +598,12 @@
         id: 'CERT-202509-001-8261',
         issued: 'Sep 26, 2025'
       };
-      
+
       // Build the HTML for the preview using the properly contained layout
       var previewHtml = `
       <div style=\"background:#fff; width:10.5in; height:7.5in; margin:0 auto; border:8px solid #2d3a5a; border-radius:6px; position:relative; padding:25px; page-break-inside:avoid; box-sizing:border-box; display:flex; flex-direction:column; justify-content:space-between;\">
         <div style=\"position:absolute; top:15px; left:15px; right:15px; bottom:15px; border:2px solid #87ceeb; border-radius:3px; pointer-events:none;\"></div>
-        
+
         <div style=\"text-align:center; margin-bottom:15px;\">
           <div style=\"width:50px; height:50px; margin:0 auto 10px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center;\">
             <img src=\"/assets/images/jetlouge_logo.png\" alt=\"Jetlouge Logo\" style=\"width:100%; height:100%; object-fit:cover;\" onerror=\"this.parentElement.innerHTML='<div style=&quot;background:#2d3a5a;width:50px;height:50px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:18px;font-weight:bold;&quot;>JT</div>'\">
@@ -611,37 +611,37 @@
           <div style=\"font-size:48px; font-weight:bold; color:#2d3a5a; margin-bottom:5px; letter-spacing:2px;\">CERTIFICATE</div>
           <div style=\"font-size:12px; color:#888; letter-spacing:1px; margin-bottom:15px;\">OF ACHIEVEMENT</div>
         </div>
-        
+
         <div style=\"text-align:center; flex:1; display:flex; flex-direction:column; justify-content:center; margin:15px 0;\">
           <div style=\"font-size:14px; color:#2d3a5a; margin-bottom:10px; line-height:1.2;\">This is to proudly certify that</div>
-          
+
           <div style=\"font-size:48px; font-family:cursive; font-weight:bold; color:#2d3a5a; margin:10px 0;\">${certData.name}</div>
-          
+
           <div style=\"font-size:14px; color:#2d3a5a; margin-bottom:10px; line-height:1.2;\">has successfully completed the comprehensive training program and demonstrated exceptional proficiency in</div>
-          
+
           <div style=\"background:#2196f3; color:white; padding:8px 25px; border-radius:5px; font-size:28px; font-weight:bold; margin:12px auto; display:inline-block;\">${certData.course}</div>
-          
+
           <div style=\"font-size:12px; color:#2d3a5a; margin:12px 0;\">Completed with distinction on <strong>${certData.date}</strong></div>
         </div>
-        
+
         <div style=\"display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:10px;\">
           <div style=\"text-align:center; flex:1;\">
             <div style=\"font-weight:bold; font-size:12px; color:#2d3a5a; margin-bottom:2px;\">John Mark Custodio</div>
             <div style=\"font-size:10px; color:#888;\">Training Director</div>
           </div>
-          
+
           <div style=\"text-align:center; flex:1;\">
             <div style=\"font-weight:bold; font-size:12px; color:#2d3a5a; margin-bottom:2px;\">Jetlouge Admin</div>
             <div style=\"font-size:10px; color:#888;\">HR Manager</div>
           </div>
         </div>
-        
+
         <div style=\"text-align:center; margin-top:15px; font-size:10px; color:#555;\">
           Certificate ID: ${certData.id} &nbsp; | &nbsp; Issued: ${certData.issued}
         </div>
       </div>
       `;
-      
+
       Swal.fire({
         title: 'Certificate Template Preview',
         html: previewHtml,
@@ -1227,13 +1227,13 @@
             message: data?.message,
             fullResponse: data
           });
-          
+
           // Check if it's a database error related to certificate_expiry
           let displayMessage = errorMsg;
           if (errorMsg.includes('certificate_expiry') && errorMsg.includes('default value')) {
             displayMessage = 'Database configuration issue detected. The certificate_expiry field needs a default value. Please contact your administrator to fix the database table structure.';
           }
-          
+
           Swal.fire({
             icon: 'error',
             title: 'Generation Failed',
@@ -1410,18 +1410,18 @@
     document.addEventListener('DOMContentLoaded', function() {
       // Add event listeners to all collapse buttons
       const collapseButtons = document.querySelectorAll('[data-bs-toggle="collapse"]');
-      
+
       collapseButtons.forEach(button => {
         const targetId = button.getAttribute('data-bs-target');
         const targetElement = document.querySelector(targetId);
-        
+
         if (targetElement) {
           targetElement.addEventListener('show.bs.collapse', function() {
             button.innerHTML = '<i class="bi bi-eye-slash me-1"></i>Hide Certificates';
             button.classList.remove('btn-outline-primary');
             button.classList.add('btn-outline-secondary');
           });
-          
+
           targetElement.addEventListener('hide.bs.collapse', function() {
             button.innerHTML = '<i class="bi bi-eye me-1"></i>View Certificates';
             button.classList.remove('btn-outline-secondary');

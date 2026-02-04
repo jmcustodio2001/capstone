@@ -19,22 +19,13 @@ class AdminDashboardController extends Controller
     {
         // Get dashboard statistics - fetch from API same as employee list
         $totalEmployees = 0;
-        try {
-            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
-            if ($response->successful()) {
-                $apiData = $response->json();
-                // Handle { success: true, data: [...] } structure
-                if (isset($apiData['data']) && is_array($apiData['data'])) {
-                    $totalEmployees = count($apiData['data']);
-                } elseif (is_array($apiData)) {
-                    $totalEmployees = count($apiData);
-                }
-            } else {
-                // Fallback to local database if API fails
-                $totalEmployees = Employee::count();
-            }
-        } catch (\Exception $e) {
-            // Fallback to local database if API call fails
+        $apiEmployees = $this->getEmployeesFromAPI();
+        $apiCourses = $this->getCoursesFromAPI();
+
+        if ($apiEmployees->isNotEmpty()) {
+            $totalEmployees = $apiEmployees->count();
+        } else {
+            // Fallback to local database if API fails
             $totalEmployees = Employee::count();
         }
 
@@ -117,7 +108,15 @@ class AdminDashboardController extends Controller
             }
         }
 
-        $recentTrainings = $uniqueTrainings->map(function($training) {
+        $recentTrainings = $uniqueTrainings->map(function($training) use ($apiEmployees) {
+            // Patch missing employee data from API
+            if (!$training->employee && $apiEmployees->isNotEmpty()) {
+                $apiEmp = $apiEmployees->firstWhere('employee_id', $training->employee_id);
+                if ($apiEmp) {
+                    $training->setRelation('employee', $apiEmp);
+                }
+            }
+
             // Get raw training_title from database to bypass accessor
             $rawTrainingTitle = $training->getAttributes()['training_title'] ?? null;
 
@@ -134,6 +133,16 @@ class AdminDashboardController extends Controller
                 if ($course && $course->course_title) {
                     $training->display_title = $course->course_title;
                     $training->update(['training_title' => $course->course_title]);
+                } elseif ($apiCourses->isNotEmpty()) {
+                    // Try to find course in API
+                    $apiCourse = $apiCourses->firstWhere('course_id', $training->course_id) ?? $apiCourses->firstWhere('id', $training->course_id);
+                    if ($apiCourse) {
+                        $title = $apiCourse['course_title'] ?? $apiCourse['title'] ?? 'Unknown Course';
+                        $training->display_title = $title;
+                        $training->update(['training_title' => $title]);
+                    } else {
+                        $training->display_title = 'Unknown Course';
+                    }
                 } else {
                     $training->display_title = 'Unknown Course';
                 }
@@ -180,10 +189,30 @@ class AdminDashboardController extends Controller
 
             // Add dashboard completions
             foreach ($dashboardCompleted as $training) {
+                // Patch missing employee data from API
+                if (!$training->employee && $apiEmployees->isNotEmpty()) {
+                    $apiEmp = $apiEmployees->firstWhere('employee_id', $training->employee_id);
+                    if ($apiEmp) {
+                        $training->setRelation('employee', $apiEmp);
+                    }
+                }
+
+                // Patch missing course data from API
+                $trainingTitle = $training->training_title;
+                if (!$trainingTitle && $training->course) {
+                    $trainingTitle = $training->course->course_title;
+                }
+                if (!$trainingTitle && $apiCourses->isNotEmpty() && $training->course_id) {
+                     $apiCourse = $apiCourses->firstWhere('course_id', $training->course_id) ?? $apiCourses->firstWhere('id', $training->course_id);
+                     if ($apiCourse) {
+                         $trainingTitle = $apiCourse['course_title'] ?? $apiCourse['title'] ?? null;
+                     }
+                }
+
                 $allCompletions->push([
                     'id' => $training->id,
                     'employee' => $training->employee,
-                    'training_title' => $training->training_title ?? ($training->course ? $training->course->course_title : 'Training Course'),
+                    'training_title' => $trainingTitle ?? 'Training Course',
                     'completion_date' => $training->updated_at,
                     'source' => 'Admin Assigned',
                     'status' => 'Verified',
@@ -193,6 +222,14 @@ class AdminDashboardController extends Controller
 
             // Add employee completions
             foreach ($employeeCompleted as $training) {
+                // Patch missing employee data from API
+                if (!$training->employee && $apiEmployees->isNotEmpty()) {
+                    $apiEmp = $apiEmployees->firstWhere('employee_id', $training->employee_id);
+                    if ($apiEmp) {
+                        $training->setRelation('employee', $apiEmp);
+                    }
+                }
+
                 $allCompletions->push([
                     'id' => $training->completed_id,
                     'employee' => $training->employee,
@@ -319,6 +356,65 @@ class AdminDashboardController extends Controller
             'recentCompetencyUpdates',
             'topSkills'
         ));
+    }
+
+    private function getEmployeesFromAPI()
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                return collect($apiEmployees)->map(function($emp) {
+                    // Normalize profile picture URL
+                    $profilePic = $emp['profile_picture'] ?? null;
+                    if ($profilePic && !\Illuminate\Support\Str::startsWith($profilePic, 'http')) {
+                         $profilePic = 'http://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                    }
+
+                    // Create a pseudo-model object that behaves like Employee model
+                    $empObj = new Employee();
+                    $empObj->forceFill([
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'profile_picture' => $profilePic,
+                        // Add other fields if necessary
+                    ]);
+
+                    return $empObj;
+                });
+            }
+        } catch (\Exception $e) {
+            Log::error('Error fetching API employees: ' . $e->getMessage());
+        }
+        return collect();
+    }
+
+    private function getCoursesFromAPI()
+    {
+        try {
+            // Try fetching from training-programs endpoint first
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/training-programs');
+
+            // If failed or empty, could try other endpoints if known, but for now just return empty
+            $apiCourses = $response->successful() ? $response->json() : [];
+
+            if (isset($apiCourses['data']) && is_array($apiCourses['data'])) {
+                $apiCourses = $apiCourses['data'];
+            }
+
+            if (is_array($apiCourses) && !empty($apiCourses)) {
+                return collect($apiCourses);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error fetching API courses: ' . $e->getMessage());
+        }
+        return collect();
     }
 
     public function debugTrainingData()

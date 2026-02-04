@@ -67,14 +67,18 @@ class EmployeeSkillsSeeder extends Seeder
                         continue;
                     }
 
-                    // Find or create competency in library
-                    $competency = CompetencyLibrary::firstOrCreate(
-                        ['competency_name' => $skillName],
-                        [
-                            'description' => 'Auto-created from employee skills via API',
-                            'category' => 'Technical Skills'
-                        ]
-                    );
+                    // Find competency in library (strict match to ensure count stays at 30)
+                    $competency = CompetencyLibrary::where('competency_name', $skillName)->first();
+
+                    // Try fuzzy match if not found
+                    if (!$competency) {
+                        $competency = CompetencyLibrary::where('competency_name', 'LIKE', '%' . $skillName . '%')->first();
+                    }
+
+                    // If still not found, skip to maintain the strict 30 count
+                    if (!$competency) {
+                        continue;
+                    }
 
                     // Create or update employee competency profile
                     EmployeeCompetencyProfile::updateOrCreate(

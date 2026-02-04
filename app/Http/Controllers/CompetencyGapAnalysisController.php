@@ -20,7 +20,15 @@ class CompetencyGapAnalysisController extends Controller
     // AJAX: Recalculate readiness scores and return updated gap data
     public function refreshScore(Request $request)
     {
-        $gaps = \App\Models\CompetencyGap::with(['employee', 'competency'])->get();
+        $gaps = \App\Models\CompetencyGap::with(['employee', 'competency'])
+            ->whereHas('competency', function($query) {
+                $query->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
+                    ->where('category', '!=', 'Destination Knowledge')
+                    ->where('competency_name', 'NOT LIKE', 'Destination Knowledge%')
+                    ->where('description', 'NOT LIKE', 'Auto-created from destination knowledge%');
+            })
+            ->get();
         $gapData = $gaps->map(function($gap) {
             return [
                 'id' => $gap->id,
@@ -72,7 +80,10 @@ class CompetencyGapAnalysisController extends Controller
         $gaps = CompetencyGap::with(['employee', 'competency'])
             ->whereHas('competency', function($query) {
                 $query->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-                    ->where('competency_name', 'NOT LIKE', '%ITALY%');
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
+                    ->where('category', '!=', 'Destination Knowledge')
+                    ->where('competency_name', 'NOT LIKE', 'Destination Knowledge%')
+                    ->where('description', 'NOT LIKE', 'Auto-created from destination knowledge%');
             })
             ->accessible()
             ->orderBy('employee_id')
@@ -82,7 +93,10 @@ class CompetencyGapAnalysisController extends Controller
         $expiredGaps = CompetencyGap::with(['employee', 'competency'])
             ->whereHas('competency', function($query) {
                 $query->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-                    ->where('competency_name', 'NOT LIKE', '%ITALY%');
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
+                    ->where('category', '!=', 'Destination Knowledge')
+                    ->where('competency_name', 'NOT LIKE', 'Destination Knowledge%')
+                    ->where('description', 'NOT LIKE', 'Auto-created from destination knowledge%');
             })
             ->expired()
             ->get();
@@ -153,7 +167,9 @@ class CompetencyGapAnalysisController extends Controller
             ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
             ->where('competency_name', 'NOT LIKE', '%ITALY%')
             ->where('category', '!=', 'Destination Knowledge')
+            ->where('competency_name', 'NOT LIKE', 'Destination Knowledge%')
             ->where('description', '!=', 'Auto-imported skill from employee profile')
+            ->where('description', 'NOT LIKE', 'Auto-created from destination knowledge%')
             ->paginate(10, ['*'], 'competencies_page');
 
         // Training assignments check
@@ -391,7 +407,15 @@ class CompetencyGapAnalysisController extends Controller
     // Export gaps to CSV
     public function export()
     {
-        $gaps = CompetencyGap::with(['employee', 'competency'])->get();
+        $gaps = CompetencyGap::with(['employee', 'competency'])
+            ->whereHas('competency', function($query) {
+                $query->where('competency_name', 'NOT LIKE', '%BESTLINK%')
+                    ->where('competency_name', 'NOT LIKE', '%ITALY%')
+                    ->where('category', '!=', 'Destination Knowledge')
+                    ->where('competency_name', 'NOT LIKE', 'Destination Knowledge%')
+                    ->where('description', 'NOT LIKE', 'Auto-created from destination knowledge%');
+            })
+            ->get();
 
         $filename = 'competency_gaps_' . date('Ymd_His') . '.csv';
         $headers = [

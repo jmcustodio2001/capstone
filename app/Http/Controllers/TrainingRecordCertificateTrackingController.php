@@ -44,15 +44,42 @@ class TrainingRecordCertificateTrackingController extends Controller
                 }
             }
 
-            // Auto-sync certificates for all employees to ensure the table is up-to-date
-            $employees = collect();
+            // Auto-sync certificates for all employees (Local + API) to ensure the table is up-to-date
+            $allEmployeeIds = [];
+            $employees = collect(); 
+
             try {
-                $employees = \App\Models\Employee::all();
-                foreach ($employees as $employee) {
-                    $this->syncEmployeeCompletedTrainings($employee->employee_id);
+                // 1. Get local employees
+                $localEmployees = \App\Models\Employee::all();
+                $employees = $localEmployees; // Start with local
+                
+                foreach ($localEmployees as $emp) {
+                    $allEmployeeIds[] = $emp->employee_id;
+                }
+
+                // 2. Get API employees (using the existing variable from line 35)
+                if ($apiEmployees && $apiEmployees->isNotEmpty()) {
+                    foreach ($apiEmployees as $apiEmp) {
+                        $empId = $apiEmp->employee_id;
+                        
+                        // Add to sync list if new
+                        if ($empId && !in_array($empId, $allEmployeeIds)) {
+                            $allEmployeeIds[] = $empId;
+                            // Add to employees collection for view if not exists
+                            $employees->push($apiEmp);
+                        }
+                    }
+                }
+
+                // 3. Sync for all unique IDs
+                foreach (array_unique($allEmployeeIds) as $empId) {
+                    $this->syncEmployeeCompletedTrainings($empId);
                 }
             } catch (\Exception $e) {
                 Log::error('Error syncing/fetching employees: ' . $e->getMessage());
+                if ($employees->isEmpty()) {
+                     $employees = \App\Models\Employee::all();
+                }
             }
 
             // Safely get courses with error handling
@@ -310,11 +337,25 @@ class TrainingRecordCertificateTrackingController extends Controller
                 return redirect()->back()->with('error', 'Failed to verify table structure.');
             }
 
+            // Get local employees
             $employees = \App\Models\Employee::all();
+            $processedIds = $employees->pluck('employee_id')->toArray();
+            
+            // Get external employees from API
+            $apiEmployees = $this->getEmployeesFromAPI();
+            
+            // Merge external employees (filtering out those already in local DB)
+            foreach ($apiEmployees as $apiEmp) {
+                if (!in_array($apiEmp->employee_id, $processedIds)) {
+                    $employees->push($apiEmp);
+                    $processedIds[] = $apiEmp->employee_id;
+                }
+            }
+
             $totalCreated = 0;
             $totalEmployees = $employees->count();
 
-            Log::info("Starting comprehensive certificate sync for {$totalEmployees} employees");
+            Log::info("Starting comprehensive certificate sync for {$totalEmployees} employees (Local + External)");
 
             foreach ($employees as $employee) {
                 try {
@@ -357,7 +398,9 @@ class TrainingRecordCertificateTrackingController extends Controller
         // Get completed destination knowledge trainings
         $destinationTrainings = \App\Models\DestinationKnowledgeTraining::where('employee_id', $employeeId)
               ->where(function($q) {
-                  $q->where('progress', '>=', 100)->orWhere('status', 'completed');
+                  $q->where('progress', '>=', 100)
+                    ->orWhere('status', 'completed')
+                    ->orWhere('status', 'Completed'); // Added Title Case check
               })
               ->get();
 
@@ -505,7 +548,7 @@ class TrainingRecordCertificateTrackingController extends Controller
             try {
                 $course = \App\Models\CourseManagement::create([
                     'course_title' => $title,
-                    'course_description' => "Auto-created from {$source} training",
+                    'description' => "Auto-created from {$source} training",
                     'status' => 'Active',
                     'duration_hours' => 8,
                     'delivery_mode' => 'Mixed',

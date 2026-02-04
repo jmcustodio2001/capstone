@@ -188,9 +188,32 @@
 
     .card-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
       gap: 1.5rem;
       margin-top: 1rem;
+    }
+
+    .card-header-custom {
+      background-color: #e7f1ff;
+      border-bottom: 3px solid #ffc107;
+      padding: 1rem 1.25rem;
+      border-top-left-radius: 15px !important;
+      border-top-right-radius: 15px !important;
+    }
+
+    .training-card {
+      border: none;
+      border-radius: 15px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+      transition: all 0.3s ease;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .btn-view-all {
+      border-radius: 20px;
+      font-weight: 600;
+      text-transform: capitalize;
     }
 
     @media (max-width: 767px) {
@@ -281,48 +304,47 @@
   </div>
       <div class="card-body">
     <!-- Filter Section -->
-    <div class="row g-3 mb-4">
+    <form action="{{ route('admin.employee_trainings_dashboard.index') }}" method="GET" class="row g-3 mb-4">
       <div class="col-12 col-md-6 col-lg-3">
         <label class="form-label small text-muted d-block d-md-none">Employee</label>
-        <select class="form-select form-select-sm" id="filterEmployee">
+        <select class="form-select form-select-sm" name="employee_id" id="filterEmployee">
           <option value="">All Employees</option>
           @foreach($employees as $employee)
-            <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
+            <option value="{{ $employee->employee_id }}" {{ request('employee_id') == $employee->employee_id ? 'selected' : '' }}>
+                {{ $employee->first_name }} {{ $employee->last_name }}
+            </option>
           @endforeach
         </select>
       </div>
       <div class="col-12 col-md-6 col-lg-3">
         <label class="form-label small text-muted d-block d-md-none">Course</label>
-        <select class="form-select form-select-sm" id="filterCourse">
+        <select class="form-select form-select-sm" name="course_id" id="filterCourse">
           <option value="">All Courses</option>
           @foreach($courses as $course)
-              <option value="{{ $course->course_id }}">{{ $course->course_title }}</option>
+              <option value="{{ $course->course_id }}" {{ request('course_id') == $course->course_id ? 'selected' : '' }}>
+                  {{ $course->course_title }}
+              </option>
           @endforeach
         </select>
       </div>
       <div class="col-12 col-md-6 col-lg-3">
         <label class="form-label small text-muted d-block d-md-none">Status</label>
-        <select class="form-select form-select-sm" id="filterStatus">
+        <select class="form-select form-select-sm" name="status" id="filterStatus">
           <option value="">All Statuses</option>
-          <option value="completed">Completed</option>
-          <option value="in-progress">In Progress</option>
-          <option value="not-started">Not Started</option>
+          <option value="completed" {{ request('status') == 'completed' ? 'selected' : '' }}>Completed</option>
+          <option value="in-progress" {{ request('status') == 'in-progress' ? 'selected' : '' }}>In Progress</option>
+          <option value="not-started" {{ request('status') == 'not-started' ? 'selected' : '' }}>Not Started</option>
         </select>
       </div>
       <div class="col-12 col-md-6 col-lg-3">
-        <button class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center" id="applyFilters">
+        <button type="submit" class="btn btn-primary btn-sm w-100 d-flex align-items-center justify-content-center" id="applyFilters">
           <i class="bi bi-funnel me-1"></i> Apply Filters
         </button>
       </div>
-    </div>
+    </form>
 
     <!-- Training Cards Grid -->
     <div class="card-grid">
-      @php
-        // Group records by employee
-        $groupedRecords = $trainingRecords->groupBy('employee_id');
-      @endphp
-
       @forelse($groupedRecords as $employeeId => $employeeRecords)
         @php
           // Get employee info from first record
@@ -450,103 +472,112 @@
           $notStartedTrainings = $employeeRecords->count() - $completedTrainings - $inProgressTrainings - $expiredTrainings;
         @endphp
 
-        <div class="card training-card">
+        <div class="card training-card h-100">
           <!-- Card Header with Employee Info -->
           <div class="card-header-custom">
-            <div class="d-flex align-items-center justify-content-between">
-              <div class="d-flex align-items-center">
-                <img src="{{ $profilePicUrl }}"
-                     alt="{{ $firstName }} {{ $lastName }}"
-                     class="employee-avatar me-3">
-                <div>
-                  <h6 class="mb-1 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
-                  <small class="text-muted">Employee ID: {{ $employee->employee_id ?? 'N/A' }} • {{ $employeeRecords->count() }} Training(s)</small>
+            <div class="d-flex align-items-center">
+              <img src="{{ $profilePicUrl }}"
+                   alt="{{ $firstName }} {{ $lastName }}"
+                   class="employee-avatar me-3"
+                   style="border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+              <div class="flex-grow-1">
+                <h6 class="mb-1 fw-bold text-dark">{{ $firstName }} {{ $lastName }}</h6>
+                <div class="d-flex align-items-center text-muted small">
+                  <i class="bi bi-journal-bookmark-fill me-1"></i>
+                  <span>{{ $employeeRecords->count() }} Competencies</span>
                 </div>
-              </div>
-              <div class="readiness-score">
-                {{ $readiness }}{{ is_numeric($readiness) ? '%' : '' }}
               </div>
             </div>
           </div>
 
-          <!-- Card Body with Training Summary -->
-          <div class="card-body">
-            <!-- Training Summary -->
-            <div class="mb-3">
-              <div class="d-flex align-items-center mb-2">
-                <i class="bi bi-collection text-primary fs-5 me-2"></i>
-                <h6 class="mb-0 fw-bold text-primary">Training Summary</h6>
-              </div>
-              <div class="row text-center">
-                <div class="col-3">
-                  <div class="text-success fw-bold fs-5">{{ $completedTrainings }}</div>
-                  <small class="text-muted">Completed</small>
+          <!-- Card Body -->
+          <div class="card-body p-3">
+            <!-- View All Button (Toggle) -->
+            <button class="btn btn-outline-primary w-100 btn-view-all mb-0" 
+                    type="button" 
+                    data-bs-toggle="collapse" 
+                    data-bs-target="#details-{{ $employeeId }}" 
+                    aria-expanded="false" 
+                    aria-controls="details-{{ $employeeId }}">
+              <i class="bi bi-eye me-1"></i> View All {{ $employeeRecords->count() }} Competencies
+            </button>
+
+            <!-- Collapsible Details -->
+            <div class="collapse mt-3" id="details-{{ $employeeId }}">
+              <div class="card card-body bg-light border-0 p-3">
+                <!-- Training Summary -->
+                <div class="mb-3">
+                  <div class="d-flex align-items-center mb-2">
+                    <i class="bi bi-bar-chart-fill text-primary me-2"></i>
+                    <h6 class="mb-0 fw-bold text-primary small">Summary</h6>
+                  </div>
+                  <div class="row text-center g-2">
+                    <div class="col-3">
+                      <div class="bg-white p-2 rounded shadow-sm">
+                        <div class="text-success fw-bold">{{ $completedTrainings }}</div>
+                        <small class="text-muted" style="font-size: 0.7rem;">Done</small>
+                      </div>
+                    </div>
+                    <div class="col-3">
+                      <div class="bg-white p-2 rounded shadow-sm">
+                        <div class="text-primary fw-bold">{{ $inProgressTrainings }}</div>
+                        <small class="text-muted" style="font-size: 0.7rem;">Active</small>
+                      </div>
+                    </div>
+                    <div class="col-3">
+                      <div class="bg-white p-2 rounded shadow-sm">
+                        <div class="text-danger fw-bold">{{ $expiredTrainings }}</div>
+                        <small class="text-muted" style="font-size: 0.7rem;">Expired</small>
+                      </div>
+                    </div>
+                    <div class="col-3">
+                      <div class="bg-white p-2 rounded shadow-sm">
+                        <div class="text-secondary fw-bold">{{ $notStartedTrainings }}</div>
+                        <small class="text-muted" style="font-size: 0.7rem;">Pending</small>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div class="col-3">
-                  <div class="text-primary fw-bold fs-5">{{ $inProgressTrainings }}</div>
-                  <small class="text-muted">In Progress</small>
+
+                <!-- Overall Progress -->
+                <div>
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="fw-semibold small">Average Progress</span>
+                    <span class="fw-bold text-primary small">{{ $averageProgress }}%</span>
+                  </div>
+                  @php
+                    // Dynamic color based on progress percentage
+                    if ($averageProgress == 0) {
+                      $progressColor = '#6c757d'; // Gray
+                    } elseif ($averageProgress < 40) {
+                      $progressColor = 'linear-gradient(90deg, #dc3545, #fd7e14)'; // Red-Orange
+                    } elseif ($averageProgress < 70) {
+                      $progressColor = 'linear-gradient(90deg, #fd7e14, #ffc107)'; // Orange-Yellow
+                    } elseif ($averageProgress < 90) {
+                      $progressColor = 'linear-gradient(90deg, #ffc107, #20c997)'; // Yellow-Teal
+                    } else {
+                      $progressColor = 'linear-gradient(90deg, #20c997, #28a745)'; // Teal-Green
+                    }
+                  @endphp
+                  <div class="progress" style="height: 8px; background-color: #e9ecef; border-radius: 4px;">
+                    <div class="progress-bar"
+                         role="progressbar"
+                         style="width: {{ $averageProgress }}%; background: {{ $progressColor }} !important; border-radius: 4px;"
+                         aria-valuenow="{{ $averageProgress }}"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                    </div>
+                  </div>
                 </div>
-                <div class="col-3">
-                  <div class="text-danger fw-bold fs-5">{{ $expiredTrainings }}</div>
-                  <small class="text-muted">Expired</small>
-                </div>
-                <div class="col-3">
-                  <div class="text-secondary fw-bold fs-5">{{ $notStartedTrainings }}</div>
-                  <small class="text-muted">Not Started</small>
+                
+                <!-- Full Details Action -->
+                <div class="mt-3 text-center">
+                   <button class="btn btn-sm btn-primary w-100 rounded-pill" onclick="viewAllEmployeeTrainings('{{ $employeeId }}')">
+                     Open Detailed View <i class="bi bi-arrow-right ms-1"></i>
+                   </button>
                 </div>
               </div>
             </div>
-
-            <!-- Overall Progress -->
-            <div class="mb-4">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <span class="fw-semibold">Average Progress</span>
-                <span class="fw-bold text-primary">{{ $averageProgress }}%</span>
-              </div>
-              @php
-                // Dynamic color based on progress percentage
-                if ($averageProgress == 0) {
-                  $progressColor = '#6c757d'; // Gray for 0%
-                } elseif ($averageProgress < 40) {
-                  $progressColor = 'linear-gradient(90deg, #dc3545, #fd7e14)'; // Red to Orange for low progress
-                } elseif ($averageProgress < 70) {
-                  $progressColor = 'linear-gradient(90deg, #fd7e14, #ffc107)'; // Orange to Yellow for medium progress
-                } elseif ($averageProgress < 90) {
-                  $progressColor = 'linear-gradient(90deg, #ffc107, #20c997)'; // Yellow to Teal for good progress
-                } else {
-                  $progressColor = 'linear-gradient(90deg, #20c997, #28a745)'; // Teal to Green for excellent progress
-                }
-              @endphp
-              <div class="progress mb-2" style="height: 12px; background-color: #e9ecef; border-radius: 6px;">
-                <div class="progress-bar"
-                     role="progressbar"
-                     style="width: {{ $averageProgress }}%; background: {{ $progressColor }} !important; border-radius: 6px;"
-                     aria-valuenow="{{ $averageProgress }}"
-                     aria-valuemin="0"
-                     aria-valuemax="100">
-                </div>
-              </div>
-
-              <div class="mt-2">
-                @if($expiredTrainings > 0)
-                  <span class="badge bg-danger bg-opacity-10 text-danger fs-6 px-3 py-2">Has Expired Trainings</span>
-                @elseif($averageProgress >= 100)
-                  <span class="badge bg-success bg-opacity-10 text-success fs-6 px-3 py-2">All Completed</span>
-                @elseif($averageProgress >= 75)
-                  <span class="badge bg-info bg-opacity-10 text-info fs-6 px-3 py-2">Nearly Complete</span>
-                @elseif($averageProgress > 0)
-                  <span class="badge bg-primary bg-opacity-10 text-primary fs-6 px-3 py-2">In Progress</span>
-                @else
-                  <span class="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-3 py-2">Not Started</span>
-                @endif
-              </div>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="action-buttons">
-              <button class="btn btn-sm btn-outline-primary w-100" onclick="viewAllEmployeeTrainings('{{ $employeeId }}')">
-                <i class="bi bi-eye me-1"></i> View All Trainings ({{ $employeeRecords->count() }})
-              </button>
           </div>
         </div>
       @empty
@@ -562,13 +593,13 @@
       @endforelse
     </div>
         <!-- Pagination -->
-        @if(method_exists($trainingRecords, 'hasPages') && $trainingRecords->hasPages())
+        @if($groupedRecords->hasPages())
         <div class="d-flex justify-content-between align-items-center mt-3">
           <div class="text-muted small">
-            Showing <span class="fw-semibold">{{ $trainingRecords->firstItem() }}</span> to <span class="fw-semibold">{{ $trainingRecords->lastItem() }}</span> of <span class="fw-semibold">{{ $trainingRecords->total() }}</span> entries
+            Showing <span class="fw-semibold">{{ $groupedRecords->firstItem() }}</span> to <span class="fw-semibold">{{ $groupedRecords->lastItem() }}</span> of <span class="fw-semibold">{{ $groupedRecords->total() }}</span> entries
           </div>
           <nav>
-            {{ $trainingRecords->links() }}
+            {{ $groupedRecords->links() }}
           </nav>
         </div>
         @endif
@@ -623,28 +654,8 @@
       }, 100);
     });
 
-    // Filter functionality with null checks
-    const applyFiltersBtn = document.getElementById('applyFilters');
-    if (applyFiltersBtn) {
-      applyFiltersBtn.addEventListener('click', function() {
-        const employeeFilterEl = document.getElementById('filterEmployee');
-        const courseFilterEl = document.getElementById('filterCourse');
-        const statusFilterEl = document.getElementById('filterStatus');
-
-        const employeeFilter = employeeFilterEl ? employeeFilterEl.value : '';
-        const courseFilter = courseFilterEl ? courseFilterEl.value : '';
-        const statusFilter = statusFilterEl ? statusFilterEl.value : '';
-
-        Swal.fire({
-          title: 'Filters Applied',
-          html: `<strong>Employee:</strong> ${employeeFilter || 'All'}<br>
-                 <strong>Course:</strong> ${courseFilter || 'All'}<br>
-                 <strong>Status:</strong> ${statusFilter || 'All'}`,
-          icon: 'info',
-          confirmButtonText: 'OK'
-        });
-      });
-    }
+    // Filter functionality handled via form submission
+    // Removed client-side SweetAlert handling
   });
 
   // Password verification function

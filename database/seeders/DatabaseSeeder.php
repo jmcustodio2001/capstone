@@ -26,8 +26,8 @@ class DatabaseSeeder extends Seeder
             DestinationMasterSeeder::class,
         ]);
 
-        $this->call(CompetencyGapSeeder::class);
-        $this->call(CompetencyGapDisplaySeeder::class);
+        // $this->call(CompetencyGapSeeder::class);
+        // $this->call(CompetencyGapDisplaySeeder::class);
         $this->call(ActivityLogSeeder::class);
         $this->call(DashboardDataSeeder::class);
         

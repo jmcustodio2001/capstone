@@ -27,6 +27,52 @@ class CertificateGenerationController extends Controller
     }
 
     /**
+     * Helper to get employee from local DB or API (for external employees)
+     */
+    private function getEmployeeIncludingExternal($employeeId)
+    {
+        // 1. Try local database first
+        $employee = \App\Models\Employee::where('employee_id', $employeeId)->first();
+        if ($employee) {
+            return $employee;
+        }
+
+        // 2. Try HR4 API for external employees
+        try {
+            $response = \Illuminate\Support\Facades\Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            if ($response->successful()) {
+                $data = $response->json();
+                $apiEmployees = $data['data'] ?? $data; // Handle wrapped or direct array
+
+                if (is_array($apiEmployees)) {
+                    foreach ($apiEmployees as $empData) {
+                        $apiId = $empData['employee_id'] ?? $empData['id'] ?? $empData['external_employee_id'] ?? null;
+                        
+                        // Check if ID matches (loose comparison for string/int differences)
+                        if ($apiId == $employeeId) {
+                            // Create a temporary Employee object (not saved to DB)
+                            $empObj = new \App\Models\Employee();
+                            $empObj->forceFill([
+                                'employee_id' => $apiId,
+                                'first_name' => $empData['first_name'] ?? 'Unknown',
+                                'last_name' => $empData['last_name'] ?? 'Employee',
+                                'email' => $empData['email'] ?? null,
+                                'position' => $empData['position'] ?? null,
+                                'department' => $empData['department'] ?? null,
+                            ]);
+                            return $empObj;
+                        }
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning('Failed to fetch external employee from API', ['employee_id' => $employeeId, 'error' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
+    /**
      * Automatically generate certificate when training is completed
      */
     public function generateCertificateOnCompletion($employeeId, $courseId, $completionDate = null)
@@ -39,7 +85,7 @@ class CertificateGenerationController extends Controller
             ]);
 
             // Get employee and course information
-            $employee = \App\Models\Employee::where('employee_id', $employeeId)->first();
+            $employee = $this->getEmployeeIncludingExternal($employeeId);
             $course = \App\Models\CourseManagement::where('course_id', $courseId)->first();
 
             if (!$employee || !$course) {
@@ -303,7 +349,7 @@ class CertificateGenerationController extends Controller
             }
 
             // Check if employee exists
-            $employee = \App\Models\Employee::where('employee_id', $request->employee_id)->first();
+            $employee = $this->getEmployeeIncludingExternal($request->employee_id);
             if (!$employee) {
                 Log::warning('Employee not found', ['employee_id' => $request->employee_id]);
                 return response()->json([
@@ -492,9 +538,9 @@ class CertificateGenerationController extends Controller
                     $employeeName = trim($firstName . ' ' . $lastName);
                 }
             } else {
-                // Try to get employee by ID if relationship is missing
+                // Try to get employee by ID including external employees
                 try {
-                    $employee = \App\Models\Employee::where('employee_id', $certificate->employee_id)->first();
+                    $employee = $this->getEmployeeIncludingExternal($certificate->employee_id);
                     if ($employee) {
                         $firstName = trim($employee->first_name ?? '');
                         $lastName = trim($employee->last_name ?? '');

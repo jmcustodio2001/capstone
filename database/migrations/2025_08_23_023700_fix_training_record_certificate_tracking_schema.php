@@ -14,20 +14,19 @@ return new class extends Migration
     {
         // Drop and recreate the table with correct schema
         Schema::dropIfExists('training_record_certificate_tracking');
-
+        
         Schema::create('training_record_certificate_tracking', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('employee_id', 20); // String to match Employee model (must be 20 chars to match foreign key)
+            $table->string('employee_id', 50); // String to match Employee model
             $table->unsignedBigInteger('course_id');
             $table->date('training_date');
             $table->string('certificate_number')->nullable();
             $table->date('certificate_expiry')->nullable();
             $table->string('certificate_url')->nullable();
-            $table->date('issue_date')->nullable(); // Added to match Model requirements
             $table->string('status')->default('Active');
             $table->text('remarks')->nullable();
             $table->timestamps();
-
+            
             // Add foreign key constraints
             $table->foreign('employee_id')->references('employee_id')->on('employees')->onDelete('cascade');
             $table->foreign('course_id')->references('course_id')->on('course_management')->onDelete('cascade');

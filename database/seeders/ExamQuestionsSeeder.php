@@ -20,7 +20,7 @@ class ExamQuestionsSeeder extends Seeder
         if (!$communicationCourse) {
             // Create Communication Skills course if it doesn't exist
             $communicationCourse = CourseManagement::create([
-                'course_id' => 'COMM001',
+                // 'course_id' => 'COMM001', // Removed to allow auto-increment
                 'course_title' => 'Communication Skills',
                 'description' => 'Essential communication skills for effective workplace interaction',
                 'category' => 'Soft Skills',

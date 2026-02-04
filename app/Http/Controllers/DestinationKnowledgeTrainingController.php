@@ -2138,6 +2138,11 @@ public function requestActivation(Request $request, $id)
      */
     private function createCompetencyGapFromDestination($destinationRecord, $competency)
     {
+        // DISABLED: Per user request, destination knowledge training should NOT auto-create competency gaps.
+        // This prevents pollution of the competency gap analysis view.
+        return;
+        
+        /* 
         try {
             // Check if competency gap already exists
             $existingGap = CompetencyGap::where('employee_id', $destinationRecord->employee_id)
@@ -2163,6 +2168,7 @@ public function requestActivation(Request $request, $id)
         } catch (\Exception $e) {
             Log::error('Error creating competency gap from destination: ' . $e->getMessage());
         }
+        */
     }
 
     /**

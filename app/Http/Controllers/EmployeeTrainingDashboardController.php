@@ -18,9 +18,14 @@ use App\Http\Controllers\CertificateGenerationController;
 
 class EmployeeTrainingDashboardController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $employees = \App\Models\Employee::all();
+        // Fetch local and API employees and merge them
+        $localEmployees = \App\Models\Employee::all();
+        $apiEmployees = $this->getEmployeesFromAPI();
+        
+        $employees = $localEmployees->concat($apiEmployees)->unique('employee_id');
+        $employeeMap = $employees->keyBy('employee_id');
 
         // Filter out destination training courses from the dropdown
         $courses = \App\Models\CourseManagement::where(function($query) {
@@ -107,6 +112,16 @@ class EmployeeTrainingDashboardController extends Controller
             });
 
         foreach ($dashboardRecords as $record) {
+            // Fix missing employee relationship for external employees
+            if (!$record->employee && $record->employee_id) {
+                $foundEmployee = $employeeMap->get($record->employee_id);
+                if ($foundEmployee) {
+                    $record->setRelation('employee', $foundEmployee);
+                    // Also manually set the attribute just in case
+                    $record->employee = $foundEmployee;
+                }
+            }
+
             // Skip records without valid employee
             if (!$record->employee_id || !$record->employee) {
                 continue;
@@ -193,6 +208,14 @@ class EmployeeTrainingDashboardController extends Controller
             $competencyProfiles = \App\Models\EmployeeCompetencyProfile::with(['employee', 'competency'])->get();
 
             foreach ($competencyProfiles as $profile) {
+                // Fix missing employee relationship
+                if (!$profile->employee && $profile->employee_id) {
+                    $foundEmployee = $employeeMap->get($profile->employee_id);
+                    if ($foundEmployee) {
+                        $profile->setRelation('employee', $foundEmployee);
+                    }
+                }
+
                 if (!$profile->employee || !$profile->competency) {
                     continue;
                 }
@@ -283,6 +306,16 @@ class EmployeeTrainingDashboardController extends Controller
             ->get();
 
         foreach ($approvedRequests as $request) {
+            // Fix missing employee relationship for external employees
+            if (!$request->employee && $request->employee_id) {
+                $foundEmployee = $employeeMap->get($request->employee_id);
+                if ($foundEmployee) {
+                    $request->setRelation('employee', $foundEmployee);
+                    // Also manually set the attribute just in case
+                    $request->employee = $foundEmployee;
+                }
+            }
+
             // Skip if no valid employee
             if (!$request->employee_id || !$request->employee) {
                 continue;
@@ -592,6 +625,34 @@ class EmployeeTrainingDashboardController extends Controller
             return $record->created_at;
         });
 
+        // Apply Filters
+        if ($request->filled('employee_id')) {
+            $trainingRecords = $trainingRecords->where('employee_id', $request->employee_id);
+        }
+
+        if ($request->filled('course_id')) {
+            $trainingRecords = $trainingRecords->filter(function ($record) use ($request) {
+                return $record->course_id == $request->course_id;
+            });
+        }
+
+        if ($request->filled('status')) {
+            $statusFilter = strtolower($request->status);
+            $trainingRecords = $trainingRecords->filter(function ($record) use ($statusFilter) {
+                $status = strtolower($record->status ?? '');
+                $progress = $record->progress ?? 0;
+                
+                if ($statusFilter === 'completed') {
+                    return $status === 'completed' || $progress >= 100;
+                } elseif ($statusFilter === 'in-progress' || $statusFilter === 'in_progress') {
+                    return ($status === 'in progress' || $status === 'in_progress') || ($progress > 0 && $progress < 100);
+                } elseif ($statusFilter === 'not-started' || $statusFilter === 'not_started') {
+                    return ($status === 'not started' || $status === 'not_started') || $progress == 0;
+                }
+                return true;
+            });
+        }
+
         // Enhanced Debug: Log comprehensive statistics for ALL employees
         $employeeStats = [];
         foreach ($trainingRecords->groupBy('employee_id') as $empId => $empRecords) {
@@ -620,7 +681,27 @@ class EmployeeTrainingDashboardController extends Controller
             'employee_breakdown' => $employeeStats
         ]);
 
-        return view('learning_management.employee_training_dashboard', compact('employees', 'courses', 'trainingRecords'));
+        // Group records by employee for pagination
+        $groupedCollection = $trainingRecords->groupBy('employee_id');
+        
+        // Pagination logic
+        $page = request()->get('page', 1);
+        $perPage = 10; // Show 10 employees per page
+        
+        $paginatedItems = new \Illuminate\Pagination\LengthAwarePaginator(
+            $groupedCollection->forPage($page, $perPage),
+            $groupedCollection->count(),
+            $perPage,
+            $page,
+            ['path' => request()->url(), 'query' => request()->query()]
+        );
+
+        return view('learning_management.employee_training_dashboard', [
+            'employees' => $employees, 
+            'courses' => $courses, 
+            'trainingRecords' => $trainingRecords,
+            'groupedRecords' => $paginatedItems
+        ]);
     }
 
     /**
@@ -2296,6 +2377,49 @@ class EmployeeTrainingDashboardController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Get employees from API with error handling and normalization
+     */
+    private function getEmployeesFromAPI()
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiEmployees = $response->successful() ? $response->json() : [];
+
+            if (isset($apiEmployees['data']) && is_array($apiEmployees['data'])) {
+                $apiEmployees = $apiEmployees['data'];
+            }
+
+            if (is_array($apiEmployees) && !empty($apiEmployees)) {
+                return collect($apiEmployees)->map(function($emp) {
+                    // Normalize profile picture URL
+                    $profilePic = $emp['profile_picture'] ?? null;
+                    if ($profilePic && !\Illuminate\Support\Str::startsWith($profilePic, 'http')) {
+                         $profilePic = 'http://hr4.jetlougetravels-ph.com/storage/' . ltrim($profilePic, '/');
+                    }
+
+                    // Create a pseudo-model object that behaves like Employee model
+                    $empObj = new \App\Models\Employee();
+                    $empObj->forceFill([
+                        'id' => $emp['id'] ?? null,
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $emp['external_employee_id'] ?? 'N/A',
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'profile_picture' => $profilePic,
+                        'email' => $emp['email'] ?? null,
+                        'department' => $emp['department'] ?? null,
+                        'position' => $emp['position'] ?? $emp['role'] ?? null,
+                    ]);
+
+                    return $empObj;
+                });
+            }
+        } catch (\Exception $e) {
+            Log::error('Error fetching API employees: ' . $e->getMessage());
+        }
+        return collect();
     }
 
     /**

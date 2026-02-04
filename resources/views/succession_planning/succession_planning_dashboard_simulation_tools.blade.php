@@ -879,7 +879,7 @@
                 <th class="fw-bold">Certificate Earned</th>
                 <th class="fw-bold">Certificate Number</th>
                 <th class="fw-bold">Expiry Date</th>
-                <th class="fw-bold">Download</th>
+<!-- Download column removed -->
                 <th class="fw-bold">Remarks</th>
                 <th class="fw-bold text-center">Actions</th>
               </tr>
@@ -994,13 +994,7 @@
                     <span class="text-muted">No expiry</span>
                   @endif
                 </td>
-                <td>
-                  @if($cert && $cert['certificate_url'])
-                    <a href="{{ $cert['certificate_url'] }}" target="_blank" class="btn btn-sm btn-outline-primary">Download</a>
-                  @else
-                    <span class="text-muted">No file</span>
-                  @endif
-                </td>
+                <!-- Download cell removed -->
                 <td>
                   @if($cert)
                     @php
@@ -1041,11 +1035,7 @@
                     <button class="btn btn-outline-primary btn-sm" onclick="viewSimulationDetails('{{ $item->id }}', '{{ $item->employee ? $item->employee->first_name . ' ' . $item->employee->last_name : 'N/A' }}', '{{ $item->simulation_result }}', '{{ \Carbon\Carbon::parse($item->created_at)->format('d/m/Y') }}')" title="View Details">
                       <i class="bi bi-eye"></i>
                     </button>
-                    <button class="btn btn-outline-warning btn-sm edit-simulation-btn"
-                      onclick="editSimulationWithConfirmation('{{ $item->id }}', '{{ $item->employee_id }}', '{{ $item->simulation_result }}', '{{ date('Y-m-d', strtotime($item->created_at)) }}')"
-                      title="Edit Simulation">
-                      <i class="bi bi-pencil"></i>
-                    </button>
+                    <!-- Edit button removed -->
                     <button class="btn btn-outline-danger btn-sm"
                       onclick="deleteSimulationWithConfirmation('{{ $item->id }}', '{{ $item->employee ? $item->employee->first_name . ' ' . $item->employee->last_name : 'N/A' }}')"
                       title="Delete Simulation">

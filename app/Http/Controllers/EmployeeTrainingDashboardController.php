@@ -1148,12 +1148,10 @@ class EmployeeTrainingDashboardController extends Controller
         }
     }
 
-    public function create()
+    public function create(Request $request)
     {
-        $employees = Employee::all();
-        $courses = CourseManagement::all();
-        $trainingRecords = EmployeeTrainingDashboard::with(['employee', 'course'])->paginate(10);
-        return view('learning_management.employee_training_dashboard', compact('employees', 'courses', 'trainingRecords'));
+        // Redirect to index as the dashboard handles creation via modal
+        return redirect()->route('admin.employee_trainings_dashboard.index');
     }
 
     public function store(Request $request)

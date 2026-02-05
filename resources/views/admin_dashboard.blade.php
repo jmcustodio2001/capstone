@@ -575,7 +575,7 @@
             </div>
             <div class="card-body">
               <div class="d-grid gap-2">
-                <a href="{{ route('admin.employee_trainings_dashboard.create') }}" class="btn btn-primary">
+                <a href="{{ route('admin.employee_trainings_dashboard.index') }}" class="btn btn-primary">
                   <i class="bi bi-eye me-2"></i>View Training
                 </a>
                 <a href="{{ route('employee.list') }}" class="btn btn-outline-primary">

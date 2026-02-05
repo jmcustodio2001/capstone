@@ -286,7 +286,6 @@
                   <!-- Employee Column -->
                   <td>
                     <div class="d-flex align-items-center">
-                      <img src="{{ $profilePicUrl }}" alt="{{ $initials }}" class="rounded-circle me-2 border" width="40" height="40">
                       <div>
                         <div class="fw-bold text-dark">{{ $fullName }}</div>
                         <small class="text-muted">ID: {{ $certificate->employee_id ?? 'N/A' }}</small>

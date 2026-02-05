@@ -193,7 +193,13 @@
       <div class="card-header d-flex justify-content-between align-items-center">
         <h4 class="fw-bold mb-0">Employee Directory</h4>
         <div class="d-flex gap-2">
-          <input type="text" id="employee-search" class="form-control form-control-sm" placeholder="Search employees..." style="width: 200px;">
+          <form method="GET" action="{{ route('employee.list') }}" class="d-flex gap-2">
+            <input type="text" name="search" class="form-control form-control-sm" placeholder="Search employees..." style="width: 200px;" value="{{ request('search') }}">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button>
+            @if(request('search'))
+              <a href="{{ route('employee.list') }}" class="btn btn-sm btn-outline-secondary" title="Clear Search"><i class="bi bi-x-lg"></i></a>
+            @endif
+          </form>
         </div>
       </div>
       <div class="card-body">
@@ -291,12 +297,6 @@
                             title="View Details" data-bs-toggle="tooltip">
                       <i class="bi bi-eye me-1"></i>View
                     </button>
-                    <button class="btn btn-outline-warning btn-sm flex-fill"
-                            onclick="initiateEditEmployee(this)"
-                            data-employee="{{ json_encode($employee) }}"
-                            title="Edit Details" data-bs-toggle="tooltip">
-                      <i class="bi bi-pencil me-1"></i>Edit
-                    </button>
                   </div>
                 </div>
 
@@ -316,6 +316,11 @@
               </div>
             </div>
           @endforelse
+        </div>
+
+        <!-- Pagination -->
+        <div class="d-flex justify-content-center mt-4">
+          {{ $employees->links('pagination::bootstrap-5') }}
         </div>
       </div>
     </div>
@@ -360,6 +365,7 @@
     });
 
 
+    /* Client-side search removed in favor of Server-side search with Pagination
     // Search functionality for card layout
     document.getElementById('employee-search').addEventListener('input', function() {
       const searchTerm = this.value.toLowerCase();
@@ -382,6 +388,7 @@
         }
       });
     });
+    */
 
     // Edit employee modal
     document.querySelectorAll('.edit-employee-btn').forEach(btn => {

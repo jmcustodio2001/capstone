@@ -240,13 +240,6 @@
                 @foreach($competencylibrary as $competency)
                   <option value="{{ $competency->id }}">{{ $competency->competency_name }}</option>
                 @endforeach
-                @if(isset($destinationTrainings) && $destinationTrainings->count() > 0)
-                  <optgroup label="Possible Training Destinations">
-                    @foreach($destinationTrainings as $destination)
-                      <option value="destination_{{ $loop->index }}">{{ $destination }}</option>
-                    @endforeach
-                  </optgroup>
-                @endif
               </select>
             </div>
             <div class="col-md-2">
@@ -339,11 +332,7 @@
                 <!-- Card Header with Employee Info -->
                 <div class="card-header text-white border-0 py-3" style="background-color: #{{ $bgColor }};">
                   <div class="d-flex align-items-center">
-                    <img src="{{ $profilePicUrl }}"
-                         alt="{{ $firstName }} {{ $lastName }}"
-                         class="rounded-circle me-3"
-                         style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);"
-                         onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name={{ urlencode($fullName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
+
                     <div class="flex-grow-1">
                       <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
                       <small class="text-dark fw-bold">

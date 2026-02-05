@@ -476,10 +476,6 @@
           <!-- Card Header with Employee Info -->
           <div class="card-header-custom">
             <div class="d-flex align-items-center">
-              <img src="{{ $profilePicUrl }}"
-                   alt="{{ $firstName }} {{ $lastName }}"
-                   class="employee-avatar me-3"
-                   style="border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
               <div class="flex-grow-1">
                 <h6 class="mb-1 fw-bold text-dark">{{ $firstName }} {{ $lastName }}</h6>
                 <div class="d-flex align-items-center text-muted small">
@@ -493,11 +489,11 @@
           <!-- Card Body -->
           <div class="card-body p-3">
             <!-- View All Button (Toggle) -->
-            <button class="btn btn-outline-primary w-100 btn-view-all mb-0" 
-                    type="button" 
-                    data-bs-toggle="collapse" 
-                    data-bs-target="#details-{{ $employeeId }}" 
-                    aria-expanded="false" 
+            <button class="btn btn-outline-primary w-100 btn-view-all mb-0"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#details-{{ $employeeId }}"
+                    aria-expanded="false"
                     aria-controls="details-{{ $employeeId }}">
               <i class="bi bi-eye me-1"></i> View All {{ $employeeRecords->count() }} Competencies
             </button>
@@ -569,7 +565,7 @@
                     </div>
                   </div>
                 </div>
-                
+
                 <!-- Full Details Action -->
                 <div class="mt-3 text-center">
                    <button class="btn btn-sm btn-primary w-100 rounded-pill" onclick="viewAllEmployeeTrainings('{{ $employeeId }}')">

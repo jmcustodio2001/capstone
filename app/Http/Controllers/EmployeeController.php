@@ -12,13 +12,15 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Pagination\Paginator;
 
 class EmployeeController extends Controller
 {
     const SETTINGS_UPDATED_SUCCESS = 'Settings updated successfully!';
 
     // List all employees with all columns
-    public function index()
+    public function index(Request $request)
     {
         // Fetch all local employees to map emails to local profile pictures
         $localEmployees = Employee::all();
@@ -73,6 +75,37 @@ class EmployeeController extends Controller
             $employees = [];
         }
 
+        // Search Logic
+        $search = $request->input('search');
+        if ($search) {
+            $search = strtolower($search);
+            $employees = array_filter($employees, function ($employee) use ($search) {
+                $fullName = strtolower(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? ''));
+                $email = strtolower($employee['email'] ?? '');
+                $position = strtolower($employee['position'] ?? '');
+                $department = strtolower($employee['department']['name'] ?? $employee['department'] ?? '');
+
+                return str_contains($fullName, $search) ||
+                       str_contains($email, $search) ||
+                       str_contains($position, $search) ||
+                       str_contains($department, $search);
+            });
+        }
+
+        // Pagination Logic
+        $page = $request->input('page', 1);
+        $perPage = 12; // Show 12 employees per page
+        $offset = ($page - 1) * $perPage;
+
+        $paginatedItems = array_slice($employees, $offset, $perPage);
+        $employees = new LengthAwarePaginator(
+            $paginatedItems,
+            count($employees),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
         // Generate next employee ID for the add form
         $nextEmployeeId = $this->generateNextEmployeeId();
 
@@ -95,6 +128,68 @@ class EmployeeController extends Controller
         }
 
         return 'EMP001';
+    }
+
+    /**
+     * Helper to get employee from API if not found locally
+     */
+    private function getEmployeeFromApi($id)
+    {
+        try {
+            // Fetch employees from API
+            $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiData = $response->successful() ? $response->json() : [];
+
+            $employees = [];
+            if (isset($apiData['data']) && is_array($apiData['data'])) {
+                $employees = $apiData['data'];
+            } else if (is_array($apiData)) {
+                $employees = $apiData;
+            }
+
+            foreach ($employees as $emp) {
+                // Check match by employee_id or id
+                if ((isset($emp['employee_id']) && $emp['employee_id'] == $id) ||
+                    (isset($emp['id']) && $emp['id'] == $id) ||
+                    (isset($emp['external_employee_id']) && $emp['external_employee_id'] == $id)) {
+
+                    // Create a temporary Employee object
+                    $employee = new Employee();
+                    $employee->forceFill([
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $id,
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'email' => $emp['email'] ?? null,
+                        'phone_number' => $emp['phone_number'] ?? $emp['phone'] ?? null,
+                        'position' => $emp['position'] ?? $emp['role'] ?? 'N/A',
+                        'department_id' => $emp['department_id'] ?? null,
+                        'address' => $emp['address'] ?? null,
+                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'status' => $emp['status'] ?? 'Active',
+                        'hire_date' => isset($emp['date_hired']) ? date('Y-m-d', strtotime($emp['date_hired'])) : null,
+                        'birth_date' => isset($emp['birth_date']) ? date('Y-m-d', strtotime($emp['birth_date'])) : null,
+                    ]);
+
+                    // Normalize profile picture URL
+                    if ($employee->profile_picture && strpos($employee->profile_picture, 'http') !== 0) {
+                        $employee->profile_picture = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($employee->profile_picture, '/');
+                    }
+
+                    // Attach department object if available in API data
+                    if (isset($emp['department'])) {
+                        $department = new \App\Models\Department(); // Assuming model exists, or generic object
+                        $department->forceFill((array)$emp['department']);
+                        $employee->setRelation('department', $department);
+                    }
+
+                    return $employee;
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch employee from API: ' . $e->getMessage());
+        }
+
+        return null;
     }
 
     public function verifyPassword(Request $request)
@@ -222,7 +317,16 @@ class EmployeeController extends Controller
 
     public function show($id)
     {
-        $employee = Employee::where('employee_id', $id)->firstOrFail();
+        $employee = Employee::where('employee_id', $id)->first();
+
+        if (!$employee) {
+            $employee = $this->getEmployeeFromApi($id);
+        }
+
+        if (!$employee) {
+            abort(404, 'Employee not found.');
+        }
+
         return view('employee_ess_modules.employee_profile', compact('employee'));
     }
 
@@ -1636,18 +1740,24 @@ class EmployeeController extends Controller
             $employee = Employee::where('employee_id', $employeeId)->first();
 
             if (!$employee) {
-                Log::warning("Employee not found with ID: " . $employeeId);
-                return response()->json([
-                    'error' => 'Employee not found',
-                    'debug' => [
-                        'searched_id' => $employeeId,
-                        'total_employees' => $totalEmployees,
-                        'available_ids' => $allEmployeeIds
-                    ]
-                ], 404);
-            }
+                // Try API fallback
+                $employee = $this->getEmployeeFromApi($employeeId);
 
-            Log::info("Employee found: " . $employee->first_name . ' ' . $employee->last_name);
+                if (!$employee) {
+                    Log::warning("Employee not found with ID: " . $employeeId);
+                    return response()->json([
+                        'error' => 'Employee not found',
+                        'debug' => [
+                            'searched_id' => $employeeId,
+                            'total_employees' => $totalEmployees,
+                            'available_ids' => $allEmployeeIds
+                        ]
+                    ], 404);
+                }
+                Log::info("Employee found in API: " . $employee->first_name . ' ' . $employee->last_name);
+            } else {
+                Log::info("Employee found: " . $employee->first_name . ' ' . $employee->last_name);
+            }
 
             // Get training statistics
             $trainingStats = [

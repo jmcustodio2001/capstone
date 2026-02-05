@@ -278,11 +278,6 @@
                         }
                       @endphp
 
-                      <img src="{{ $profilePicUrl }}"
-                           alt="{{ $firstName }} {{ $lastName }}"
-                           class="rounded-circle"
-                           style="width: 40px; height: 40px; object-fit: cover;"
-                           onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($fullName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
                     </div>
                     <div>
                       <span class="fw-semibold">{{ $firstName }} {{ $lastName }}</span>

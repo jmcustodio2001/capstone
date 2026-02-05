@@ -59,25 +59,10 @@ class EmployeeCompetencyProfileController extends Controller
             $employees = Employee::all()->toArray();
         }
 
-        // Exclude all destination training related competencies from the main competency dropdown
-        $competencylibrary = CompetencyLibrary::where('category', '!=', 'Destination Knowledge')
-            ->where('category', '!=', 'General')
-            ->where('competency_name', 'NOT LIKE', '%BESTLINK%')
-            ->where('competency_name', 'NOT LIKE', '%ITALY%')
-            ->where('competency_name', 'NOT LIKE', '%destination%')
-            ->where('description', 'NOT LIKE', '%Auto-created from destination knowledge training%')
+        // Only show seeded competencies (fixed set of ~30) to prevent junk/test data from appearing
+        $competencylibrary = CompetencyLibrary::where('is_seeded', true)
+            ->orderBy('competency_name')
             ->get();
-
-        // Get unique destination names from DestinationKnowledgeTraining
-        $destinationTrainings = \App\Models\DestinationKnowledgeTraining::select('destination_name')
-            ->distinct()
-            ->whereNotNull('destination_name')
-            ->where('destination_name', '!=', '')
-            ->orderBy('destination_name')
-            ->get()
-            ->pluck('destination_name')
-            ->unique()
-            ->values();
 
         // Sort employees by name
         usort($employees, function($a, $b) {
@@ -184,7 +169,7 @@ class EmployeeCompetencyProfileController extends Controller
             ['path' => \Illuminate\Pagination\Paginator::resolveCurrentPath()]
         );
 
-        return view('competency_management.employee_competency_profiles', compact('profiles', 'employees', 'allEmployees', 'competencylibrary', 'destinationTrainings'));
+        return view('competency_management.employee_competency_profiles', compact('profiles', 'employees', 'allEmployees', 'competencylibrary'));
     }
 
     /**
@@ -392,49 +377,12 @@ class EmployeeCompetencyProfileController extends Controller
 
     public function store(Request $request)
     {
-        // Handle destination training selections
-        $competencyId = $request->input('competency_id');
-
-        if (substr($competencyId, 0, 12) === 'destination_') {
-            // Extract destination name from the destinations array
-            $destinationIndex = (int) str_replace('destination_', '', $competencyId);
-            $destinationTrainings = \App\Models\DestinationKnowledgeTraining::select('destination_name')
-                ->distinct()
-                ->whereNotNull('destination_name')
-                ->where('destination_name', '!=', '')
-                ->orderBy('destination_name')
-                ->get()
-                ->pluck('destination_name')
-                ->unique()
-                ->values();
-
-            if (!isset($destinationTrainings[$destinationIndex])) {
-                return redirect()->route('employee_competency_profiles.index')
-                    ->with('error', 'Invalid destination selection.');
-            }
-
-            $destinationName = $destinationTrainings[$destinationIndex];
-
-            // Create or find competency for this destination
-            $competencyName = 'Destination Knowledge - ' . $destinationName;
-            $competency = CompetencyLibrary::firstOrCreate(
-                ['competency_name' => $competencyName],
-                [
-                    'description' => 'Knowledge and expertise about ' . $destinationName . ' destination',
-                    'category' => 'Destination Knowledge'
-                ]
-            );
-
-            $competencyId = $competency->id;
-        }
-
         $validated = $request->validate([
             'employee_id' => 'required|string',
+            'competency_id' => 'required|exists:competency_library,id',
             'proficiency_level' => 'required|integer|between:1,5',
             'assessment_date' => 'required|date',
         ]);
-
-        $validated['competency_id'] = $competencyId;
 
         // Check for existing competency profile to prevent duplicates
         $existingProfile = EmployeeCompetencyProfile::where('employee_id', $validated['employee_id'])
@@ -1239,7 +1187,7 @@ class EmployeeCompetencyProfileController extends Controller
 
                 // 1. Normalize the input skill
                 $normalizedInput = strtolower($skillName);
-                
+
                 // 2. Try to find a match in existing competencies
                 $matchedCompetency = null;
 
@@ -1251,7 +1199,7 @@ class EmployeeCompetencyProfileController extends Controller
                 // 2b. Check for "Skill" or "Skills" suffix variation
                 if (!$matchedCompetency) {
                     $withoutSkills = preg_replace('/\s+skills?$/i', '', $normalizedInput);
-                    
+
                     // If input was "Communication Skills", check for "Communication"
                     if ($withoutSkills !== $normalizedInput) {
                         $matchedCompetency = $allCompetencies->first(function ($comp) use ($withoutSkills) {
@@ -1265,7 +1213,7 @@ class EmployeeCompetencyProfileController extends Controller
                         });
                     }
                 }
-                
+
                 // 3. Use matched or create new
                 if ($matchedCompetency) {
                     $competency = $matchedCompetency;

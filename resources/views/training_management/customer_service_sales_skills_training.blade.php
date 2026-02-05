@@ -305,13 +305,8 @@
                 <tr class="{{ $rowClass }}">
                   <td>
                     <div class="d-flex align-items-center">
-                      <img src="{{ $profilePicUrl }}"
-                           alt="{{ $firstName }} {{ $lastName }}"
-                           class="rounded-circle me-2"
-                           style="width: 40px; height: 40px; object-fit: cover;" onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($firstName . ' ' . $lastName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
-                      <div>
                         <div class="fw-semibold">{{ $firstName }} {{ $lastName }}</div>
-                        <small class="text-muted">ID: {{ $employee->employee_id ?? $gap->employee_id ?? 'N/A' }}</small>
+                         <small class="text-muted">ID: {{ $employee->employee_id ?? $gap->employee_id ?? 'N/A' }}</small>
                       </div>
                     </div>
                   </td>
@@ -779,10 +774,6 @@
               <!-- Employee Header -->
               <div class="card-header bg-light text-dark" style="border-radius: 12px 12px 0 0 !important;">
                 <div class="d-flex align-items-center">
-                  <img src="{{ $profilePicUrl }}"
-                       alt="{{ $firstName }} {{ $lastName }}"
-                       class="rounded-circle me-3"
-                       style="width: 50px; height: 50px; object-fit: cover; border: 3px solid rgba(0,0,0,0.1);" onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($firstName . ' ' . $lastName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
                   <div class="flex-grow-1">
                     <h5 class="mb-1 fw-bold text-dark">{{ $firstName }} {{ $lastName }}</h5>
                     <small class="text-muted">ID: {{ $employee->employee_id ?? $employeeId ?? 'N/A' }} • {{ $employeeRecords->count() }} Training(s)</small>

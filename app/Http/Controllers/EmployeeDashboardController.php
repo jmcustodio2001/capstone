@@ -422,6 +422,10 @@ class EmployeeDashboardController extends Controller
         $employee = \App\Models\Employee::where('employee_id', $employeeId)->first();
 
         if (!$employee) {
+            $employee = $this->getEmployeeFromApi($employeeId);
+        }
+
+        if (!$employee) {
             return redirect()->back()->with('error', 'Employee not found.');
         }
 
@@ -1134,6 +1138,68 @@ class EmployeeDashboardController extends Controller
                 'message' => 'Error fetching rewards: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Helper to get employee from API if not found locally
+     */
+    private function getEmployeeFromApi($id)
+    {
+        try {
+            // Fetch employees from API
+            $response = Http::get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $apiData = $response->successful() ? $response->json() : [];
+
+            $employees = [];
+            if (isset($apiData['data']) && is_array($apiData['data'])) {
+                $employees = $apiData['data'];
+            } else if (is_array($apiData)) {
+                $employees = $apiData;
+            }
+
+            foreach ($employees as $emp) {
+                // Check match by employee_id or id
+                if ((isset($emp['employee_id']) && $emp['employee_id'] == $id) ||
+                    (isset($emp['id']) && $emp['id'] == $id) ||
+                    (isset($emp['external_employee_id']) && $emp['external_employee_id'] == $id)) {
+
+                    // Create a temporary Employee object
+                    $employee = new \App\Models\Employee();
+                    $employee->forceFill([
+                        'employee_id' => $emp['employee_id'] ?? $emp['id'] ?? $id,
+                        'first_name' => $emp['first_name'] ?? 'Unknown',
+                        'last_name' => $emp['last_name'] ?? 'Employee',
+                        'email' => $emp['email'] ?? null,
+                        'phone_number' => $emp['phone_number'] ?? $emp['phone'] ?? null,
+                        'position' => $emp['position'] ?? $emp['role'] ?? 'N/A',
+                        'department_id' => $emp['department_id'] ?? null,
+                        'address' => $emp['address'] ?? null,
+                        'profile_picture' => $emp['profile_picture'] ?? null,
+                        'status' => $emp['status'] ?? 'Active',
+                        'hire_date' => isset($emp['date_hired']) ? date('Y-m-d', strtotime($emp['date_hired'])) : null,
+                        'birth_date' => isset($emp['birth_date']) ? date('Y-m-d', strtotime($emp['birth_date'])) : null,
+                    ]);
+
+                    // Normalize profile picture URL
+                    if ($employee->profile_picture && strpos($employee->profile_picture, 'http') !== 0) {
+                        $employee->profile_picture = 'https://hr4.jetlougetravels-ph.com/storage/' . ltrim($employee->profile_picture, '/');
+                    }
+
+                    // Attach department object if available in API data
+                    if (isset($emp['department'])) {
+                        $department = new \App\Models\Department();
+                        $department->forceFill((array)$emp['department']);
+                        $employee->setRelation('department', $department);
+                    }
+
+                    return $employee;
+                }
+            }
+        } catch (\Exception $e) {
+            error_log('Failed to fetch employee from API: ' . $e->getMessage());
+        }
+
+        return null;
     }
 }
 

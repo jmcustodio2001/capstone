@@ -65,7 +65,7 @@
       <div class="card-body">
         <div class="row">
           <div class="col-md-4 text-center">
-            <img src="{{ $employee->profile_picture ? asset('storage/' . $employee->profile_picture) : 'https://ui-avatars.com/api/?name=' . urlencode($employee->first_name . ' ' . $employee->last_name) }}" 
+            <img src="{{ $employee->profile_picture ? (strpos($employee->profile_picture, 'http') === 0 ? $employee->profile_picture : asset('storage/' . $employee->profile_picture)) : 'https://ui-avatars.com/api/?name=' . urlencode($employee->first_name . ' ' . $employee->last_name) }}" 
                  class="rounded-circle mb-3" width="150" height="150" alt="Profile Picture">
             <h4 class="fw-bold">{{ $employee->first_name }} {{ $employee->last_name }}</h4>
             <p class="text-muted">{{ $employee->position }}</p>

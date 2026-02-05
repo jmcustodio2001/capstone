@@ -688,6 +688,28 @@
         <h4 class="fw-bold mb-0"><i class="bi bi-person-check me-2"></i>Candidate Details & Comparison</h4>
       </div>
       <div class="card-body">
+        <!-- Pagination Controls (Top) -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <form method="GET" class="d-flex align-items-center">
+            @foreach(request()->except(['cand_per_page', 'cand_page']) as $key => $value)
+              <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+            @endforeach
+            <label class="me-2 small text-muted">Show:</label>
+            <select name="cand_per_page" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+              <option value="6" {{ request('cand_per_page', 6) == 6 ? 'selected' : '' }}>6</option>
+              <option value="12" {{ request('cand_per_page') == 12 ? 'selected' : '' }}>12</option>
+              <option value="24" {{ request('cand_per_page') == 24 ? 'selected' : '' }}>24</option>
+              <option value="48" {{ request('cand_per_page') == 48 ? 'selected' : '' }}>48</option>
+            </select>
+          </form>
+
+          @if(isset($topUniqueCandidates) && $topUniqueCandidates->count() > 0)
+            <div>
+              {{ $topUniqueCandidates->appends(request()->except('cand_page'))->links('pagination::bootstrap-5') }}
+            </div>
+          @endif
+        </div>
+
         <div class="row" id="candidatesList">
           @if(isset($topUniqueCandidates) && $topUniqueCandidates->count() > 0)
             @foreach($topUniqueCandidates as $candidate)
@@ -695,7 +717,7 @@
                 <div class="candidate-card card h-100">
                   <div class="card-body">
                     <div class="d-flex align-items-center mb-3">
-                      <div class="avatar-circle me-3" style="width: 50px; height: 50px;">
+                      <div style="width: 50px; height: 50px;">
                         @php
                           $profilePicUrl = null;
 
@@ -727,10 +749,6 @@
                                              "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
                           }
                         @endphp
-                        <img src="{{ $profilePicUrl }}"
-                             alt="{{ $candidate['name'] ?? 'Employee' }}"
-                             class="rounded-circle"
-                             style="width: 50px; height: 50px; object-fit: cover;">
                       </div>
                       <div>
                         <h6 class="mb-0">{{ $candidate['name'] ?? 'N/A' }}</h6>
@@ -868,6 +886,28 @@
         <h4 class="fw-bold mb-0">Simulation Results</h4>
       </div>
       <div class="card-body">
+        <!-- Pagination Controls (Top) -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <form method="GET" class="d-flex align-items-center">
+            @foreach(request()->except(['sim_per_page', 'sim_page']) as $key => $value)
+              <input type="hidden" name="{{ $key }}" value="{{ $value }}">
+            @endforeach
+            <label class="me-2 small text-muted">Show:</label>
+            <select name="sim_per_page" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+              <option value="10" {{ request('sim_per_page', 10) == 10 ? 'selected' : '' }}>10</option>
+              <option value="25" {{ request('sim_per_page') == 25 ? 'selected' : '' }}>25</option>
+              <option value="50" {{ request('sim_per_page') == 50 ? 'selected' : '' }}>50</option>
+              <option value="100" {{ request('sim_per_page') == 100 ? 'selected' : '' }}>100</option>
+            </select>
+          </form>
+
+          @if(isset($simulations) && $simulations->count() > 0)
+            <div>
+              {{ $simulations->appends(request()->except('sim_page'))->links('pagination::bootstrap-5') }}
+            </div>
+          @endif
+        </div>
+
         <div class="table-responsive">
           <table class="table table-hover align-middle">
             <thead class="table-light">

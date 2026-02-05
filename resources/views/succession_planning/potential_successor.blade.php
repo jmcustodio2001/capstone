@@ -390,17 +390,12 @@
                                              "&size=200&background=" . $bgColor . "&color=ffffff&bold=true&rounded=true";
                           }
                         @endphp
-
-                        <img src="{{ $profilePicUrl }}"
-                             alt="{{ $firstName }} {{ $lastName }}"
-                             class="rounded-circle"
-                             style="width: 40px; height: 40px; object-fit: cover;">
                       </div>
                       <div>
                         <span class="fw-semibold">
                           {{ $firstName }} {{ $lastName }}
                         </span>
-                        <div class="small text-muted">{{ $successor->employee_id }}</div>
+                        <div class="small text-muted">ID : {{ $successor->employee_id }}</div>
                       </div>
                     </div>
                   @else

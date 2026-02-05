@@ -74,7 +74,8 @@ class SuccessionSimulationController extends Controller
 
     private function getSimulations($apiEmployees = null)
     {
-        $simulations = SuccessionSimulation::with('employee')->orderByDesc('created_at')->paginate(10, ['*'], 'sim_page');
+        $perPage = request()->get('sim_per_page', 10); // Default 10, allow user selection
+        $simulations = SuccessionSimulation::with('employee')->orderByDesc('created_at')->paginate($perPage, ['*'], 'sim_page');
 
         if ($apiEmployees) {
             $empMap = collect($apiEmployees)->keyBy(function($e) {
@@ -109,7 +110,7 @@ class SuccessionSimulationController extends Controller
 
         // Paginate the collection manually
         $page = request()->get('cand_page', 1);
-        $perPage = 6; // Show 6 candidates per page (2 rows of 3)
+        $perPage = request()->get('cand_per_page', 6); // Default 6, allow user selection
 
         return new \Illuminate\Pagination\LengthAwarePaginator(
             $sortedCandidates->forPage($page, $perPage),

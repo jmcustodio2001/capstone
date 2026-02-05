@@ -300,10 +300,6 @@
                   <!-- Card Header with Employee Info -->
                   <div class="card-header bg-primary text-white border-0 py-3">
                     <div class="d-flex align-items-center">
-                      <img src="{{ $profilePicUrl }}"
-                           alt="{{ $firstName }} {{ $lastName }}"
-                           class="rounded-circle me-3"
-                           style="width: 45px; height: 45px; object-fit: cover; border: 2px solid rgba(255,255,255,0.3);">
                       <div class="flex-grow-1">
                         <h6 class="mb-0 fw-bold">{{ $firstName }} {{ $lastName }}</h6>
                         <small class="text-dark fw-bold">{{ $employeeGaps->count() }} Competency Gap{{ $employeeGaps->count() > 1 ? 's' : '' }}</small>

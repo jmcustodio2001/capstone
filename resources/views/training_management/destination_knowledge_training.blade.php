@@ -529,11 +529,7 @@ if (typeof window.trans === 'undefined') {
                       <div class="d-flex align-items-center">
                         <div class="me-3">
                           @if($record->employee)
-                            <img src="{{ $profilePicUrl }}"
-                                 alt="{{ $firstName }} {{ $lastName }}"
-                                 class="rounded-circle border border-white"
-                                 style="width: 50px; height: 50px; object-fit: cover;"
-                                 onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($firstName . ' ' . $lastName) }}&size=200&background={{ $bgColor }}&color=ffffff&bold=true&rounded=true'">
+
                           @else
                             <div class="rounded-circle border border-white d-flex align-items-center justify-content-center" style="width: 50px; height: 50px; background: #6c757d;">
                               <i class="bi bi-person text-white"></i>

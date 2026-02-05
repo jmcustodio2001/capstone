@@ -471,9 +471,6 @@
                                 $profilePicUrl = 'https://ui-avatars.com/api/?name=' . urlencode($firstName) . '&background=007bff&color=ffffff&bold=true';
                             }
                           @endphp
-                          <img src="{{ $profilePicUrl }}" class="rounded-circle me-2" width="32" height="32" alt="Trainer"
-                               style="object-fit: cover;"
-                               onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($training->employee->first_name ?? 'User') }}&background=6c757d&color=ffffff&bold=true'">
                           <span>{{ $training->employee ? ($training->employee->first_name ?? 'N/A') : 'N/A' }} {{ $training->employee ? ($training->employee->last_name ?? '') : '' }}</span>
                         </div>
                       </td>
@@ -535,9 +532,6 @@
                       $profilePicUrl = 'https://ui-avatars.com/api/?name=' . urlencode($firstName) . '&background=28a745&color=ffffff&bold=true';
                   }
                 @endphp
-                <img src="{{ $profilePicUrl }}" class="rounded-circle me-3" width="40" height="40" alt="Employee"
-                     style="object-fit: cover;"
-                     onerror="this.src='https://ui-avatars.com/api/?name={{ urlencode($completion['employee']->first_name ?? 'User') }}&background=6c757d&color=ffffff&bold=true'">
                 <div class="flex-grow-1">
                   <h6 class="mb-1">{{ isset($completion['employee']) && $completion['employee'] ? $completion['employee']->first_name ?? 'N/A' : 'N/A' }} {{ isset($completion['employee']) && $completion['employee'] ? $completion['employee']->last_name ?? '' : '' }}</h6>
                   <p class="mb-1 small">{{ $completion['training_title'] ?? 'Training Course' }}</p>

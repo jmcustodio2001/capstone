@@ -399,7 +399,7 @@
     </section>
 
 
-    @include('layouts.includes.animation')
+    @include('layouts.animation')
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {

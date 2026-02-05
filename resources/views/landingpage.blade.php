@@ -51,17 +51,10 @@
                                     <i class="bi bi-briefcase-fill"></i> Careers
                                 </a>
                             </li>
-                            <li class="nav-item dropdown">
-                                <a class="nav-link dropdown-toggle d-flex align-items-center gap-1 {{ request()->is('login') ? 'text-black' : 'text-white' }}" href="#" id="loginDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <li class="nav-item">
+                                <a class="nav-link d-flex align-items-center gap-1 {{ request()->is('login-options') ? 'text-black' : 'text-white' }}" href="{{ route('login-options') }}">
                                     <i class="bi bi-box-arrow-in-right"></i> Portals
                                 </a>
-                                <ul class="dropdown-menu" aria-labelledby="loginDropdown">
-                                    <li><a class="dropdown-item" href="{{ route('login') }}">Login</a></li>
-                                    <li><a class="dropdown-item" href="#">HR1</a></li>
-                                    <li><a class="dropdown-item" href="{{ route('admin.login') }}">HR2</a></li>
-                                    <li><a class="dropdown-item" href="#">HR3</a></li>
-                                    <li><a class="dropdown-item" href="#">HR4</a></li>
-                                </ul>
                             </li>
                         </ul>
                     </div>

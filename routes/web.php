@@ -33,6 +33,10 @@ Route::get('/contact', function () {
     return view('contactpage');
 })->name('contact');
 
+Route::get('/login-options', function () {
+    return view('portal');
+})->name('login-options');
+
 Route::get('/welcome', function () {
     return view('welcome');
 })->name('welcome.page');

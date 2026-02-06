@@ -3900,4 +3900,68 @@ class MyTrainingController extends Controller
         }
         return collect([]);
     }
+
+    /**
+     * Get certificate details for PDF generation (Employee View)
+     */
+    public function getCertificateDetails($id)
+    {
+        try {
+            $employee = $this->getAuthenticatedEmployee();
+            if (!$employee) {
+                return response()->json(['success' => false, 'message' => 'Unauthorized'], 401);
+            }
+
+            $certificate = TrainingRecordCertificateTracking::with(['employee', 'course'])->findOrFail($id);
+
+            // Verify ownership
+            $employeeId = $employee->employee_id;
+            $possibleIds = $this->getPossibleEmployeeIds($employeeId);
+
+            if (!in_array((string)$certificate->employee_id, $possibleIds)) {
+                 return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access to certificate.'
+                ], 403);
+            }
+
+            // Format data for PDF generation (matching frontend expectations)
+            $employeeName = $certificate->employee
+                ? $certificate->employee->first_name . ' ' . $certificate->employee->last_name
+                : 'Unknown Employee';
+
+            $courseName = $certificate->course
+                ? $certificate->course->course_title
+                : ($certificate->training_title ?? 'Unknown Course');
+
+            $formattedDate = $certificate->training_date
+                ? $certificate->training_date->format('F d, Y')
+                : ($certificate->created_at ? $certificate->created_at->format('F d, Y') : date('F d, Y'));
+
+            $issuedDate = $certificate->issue_date
+                ? $certificate->issue_date->format('F d, Y')
+                : ($certificate->created_at ? $certificate->created_at->format('F d, Y') : date('F d, Y'));
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $certificate->id,
+                    'certificate_number' => $certificate->certificate_number ?? ('CERT-' . str_pad($certificate->id, 8, '0', STR_PAD_LEFT)),
+                    'employee_name' => $employeeName,
+                    'course_name' => $courseName,
+                    'formatted_date' => $formattedDate,
+                    'issued_date' => $issuedDate,
+                    // Keep original object data if needed elsewhere
+                    'original' => $certificate
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Error fetching certificate details: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Certificate not found'
+            ], 404);
+        }
+    }
 }

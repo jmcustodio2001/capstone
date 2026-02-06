@@ -1010,6 +1010,11 @@ Route::get('/employee/ping', function() {
 
 Route::get('/employee/my-trainings', [App\Http\Controllers\MyTrainingController::class, 'index'])->name('employee.my_trainings.index')->middleware('employee.auth');
 
+// Employee Certificate Details Route (for PDF generation)
+Route::get('/employee/training-certificate/{id}', [App\Http\Controllers\MyTrainingController::class, 'getCertificateDetails'])
+    ->name('employee.training_certificate.details')
+    ->middleware('employee.auth');
+
 // Training export routes
 Route::get('/employee/trainings/export/pdf', [App\Http\Controllers\MyTrainingController::class, 'exportPdf'])->name('employee.trainings.export.pdf')->middleware('employee.auth');
 Route::get('/employee/trainings/export/excel', [App\Http\Controllers\MyTrainingController::class, 'exportExcel'])->name('employee.trainings.export.excel')->middleware('employee.auth');

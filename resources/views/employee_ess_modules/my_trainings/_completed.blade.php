@@ -332,7 +332,7 @@ async function downloadCertificatePDF(certId) {
     }
 
     // Fetch certificate data from server
-    const response = await fetch(`/admin/training-record-certificate-tracking/${certId}`, {
+    const response = await fetch(`/employee/training-certificate/${certId}`, {
       headers: {
         'X-CSRF-TOKEN': csrfToken,
         'Accept': 'application/json'
@@ -343,7 +343,8 @@ async function downloadCertificatePDF(certId) {
       throw new Error('Failed to fetch certificate data');
     }
 
-    const certificate = await response.json();
+    const result = await response.json();
+    const certificate = result.data || result; // Handle both wrapped and unwrapped responses safely
 
     // Use actual certificate data
     const certData = {
